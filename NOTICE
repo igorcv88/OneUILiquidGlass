@@ -1,0 +1,9 @@
+The original OneUILiquidGlass sources are licensed under the MIT License.
+
+The Gradle wrapper scripts and gradle/wrapper/gradle-wrapper.jar are from
+Gradle, licensed under the Apache License, Version 2.0:
+https://www.apache.org/licenses/LICENSE-2.0
+Copyright Gradle, Inc. / the original authors as retained in script headers.
+
+The Xposed API is a compile-only dependency supplied by LSPosed at runtime.
+No Xposed API implementation is bundled in this module.

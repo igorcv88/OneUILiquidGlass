@@ -1,0 +1,19 @@
+plugins { id 'com.android.application' }
+android {
+    namespace 'io.github.igorcv88.oneuiliquidglass'
+    compileSdk 36
+    defaultConfig {
+        applicationId 'io.github.igorcv88.oneuiliquidglass'
+        minSdk 33
+        targetSdk 36
+        versionCode 1
+        versionName '0.1.0-probe'
+        testInstrumentationRunner 'android.test.InstrumentationTestRunner'
+    }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+    buildTypes { release { minifyEnabled false } }
+}
+dependencies {
+    compileOnly 'de.robv.android.xposed:api:82'
+    testImplementation 'junit:junit:4.13.2'
+}
