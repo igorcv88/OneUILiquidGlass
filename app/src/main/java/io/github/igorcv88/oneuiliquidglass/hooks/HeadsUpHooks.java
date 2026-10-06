@@ -49,7 +49,14 @@ public final class HeadsUpHooks {
         if (type == null) return false;
         int count = 0, hooked = 0;
         for (Class<?> c = type; c != null && c != View.class; c = c.getSuperclass()) {
-            for (Method m : c.getDeclaredMethods()) {
+            Method[] methods;
+            // Firmware classes can reference types absent from this build; skip this hook, not the whole install.
+            try { methods = c.getDeclaredMethods(); }
+            catch (RuntimeException | LinkageError e) {
+                Probe.log("METHODS_UNREADABLE", "owner=" + c.getName() + " name=" + name + " error=" + e.getClass().getSimpleName());
+                return hooked > 0;
+            }
+            for (Method m : methods) {
                 if (!m.getName().equals(name)) continue;
                 count++;
                 if (!installed.add(m)) continue;

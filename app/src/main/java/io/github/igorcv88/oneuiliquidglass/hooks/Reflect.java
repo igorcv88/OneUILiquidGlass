@@ -9,6 +9,7 @@ public final class Reflect {
         for (Class<?> c = type; c != null; c = c.getSuperclass()) {
             try { Field f = c.getDeclaredField(name); f.setAccessible(true); return f; }
             catch (NoSuchFieldException ignored) { }
+            catch (LinkageError unresolvable) { return null; }
         }
         return null;
     }
