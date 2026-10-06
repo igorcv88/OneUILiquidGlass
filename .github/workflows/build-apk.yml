@@ -12,10 +12,19 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+      # The action's default package list includes the obsolete 'tools' package,
+      # which current cmdline-tools no longer publish (sdkmanager exits 1).
       - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-36 build-tools;35.0.0'
       - uses: gradle/actions/setup-gradle@v4
-      - run: sdkmanager "platforms;android-36" "build-tools;35.0.0"
       - run: ./gradlew --no-daemon testDebugUnitTest lintDebug assembleDebug
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: reports
+          path: app/build/reports/
+          if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         with:
           name: OneUILiquidGlass-0.1.0-probe

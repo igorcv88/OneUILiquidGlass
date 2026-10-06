@@ -33,27 +33,33 @@ public final class HeadsUpHooks {
     private Class<?> rowClass;
     private Field backgroundField;
     private boolean drawHook;
+    private boolean shadeHook;
     private final GlassSpec spec = new GlassSpec();
     private Boolean shadeExpanded;
     public HeadsUpHooks(ClassLoader loader, boolean enabled) { this.loader = loader; this.enabled = enabled; }
     private Class<?> resolve(String name) {
-        try { Class<?> c = Class.forName(name, false, loader); Probe.resolved(c); return c; }
+        Class<?> c;
+        try { c = Class.forName(name, false, loader); }
         catch (ClassNotFoundException | LinkageError | RuntimeException e) { Probe.log("CLASS_MISSING", "name=" + name); return null; }
+        // Member probing can hit unresolvable field/parameter types; that must not hide a present class.
+        try { Probe.resolved(c); } catch (LinkageError | RuntimeException e) { Probe.error("CLASS_PROBE_FAILED", e); }
+        return c;
     }
-    private void hook(Class<?> type, String name, XC_MethodHook callback) {
-        if (type == null) return;
-        int count = 0;
+    private boolean hook(Class<?> type, String name, XC_MethodHook callback) {
+        if (type == null) return false;
+        int count = 0, hooked = 0;
         for (Class<?> c = type; c != null && c != View.class; c = c.getSuperclass()) {
             for (Method m : c.getDeclaredMethods()) {
                 if (!m.getName().equals(name)) continue;
                 count++;
                 if (!installed.add(m)) continue;
-                try { XposedBridge.hookMethod(m, callback); Probe.log("HOOK", "method=" + m.toGenericString()); }
+                try { XposedBridge.hookMethod(m, callback); hooked++; Probe.log("HOOK", "method=" + m.toGenericString()); }
                 catch (RuntimeException | LinkageError e) { Probe.error("HOOK_FAILED", e); }
             }
             if (count > 0) break;
         }
         if (count == 0) Probe.log("METHOD_MISSING", "owner=" + type.getName() + " name=" + name);
+        return hooked > 0;
     }
     public void install() {
         rowClass = resolve(ROW);
@@ -83,17 +89,22 @@ public final class HeadsUpHooks {
         for (String manager : new String[]{"com.android.systemui.statusbar.notification.headsup.HeadsUpManagerImpl", "com.android.systemui.statusbar.policy.BaseHeadsUpManager", "com.android.systemui.statusbar.policy.HeadsUpManager"}) {
             Class<?> c = resolve(manager);
             for (String n : new String[]{"showNotification", "updateNotification", "removeNotification"}) hook(c, n, new XC_MethodHook() {
-                @Override protected void afterHookedMethod(MethodHookParam p) { Probe.log("MANAGER_EVENT", "owner=" + p.thisObject.getClass().getName() + " method=" + ((Method) p.method).getName()); }
+                @Override protected void afterHookedMethod(MethodHookParam p) { Probe.log("MANAGER_EVENT", "owner=" + owner(p) + " method=" + ((Method) p.method).getName()); }
             });
         }
         // Brief/Edge Lighting remains a separate discovery lane, not a notification row assumption.
         for (String name : new String[]{"com.android.systemui.edgelighting.effect.container.NotificationEffect", "com.android.systemui.edgelighting.effect.container.EdgeLightingDialog"}) {
             Class<?> c = resolve(name);
             for (String n : new String[]{"show", "dismiss", "onAttachedToWindow", "onDetachedFromWindow"}) hook(c, n, new XC_MethodHook() {
-                @Override protected void afterHookedMethod(MethodHookParam p) { Probe.log("BRIEF_EVENT", "owner=" + p.thisObject.getClass().getName() + " method=" + ((Method) p.method).getName()); }
+                @Override protected void afterHookedMethod(MethodHookParam p) { Probe.log("BRIEF_EVENT", "owner=" + owner(p) + " method=" + ((Method) p.method).getName()); }
             });
         }
-        Probe.log("READY", "mode=" + (enabled ? "glass" : "probe") + " drawHook=" + drawHook + " shadeKnown=" + (shadeExpanded != null));
+        // Shade state is only known once SystemUI constructs the controller, after this point.
+        Probe.log("READY", "mode=" + (enabled ? "glass" : "probe") + " drawHook=" + drawHook + " shadeHook=" + shadeHook);
+        if (enabled && (!drawHook || !shadeHook)) Probe.log("GLASS_UNAVAILABLE", "drawHook=" + drawHook + " shadeHook=" + shadeHook);
+    }
+    private static String owner(XC_MethodHook.MethodHookParam p) {
+        return p.thisObject != null ? p.thisObject.getClass().getName() : ((Method) p.method).getDeclaringClass().getName();
     }
     private void installShade() {
         Class<?> c = resolve("com.android.systemui.shade.NotificationPanelViewController");
@@ -101,14 +112,14 @@ public final class HeadsUpHooks {
         if (c != null) {
             try { XposedBridge.hookAllConstructors(c, new XC_MethodHook() {
                 @Override protected void afterHookedMethod(MethodHookParam p) { updateShade(p.thisObject); }
-            }); } catch (RuntimeException | LinkageError e) { Probe.error("SHADE_CONSTRUCTOR_FAILED", e); }
+            }); shadeHook = true; } catch (RuntimeException | LinkageError e) { Probe.error("SHADE_CONSTRUCTOR_FAILED", e); }
         }
         // This reads the controller's actual expanded height, rather than treating a row expansion as QS.
-        hook(c, "setExpandedHeightInternal", new XC_MethodHook() {
+        if (hook(c, "setExpandedHeightInternal", new XC_MethodHook() {
             @Override protected void afterHookedMethod(MethodHookParam p) {
                 updateShade(p.thisObject);
             }
-        });
+        })) shadeHook = true;
     }
     private void updateShade(Object controller) {
         Object height = Reflect.read(controller, "mExpandedHeight");
@@ -213,14 +224,14 @@ public final class HeadsUpHooks {
             View v = background.get(), r = row.get();
             if (v == null || r == null || failed || !drawHook || !v.isShown() || v.getWidth() <= 0 || v.getHeight() <= 0) return false;
             Boolean keyguard = Reflect.bool(r, "isOnKeyguard", "mOnKeyguard");
-            return Eligibility.glass(enabled, Reflect.bool(r, "isHeadsUpState", "mHeadsUp"), keyguard, shadeExpanded,
+            return Eligibility.glass(enabled, Reflect.bool(r, "isHeadsUpState", "mIsHeadsUp"), keyguard, shadeExpanded,
                     v.isAttachedToWindow(), v.isHardwareAccelerated(), r.isPressed() || r.isFocused() || r.isHovered());
         }
         void event(String event) {
             View v = background.get(), r = row.get(); if (v == null || r == null) return;
             Probe.view("ROW_EVENT", v);
             Probe.log("LIFECYCLE", "callback=" + event + " rowId=" + Integer.toHexString(System.identityHashCode(r))
-                    + " headsUp=" + Reflect.bool(r, "isHeadsUpState", "mHeadsUp") + " keyguard=" + Reflect.read(r, "mOnKeyguard")
+                    + " headsUp=" + Reflect.bool(r, "isHeadsUpState", "mIsHeadsUp") + " keyguard=" + Reflect.read(r, "mOnKeyguard")
                     + " pinned=" + Reflect.read(r, "mIsPinned") + " animatingAway=" + Reflect.read(r, "mHeadsUpAnimatingAway")
                     + " tint=" + Reflect.read(v, "mTintColor") + " radii=" + java.util.Arrays.toString(shape())
                     + " shadeExpanded=" + shadeExpanded + " crossBlur=" + blurEnabled);
