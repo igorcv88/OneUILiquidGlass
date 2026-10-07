@@ -15,10 +15,15 @@ package io.github.igorcv88.oneuiliquidglass.glass;
  * the thickness shadow. Rim, hairline and shadow terms are adapted from the author's WaEnhancerX
  * Community {@code LiquidLens}; its backdrop-sampling terms (refraction, backdrop dispersion,
  * saturation) are omitted because a cross-process compositor blur exposes no pixels.</p>
+ *
+ * <p>{@link #REFRACT_SOURCE} is the variant for a captured backdrop: the same geometry and edge
+ * optics over backdrop pixels displaced by the Snell shift of a quarter-circle bevel.</p>
  */
 public final class LiquidGlassShader {
     private LiquidGlassShader() {}
-    public static final String SOURCE = """
+
+    /** Geometry and edge optics shared by both programs. edge() returns added light and shadow alpha. */
+    private static final String COMMON = """
         uniform float2 size;
         uniform float2 origin;
         uniform float4 corners;
@@ -38,18 +43,13 @@ public final class LiquidGlassShader {
                                 : (p.x < 0.0 ? corners.w : corners.z);
             return roundedBox(p, hs, clamp(r, 0.0, min(hs.x, hs.y)));
         }
-        half4 main(float2 coord) {
-            float2 hs = size * 0.5;
-            float2 p = coord - origin - hs;
-            float d = field(p, hs);
-            float cover = clamp(0.5 - d / 1.5, 0.0, 1.0);
-            if (cover <= 0.004) {
-                return half4(0.0);
-            }
+        float2 outward(float2 p, float2 hs) {
             float2 n = float2(field(p + float2(1.0, 0.0), hs) - field(p - float2(1.0, 0.0), hs),
                               field(p + float2(0.0, 1.0), hs) - field(p - float2(0.0, 1.0), hs));
             float nl = length(n);
-            n = nl > 0.0001 ? n / nl : float2(0.0, -1.0);
+            return nl > 0.0001 ? n / nl : float2(0.0, -1.0);
+        }
+        half4 edge(float2 p, float2 hs, float d, float2 n) {
             float depth = max(-d, 0.0);
             float facing = dot(n, -normalize(light + float2(0.0001, 0.0)));
             float2 q = p / max(hs, float2(1.0, 1.0));
@@ -83,7 +83,93 @@ public final class LiquidGlassShader {
             float t = clamp(depth / max(bevel, 1.0), 0.0, 1.0);
             float sw = clamp(bevel * 0.9, 4.0, 40.0);
             float thick = pow(clamp(1.0 - depth / sw, 0.0, 1.0), 1.5) * t * max(-facing, 0.0) * shadow;
-            return half4(half3(clamp(added, 0.0, 1.0) * cover), half(0.26 * thick * cover));
+            return half4(half3(clamp(added, 0.0, 1.0)), half(0.26 * thick));
+        }
+        """;
+
+    /** Edge optics alone, composited over a compositor or shade blur (premultiplied, additive rgb). */
+    public static final String SOURCE = COMMON + """
+        half4 main(float2 coord) {
+            float2 hs = size * 0.5;
+            float2 p = coord - origin - hs;
+            float d = field(p, hs);
+            float cover = clamp(0.5 - d / 1.5, 0.0, 1.0);
+            if (cover <= 0.004) {
+                return half4(0.0);
+            }
+            return edge(p, hs, d, outward(p, hs)) * half(cover);
+        }
+        """;
+
+    /**
+     * Opaque material over a sampled backdrop. The backdrop child is in bitmap pixels:
+     * screen = coord + bdOrigin, bitmap = screen * bdScale. Each channel is displaced inward by the
+     * Snell shift (scaled by refractScale; red bends less, blue more by +-dispersion), frosted with a
+     * 9-tap ring, saturated, veiled by tint and fill, then lit and shadowed by edge().
+     */
+    public static final String REFRACT_SOURCE = COMMON + """
+        uniform shader backdrop;
+        uniform float2 bdOrigin;
+        uniform float bdScale;
+        uniform float2 bdSize;
+        uniform float refractScale;
+        uniform float ior;
+        uniform float blurPx;
+        uniform float saturation;
+        uniform float dispersion;
+        uniform half4 tint;
+        uniform half4 fillColor;
+
+        float shiftAt(float depth, float b) {
+            if (depth >= b || b <= 0.0) {
+                return 0.0;
+            }
+            float u = 1.0 - depth / b;
+            float s = sqrt(max(1.0 - u * u, 0.0004));
+            float t1 = atan(u / s);
+            float t2 = asin(clamp(sin(t1) / ior, -1.0, 1.0));
+            return b * s * tan(t1 - t2);
+        }
+        half3 tap(float2 screen) {
+            float2 uv = clamp(screen * bdScale, float2(0.5), bdSize - float2(0.5));
+            return backdrop.eval(uv).rgb;
+        }
+        half3 frost(float2 q, float r) {
+            if (r < 0.5) {
+                return tap(q);
+            }
+            float k = r * 0.7071;
+            half3 c = tap(q) * 0.2;
+            c += (tap(q + float2(r, 0.0)) + tap(q - float2(r, 0.0)) + tap(q + float2(0.0, r)) + tap(q - float2(0.0, r))) * 0.12;
+            c += (tap(q + float2(k, k)) + tap(q - float2(k, k)) + tap(q + float2(k, -k)) + tap(q + float2(-k, k))) * 0.08;
+            return c;
+        }
+        half4 main(float2 coord) {
+            float2 hs = size * 0.5;
+            float2 p = coord - origin - hs;
+            float d = field(p, hs);
+            float cover = clamp(0.5 - d / 1.5, 0.0, 1.0);
+            if (cover <= 0.004) {
+                return half4(0.0);
+            }
+            float2 n = outward(p, hs);
+            float s = shiftAt(max(-d, 0.0), bevel) * refractScale;
+            float2 q = coord + bdOrigin;
+            half3 c;
+            if (s > 0.25 && dispersion > 0.0) {
+                c = half3(frost(q - n * (s * (1.0 - dispersion)), blurPx).r,
+                          frost(q - n * s, blurPx).g,
+                          frost(q - n * (s * (1.0 + dispersion)), blurPx).b);
+            } else {
+                c = frost(q - n * s, blurPx);
+            }
+            half l = dot(c, half3(0.2126, 0.7152, 0.0722));
+            c = clamp(mix(half3(l), c, half(saturation)), 0.0, 1.0);
+            c = c * (1.0 - tint.a) + tint.rgb;
+            c = c * (1.0 - fillColor.a) + fillColor.rgb;
+            half4 e = edge(p, hs, d, n);
+            c = c * (1.0 - e.a) + e.rgb;
+            return half4(clamp(c, 0.0, 1.0) * half(cover), half(cover));
         }
         """;
 }

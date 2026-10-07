@@ -19,4 +19,17 @@ public final class GlassSpecTest {
         assertTrue((spec.darkFill >>> 24) < (spec.darkBlurColor >>> 24));
         assertTrue((spec.lightFill >>> 24) < (spec.lightBlurColor >>> 24));
     }
+    /** Snell on a quarter-circle bevel b = 70 px, n = 1.5: peak 16.19 px about 11 px inside the outline. */
+    @Test public void refractionShiftMatchesThePhysicalModel() {
+        double peak = 0, at = 0;
+        for (double x = 0; x < 70; x += 0.25) {
+            double s = GlassSpec.refractionShift(x, 70, 1.5);
+            if (s > peak) { peak = s; at = x; }
+        }
+        assertEquals(16.19, peak, 0.05);
+        assertEquals(11, at, 1.0);
+        assertEquals(0, GlassSpec.refractionShift(70, 70, 1.5), 0);
+        assertEquals(0, GlassSpec.refractionShift(30, 70, 1.0), 1e-9);
+        assertTrue(GlassSpec.refractionShift(11, 70, 1.6) > GlassSpec.refractionShift(11, 70, 1.5));
+    }
 }
