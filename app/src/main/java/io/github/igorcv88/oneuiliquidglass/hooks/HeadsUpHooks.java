@@ -34,6 +34,7 @@ public final class HeadsUpHooks {
     private Field backgroundField;
     private boolean drawHook;
     private boolean shadeHook;
+    private boolean blurEnvironmentReported;
     private final GlassSpec spec = new GlassSpec();
     private Boolean shadeExpanded;
     public HeadsUpHooks(ClassLoader loader, boolean enabled) { this.loader = loader; this.enabled = enabled; }
@@ -48,7 +49,9 @@ public final class HeadsUpHooks {
     private boolean hook(Class<?> type, String name, XC_MethodHook callback) {
         if (type == null) return false;
         int count = 0, hooked = 0;
-        for (Class<?> c = type; c != null && c != View.class; c = c.getSuperclass()) {
+        // Never climb into framework classes: hooking e.g. Dialog.dismiss would fire for every SystemUI dialog.
+        ClassLoader framework = View.class.getClassLoader();
+        for (Class<?> c = type; c != null && c.getClassLoader() != framework; c = c.getSuperclass()) {
             Method[] methods;
             // Firmware classes can reference types absent from this build; skip this hook, not the whole install.
             try { methods = c.getDeclaredMethods(); }
@@ -184,6 +187,7 @@ public final class HeadsUpHooks {
         void invalidate() { View v = background.get(); if (v != null) v.invalidate(); }
         @Override public void onViewAttachedToWindow(View view) {
             if (observer != null) return;
+            if (!blurEnvironmentReported) { blurEnvironmentReported = true; Probe.blurEnvironment(view.getContext()); }
             observer = view.getViewTreeObserver(); observer.addOnPreDrawListener(this);
             try {
                 wm = view.getContext().getSystemService(WindowManager.class);
