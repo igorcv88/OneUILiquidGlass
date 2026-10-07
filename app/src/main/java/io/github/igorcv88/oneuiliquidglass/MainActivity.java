@@ -24,7 +24,7 @@ public final class MainActivity extends Activity {
         int pad = (int) (24 * getResources().getDisplayMetrics().density);
         layout.setPadding(pad, pad, pad, pad);
         TextView title = new TextView(this);
-        title.setText("One UI Liquid Glass 0.1\n\nEnable this module for SystemUI in LSPosed. Restart SystemUI after changing the mode.\n\nProbe mode logs firmware classes and notification lifecycle. Glass mode adds compositor blur and edge lighting to detailed heads-up notifications. Brief popups are diagnostic only.\n");
+        title.setText("One UI Liquid Glass 0.1\n\nEnable this module for SystemUI in LSPosed. Restart SystemUI after changing the mode.\n\nProbe mode logs firmware classes and notification lifecycle. Glass mode adds blur and edge lighting to notifications: detailed heads-up pop-ups, the shade and the lockscreen. Brief pop-ups (Edge Lighting) are not covered.\n");
         layout.addView(title);
         if (!Config.lsposedPrefs) {
             TextView warning = new TextView(this);

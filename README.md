@@ -1,6 +1,6 @@
 # OneUILiquidGlass
 
-Independent LSPosed module for Samsung SystemUI heads-up notifications. Initial target: Galaxy S25 Ultra SM-S938B, Android 17 / One UI 9 Beta. Firmware compatibility is **not physically verified** yet.
+Independent LSPosed module for Samsung SystemUI notifications: heads-up pop-ups, the notification shade and lockscreen notifications. Initial target: Galaxy S25 Ultra SM-S938B, Android 17 / One UI 9 Beta. Firmware compatibility is **not physically verified** yet.
 
 ## Current implementation
 
@@ -28,7 +28,7 @@ Releases are published to GitHub Releases by **Build One UI Liquid Glass APK** (
 
 1. Install the APK and enable the module for **SystemUI** in LSPosed.
 2. Leave glass off for the first probe. Restart SystemUI (or reboot).
-3. Use Samsung **Detailed** notification pop-up style. Grant the app notification permission, press the test button and switch to another app during the five-second delay.
+3. Use Samsung **Detailed** notification pop-up style (the **Brief** style is drawn by `EdgeLightingWindow` and is not covered). Grant the app notification permission, press the test button and switch to another app during the five-second delay.
 4. Collect `OULG` logs following [docs/physical-test.md](docs/physical-test.md).
 5. Enable experimental glass in the app, restart SystemUI and open/close the shade once. Repeat the test. If panel state cannot be resolved, native rendering remains active and the logs explain the missing path.
 
@@ -37,7 +37,7 @@ Configuration is a process-start snapshot read through LSPosed's shared-preferen
 ## Layout
 
 - `SystemUIEntry`: process scope and configuration.
-- `hooks/HeadsUpHooks`: firmware resolution, heads-up lifecycle, eligibility and temporary background substitution.
+- `hooks/HeadsUpHooks`: firmware resolution, notification lifecycle, eligibility and glass composition over the native background draw.
 - `glass/BackgroundBlurBridge`: compositor acquisition and cleanup.
 - `glass/GlassDrawable`, `LiquidGlassShader`, `GlassSpec`: material and geometry.
 - `diagnostics/Probe`: bounded structural logs.

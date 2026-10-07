@@ -37,6 +37,7 @@ public final class HeadsUpHooks {
     private final Set<Method> installed = Collections.newSetFromMap(new java.util.HashMap<>());
     private Class<?> rowClass;
     private Field backgroundField;
+    private Field clipTopField, clipBottomField, actualHeightField, expandRunningField;
     private boolean drawHook;
     private boolean shadeHook;
     private boolean blurEnvironmentReported;
@@ -106,6 +107,12 @@ public final class HeadsUpHooks {
         Class<?> bg = resolve(BACKGROUND);
         if (bg != null) {
             backgroundField = Reflect.field(bg, "mBackground");
+            clipTopField = Reflect.field(bg, "mClipTopAmount");
+            clipBottomField = Reflect.field(bg, "mClipBottomAmount");
+            actualHeightField = Reflect.field(bg, "mActualHeight");
+            expandRunningField = Reflect.field(bg, "mExpandAnimationRunning");
+            Probe.log("CLIP_FIELDS", "clipTop=" + (clipTopField != null) + " clipBottom=" + (clipBottomField != null)
+                    + " actualHeight=" + (actualHeightField != null) + " expandRunning=" + (expandRunningField != null));
             // Require the exact onDraw(Canvas) contract; unknown implementations stay native.
             try {
                 Method draw = bg.getDeclaredMethod("onDraw", Canvas.class);
@@ -180,7 +187,7 @@ public final class HeadsUpHooks {
                 ? ((Number) height).floatValue() > 0.5f : null;
         if (next != null && !next.equals(shadeExpanded)) {
             shadeExpanded = next; Probe.log("SHADE", "expanded=" + next);
-            for (State state : new ArrayList<>(states.values())) { if (next) state.release(); state.invalidate(); }
+            for (State state : new ArrayList<>(states.values())) state.invalidate();
         }
     }
     private void observeRow(View row, String event) {
@@ -212,6 +219,7 @@ public final class HeadsUpHooks {
         final WeakReference<View> row;
         GlassDrawable glass;
         Backdrop.Kind glassKind;
+        android.graphics.RenderNode scratch;
         WindowManager wm;
         Consumer<Boolean> blurListener;
         ViewTreeObserver observer;
@@ -261,9 +269,9 @@ public final class HeadsUpHooks {
             try {
                 View v = background.get(); if (v == null) return true;
                 boolean eligible = eligible();
-                String reason = reason();
                 View r = row.get();
                 Boolean headsUp = r == null ? null : Reflect.bool(r, "isHeadsUpState", "mIsHeadsUp");
+                String reason = reason();
                 if (headsUp != null && !headsUp.equals(lastHeadsUp)) {
                     lastHeadsUp = headsUp;
                     Probe.log("HEADSUP", "viewId=" + Integer.toHexString(System.identityHashCode(v)) + " headsUp=" + headsUp
@@ -273,6 +281,7 @@ public final class HeadsUpHooks {
                 if (!lastReason.equals(String.valueOf(reason))) {
                     lastReason = String.valueOf(reason);
                     Probe.log("DECISION", "viewId=" + Integer.toHexString(System.identityHashCode(v))
+                            + " surface=" + Eligibility.surface(headsUp, r == null ? null : Reflect.bool(r, "isOnKeyguard", "mOnKeyguard"), shadeExpanded)
                             + (reason == null ? " glass=true" : " glass=false reason=" + reason));
                 }
                 if (lastEligible == null || lastEligible != eligible) {
@@ -290,9 +299,7 @@ public final class HeadsUpHooks {
         boolean eligible() {
             View v = background.get(), r = row.get();
             if (v == null || r == null || failed || !drawHook || !v.isShown() || v.getWidth() <= 0 || v.getHeight() <= 0) return false;
-            Boolean keyguard = Reflect.bool(r, "isOnKeyguard", "mOnKeyguard");
-            return Eligibility.glass(enabled, Reflect.bool(r, "isHeadsUpState", "mIsHeadsUp"), keyguard, shadeExpanded,
-                    v.isAttachedToWindow(), v.isHardwareAccelerated(), r.isPressed() || r.isFocused() || r.isHovered());
+            return Eligibility.glass(enabled, v.isAttachedToWindow(), v.isHardwareAccelerated(), r.isPressed() || r.isFocused() || r.isHovered());
         }
         /** Diagnostic mirror of eligible() plus the compositor capability checked in material(). */
         String reason() {
@@ -302,9 +309,7 @@ public final class HeadsUpHooks {
             if (!drawHook) return "drawHook=false";
             if (!v.isShown()) return "hidden";
             if (v.getWidth() <= 0 || v.getHeight() <= 0) return "empty";
-            String policy = Eligibility.reason(enabled, Reflect.bool(r, "isHeadsUpState", "mIsHeadsUp"),
-                    Reflect.bool(r, "isOnKeyguard", "mOnKeyguard"), shadeExpanded,
-                    v.isAttachedToWindow(), v.isHardwareAccelerated(), r.isPressed() || r.isFocused() || r.isHovered());
+            String policy = Eligibility.reason(enabled, v.isAttachedToWindow(), v.isHardwareAccelerated(), r.isPressed() || r.isFocused() || r.isHovered());
             if (policy != null) return policy;
             return Backdrop.choose(blurEnabled, samsungBlur) != null ? null : "blur=unavailable";
         }
@@ -347,8 +352,8 @@ public final class HeadsUpHooks {
             if (!CornerGeometry.supported(Reflect.read(v, "mCornerRadii"))) {
                 failed = true; Probe.log("GEOMETRY_UNSUPPORTED", "view=" + v.getClass().getName()); return null;
             }
-            if (kind == Backdrop.Kind.SAMSUNG && !CornerGeometry.uniform(Reflect.read(v, "mCornerRadii"))) {
-                // Samsung blur takes one corner radius; mixed top/bottom corners stay native this frame.
+            if (kind == Backdrop.Kind.SAMSUNG && !SemBlurBridge.supports(Reflect.read(v, "mCornerRadii"))) {
+                // Corner order is only known for top/bottom-symmetric shapes; others stay native this frame.
                 release(); return null;
             }
             if (glass == null) {
@@ -366,10 +371,15 @@ public final class HeadsUpHooks {
             if (glass != null) { glass.release(); glass = null; glassKind = null; Probe.log("GLASS_RELEASED", "native=true"); }
         }
     }
+    /**
+     * The native onDraw records into a throwaway RenderNode so it still computes the drawable's
+     * bounds; the glass is then drawn on the real canvas with those bounds and the native clip.
+     * The private background field is never written: on One UI 9 it is typed SeslRecoilDrawable.
+     */
     private final class DrawHook extends XC_MethodHook {
         private boolean reported;
         @Override protected void beforeHookedMethod(MethodHookParam p) {
-            if (!(p.thisObject instanceof View) || backgroundField == null) return;
+            if (!(p.thisObject instanceof View) || backgroundField == null || !(p.args[0] instanceof Canvas)) return;
             View v = (View) p.thisObject;
             if (!reported) { reported = true; Probe.log("DRAW_HOOK_CALLED", "view=" + v.getClass().getName()); }
             try {
@@ -377,30 +387,56 @@ public final class HeadsUpHooks {
                 State s = state(v, row);
                 Object current = backgroundField.get(v); if (!(current instanceof Drawable)) return;
                 GlassDrawable glass = s.material((Drawable) current); if (glass == null) return;
-                // Restore even when the native draw throws; no permanent drawable replacement.
-                p.setObjectExtra("oulgOriginal", current);
-                p.setObjectExtra("oulgSaveCount", ((Canvas) p.args[0]).getSaveCount());
-                backgroundField.set(v, glass);
+                if (s.scratch == null) s.scratch = new android.graphics.RenderNode("oulg-native-bounds");
+                Canvas scratch = s.scratch.beginRecording(Math.max(1, v.getWidth()), Math.max(1, v.getHeight()));
+                p.setObjectExtra("oulgCanvas", p.args[0]);
+                p.setObjectExtra("oulgGlass", glass);
+                p.args[0] = scratch;
             } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
                 State s = states.get(v); if (s != null) { s.failed = true; s.release(); }
                 Probe.error("DRAW_SWAP_FAILED", e);
             }
         }
         @Override protected void afterHookedMethod(MethodHookParam p) {
-            Object original = p.getObjectExtra("oulgOriginal"); if (original == null) return;
-            try { backgroundField.set(p.thisObject, original); }
-            catch (IllegalAccessException | RuntimeException e) { Probe.error("DRAW_RESTORE_FAILED", e); }
+            Object real = p.getObjectExtra("oulgCanvas"); if (!(real instanceof Canvas)) return;
+            View v = (View) p.thisObject;
+            State s = states.get(v);
+            if (s != null && s.scratch != null) { s.scratch.endRecording(); s.scratch.discardDisplayList(); }
+            p.args[0] = real;
+            Canvas canvas = (Canvas) real;
             if (p.hasThrowable()) {
-                State s = states.get((View) p.thisObject); if (s != null) { s.failed = true; s.release(); }
+                if (s != null) { s.failed = true; s.release(); }
                 Probe.error("NATIVE_DRAW_FAILED", p.getThrowable());
                 try {
-                    Object count = p.getObjectExtra("oulgSaveCount");
-                    if (count instanceof Integer) ((Canvas) p.args[0]).restoreToCount((Integer) count);
-                    Object result = XposedBridge.invokeOriginalMethod(p.method, p.thisObject, p.args);
-                    p.setResult(result);
+                    p.setResult(XposedBridge.invokeOriginalMethod(p.method, p.thisObject, p.args));
                     Probe.log("NATIVE_DRAW_RECOVERED", "glassDisabled=true");
                 } catch (ReflectiveOperationException | RuntimeException e) { Probe.error("NATIVE_DRAW_RECOVERY_FAILED", e); }
+                return;
+            }
+            try {
+                Drawable current = (Drawable) backgroundField.get(v);
+                GlassDrawable glass = (GlassDrawable) p.getObjectExtra("oulgGlass");
+                android.graphics.Rect bounds = current.getBounds();
+                if (bounds.isEmpty()) return;
+                int save = canvas.save();
+                try {
+                    clipLikeNative(v, canvas);
+                    glass.setBounds(bounds);
+                    glass.draw(canvas);
+                } finally { canvas.restoreToCount(save); }
+            } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
+                if (s != null) { s.failed = true; s.release(); }
+                Probe.error("GLASS_COMPOSE_FAILED", e);
+                // The real canvas received nothing this frame; redraw natively.
+                v.invalidate();
             }
         }
+    }
+    /** AOSP NotificationBackgroundView clips to [clipTop, actualHeight - clipBottom] unless expanding. */
+    private void clipLikeNative(View v, Canvas canvas) throws IllegalAccessException {
+        if (clipTopField == null || clipBottomField == null || actualHeightField == null) return;
+        if (expandRunningField != null && expandRunningField.getBoolean(v)) return;
+        int top = clipTopField.getInt(v), bottom = actualHeightField.getInt(v) - clipBottomField.getInt(v);
+        canvas.clipRect(0, top, v.getWidth(), Math.max(top, bottom));
     }
 }

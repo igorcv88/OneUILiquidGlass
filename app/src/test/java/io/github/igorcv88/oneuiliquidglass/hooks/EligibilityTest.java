@@ -4,35 +4,23 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public final class EligibilityTest {
-    @Test public void detailedHeadsUpWithKnownUnlockedCollapsedStateCanRender() {
-        assertTrue(Eligibility.glass(true, true, false, false, true, true, false));
+    @Test public void attachedHardwareIdleRowCanRender() {
+        assertTrue(Eligibility.glass(true, true, true, false));
+        assertNull(Eligibility.reason(true, true, true, false));
     }
     @Test public void probeNeverChangesRendering() {
-        assertFalse(Eligibility.glass(false, true, false, false, true, true, false));
+        assertFalse(Eligibility.glass(false, true, true, false));
+        assertEquals("disabled", Eligibility.reason(false, false, false, true));
     }
-    @Test public void unknownFirmwareStateKeepsNativeBackground() {
-        assertFalse(Eligibility.glass(true, null, false, false, true, true, false));
-        assertFalse(Eligibility.glass(true, true, null, false, true, true, false));
-        assertFalse(Eligibility.glass(true, true, false, null, true, true, false));
+    @Test public void detachSoftwareAndInteractionKeepNativeBackground() {
+        assertEquals("detached", Eligibility.reason(true, false, true, false));
+        assertEquals("software", Eligibility.reason(true, true, false, false));
+        assertEquals("interacting", Eligibility.reason(true, true, true, true));
     }
-    @Test public void lockscreenAndShadeKeepNativeRendering() {
-        assertFalse(Eligibility.glass(true, true, true, false, true, true, false));
-        assertFalse(Eligibility.glass(true, true, false, true, true, true, false));
-    }
-    @Test public void dismissDetachAndSoftwareRenderingKeepNativeBackground() {
-        assertFalse(Eligibility.glass(true, false, false, false, true, true, false));
-        assertFalse(Eligibility.glass(true, true, false, false, false, true, false));
-        assertFalse(Eligibility.glass(true, true, false, false, true, false, false));
-    }
-    @Test public void nativeInteractionUsesOriginalStatefulDrawable() {
-        assertFalse(Eligibility.glass(true, true, false, false, true, true, true));
-    }
-    @Test public void reasonNamesFirstBlockingCondition() {
-        assertNull(Eligibility.reason(true, true, false, false, true, true, false));
-        assertEquals("disabled", Eligibility.reason(false, null, null, null, false, false, true));
-        assertEquals("headsUp=unknown", Eligibility.reason(true, null, false, false, true, true, false));
-        assertEquals("keyguard=true", Eligibility.reason(true, true, true, false, true, true, false));
-        assertEquals("shade=unknown", Eligibility.reason(true, true, false, null, true, true, false));
-        assertEquals("interacting", Eligibility.reason(true, true, false, false, true, true, true));
+    @Test public void surfaceLabelPrefersHeadsUpThenLockscreenThenShade() {
+        assertEquals("headsup", Eligibility.surface(true, true, true));
+        assertEquals("lockscreen", Eligibility.surface(false, true, false));
+        assertEquals("shade", Eligibility.surface(false, false, true));
+        assertEquals("unknown", Eligibility.surface(null, null, null));
     }
 }

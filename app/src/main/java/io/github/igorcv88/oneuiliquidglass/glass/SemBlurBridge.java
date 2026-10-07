@@ -20,7 +20,7 @@ public final class SemBlurBridge implements Backdrop {
     private final Constructor<?> builderWithMode, builderPlain;
     private final Method setMode;
     private final int mode;
-    private final Method radius, color, corner, build;
+    private final Method radius, color, corner, corners, build;
     private Object pending;
     private boolean posted, released;
     private final Runnable apply = this::applyPending;
@@ -40,6 +40,10 @@ public final class SemBlurBridge implements Backdrop {
         build = builderClass.getMethod("build");
         color = optional(builderClass, "setBackgroundColor", int.class);
         corner = optional(builderClass, "setBackgroundCornerRadius", float.class);
+        Method four;
+        try { four = builderClass.getMethod("setBackgroundCornerRadius", float.class, float.class, float.class, float.class); }
+        catch (NoSuchMethodException e) { four = null; }
+        corners = four;
     }
     private static Constructor<?> optionalCtor(Class<?> c, Class<?> arg) {
         try { return c.getConstructor(arg); } catch (NoSuchMethodException e) { return null; }
@@ -54,10 +58,24 @@ public final class SemBlurBridge implements Backdrop {
             return true;
         } catch (ReflectiveOperationException | LinkageError e) { return false; }
     }
+    /** Shapes the Samsung blur can reproduce without guessing a corner order. */
+    public static boolean supports(Object shape) {
+        return fourRadii() ? CornerGeometry.symmetric(shape) : CornerGeometry.uniform(shape);
+    }
+    private static Boolean fourRadii;
+    private static boolean fourRadii() {
+        if (fourRadii == null) {
+            try {
+                Class.forName(INFO + "$Builder").getMethod("setBackgroundCornerRadius", float.class, float.class, float.class, float.class);
+                fourRadii = true;
+            } catch (ReflectiveOperationException | LinkageError e) { fourRadii = false; }
+        }
+        return fourRadii;
+    }
     public static SemBlurBridge create(View host) throws ReflectiveOperationException {
         SemBlurBridge bridge = new SemBlurBridge(host);
         Probe.log("SEM_BLUR_BRIDGE", "mode=" + bridge.mode + " builder=" + (bridge.builderWithMode != null ? "Builder(int)" : "Builder()+setBlurMode")
-                + " radius=" + bridge.radius.getName() + " color=" + (bridge.color != null) + " corner=" + (bridge.corner != null));
+                + " radius=" + bridge.radius.getName() + " color=" + (bridge.color != null) + " corner=" + (bridge.corner != null) + " corners4=" + (bridge.corners != null));
         return bridge;
     }
     @Override public String name() { return "samsung"; }
@@ -67,8 +85,10 @@ public final class SemBlurBridge implements Backdrop {
         else { b = builderPlain.newInstance(); setMode.invoke(b, mode); }
         radius.invoke(b, px);
         if (color != null) color.invoke(b, tint);
-        // Single scalar radius: callers only select this backdrop for uniform circular corners.
-        if (corner != null) corner.invoke(b, radii[0]);
+        // Four-radius setter assumed top-first (TL, TR, BL, BR as in AOSP); callers pass only shapes
+        // with equal top and bottom pairs, so the bottom-pair order cannot matter.
+        if (corners != null) corners.invoke(b, radii[0], radii[2], radii[6], radii[4]);
+        else if (corner != null) corner.invoke(b, radii[0]);
         pending = build.invoke(b);
         // Updates arrive from the hooked onDraw; apply after the current traversal, not mid-draw.
         if (!posted) { posted = true; host.post(apply); }

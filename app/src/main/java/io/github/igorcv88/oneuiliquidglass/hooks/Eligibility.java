@@ -1,25 +1,24 @@
 package io.github.igorcv88.oneuiliquidglass.hooks;
 
-/** Unknown firmware states retain native rendering. */
+/** Glass applies to every notification surface (heads-up, shade, lockscreen); state reads only gate safety. */
 public final class Eligibility {
     private Eligibility() {}
-    public static boolean glass(boolean enabled, Boolean headsUp, Boolean keyguard,
-                                Boolean shadeExpanded, boolean attached, boolean hardware, boolean interacting) {
-        return reason(enabled, headsUp, keyguard, shadeExpanded, attached, hardware, interacting) == null;
+    public static boolean glass(boolean enabled, boolean attached, boolean hardware, boolean interacting) {
+        return reason(enabled, attached, hardware, interacting) == null;
     }
     /** First condition that keeps native rendering, or null when glass may render. */
-    public static String reason(boolean enabled, Boolean headsUp, Boolean keyguard,
-                                Boolean shadeExpanded, boolean attached, boolean hardware, boolean interacting) {
+    public static String reason(boolean enabled, boolean attached, boolean hardware, boolean interacting) {
         if (!enabled) return "disabled";
-        if (headsUp == null) return "headsUp=unknown";
-        if (!headsUp) return "headsUp=false";
-        if (keyguard == null) return "keyguard=unknown";
-        if (keyguard) return "keyguard=true";
-        if (shadeExpanded == null) return "shade=unknown";
-        if (shadeExpanded) return "shade=expanded";
         if (!attached) return "detached";
         if (!hardware) return "software";
         if (interacting) return "interacting";
         return null;
+    }
+    /** Diagnostic label only; unknown firmware state does not block rendering. */
+    public static String surface(Boolean headsUp, Boolean keyguard, Boolean shadeExpanded) {
+        if (Boolean.TRUE.equals(headsUp)) return "headsup";
+        if (Boolean.TRUE.equals(keyguard)) return "lockscreen";
+        if (Boolean.TRUE.equals(shadeExpanded)) return "shade";
+        return "unknown";
     }
 }
