@@ -16,6 +16,12 @@ public final class GlassSpec {
     public final int darkFill = 0x0a000000;
     public final int shadeLightFill = 0x2effffff;
     public final int shadeDarkFill = 0x14ffffff;
+    /**
+     * Over a captured backdrop the pane is mostly clear: a light veil keeps text legible without
+     * hiding what the edge refracts. debug.oulg.tint overrides the alpha.
+     */
+    public final int captureLightTint = 0x1affffff;
+    public final int captureDarkTint = 0x29000000;
     /** Width of the lit bevel inside the outline. */
     public final float rimDp = 20f;
     public final float hairDp = 0.95f;
@@ -32,5 +38,20 @@ public final class GlassSpec {
     /** Hairline in px: at least 1.5 px so antialiasing does not erase it, at most 5 px. */
     public static float hairPx(float hairDp, float density) {
         return Math.max(1.5f, Math.min(hairDp * density, 5f));
+    }
+
+    /**
+     * Lateral backdrop shift (px) at {@code depth} px inside the outline, for a quarter-circle bevel
+     * of radius {@code bevel} (height = bevel) with refractive index {@code ior}, viewed head-on:
+     * the ray bends by (theta1 - theta2) at the surface and travels the local thickness. Mirrors
+     * shiftAt() in {@link LiquidGlassShader#REFRACT_SOURCE}. Zero on the flat body.
+     */
+    public static double refractionShift(double depth, double bevel, double ior) {
+        if (bevel <= 0 || depth >= bevel || depth < 0) return 0;
+        double u = 1 - depth / bevel;
+        double s = Math.sqrt(Math.max(1 - u * u, 0.0004));
+        double theta1 = Math.atan(u / s);
+        double theta2 = Math.asin(Math.max(-1, Math.min(1, Math.sin(theta1) / ior)));
+        return bevel * s * Math.tan(theta1 - theta2);
     }
 }

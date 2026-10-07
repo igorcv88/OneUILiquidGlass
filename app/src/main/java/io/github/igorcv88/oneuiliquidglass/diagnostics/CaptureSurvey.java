@@ -12,9 +12,9 @@ import java.util.Set;
  * One-shot inventory of the screen-capture surface on this firmware: IWindowManager and SurfaceControl
  * methods whose names mention capture/screenshot, the classes in their signatures (with nested
  * classes, constructors and methods), and which well-known class names exist. Logged so the binding
- * in {@link CaptureProbe} can follow the firmware instead of guessing.
+ * in {@code CaptureApi} can follow the firmware instead of guessing.
  */
-final class CaptureSurvey {
+public final class CaptureSurvey {
     private static final String[] KNOWN = {
             "android.window.ScreenCapture", "android.window.ScreenCaptureInternal",
             "android.window.ScreenCapture$CaptureArgs", "android.window.ScreenCaptureInternal$CaptureArgs",
@@ -27,7 +27,7 @@ final class CaptureSurvey {
 
     private CaptureSurvey() {}
 
-    static void run(Object windowManager) {
+    public static void run(Object windowManager) {
         if (done) return;
         done = true;
         for (String name : KNOWN) {

@@ -18,11 +18,14 @@ import java.util.function.Consumer;
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
 import io.github.igorcv88.oneuiliquidglass.Config;
-import io.github.igorcv88.oneuiliquidglass.diagnostics.CaptureProbe;
 import io.github.igorcv88.oneuiliquidglass.diagnostics.Probe;
 import io.github.igorcv88.oneuiliquidglass.diagnostics.WindowSurvey;
 import io.github.igorcv88.oneuiliquidglass.glass.Backdrop;
 import io.github.igorcv88.oneuiliquidglass.glass.BackgroundBlurBridge;
+import io.github.igorcv88.oneuiliquidglass.glass.CaptureBackdrop;
+import io.github.igorcv88.oneuiliquidglass.glass.CaptureHub;
+import io.github.igorcv88.oneuiliquidglass.glass.GridBackdrop;
+import io.github.igorcv88.oneuiliquidglass.glass.Tuning;
 import io.github.igorcv88.oneuiliquidglass.glass.SemBlurBridge;
 import io.github.igorcv88.oneuiliquidglass.glass.SharedBackdrop;
 import io.github.igorcv88.oneuiliquidglass.glass.GlassDrawable;
@@ -190,7 +193,6 @@ public final class HeadsUpHooks {
         if (next != null && !next.equals(shadeExpanded)) {
             shadeExpanded = next; Probe.log("SHADE", "expanded=" + next);
             for (State state : new ArrayList<>(states.values())) state.invalidate();
-            if (!next) CaptureProbe.onShadeCollapsed();
             // The panel controller's own view works with an empty shade; a row is only the fallback.
             Object panel = Reflect.read(controller, "mView");
             View sample = panel instanceof View && ((View) panel).isAttachedToWindow() ? (View) panel : null;
@@ -198,10 +200,8 @@ public final class HeadsUpHooks {
                 if (sample != null) break;
                 View v = state.background.get(); if (v != null && v.isAttachedToWindow()) sample = v;
             }
-            if (sample != null) {
-                Probe.scrims(sample.getRootView(), next ? "shadeExpanded" : "shadeCollapsed");
-                if (next) CaptureProbe.onShadeExpanded(sample);
-            } else Probe.log("SHADE_PROBE_SKIPPED", "reason=noAttachedView");
+            if (sample != null) Probe.scrims(sample.getRootView(), next ? "shadeExpanded" : "shadeCollapsed");
+            else Probe.log("SHADE_PROBE_SKIPPED", "reason=noAttachedView");
         }
     }
     private void observeRow(View row, String event) {
@@ -246,6 +246,7 @@ public final class HeadsUpHooks {
         Boolean lastHeadsUp;
         int width = -1, height = -1;
         final float[] lastRadii = new float[8];
+        final int[] location = new int[2], lastLocation = {Integer.MIN_VALUE, Integer.MIN_VALUE};
         State(View background, View row) { this.background = new WeakReference<>(background); this.row = new WeakReference<>(row); }
         void invalidate() { View v = background.get(); if (v != null) v.invalidate(); }
         @Override public void onViewAttachedToWindow(View view) {
@@ -289,8 +290,6 @@ public final class HeadsUpHooks {
                 String reason = reason();
                 if (headsUp != null && !headsUp.equals(lastHeadsUp)) {
                     lastHeadsUp = headsUp;
-                    if (headsUp && v.isShown()) CaptureProbe.onHeadsUp(v);
-                    else if (!headsUp) CaptureProbe.onHeadsUpEnded(v);
                     Probe.log("HEADSUP", "viewId=" + Integer.toHexString(System.identityHashCode(v)) + " headsUp=" + headsUp
                             + " pinned=" + Reflect.bool(r, "isPinned", "mIsPinned") + " shown=" + v.isShown()
                             + " nativeBlur=" + Reflect.bool(v, "isBlurEnabled", "mBlurEnabled"));
@@ -300,7 +299,15 @@ public final class HeadsUpHooks {
                 if (!lastReason.equals(decision)) {
                     lastReason = decision;
                     Probe.log("DECISION", "viewId=" + Integer.toHexString(System.identityHashCode(v)) + " surface=" + surface
-                            + (reason == null ? " glass=true backdrop=" + Backdrop.choose(blurEnabled, samsungBlur, sharedBackdrop()) : " glass=false reason=" + reason));
+                            + (reason == null ? " glass=true backdrop=" + kind() : " glass=false reason=" + reason));
+                }
+                if (glassKind == Backdrop.Kind.CAPTURE) {
+                    // Slide and stack animations move the row through RenderNode properties without
+                    // re-recording; the sampled backdrop must follow the screen position every frame.
+                    v.getLocationOnScreen(location);
+                    if (location[0] != lastLocation[0] || location[1] != lastLocation[1]) {
+                        lastLocation[0] = location[0]; lastLocation[1] = location[1]; v.invalidate();
+                    }
                 }
                 if (lastEligible == null || lastEligible != eligible) {
                     lastEligible = eligible;
@@ -329,8 +336,22 @@ public final class HeadsUpHooks {
             if (v.getWidth() <= 0 || v.getHeight() <= 0) return "empty";
             String policy = Eligibility.reason(enabled, v.isAttachedToWindow(), v.isHardwareAccelerated(), r.isPressed() || r.isFocused() || r.isHovered());
             if (policy != null) return policy;
-            return Backdrop.choose(blurEnabled, samsungBlur, sharedBackdrop()) != null ? null : "blur=unavailable";
+            return kind() != null ? null : "blur=unavailable";
         }
+        Backdrop.Kind kind() { return Backdrop.choose(blurEnabled, samsungBlur, sharedBackdrop(), captureRow()); }
+        /**
+         * Heads-up and lockscreen rows have an app or the wallpaper directly behind the shade window,
+         * which a capture excluding that window can sample (debug.oulg.backdrop=off disables it).
+         */
+        boolean captureRow() {
+            View r = row.get();
+            if (r == null || sharedBackdrop()) return false;
+            String mode = Tuning.get().backdrop;
+            if (mode.equals("off") || !GlassDrawable.refractionAvailable()) return false;
+            if (!Boolean.TRUE.equals(Reflect.bool(r, "isHeadsUpState", "mIsHeadsUp")) && !onKeyguard()) return false;
+            return mode.equals("grid") || CaptureHub.available();
+        }
+        boolean onKeyguard() { View r = row.get(); return r != null && Boolean.TRUE.equals(Reflect.bool(r, "isOnKeyguard", "mOnKeyguard")); }
         void event(String event) {
             View v = background.get(), r = row.get(); if (v == null || r == null) return;
             Probe.view("ROW_EVENT", v);
@@ -358,7 +379,7 @@ public final class HeadsUpHooks {
         }
         GlassDrawable material(Drawable original) throws ReflectiveOperationException {
             View v = background.get();
-            Backdrop.Kind kind = Backdrop.choose(blurEnabled, samsungBlur, sharedBackdrop());
+            Backdrop.Kind kind = kind();
             if (v == null || !eligible() || kind == null) { release(); return null; }
             for (int state : original.getState()) {
                 if (state == android.R.attr.state_pressed || state == android.R.attr.state_focused || state == android.R.attr.state_hovered) {
@@ -366,7 +387,7 @@ public final class HeadsUpHooks {
                 }
             }
             if (glass != null && glass.failed()) { failed = true; release(); return null; }
-            if (glass != null && glassKind != kind) release();
+            if (glass != null && (glassKind != kind || glass.stale())) release();
             if (!CornerGeometry.supported(Reflect.read(v, "mCornerRadii"))) {
                 failed = true; Probe.log("GEOMETRY_UNSUPPORTED", "view=" + v.getClass().getName()); return null;
             }
@@ -376,19 +397,24 @@ public final class HeadsUpHooks {
             }
             if (glass == null) {
                 Backdrop backdrop = kind == Backdrop.Kind.SHARED ? new SharedBackdrop()
+                        : kind == Backdrop.Kind.CAPTURE ? (Tuning.get().backdrop.equals("grid") ? new GridBackdrop(v)
+                                : new CaptureBackdrop(v, onKeyguard() && !Boolean.TRUE.equals(Reflect.bool(row.get(), "isHeadsUpState", "mIsHeadsUp"))))
                         : kind == Backdrop.Kind.SAMSUNG ? SemBlurBridge.create(v) : BackgroundBlurBridge.create(v);
                 glass = new GlassDrawable(backdrop, v.getResources().getDisplayMetrics().density, spec);
                 glassKind = kind;
                 glass.setCallback(v);
-                Probe.log("GLASS_APPLIED", "viewId=" + Integer.toHexString(System.identityHashCode(v)) + " source=" + backdrop.name() + " optics=edge_shader");
+                Probe.log("GLASS_APPLIED", "viewId=" + Integer.toHexString(System.identityHashCode(v)) + " source=" + backdrop.name()
+                        + " optics=" + (kind == Backdrop.Kind.CAPTURE ? "refraction" : "edge_shader"));
                 materialReported = false;
             }
             boolean dark = (v.getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
             int fill = kind == Backdrop.Kind.SHARED ? (dark ? spec.shadeDarkFill : spec.shadeLightFill) : (dark ? spec.darkFill : spec.lightFill);
-            glass.configure(original, shape(), fill, dark ? spec.darkBlurColor : spec.lightBlurColor);
+            int tone = kind == Backdrop.Kind.CAPTURE ? (dark ? spec.captureDarkTint : spec.captureLightTint)
+                    : dark ? spec.darkBlurColor : spec.lightBlurColor;
+            glass.configure(original, shape(), fill, tone);
             if (!materialReported) {
                 materialReported = true;
-                Probe.material(v, row.get(), original, String.valueOf(kind), fill, dark ? spec.darkBlurColor : spec.lightBlurColor);
+                Probe.material(v, row.get(), original, String.valueOf(kind), fill, tone);
             }
             return glass;
         }
