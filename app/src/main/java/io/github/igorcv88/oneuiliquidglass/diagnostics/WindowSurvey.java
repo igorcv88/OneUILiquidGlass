@@ -67,6 +67,32 @@ public final class WindowSurvey {
         }
     }
 
+    /**
+     * Log every window SystemUI adds and survey it; One UI 9 shows pop-ups in EdgeLightingWindow,
+     * not in NotificationShade. Log-only: the hook never changes arguments or results.
+     */
+    public static void installWindowHook() {
+        try {
+            Class<?> global = Class.forName("android.view.WindowManagerGlobal");
+            de.robv.android.xposed.XposedBridge.hookAllMethods(global, "addView", new de.robv.android.xposed.XC_MethodHook() {
+                @Override protected void afterHookedMethod(MethodHookParam p) {
+                    try {
+                        if (p.args.length < 2 || !(p.args[0] instanceof View) || !(p.args[1] instanceof WindowManager.LayoutParams)) return;
+                        WindowManager.LayoutParams lp = (WindowManager.LayoutParams) p.args[1];
+                        String title = String.valueOf(lp.getTitle());
+                        Probe.log("WINDOW_ADDED", "title=" + title + " type=" + lp.type + " root=" + p.args[0].getClass().getName()
+                                + " failed=" + p.hasThrowable());
+                        if (title.contains("EdgeLighting") || title.contains("HeadsUp") || title.contains("Popup")) {
+                            lastScheduled = 0;
+                            schedule("window:" + title);
+                        }
+                    } catch (RuntimeException e) { Probe.error("WINDOW_HOOK_FAILED", e); }
+                }
+            });
+            Probe.log("WINDOW_HOOK", "installed=true");
+        } catch (ClassNotFoundException | RuntimeException | LinkageError e) { Probe.error("WINDOW_HOOK_FAILED", e); }
+    }
+
     private static Object field(Object owner, String name) throws ReflectiveOperationException {
         java.lang.reflect.Field f = owner.getClass().getDeclaredField(name);
         f.setAccessible(true);
