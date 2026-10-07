@@ -121,11 +121,50 @@ public final class Probe {
             log("SCRIM", "reason=" + reason + " class=" + name + " shown=" + v.isShown() + " alpha=" + v.getAlpha()
                     + " viewAlpha=" + viewAlpha + " tint=" + hex(tint) + " size=" + v.getWidth() + "x" + v.getHeight()
                     + " bg=" + describe(v.getBackground(), 0));
+            scrimFields(v, reason);
         }
         if (v instanceof android.view.ViewGroup) {
             android.view.ViewGroup g = (android.view.ViewGroup) v;
             for (int i = 0; i < g.getChildCount(); i++) walkScrims(g.getChildAt(i), depth + 1, reason, budget);
         }
+    }
+    /**
+     * Scalar and drawable fields declared by SystemUI scrim classes. The AOSP getters (getViewAlpha,
+     * getTint) are absent on One UI 9, so the state is read from fields; each class is dumped once
+     * per shade transition kind to keep the log bounded.
+     */
+    private static final java.util.Set<String> SCRIM_DUMPED = new java.util.HashSet<>();
+    private static void scrimFields(View v, String reason) {
+        int[] xy = new int[2];
+        v.getLocationOnScreen(xy);
+        String key = v.getClass().getName() + "@" + Integer.toHexString(System.identityHashCode(v)) + "/" + reason;
+        if (SCRIM_DUMPED.size() > 64 || !SCRIM_DUMPED.add(key)) return;
+        StringBuilder b = new StringBuilder();
+        int n = 0;
+        for (Class<?> c = v.getClass(); c != null && !c.getName().startsWith("android."); c = c.getSuperclass()) {
+            Field[] fields;
+            try { fields = c.getDeclaredFields(); } catch (LinkageError e) { break; }
+            for (Field f : fields) {
+                if (java.lang.reflect.Modifier.isStatic(f.getModifiers()) || n >= 32) continue;
+                Class<?> t = f.getType();
+                boolean drawable = android.graphics.drawable.Drawable.class.isAssignableFrom(t);
+                if (!t.isPrimitive() && t != Integer.class && t != Float.class && !drawable) continue;
+                Object value;
+                try { f.setAccessible(true); value = f.get(v); } catch (ReflectiveOperationException | RuntimeException e) { continue; }
+                if (drawable) value = describe((android.graphics.drawable.Drawable) value, 1) + scrimDrawable(value);
+                else if (t == int.class && f.getName().toLowerCase(java.util.Locale.ROOT).contains("color")) value = hex(value);
+                b.append(' ').append(f.getName()).append('=').append(value);
+                n++;
+            }
+        }
+        log("SCRIM_FIELDS", "reason=" + reason + " id=" + Integer.toHexString(System.identityHashCode(v))
+                + " class=" + v.getClass().getName() + " xy=" + xy[0] + "," + xy[1] + b);
+    }
+    /** The color and alpha a ScrimDrawable-like drawable actually paints with. */
+    private static String scrimDrawable(Object d) {
+        if (d == null) return "";
+        Object main = Reflect.read(d, "mMainColor"), alpha = Reflect.read(d, "mAlpha");
+        return main == null && alpha == null ? "" : "[main=" + hex(main) + " alpha=" + alpha + "]";
     }
     private static String describe(android.graphics.drawable.Drawable d, int depth) {
         if (d == null) return "null";

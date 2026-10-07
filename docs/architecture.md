@@ -18,7 +18,7 @@ The lifecycle logs expose manager events, row state, background changes, attach/
 
 ## Backdrop research
 
-`BackgroundBlurDrawable` requests compositor blur, but does not give AGSL a texture. `RenderEffect` on a notification subtree blurs that subtree, not the app underneath. Capturing the SystemUI tree has the same process/window boundary. SurfaceControl/HardwareBuffer capture APIs need careful inspection of permissions, secure surfaces, source selection, fences and frame cost on this firmware before adoption. No capture API is invoked by this build.
+`BackgroundBlurDrawable` requests compositor blur, but does not give AGSL a texture. `RenderEffect` on a notification subtree blurs that subtree, not the app underneath. Capturing the SystemUI tree has the same process/window boundary. SurfaceControl/HardwareBuffer capture APIs need careful inspection of permissions, secure surfaces, source selection, fences and frame cost on this firmware before adoption. The only capture caller is the bounded, measurement-only `CaptureProbe`. It binds `IWindowManager.captureDisplay` through the classes named in that method's own signature, because `android.window.ScreenCapture` (Android 14–16) is absent on One UI 9 / SDK 37. Before binding, `CaptureSurvey` logs the firmware's capture surface once (`CAPTURE_SURVEY_*`).
 
 A future sampled-backdrop provider should expose texture, coordinate transform, valid region, timestamp and ownership/lifetime. Refraction/dispersion must be gated on that provider actually yielding the lower app content, and must preserve secure/protected surface handling. A compositor-only material remains an independent tier.
 
