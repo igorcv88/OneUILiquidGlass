@@ -130,7 +130,7 @@ jobs:
         run: |
           set -euo pipefail
           chmod +x gradlew
-          ./gradlew --no-daemon \
+          ./gradlew --build-cache \
             :app:testDebugUnitTest \
             :app:lintDebug \
             :app:assembleRelease \
