@@ -12,6 +12,12 @@ public final class CornerGeometry {
         }
         return true;
     }
+    /** Equal top pair and equal bottom pair: any top-first four-radius order maps them identically. */
+    public static boolean symmetric(Object shape) {
+        if (!supported(shape)) return false;
+        float[] radii = (float[]) shape;
+        return radii[0] == radii[2] && radii[4] == radii[6];
+    }
     /** Single-radius backdrops (Samsung blur) need all four corners equal. */
     public static boolean uniform(Object shape) {
         if (!supported(shape)) return false;

@@ -23,4 +23,8 @@ public final class CornerGeometryTest {
         assertFalse(CornerGeometry.uniform(new float[]{16,16,16,16,8,8,8,8}));
         assertFalse(CornerGeometry.uniform(null));
     }
+    @Test public void topBottomPairsAreSymmetric() {
+        assertTrue(CornerGeometry.symmetric(new float[]{16,16,16,16,8,8,8,8}));
+        assertFalse(CornerGeometry.symmetric(new float[]{16,16,8,8,8,8,8,8}));
+    }
 }
