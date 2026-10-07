@@ -17,6 +17,7 @@ import java.util.WeakHashMap;
 import java.util.function.Consumer;
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
+import io.github.igorcv88.oneuiliquidglass.Config;
 import io.github.igorcv88.oneuiliquidglass.diagnostics.Probe;
 import io.github.igorcv88.oneuiliquidglass.glass.Backdrop;
 import io.github.igorcv88.oneuiliquidglass.glass.BackgroundBlurBridge;
@@ -29,7 +30,8 @@ public final class HeadsUpHooks {
     private static final String ROW = "com.android.systemui.statusbar.notification.row.ExpandableNotificationRow";
     private static final String BACKGROUND = "com.android.systemui.statusbar.notification.row.NotificationBackgroundView";
     private final ClassLoader loader;
-    private final boolean enabled;
+    private volatile boolean enabled;
+    private boolean configPending;
     private final WeakHashMap<View, State> states = new WeakHashMap<>();
     private final Set<Method> installed = Collections.newSetFromMap(new java.util.HashMap<>());
     private Class<?> rowClass;
@@ -40,7 +42,31 @@ public final class HeadsUpHooks {
     private final boolean samsungBlur = SemBlurBridge.available();
     private final GlassSpec spec = new GlassSpec();
     private Boolean shadeExpanded;
-    public HeadsUpHooks(ClassLoader loader, boolean enabled) { this.loader = loader; this.enabled = enabled; }
+    /** enabled == null: preferences unreadable, resolve through the module's ConfigProvider. */
+    public HeadsUpHooks(ClassLoader loader, Boolean enabled) {
+        this.loader = loader; this.enabled = Boolean.TRUE.equals(enabled); this.configPending = enabled == null;
+    }
+    private void resolveConfig(android.content.Context context) {
+        if (!configPending) return;
+        configPending = false;
+        android.content.ContentResolver resolver = context.getContentResolver();
+        android.os.Handler main = new android.os.Handler(android.os.Looper.getMainLooper());
+        // Cross-process query may start the module app; keep it off SystemUI's main thread.
+        new Thread(() -> {
+            Boolean value = null;
+            try (android.database.Cursor c = resolver.query(android.net.Uri.parse("content://" + Config.AUTHORITY), null, null, null, null)) {
+                if (c != null && c.moveToFirst()) value = c.getInt(0) != 0;
+            } catch (RuntimeException e) { Probe.error("CONFIG_PROVIDER_FAILED", e); }
+            Boolean result = value;
+            main.post(() -> {
+                Probe.log("CONFIG_PROVIDER", "enabled=" + result);
+                if (Boolean.TRUE.equals(result)) {
+                    enabled = true;
+                    for (State state : new ArrayList<>(states.values())) state.invalidate();
+                }
+            });
+        }, "oulg-config").start();
+    }
     private Class<?> resolve(String name) {
         Class<?> c;
         try { c = Class.forName(name, false, loader); }
@@ -193,6 +219,7 @@ public final class HeadsUpHooks {
         @Override public void onViewAttachedToWindow(View view) {
             if (observer != null) return;
             if (!blurEnvironmentReported) { blurEnvironmentReported = true; Probe.blurEnvironment(view.getContext()); }
+            resolveConfig(view.getContext());
             observer = view.getViewTreeObserver(); observer.addOnPreDrawListener(this);
             try {
                 wm = view.getContext().getSystemService(WindowManager.class);
