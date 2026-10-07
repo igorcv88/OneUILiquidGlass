@@ -39,13 +39,26 @@ public final class CaptureHub {
     private static final int MAX_CONSECUTIVE_FAILURES = 5;
     private static final long SECURE_BACKOFF_MS = 3000;
 
-    /** A captured frame: a hardware bitmap of {@code crop} (screen px) scaled by {@code scale}. */
+    /**
+     * A captured frame: a hardware bitmap of {@code crop} (screen px) scaled by {@code scale}.
+     * Drawables that record it into a display list retain it and release it once a frame without it
+     * has been committed; a superseded frame nobody retains is recycled at once, so each capture's
+     * graphics buffer is freed within a few frames instead of waiting for GC. Main thread only.
+     */
     public static final class Frame {
         public final Bitmap bitmap;
         public final Rect crop;
         public final float scale;
-        Frame(Bitmap bitmap, Rect crop, float scale) { this.bitmap = bitmap; this.crop = crop; this.scale = scale; }
+        private final boolean owned;
+        private int refs;
+        private boolean superseded;
+        Frame(Bitmap bitmap, Rect crop, float scale, boolean owned) { this.bitmap = bitmap; this.crop = crop; this.scale = scale; this.owned = owned; }
+        public void retain() { refs++; }
+        public void release() { refs--; reclaim(); }
+        void supersede() { superseded = true; reclaim(); }
+        private void reclaim() { if (owned && superseded && refs <= 0 && !bitmap.isRecycled()) bitmap.recycle(); }
     }
+    private static Frame latest;
 
     public interface Client {
         View view();
@@ -91,7 +104,11 @@ public final class CaptureHub {
             if (v == null || !v.isAttachedToWindow()) { clients.remove(i); continue; }
             if (v.isShown()) shown.add(c);
         }
-        if (clients.isEmpty()) { ticking = false; stats.flush("idle"); return; }
+        if (clients.isEmpty()) {
+            ticking = false; stats.flush("idle");
+            if (latest != null) { latest.supersede(); latest = null; }
+            return;
+        }
         int hz = 1;
         for (Client c : shown) hz = Math.max(hz, c.hz());
         MAIN.postDelayed(CaptureHub::tick, 1000L / (shown.isEmpty() ? 2 : hz));
@@ -153,6 +170,8 @@ public final class CaptureHub {
             Frame frame = null;
             boolean secure = false;
             String error = !ok ? "timeout" : status[0] != 0 || result[0] == null ? "status=" + status[0] : null;
+            // A failed status can still carry a buffer.
+            if (error != null && result[0] != null) { api.closeQuietly(result[0]); result[0] = null; }
             if (error == null) {
                 Object shot = result[0];
                 HardwareBuffer hb = null;
@@ -162,7 +181,7 @@ public final class CaptureHub {
                     ColorSpace space = api.colorSpace(shot);
                     // The bitmap keeps its own reference to the buffer; the handle is closed below.
                     Bitmap bitmap = secure ? null : Bitmap.wrapHardwareBuffer(hb, space);
-                    if (bitmap != null) frame = new Frame(bitmap, crop, SCALE);
+                    if (bitmap != null) frame = new Frame(bitmap, crop, SCALE, true);
                     else if (!secure) error = "wrapFailed";
                 } finally { if (hb != null) hb.close(); }
             }
@@ -199,6 +218,9 @@ public final class CaptureHub {
             Client c = ref.get();
             if (c != null) c.onFrame(frame);
         }
+        Frame previous = latest;
+        latest = frame;
+        if (previous != null) previous.supersede();
     }
 
     private static void notifyUnavailable() {

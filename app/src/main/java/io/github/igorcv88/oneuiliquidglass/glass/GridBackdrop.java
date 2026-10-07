@@ -40,7 +40,7 @@ public final class GridBackdrop implements SampledBackdrop {
         for (int y = 0; y <= display.height(); y += 40) c.drawLine(0, y * s, b.getWidth(), y * s, y % 200 == 0 ? thick : thin);
         for (int y = 0; y < display.height(); y += 200)
             for (int x = 0; x < display.width(); x += 200) c.drawText(x + "," + y, x * s + 3, y * s + 15, text);
-        return new CaptureHub.Frame(b, new Rect(display), s);
+        return new CaptureHub.Frame(b, new Rect(display), s, false);
     }
 
     @Override public String name() { return "grid"; }

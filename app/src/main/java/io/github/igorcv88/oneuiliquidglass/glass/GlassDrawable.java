@@ -1,6 +1,5 @@
 package io.github.igorcv88.oneuiliquidglass.glass;
 
-import android.graphics.Bitmap;
 import android.graphics.BitmapShader;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -32,7 +31,7 @@ public final class GlassDrawable extends Drawable {
     private RuntimeShader shader;
     private RuntimeShader refract;
     private final Paint refractPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private Bitmap boundBitmap;
+    private CaptureHub.Frame boundFrame;
     private final int[] screen = new int[2];
     private int tintColor;
     private Drawable nativeDrawable;
@@ -115,12 +114,14 @@ public final class GlassDrawable extends Drawable {
         SampledBackdrop sampled = (SampledBackdrop) backdrop;
         CaptureHub.Frame frame = sampled.frame();
         android.view.View view = sampled.view();
-        if (frame == null || view == null) return false;
-        if (frame.bitmap != boundBitmap) {
+        if (frame == null || view == null || frame.bitmap.isRecycled()) return false;
+        if (frame != boundFrame) {
             BitmapShader image = new BitmapShader(frame.bitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
             image.setFilterMode(BitmapShader.FILTER_MODE_LINEAR);
             refract.setInputShader("backdrop", image);
-            boundBitmap = frame.bitmap;
+            frame.retain();
+            unbind(view);
+            boundFrame = frame;
         }
         Tuning t = Tuning.get();
         view.getLocationOnScreen(screen);
@@ -139,6 +140,18 @@ public final class GlassDrawable extends Drawable {
         canvas.drawRect(rect, refractPaint);
         return true;
     }
+    /**
+     * The previous frame stays in the display list being replaced until this recording is committed;
+     * release it from the commit callback. A detached view gets a delay of several frames instead.
+     */
+    private void unbind(android.view.View view) {
+        CaptureHub.Frame old = boundFrame;
+        boundFrame = null;
+        if (old == null) return;
+        if (view != null && view.isAttachedToWindow()) view.getViewTreeObserver().registerFrameCommitCallback(old::release);
+        else MAIN.postDelayed(old::release, 250);
+    }
+    private static final android.os.Handler MAIN = new android.os.Handler(android.os.Looper.getMainLooper());
     private static void premultiplied(RuntimeShader s, String name, int color) {
         float a = Color.alpha(color) / 255f;
         s.setFloatUniform(name, Color.red(color) / 255f * a, Color.green(color) / 255f * a, Color.blue(color) / 255f * a, a);
@@ -149,5 +162,8 @@ public final class GlassDrawable extends Drawable {
     @Override public int getAlpha() { return alpha; }
     @Override public void setColorFilter(ColorFilter filter) { paint.setColorFilter(filter); refractPaint.setColorFilter(filter); }
     @Override public int getOpacity() { return PixelFormat.TRANSLUCENT; }
-    public void release() { backdrop.release(); nativeDrawable = null; setCallback(null); }
+    public void release() {
+        if (backdrop instanceof SampledBackdrop) unbind(((SampledBackdrop) backdrop).view());
+        backdrop.release(); nativeDrawable = null; setCallback(null);
+    }
 }
