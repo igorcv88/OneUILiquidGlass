@@ -18,7 +18,9 @@ import java.util.function.Consumer;
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
 import io.github.igorcv88.oneuiliquidglass.diagnostics.Probe;
+import io.github.igorcv88.oneuiliquidglass.glass.Backdrop;
 import io.github.igorcv88.oneuiliquidglass.glass.BackgroundBlurBridge;
+import io.github.igorcv88.oneuiliquidglass.glass.SemBlurBridge;
 import io.github.igorcv88.oneuiliquidglass.glass.GlassDrawable;
 import io.github.igorcv88.oneuiliquidglass.glass.GlassSpec;
 import io.github.igorcv88.oneuiliquidglass.glass.CornerGeometry;
@@ -35,6 +37,7 @@ public final class HeadsUpHooks {
     private boolean drawHook;
     private boolean shadeHook;
     private boolean blurEnvironmentReported;
+    private final boolean samsungBlur = SemBlurBridge.available();
     private final GlassSpec spec = new GlassSpec();
     private Boolean shadeExpanded;
     public HeadsUpHooks(ClassLoader loader, boolean enabled) { this.loader = loader; this.enabled = enabled; }
@@ -110,7 +113,7 @@ public final class HeadsUpHooks {
             });
         }
         // Shade state is only known once SystemUI constructs the controller, after this point.
-        Probe.log("READY", "mode=" + (enabled ? "glass" : "probe") + " drawHook=" + drawHook + " shadeHook=" + shadeHook);
+        Probe.log("READY", "mode=" + (enabled ? "glass" : "probe") + " drawHook=" + drawHook + " shadeHook=" + shadeHook + " samsungBlur=" + samsungBlur);
         if (enabled && (!drawHook || !shadeHook)) Probe.log("GLASS_UNAVAILABLE", "drawHook=" + drawHook + " shadeHook=" + shadeHook);
     }
     private static String owner(XC_MethodHook.MethodHookParam p) {
@@ -173,6 +176,7 @@ public final class HeadsUpHooks {
         final WeakReference<View> background;
         final WeakReference<View> row;
         GlassDrawable glass;
+        Backdrop.Kind glassKind;
         WindowManager wm;
         Consumer<Boolean> blurListener;
         ViewTreeObserver observer;
@@ -197,7 +201,7 @@ public final class HeadsUpHooks {
                     blurListener = supported -> {
                         blurEnabled = supported;
                         Probe.log("BLUR_CAPABILITY_CHANGED", "enabled=" + supported);
-                        if (!supported) release();
+                        if (!supported && glassKind == Backdrop.Kind.COMPOSITOR) release();
                         invalidate();
                     };
                     wm.addCrossWindowBlurEnabledListener(view.getContext().getMainExecutor(), blurListener);
@@ -266,7 +270,7 @@ public final class HeadsUpHooks {
                     Reflect.bool(r, "isOnKeyguard", "mOnKeyguard"), shadeExpanded,
                     v.isAttachedToWindow(), v.isHardwareAccelerated(), r.isPressed() || r.isFocused() || r.isHovered());
             if (policy != null) return policy;
-            return blurEnabled ? null : "crossWindowBlur=false";
+            return Backdrop.choose(blurEnabled, samsungBlur) != null ? null : "blur=unavailable";
         }
         void event(String event) {
             View v = background.get(), r = row.get(); if (v == null || r == null) return;
@@ -295,28 +299,35 @@ public final class HeadsUpHooks {
         }
         GlassDrawable material(Drawable original) throws ReflectiveOperationException {
             View v = background.get();
-            if (v == null || !eligible() || !blurEnabled) { release(); return null; }
+            Backdrop.Kind kind = Backdrop.choose(blurEnabled, samsungBlur);
+            if (v == null || !eligible() || kind == null) { release(); return null; }
             for (int state : original.getState()) {
                 if (state == android.R.attr.state_pressed || state == android.R.attr.state_focused || state == android.R.attr.state_hovered) {
                     release(); return null;
                 }
             }
             if (glass != null && glass.failed()) { failed = true; release(); return null; }
+            if (glass != null && glassKind != kind) release();
             if (!CornerGeometry.supported(Reflect.read(v, "mCornerRadii"))) {
                 failed = true; Probe.log("GEOMETRY_UNSUPPORTED", "view=" + v.getClass().getName()); return null;
             }
+            if (kind == Backdrop.Kind.SAMSUNG && !CornerGeometry.uniform(Reflect.read(v, "mCornerRadii"))) {
+                // Samsung blur takes one corner radius; mixed top/bottom corners stay native this frame.
+                release(); return null;
+            }
             if (glass == null) {
-                BackgroundBlurBridge bridge = BackgroundBlurBridge.create(v);
-                glass = new GlassDrawable(bridge, v.getResources().getDisplayMetrics().density, spec);
+                Backdrop backdrop = kind == Backdrop.Kind.SAMSUNG ? SemBlurBridge.create(v) : BackgroundBlurBridge.create(v);
+                glass = new GlassDrawable(backdrop, v.getResources().getDisplayMetrics().density, spec);
+                glassKind = kind;
                 glass.setCallback(v);
-                Probe.log("GLASS_APPLIED", "viewId=" + Integer.toHexString(System.identityHashCode(v)) + " source=compositor optics=edge_shader");
+                Probe.log("GLASS_APPLIED", "viewId=" + Integer.toHexString(System.identityHashCode(v)) + " source=" + backdrop.name() + " optics=edge_shader");
             }
             boolean dark = (v.getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
             glass.configure(original, shape(), dark ? spec.darkTint : spec.lightTint);
             return glass;
         }
         void release() {
-            if (glass != null) { glass.release(); glass = null; Probe.log("GLASS_RELEASED", "native=true"); }
+            if (glass != null) { glass.release(); glass = null; glassKind = null; Probe.log("GLASS_RELEASED", "native=true"); }
         }
     }
     private final class DrawHook extends XC_MethodHook {

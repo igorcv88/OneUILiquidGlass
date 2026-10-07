@@ -47,6 +47,18 @@ public final class Probe {
             for (Method m : View.class.getMethods()) if (m.getName().equals("semSetBlurInfo")) { semSetBlurInfo = true; break; }
         } catch (LinkageError | RuntimeException ignored) { }
         log("SEM_BLUR", "SemBlurInfo=" + semBlurInfo + " View.semSetBlurInfo=" + semSetBlurInfo);
+        // Names for the Samsung backdrop; logged so a firmware mismatch is visible without guessing.
+        for (String name : new String[]{"android.view.SemBlurInfo", "android.view.SemBlurInfo$Builder"}) {
+            try {
+                Class<?> c = Class.forName(name);
+                for (Field f : c.getFields()) if (f.getType() == int.class && java.lang.reflect.Modifier.isStatic(f.getModifiers()))
+                    log("SEM_BLUR_FIELD", "owner=" + name + " name=" + f.getName());
+                for (Method m : c.getDeclaredMethods())
+                    log("SEM_BLUR_METHOD", "owner=" + name + " name=" + m.getName() + " args=" + Arrays.toString(m.getParameterTypes()));
+                for (java.lang.reflect.Constructor<?> k : c.getConstructors())
+                    log("SEM_BLUR_CTOR", "owner=" + name + " args=" + Arrays.toString(k.getParameterTypes()));
+            } catch (ClassNotFoundException | LinkageError | RuntimeException ignored) { }
+        }
     }
     public static void resolved(Class<?> c) {
         log("CLASS", "name=" + c.getName());

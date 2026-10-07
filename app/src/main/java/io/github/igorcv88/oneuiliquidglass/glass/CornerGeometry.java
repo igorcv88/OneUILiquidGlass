@@ -12,4 +12,11 @@ public final class CornerGeometry {
         }
         return true;
     }
+    /** Single-radius backdrops (Samsung blur) need all four corners equal. */
+    public static boolean uniform(Object shape) {
+        if (!supported(shape)) return false;
+        float[] radii = (float[]) shape;
+        for (int i = 2; i < 8; i += 2) if (radii[i] != radii[0]) return false;
+        return true;
+    }
 }
