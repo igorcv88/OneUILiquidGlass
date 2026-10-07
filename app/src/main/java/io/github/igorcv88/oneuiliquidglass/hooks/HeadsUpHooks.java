@@ -18,6 +18,7 @@ import java.util.function.Consumer;
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
 import io.github.igorcv88.oneuiliquidglass.Config;
+import io.github.igorcv88.oneuiliquidglass.diagnostics.CaptureProbe;
 import io.github.igorcv88.oneuiliquidglass.diagnostics.Probe;
 import io.github.igorcv88.oneuiliquidglass.diagnostics.WindowSurvey;
 import io.github.igorcv88.oneuiliquidglass.glass.Backdrop;
@@ -189,6 +190,12 @@ public final class HeadsUpHooks {
         if (next != null && !next.equals(shadeExpanded)) {
             shadeExpanded = next; Probe.log("SHADE", "expanded=" + next);
             for (State state : new ArrayList<>(states.values())) state.invalidate();
+            View sample = null;
+            for (State state : new ArrayList<>(states.values())) { View v = state.background.get(); if (v != null && v.isAttachedToWindow()) { sample = v; break; } }
+            if (sample != null) {
+                Probe.scrims(sample.getRootView(), next ? "shadeExpanded" : "shadeCollapsed");
+                if (next) CaptureProbe.onShadeExpanded(sample);
+            }
         }
     }
     private void observeRow(View row, String event) {
@@ -220,6 +227,7 @@ public final class HeadsUpHooks {
         final WeakReference<View> row;
         GlassDrawable glass;
         Backdrop.Kind glassKind;
+        boolean materialReported;
         android.graphics.RenderNode scratch;
         WindowManager wm;
         Consumer<Boolean> blurListener;
@@ -275,6 +283,8 @@ public final class HeadsUpHooks {
                 String reason = reason();
                 if (headsUp != null && !headsUp.equals(lastHeadsUp)) {
                     lastHeadsUp = headsUp;
+                    if (headsUp && v.isShown()) CaptureProbe.onHeadsUp(v);
+                    else if (!headsUp) CaptureProbe.onHeadsUpEnded(v);
                     Probe.log("HEADSUP", "viewId=" + Integer.toHexString(System.identityHashCode(v)) + " headsUp=" + headsUp
                             + " pinned=" + Reflect.bool(r, "isPinned", "mIsPinned") + " shown=" + v.isShown()
                             + " nativeBlur=" + Reflect.bool(v, "isBlurEnabled", "mBlurEnabled"));
@@ -365,10 +375,15 @@ public final class HeadsUpHooks {
                 glassKind = kind;
                 glass.setCallback(v);
                 Probe.log("GLASS_APPLIED", "viewId=" + Integer.toHexString(System.identityHashCode(v)) + " source=" + backdrop.name() + " optics=edge_shader");
+                materialReported = false;
             }
             boolean dark = (v.getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
             int fill = kind == Backdrop.Kind.SHARED ? (dark ? spec.shadeDarkFill : spec.shadeLightFill) : (dark ? spec.darkFill : spec.lightFill);
             glass.configure(original, shape(), fill, dark ? spec.darkBlurColor : spec.lightBlurColor);
+            if (!materialReported) {
+                materialReported = true;
+                Probe.material(v, row.get(), original, String.valueOf(kind), fill, dark ? spec.darkBlurColor : spec.lightBlurColor);
+            }
             return glass;
         }
         /**

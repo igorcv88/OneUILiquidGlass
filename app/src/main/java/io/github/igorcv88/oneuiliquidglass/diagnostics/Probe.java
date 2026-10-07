@@ -94,4 +94,57 @@ public final class Probe {
                 + " windowType=" + Reflect.read(attrs, "type") + " flags=" + Reflect.read(attrs, "flags")
                 + " alpha=" + view.getAlpha() + " ime=" + (insets != null && insets.isVisible(WindowInsets.Type.ime())));
     }
+    /** What paints the native material: drawable chain, alphas and tint, logged when glass engages. */
+    public static void material(View background, View row, android.graphics.drawable.Drawable original,
+                                String backdrop, int fill, int blurColor) {
+        log("MATERIAL", "viewId=" + Integer.toHexString(System.identityHashCode(background)) + " backdrop=" + backdrop
+                + " viewAlpha=" + background.getAlpha() + " rowAlpha=" + (row == null ? "null" : row.getAlpha())
+                + " transitionAlpha=" + Reflect.read(background, "mTransitionAlpha")
+                + " tint=" + hex(Reflect.read(background, "mTintColor")) + " fill=" + hex(fill) + " blurColor=" + hex(blurColor)
+                + " nativeBlur=" + Reflect.read(background, "mBlurEnabled") + " drawable=" + describe(original, 0));
+    }
+    /** Scrims, overlays and tinted backgrounds in the shade window: alpha, visibility and tint. */
+    public static void scrims(View root, String reason) {
+        if (root == null) return;
+        int[] budget = {40};
+        walkScrims(root, 0, reason, budget);
+    }
+    private static void walkScrims(View v, int depth, String reason, int[] budget) {
+        if (budget[0] <= 0 || depth > 14) return;
+        String name = v.getClass().getName();
+        String simple = v.getClass().getSimpleName().toLowerCase(java.util.Locale.ROOT);
+        if (simple.contains("scrim") || simple.contains("blur") || simple.contains("dim")) {
+            budget[0]--;
+            Object viewAlpha = null, tint = null;
+            try { viewAlpha = Reflect.call(v, "getViewAlpha"); } catch (ReflectiveOperationException | RuntimeException ignored) { }
+            try { tint = Reflect.call(v, "getTint"); } catch (ReflectiveOperationException | RuntimeException ignored) { }
+            log("SCRIM", "reason=" + reason + " class=" + name + " shown=" + v.isShown() + " alpha=" + v.getAlpha()
+                    + " viewAlpha=" + viewAlpha + " tint=" + hex(tint) + " size=" + v.getWidth() + "x" + v.getHeight()
+                    + " bg=" + describe(v.getBackground(), 0));
+        }
+        if (v instanceof android.view.ViewGroup) {
+            android.view.ViewGroup g = (android.view.ViewGroup) v;
+            for (int i = 0; i < g.getChildCount(); i++) walkScrims(g.getChildAt(i), depth + 1, reason, budget);
+        }
+    }
+    private static String describe(android.graphics.drawable.Drawable d, int depth) {
+        if (d == null) return "null";
+        StringBuilder b = new StringBuilder(d.getClass().getSimpleName()).append("{alpha=").append(d.getAlpha());
+        if (d instanceof android.graphics.drawable.ColorDrawable) b.append(" color=").append(hex(((android.graphics.drawable.ColorDrawable) d).getColor()));
+        if (d instanceof android.graphics.drawable.GradientDrawable) {
+            android.content.res.ColorStateList c = ((android.graphics.drawable.GradientDrawable) d).getColor();
+            b.append(" color=").append(c == null ? "null" : hex(c.getDefaultColor()));
+        }
+        if (d.getColorFilter() != null) b.append(" filter=").append(d.getColorFilter().getClass().getSimpleName());
+        if (d instanceof android.graphics.drawable.LayerDrawable && depth < 2) {
+            android.graphics.drawable.LayerDrawable l = (android.graphics.drawable.LayerDrawable) d;
+            for (int i = 0; i < l.getNumberOfLayers() && i < 6; i++) b.append(" L").append(i).append('=').append(describe(l.getDrawable(i), depth + 1));
+        } else if (d instanceof android.graphics.drawable.DrawableWrapper && depth < 2) {
+            b.append(" inner=").append(describe(((android.graphics.drawable.DrawableWrapper) d).getDrawable(), depth + 1));
+        }
+        return b.append('}').toString();
+    }
+    private static String hex(Object color) {
+        return color instanceof Integer ? String.format("#%08x", (Integer) color) : String.valueOf(color);
+    }
 }
