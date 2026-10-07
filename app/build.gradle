@@ -1,4 +1,7 @@
 plugins { id 'com.android.application' }
+// CI release passes -PreleaseVersionCode/-PreleaseVersionName; local builds keep the dev defaults.
+def releaseVersionCode = (findProperty('releaseVersionCode') ?: '1') as Integer
+def releaseVersionName = (findProperty('releaseVersionName') ?: '0.1.0-dev') as String
 android {
     namespace 'io.github.igorcv88.oneuiliquidglass'
     compileSdk 36
@@ -6,8 +9,8 @@ android {
         applicationId 'io.github.igorcv88.oneuiliquidglass'
         minSdk 33
         targetSdk 36
-        versionCode 1
-        versionName '0.1.0-probe'
+        versionCode releaseVersionCode
+        versionName releaseVersionName
     }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
     buildTypes { release { minifyEnabled false } }

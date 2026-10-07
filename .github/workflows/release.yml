@@ -1,0 +1,258 @@
+name: Build One UI Liquid Glass APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      app_sha:
+        description: "Exact OneUILiquidGlass commit to build"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: oulg-release
+  cancel-in-progress: false
+
+env:
+  RELEASE_SERIES: "0.1"
+  APP_REPOSITORY: igorcv88/OneUILiquidGlass
+  APPLICATION_ID: io.github.igorcv88.oneuiliquidglass
+
+jobs:
+  release:
+    name: Build, sign and publish APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Enforce repository and main dispatch
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "$APP_REPOSITORY"
+          test "$GITHUB_REF" = "refs/heads/main"
+          echo "RELEASE_ORDER_COMMIT=$GITHUB_SHA" >> "$GITHUB_ENV"
+
+      - name: Validate pinned source input
+        env:
+          REQUESTED_APP_SHA: ${{ inputs.app_sha }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$REQUESTED_APP_SHA" && ! "$REQUESTED_APP_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::app_sha must be a full 40-character commit SHA" >&2
+            exit 1
+          fi
+
+      - name: Checkout pinned source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.app_sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Record app provenance
+        env:
+          REQUESTED_APP_SHA: ${{ inputs.app_sha }}
+        run: |
+          set -euo pipefail
+          APP_COMMIT="$(git rev-parse HEAD)"
+          if [[ -n "$REQUESTED_APP_SHA" && "$APP_COMMIT" != "$REQUESTED_APP_SHA" ]]; then
+            echo "::error::Pinned app checkout drifted: expected $REQUESTED_APP_SHA, got $APP_COMMIT" >&2
+            exit 1
+          fi
+          git cat-file -e "${RELEASE_ORDER_COMMIT}^{commit}"
+          echo "APP_COMMIT=$APP_COMMIT" >> "$GITHUB_ENV"
+
+      # A fixed release key (same secrets layout as the other repositories) lets each
+      # release install over the previous one as an update.
+      - name: Require signing secrets
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for name in KEYSTORE_BASE64 STORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "::error::Required signing secret is missing: $name" >&2
+              exit 1
+            fi
+          done
+
+      - name: Choose next version
+        run: |
+          set -euo pipefail
+          SERIES_PATTERN="${RELEASE_SERIES//./\.}"
+          BASE_TAG="$(git tag --sort=-version:refname --list "v${RELEASE_SERIES}.*" | head -n 1)"
+          LAST_PATCH="$(
+            git tag --list "v${RELEASE_SERIES}.*" \
+              | sed -nE "s/^v${SERIES_PATTERN}\.([0-9]+)$/\1/p" \
+              | sort -n \
+              | tail -n 1
+          )"
+          LAST_PATCH="${LAST_PATCH:-0}"
+          PATCH=$((LAST_PATCH + 1))
+          VERSION_NAME="${RELEASE_SERIES}.${PATCH}"
+          VERSION_CODE=$((100 + PATCH))
+          RELEASE_TAG="v${VERSION_NAME}"
+
+          if git rev-parse -q --verify "refs/tags/${RELEASE_TAG}" >/dev/null; then
+            echo "::error::Tag already exists: ${RELEASE_TAG}" >&2
+            exit 1
+          fi
+
+          {
+            echo "BASE_TAG=$BASE_TAG"
+            echo "VERSION_NAME=$VERSION_NAME"
+            echo "VERSION_CODE=$VERSION_CODE"
+            echo "RELEASE_TAG=$RELEASE_TAG"
+          } >> "$GITHUB_ENV"
+
+      - name: Java 17
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # The runner image ships the SDK and sdkmanager; install only the packages this build pins.
+      - name: Android SDK packages
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-36" "build-tools;35.0.0" >/dev/null
+
+      - name: Gradle cache
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Test, lint and assemble release APK
+        run: |
+          set -euo pipefail
+          chmod +x gradlew
+          ./gradlew --build-cache \
+            :app:testDebugUnitTest \
+            :app:lintDebug \
+            :app:assembleRelease \
+            -PreleaseVersionCode="$VERSION_CODE" \
+            -PreleaseVersionName="$VERSION_NAME"
+
+      - name: Verify unsigned APK identity
+        run: |
+          set -euo pipefail
+          APK=app/build/outputs/apk/release/app-release-unsigned.apk
+          test -s "$APK"
+          BUILD_TOOLS_DIR="$ANDROID_HOME/build-tools/35.0.0"
+          # aapt2: legacy aapt exits 1 on the framework icon reference (@android:drawable/...).
+          BADGING="$("$BUILD_TOOLS_DIR/aapt2" dump badging "$APK")"
+          BADGING="$(head -n 1 <<< "$BADGING")"
+          grep -F "package: name='$APPLICATION_ID'" <<< "$BADGING"
+          grep -F "versionCode='${VERSION_CODE}'" <<< "$BADGING"
+          grep -F "versionName='${VERSION_NAME}'" <<< "$BADGING"
+          unzip -l "$APK" > "$RUNNER_TEMP/apk-entries.txt"
+          grep -F assets/xposed_init "$RUNNER_TEMP/apk-entries.txt"
+          "$BUILD_TOOLS_DIR/dexdump" "$APK" > "$RUNNER_TEMP/dexdump.txt" 2>/dev/null
+          if grep -q 'Class descriptor.*Lde/robv/android/xposed/' "$RUNNER_TEMP/dexdump.txt"; then
+            echo "::error::Xposed API classes were bundled; they must stay compileOnly" >&2
+            exit 1
+          fi
+
+      - name: Prepare signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$KEYSTORE_BASE64" | tr -d '\r\n ' | base64 --decode > release.keystore
+          chmod 600 release.keystore
+          keytool -list \
+            -keystore release.keystore \
+            -storepass "$STORE_PASSWORD" \
+            -alias "$KEY_ALIAS" >/dev/null
+
+      - name: Sign and verify APK
+        env:
+          STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          BUILD_TOOLS_DIR="$ANDROID_HOME/build-tools/35.0.0"
+          UNSIGNED_APK=app/build/outputs/apk/release/app-release-unsigned.apk
+          ALIGNED_APK=app/build/outputs/apk/release/app-release-aligned.apk
+          RELEASE_ASSET="OneUILiquidGlass-${VERSION_NAME}.apk"
+
+          "$BUILD_TOOLS_DIR/zipalign" -P 16 -f 4 "$UNSIGNED_APK" "$ALIGNED_APK"
+          "$BUILD_TOOLS_DIR/apksigner" sign \
+            --ks release.keystore \
+            --ks-key-alias "$KEY_ALIAS" \
+            --ks-pass env:STORE_PASSWORD \
+            --key-pass env:KEY_PASSWORD \
+            --out "$RELEASE_ASSET" \
+            "$ALIGNED_APK"
+          "$BUILD_TOOLS_DIR/zipalign" -c -P 16 4 "$RELEASE_ASSET"
+          "$BUILD_TOOLS_DIR/apksigner" verify --verbose --print-certs "$RELEASE_ASSET"
+
+          BADGING="$("$BUILD_TOOLS_DIR/aapt2" dump badging "$RELEASE_ASSET")"
+          BADGING="$(head -n 1 <<< "$BADGING")"
+          grep -F "package: name='$APPLICATION_ID'" <<< "$BADGING"
+          sha256sum "$RELEASE_ASSET" | tee "${RELEASE_ASSET}.sha256"
+          echo "RELEASE_ASSET=$RELEASE_ASSET" >> "$GITHUB_ENV"
+
+      - name: Build release notes
+        run: |
+          set -euo pipefail
+          SHA256="$(awk '{print $1}' "${RELEASE_ASSET}.sha256")"
+          NOTES_PATH="$RUNNER_TEMP/release-notes.md"
+          {
+            printf '# One UI Liquid Glass %s\n\n' "$VERSION_NAME"
+            printf 'SHA-256: `%s`\n\n' "$SHA256"
+            printf '### Pinned source provenance\n'
+            printf -- '- App commit: `%s`\n' "$APP_COMMIT"
+            printf -- '- Release-order commit: `%s`\n\n' "$RELEASE_ORDER_COMMIT"
+            if [[ -n "${BASE_TAG:-}" ]] && git merge-base --is-ancestor "$BASE_TAG" "$APP_COMMIT"; then
+              printf 'Changes since `%s`:\n\n' "$BASE_TAG"
+              git log --no-merges --pretty='- `%h` %s' "${BASE_TAG}..${APP_COMMIT}"
+              printf '\n'
+            fi
+          } > "$NOTES_PATH"
+          test -s "$NOTES_PATH"
+          echo "NOTES_PATH=$NOTES_PATH" >> "$GITHUB_ENV"
+
+      - name: Reserve release tag
+        run: |
+          set -euo pipefail
+          git tag "$RELEASE_TAG" "$RELEASE_ORDER_COMMIT"
+          git push origin "refs/tags/${RELEASE_TAG}"
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create "$RELEASE_TAG" \
+            "$RELEASE_ASSET" \
+            "${RELEASE_ASSET}.sha256" \
+            --verify-tag \
+            --title "One UI Liquid Glass ${VERSION_NAME}" \
+            --notes-file "$NOTES_PATH" \
+            --latest
+
+      - name: Remove reserved tag if publication fails
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${RELEASE_TAG:-}" ]]; then
+            exit 0
+          fi
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            exit 0
+          fi
+          git push origin ":refs/tags/${RELEASE_TAG}" || true
+
+      - name: Delete temporary signing key
+        if: always()
+        run: rm -f release.keystore
