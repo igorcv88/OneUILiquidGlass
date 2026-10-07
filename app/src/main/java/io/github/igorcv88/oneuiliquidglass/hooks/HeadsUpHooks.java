@@ -378,9 +378,10 @@ public final class HeadsUpHooks {
         boolean sharedBackdrop() {
             View r = row.get();
             if (r == null) return false;
+            // Unknown state keeps the real blur: only rows known not to be heads-up or keyguard share.
             return Boolean.TRUE.equals(shadeExpanded)
-                    && !Boolean.TRUE.equals(Reflect.bool(r, "isHeadsUpState", "mIsHeadsUp"))
-                    && !Boolean.TRUE.equals(Reflect.bool(r, "isOnKeyguard", "mOnKeyguard"));
+                    && Boolean.FALSE.equals(Reflect.bool(r, "isHeadsUpState", "mIsHeadsUp"))
+                    && Boolean.FALSE.equals(Reflect.bool(r, "isOnKeyguard", "mOnKeyguard"));
         }
         void release() {
             if (glass != null) { glass.release(); glass = null; glassKind = null; Probe.log("GLASS_RELEASED", "native=true"); }
