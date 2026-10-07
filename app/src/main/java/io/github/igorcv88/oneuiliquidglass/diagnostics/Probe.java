@@ -40,6 +40,13 @@ public final class Probe {
         catch (RuntimeException ignored) { }
         log("BLUR_ENV", "supportsBackgroundBlur=" + prop("ro.surface_flinger.supports_background_blur")
                 + " disableWindowBlurs=" + disabled + " powerSave=" + powerSave);
+        // Samsung's own realtime blur, used when AOSP cross-window blur is unsupported.
+        boolean semBlurInfo = false, semSetBlurInfo = false;
+        try { Class.forName("android.view.SemBlurInfo"); semBlurInfo = true; } catch (ClassNotFoundException | LinkageError ignored) { }
+        try {
+            for (Method m : View.class.getMethods()) if (m.getName().equals("semSetBlurInfo")) { semSetBlurInfo = true; break; }
+        } catch (LinkageError | RuntimeException ignored) { }
+        log("SEM_BLUR", "SemBlurInfo=" + semBlurInfo + " View.semSetBlurInfo=" + semSetBlurInfo);
     }
     public static void resolved(Class<?> c) {
         log("CLASS", "name=" + c.getName());

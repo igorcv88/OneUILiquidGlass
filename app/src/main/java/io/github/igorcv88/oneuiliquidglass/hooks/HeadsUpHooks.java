@@ -98,7 +98,7 @@ public final class HeadsUpHooks {
         installShade();
         for (String manager : new String[]{"com.android.systemui.statusbar.notification.headsup.HeadsUpManagerImpl", "com.android.systemui.statusbar.policy.BaseHeadsUpManager", "com.android.systemui.statusbar.policy.HeadsUpManager"}) {
             Class<?> c = resolve(manager);
-            for (String n : new String[]{"showNotification", "updateNotification", "removeNotification"}) hook(c, n, new XC_MethodHook() {
+            for (String n : new String[]{"showNotification", "updateNotification", "removeNotification", "createHeadsUpEntry", "setEntryPinned"}) hook(c, n, new XC_MethodHook() {
                 @Override protected void afterHookedMethod(MethodHookParam p) { Probe.log("MANAGER_EVENT", "owner=" + owner(p) + " method=" + ((Method) p.method).getName()); }
             });
         }
@@ -181,6 +181,7 @@ public final class HeadsUpHooks {
         boolean reportedCapability;
         Boolean lastEligible;
         String lastReason = "";
+        Boolean lastHeadsUp;
         int width = -1, height = -1;
         final float[] lastRadii = new float[8];
         State(View background, View row) { this.background = new WeakReference<>(background); this.row = new WeakReference<>(row); }
@@ -221,6 +222,14 @@ public final class HeadsUpHooks {
                 View v = background.get(); if (v == null) return true;
                 boolean eligible = eligible();
                 String reason = reason();
+                View r = row.get();
+                Boolean headsUp = r == null ? null : Reflect.bool(r, "isHeadsUpState", "mIsHeadsUp");
+                if (headsUp != null && !headsUp.equals(lastHeadsUp)) {
+                    lastHeadsUp = headsUp;
+                    Probe.log("HEADSUP", "viewId=" + Integer.toHexString(System.identityHashCode(v)) + " headsUp=" + headsUp
+                            + " pinned=" + Reflect.bool(r, "isPinned", "mIsPinned") + " shown=" + v.isShown()
+                            + " nativeBlur=" + Reflect.bool(v, "isBlurEnabled", "mBlurEnabled"));
+                }
                 if (!lastReason.equals(String.valueOf(reason))) {
                     lastReason = String.valueOf(reason);
                     Probe.log("DECISION", "viewId=" + Integer.toHexString(System.identityHashCode(v))
@@ -264,7 +273,8 @@ public final class HeadsUpHooks {
             Probe.view("ROW_EVENT", v);
             Probe.log("LIFECYCLE", "callback=" + event + " rowId=" + Integer.toHexString(System.identityHashCode(r))
                     + " headsUp=" + Reflect.bool(r, "isHeadsUpState", "mIsHeadsUp") + " keyguard=" + Reflect.read(r, "mOnKeyguard")
-                    + " pinned=" + Reflect.read(r, "mIsPinned") + " animatingAway=" + Reflect.read(r, "mHeadsUpAnimatingAway")
+                    + " pinned=" + Reflect.bool(r, "isPinned", "mIsPinned") + " animatingAway=" + Reflect.bool(r, "isHeadsUpAnimatingAway", "mHeadsUpAnimatingAway")
+                    + " nativeBlur=" + Reflect.bool(v, "isBlurEnabled", "mBlurEnabled")
                     + " tint=" + Reflect.read(v, "mTintColor") + " radii=" + java.util.Arrays.toString(shape())
                     + " shadeExpanded=" + shadeExpanded + " crossBlur=" + blurEnabled);
             if (v.isAttachedToWindow() && !reportedCapability) {
