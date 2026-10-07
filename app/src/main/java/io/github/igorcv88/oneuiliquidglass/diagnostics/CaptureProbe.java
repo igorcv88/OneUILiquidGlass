@@ -75,7 +75,8 @@ public final class CaptureProbe {
             try { api = new Api(); Probe.log("CAPTURE_API", api.describe()); }
             catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
                 apiFailed = true; Probe.error("CAPTURE_API_FAILED", e);
-                Probe.log("CAPTURE_API_DETAIL", "message=" + String.valueOf(e.getMessage()));
+                Probe.log("CAPTURE_API_DETAIL", "message=" + String.valueOf(e.getMessage())
+                        + " cause=" + (e.getCause() == null ? "null" : e.getCause().getClass().getSimpleName() + ":" + e.getCause().getMessage()));
                 return;
             }
         }
@@ -274,7 +275,11 @@ public final class CaptureProbe {
 
     private static String fmt(double v) { return String.format(java.util.Locale.ROOT, "%.2f", v); }
 
-    /** Reflective binding to android.window.ScreenCapture and IWindowManager.captureDisplay. */
+    /**
+     * Reflective binding to IWindowManager.captureDisplay. The argument, listener and result classes are
+     * taken from the method's own signature: their package and outer class moved between releases
+     * (android.window.ScreenCapture on Android 14-16 is absent on this One UI 9 build).
+     */
     private static final class Api {
         final Class<?> builderClass, argsClass, listenerClass, shotClass;
         final Method setCrop, setScale, setSecure, setProtected, setExclude, build;
@@ -284,42 +289,73 @@ public final class CaptureProbe {
         final Method getBuffer, getSecure, getHdr, getColorSpace;
 
         Api() throws ReflectiveOperationException {
-            argsClass = Class.forName("android.window.ScreenCapture$CaptureArgs");
-            builderClass = Class.forName("android.window.ScreenCapture$CaptureArgs$Builder");
-            listenerClass = Class.forName("android.window.ScreenCapture$ScreenCaptureListener");
-            shotClass = Class.forName("android.window.ScreenCapture$ScreenshotHardwareBuffer");
-            setCrop = builderClass.getMethod("setSourceCrop", Rect.class);
-            setScale = builderClass.getMethod("setFrameScale", float.class);
-            setSecure = builderClass.getMethod("setCaptureSecureLayers", boolean.class);
-            setProtected = builderClass.getMethod("setAllowProtected", boolean.class);
-            setExclude = builderClass.getMethod("setExcludeLayers", SurfaceControl[].class);
-            build = builderClass.getMethod("build");
-            listenerCtor = listenerClass.getConstructor(ObjIntConsumer.class);
             windowManager = Class.forName("android.view.WindowManagerGlobal").getMethod("getWindowManagerService").invoke(null);
+            if (windowManager == null) throw new IllegalStateException("no window manager service");
+            CaptureSurvey.run(windowManager);
             Method found = null;
             for (Method m : windowManager.getClass().getMethods()) {
                 Class<?>[] p = m.getParameterTypes();
-                if (m.getName().equals("captureDisplay") && p.length == 3 && p[0] == int.class
-                        && p[1].isAssignableFrom(argsClass) && p[2].isAssignableFrom(listenerClass)) { found = m; break; }
+                if (m.getName().equals("captureDisplay") && p.length == 3 && p[0] == int.class) { found = m; break; }
             }
-            if (found == null) throw new NoSuchMethodException("IWindowManager.captureDisplay(int, CaptureArgs, ScreenCaptureListener)");
+            if (found == null) throw new NoSuchMethodException("IWindowManager.captureDisplay(int, ?, ?)");
             captureDisplay = found;
+            argsClass = found.getParameterTypes()[1];
+            listenerClass = found.getParameterTypes()[2];
+            builderClass = nested(argsClass, "Builder");
+            shotClass = shotClass(argsClass, listenerClass);
+            setCrop = builderClass.getMethod("setSourceCrop", Rect.class);
+            setScale = builderClass.getMethod("setFrameScale", float.class);
+            setSecure = optional(builderClass, "setCaptureSecureLayers", boolean.class);
+            setProtected = optional(builderClass, "setAllowProtected", boolean.class);
+            setExclude = builderClass.getMethod("setExcludeLayers", SurfaceControl[].class);
+            build = builderClass.getMethod("build");
+            listenerCtor = listenerClass.getConstructor(ObjIntConsumer.class);
             getBuffer = shotClass.getMethod("getHardwareBuffer");
             getSecure = shotClass.getMethod("containsSecureLayers");
-            getHdr = shotClass.getMethod("containsHdrLayers");
+            getHdr = optional(shotClass, "containsHdrLayers");
             getColorSpace = shotClass.getMethod("getColorSpace");
         }
 
+        private static Class<?> nested(Class<?> owner, String simpleName) throws ClassNotFoundException {
+            for (Class<?> c : owner.getDeclaredClasses()) if (c.getSimpleName().equals(simpleName)) return c;
+            return Class.forName(owner.getName() + "$" + simpleName, false, owner.getClassLoader());
+        }
+
+        /** The result type: whichever sibling of the argument/listener classes exposes getHardwareBuffer(). */
+        private static Class<?> shotClass(Class<?> args, Class<?> listener) throws ClassNotFoundException {
+            List<Class<?>> candidates = new ArrayList<>();
+            for (Class<?> c : new Class<?>[]{args, listener}) {
+                Class<?> outer = c.getEnclosingClass();
+                if (outer != null) Collections.addAll(candidates, outer.getDeclaredClasses());
+                Package pkg = c.getPackage();
+                if (pkg != null) {
+                    try { candidates.add(Class.forName(pkg.getName() + ".ScreenshotHardwareBuffer", false, c.getClassLoader())); }
+                    catch (ClassNotFoundException ignored) { }
+                }
+            }
+            for (Class<?> c : candidates) {
+                try { if (c.getMethod("getHardwareBuffer").getReturnType() == HardwareBuffer.class) return c; }
+                catch (NoSuchMethodException | LinkageError ignored) { }
+            }
+            throw new ClassNotFoundException("ScreenshotHardwareBuffer next to " + args.getName());
+        }
+
+        private static Method optional(Class<?> owner, String name, Class<?>... args) {
+            try { return owner.getMethod(name, args); } catch (NoSuchMethodException e) { return null; }
+        }
+
         String describe() {
-            return "path=IWindowManager.captureDisplay method=" + captureDisplay.toGenericString();
+            return "path=IWindowManager.captureDisplay args=" + argsClass.getName() + " listener=" + listenerClass.getName()
+                    + " shot=" + shotClass.getName() + " secureSetter=" + (setSecure != null)
+                    + " protectedSetter=" + (setProtected != null) + " hdrGetter=" + (getHdr != null);
         }
 
         Object args(Rect crop, float scale, SurfaceControl exclude) throws ReflectiveOperationException {
             Object b = builderClass.getConstructor().newInstance();
             setCrop.invoke(b, crop);
             setScale.invoke(b, scale);
-            setSecure.invoke(b, false);
-            setProtected.invoke(b, false);
+            if (setSecure != null) setSecure.invoke(b, false);
+            if (setProtected != null) setProtected.invoke(b, false);
             setExclude.invoke(b, (Object) new SurfaceControl[]{exclude});
             return build.invoke(b);
         }
@@ -334,7 +370,7 @@ public final class CaptureProbe {
 
         HardwareBuffer hardwareBuffer(Object shot) throws ReflectiveOperationException { return (HardwareBuffer) getBuffer.invoke(shot); }
         boolean secure(Object shot) throws ReflectiveOperationException { return (Boolean) getSecure.invoke(shot); }
-        boolean hdr(Object shot) throws ReflectiveOperationException { return (Boolean) getHdr.invoke(shot); }
+        boolean hdr(Object shot) throws ReflectiveOperationException { return getHdr != null && (Boolean) getHdr.invoke(shot); }
         ColorSpace colorSpace(Object shot) throws ReflectiveOperationException { return (ColorSpace) getColorSpace.invoke(shot); }
     }
 }
