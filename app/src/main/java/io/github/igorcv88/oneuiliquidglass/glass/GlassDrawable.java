@@ -60,8 +60,12 @@ public final class GlassDrawable extends Drawable {
                 shader.setFloatUniform("size", (float) bounds.width(), (float) bounds.height());
                 shader.setFloatUniform("origin", (float) bounds.left, (float) bounds.top);
                 shader.setFloatUniform("corners", radii[0], radii[2], radii[4], radii[6]);
-                shader.setFloatUniform("density", density);
-                shader.setFloatUniform("strength", spec.edgeStrength);
+                shader.setFloatUniform("bevel", GlassSpec.bevelPx(spec.rimDp, density, bounds.width(), bounds.height()));
+                shader.setFloatUniform("hair", GlassSpec.hairPx(spec.hairDp, density));
+                shader.setFloatUniform("fringe", spec.fringe);
+                shader.setFloatUniform("light", spec.lightX, spec.lightY);
+                shader.setFloatUniform("specular", spec.specular);
+                shader.setFloatUniform("shadow", spec.innerShadow);
                 canvas.drawRect(rect, paint);
             }
         } catch (RuntimeException e) {

@@ -367,7 +367,8 @@ public final class HeadsUpHooks {
                 Probe.log("GLASS_APPLIED", "viewId=" + Integer.toHexString(System.identityHashCode(v)) + " source=" + backdrop.name() + " optics=edge_shader");
             }
             boolean dark = (v.getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
-            glass.configure(original, shape(), dark ? spec.darkTint : spec.lightTint, dark ? spec.darkBlurColor : spec.lightBlurColor);
+            int fill = kind == Backdrop.Kind.SHARED ? (dark ? spec.shadeDarkFill : spec.shadeLightFill) : (dark ? spec.darkFill : spec.lightFill);
+            glass.configure(original, shape(), fill, dark ? spec.darkBlurColor : spec.lightBlurColor);
             return glass;
         }
         /**
