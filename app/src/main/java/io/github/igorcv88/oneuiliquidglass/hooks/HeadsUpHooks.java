@@ -19,6 +19,7 @@ import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
 import io.github.igorcv88.oneuiliquidglass.Config;
 import io.github.igorcv88.oneuiliquidglass.diagnostics.Probe;
+import io.github.igorcv88.oneuiliquidglass.diagnostics.WindowSurvey;
 import io.github.igorcv88.oneuiliquidglass.glass.Backdrop;
 import io.github.igorcv88.oneuiliquidglass.glass.BackgroundBlurBridge;
 import io.github.igorcv88.oneuiliquidglass.glass.SemBlurBridge;
@@ -119,7 +120,14 @@ public final class HeadsUpHooks {
         }
         XC_MethodHook rowEvent = new XC_MethodHook() {
             @Override protected void afterHookedMethod(MethodHookParam p) {
-                try { if (rowClass != null && rowClass.isInstance(p.thisObject)) observeRow((View) p.thisObject, ((Method) p.method).getName()); }
+                try {
+                    if (rowClass != null && rowClass.isInstance(p.thisObject)) {
+                        String name = ((Method) p.method).getName();
+                        observeRow((View) p.thisObject, name);
+                        // A new row inflates when a notification arrives; survey windows while its pop-up is on screen.
+                        if ("onFinishInflate".equals(name)) WindowSurvey.schedule("rowInflate");
+                    }
+                }
                 catch (RuntimeException | LinkageError e) { Probe.error("ROW_PROBE_FAILED", e); }
             }
         };
