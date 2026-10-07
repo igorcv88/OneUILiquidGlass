@@ -23,6 +23,7 @@ import io.github.igorcv88.oneuiliquidglass.diagnostics.WindowSurvey;
 import io.github.igorcv88.oneuiliquidglass.glass.Backdrop;
 import io.github.igorcv88.oneuiliquidglass.glass.BackgroundBlurBridge;
 import io.github.igorcv88.oneuiliquidglass.glass.SemBlurBridge;
+import io.github.igorcv88.oneuiliquidglass.glass.SharedBackdrop;
 import io.github.igorcv88.oneuiliquidglass.glass.GlassDrawable;
 import io.github.igorcv88.oneuiliquidglass.glass.GlassSpec;
 import io.github.igorcv88.oneuiliquidglass.glass.CornerGeometry;
@@ -278,11 +279,12 @@ public final class HeadsUpHooks {
                             + " pinned=" + Reflect.bool(r, "isPinned", "mIsPinned") + " shown=" + v.isShown()
                             + " nativeBlur=" + Reflect.bool(v, "isBlurEnabled", "mBlurEnabled"));
                 }
-                if (!lastReason.equals(String.valueOf(reason))) {
-                    lastReason = String.valueOf(reason);
-                    Probe.log("DECISION", "viewId=" + Integer.toHexString(System.identityHashCode(v))
-                            + " surface=" + Eligibility.surface(headsUp, r == null ? null : Reflect.bool(r, "isOnKeyguard", "mOnKeyguard"), shadeExpanded)
-                            + (reason == null ? " glass=true" : " glass=false reason=" + reason));
+                String surface = Eligibility.surface(headsUp, r == null ? null : Reflect.bool(r, "isOnKeyguard", "mOnKeyguard"), shadeExpanded);
+                String decision = surface + "|" + reason;
+                if (!lastReason.equals(decision)) {
+                    lastReason = decision;
+                    Probe.log("DECISION", "viewId=" + Integer.toHexString(System.identityHashCode(v)) + " surface=" + surface
+                            + (reason == null ? " glass=true backdrop=" + Backdrop.choose(blurEnabled, samsungBlur, sharedBackdrop()) : " glass=false reason=" + reason));
                 }
                 if (lastEligible == null || lastEligible != eligible) {
                     lastEligible = eligible;
@@ -311,7 +313,7 @@ public final class HeadsUpHooks {
             if (v.getWidth() <= 0 || v.getHeight() <= 0) return "empty";
             String policy = Eligibility.reason(enabled, v.isAttachedToWindow(), v.isHardwareAccelerated(), r.isPressed() || r.isFocused() || r.isHovered());
             if (policy != null) return policy;
-            return Backdrop.choose(blurEnabled, samsungBlur) != null ? null : "blur=unavailable";
+            return Backdrop.choose(blurEnabled, samsungBlur, sharedBackdrop()) != null ? null : "blur=unavailable";
         }
         void event(String event) {
             View v = background.get(), r = row.get(); if (v == null || r == null) return;
@@ -340,7 +342,7 @@ public final class HeadsUpHooks {
         }
         GlassDrawable material(Drawable original) throws ReflectiveOperationException {
             View v = background.get();
-            Backdrop.Kind kind = Backdrop.choose(blurEnabled, samsungBlur);
+            Backdrop.Kind kind = Backdrop.choose(blurEnabled, samsungBlur, sharedBackdrop());
             if (v == null || !eligible() || kind == null) { release(); return null; }
             for (int state : original.getState()) {
                 if (state == android.R.attr.state_pressed || state == android.R.attr.state_focused || state == android.R.attr.state_hovered) {
@@ -357,15 +359,29 @@ public final class HeadsUpHooks {
                 release(); return null;
             }
             if (glass == null) {
-                Backdrop backdrop = kind == Backdrop.Kind.SAMSUNG ? SemBlurBridge.create(v) : BackgroundBlurBridge.create(v);
+                Backdrop backdrop = kind == Backdrop.Kind.SHARED ? new SharedBackdrop()
+                        : kind == Backdrop.Kind.SAMSUNG ? SemBlurBridge.create(v) : BackgroundBlurBridge.create(v);
                 glass = new GlassDrawable(backdrop, v.getResources().getDisplayMetrics().density, spec);
                 glassKind = kind;
                 glass.setCallback(v);
                 Probe.log("GLASS_APPLIED", "viewId=" + Integer.toHexString(System.identityHashCode(v)) + " source=" + backdrop.name() + " optics=edge_shader");
             }
             boolean dark = (v.getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
-            glass.configure(original, shape(), dark ? spec.darkTint : spec.lightTint);
+            int fill = kind == Backdrop.Kind.SHARED ? (dark ? spec.shadeDarkFill : spec.shadeLightFill) : (dark ? spec.darkFill : spec.lightFill);
+            glass.configure(original, shape(), fill, dark ? spec.darkBlurColor : spec.lightBlurColor);
             return glass;
+        }
+        /**
+         * Expanded-shade rows sit on the shade's own blurred scrim. Heads-up and lockscreen rows
+         * have the app or wallpaper directly behind the window and keep a real blur.
+         */
+        boolean sharedBackdrop() {
+            View r = row.get();
+            if (r == null) return false;
+            // Unknown state keeps the real blur: only rows known not to be heads-up or keyguard share.
+            return Boolean.TRUE.equals(shadeExpanded)
+                    && Boolean.FALSE.equals(Reflect.bool(r, "isHeadsUpState", "mIsHeadsUp"))
+                    && Boolean.FALSE.equals(Reflect.bool(r, "isOnKeyguard", "mOnKeyguard"));
         }
         void release() {
             if (glass != null) { glass.release(); glass = null; glassKind = null; Probe.log("GLASS_RELEASED", "native=true"); }

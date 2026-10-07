@@ -12,9 +12,13 @@ public interface Backdrop {
     void setAlpha(int alpha);
     void release();
 
-    /** AOSP cross-window blur first; Samsung realtime blur when the compositor path is unsupported. */
-    enum Kind { COMPOSITOR, SAMSUNG }
-    static Kind choose(boolean crossWindowBlur, boolean samsungBlur) {
+    /**
+     * Shade rows share the shade's own blurred backdrop; elsewhere AOSP cross-window blur first,
+     * Samsung realtime blur when the compositor path is unsupported.
+     */
+    enum Kind { SHARED, COMPOSITOR, SAMSUNG }
+    static Kind choose(boolean crossWindowBlur, boolean samsungBlur, boolean sharedBackdrop) {
+        if (sharedBackdrop) return Kind.SHARED;
         if (crossWindowBlur) return Kind.COMPOSITOR;
         return samsungBlur ? Kind.SAMSUNG : null;
     }

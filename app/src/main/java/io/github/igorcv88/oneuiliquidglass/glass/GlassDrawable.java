@@ -17,6 +17,7 @@ public final class GlassDrawable extends Drawable {
     private final float density;
     private final GlassSpec spec;
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Path clip = new Path();
     private final RectF rect = new RectF();
     private final float[] radii = new float[8];
@@ -25,16 +26,18 @@ public final class GlassDrawable extends Drawable {
     private int alpha = 255;
     private boolean failed;
     private boolean configured;
-    private int lastTint;
+    private int lastTint, fillColor;
     public GlassDrawable(Backdrop backdrop, float density, GlassSpec spec) {
         this.backdrop = backdrop; this.density = density; this.spec = spec;
         try { shader = new RuntimeShader(LiquidGlassShader.SOURCE); paint.setShader(shader); }
         catch (RuntimeException e) { Probe.error("SHADER_UNAVAILABLE", e); }
     }
     public boolean failed() { return failed; }
-    public void configure(Drawable original, float[] shape, int tint) throws ReflectiveOperationException {
+    /** fillColor is drawn by the material; blurColor is handed to the backdrop. */
+    public void configure(Drawable original, float[] shape, int fillColor, int tint) throws ReflectiveOperationException {
         nativeDrawable = original;
         boolean changed = !configured || lastTint != tint || !java.util.Arrays.equals(shape, radii);
+        this.fillColor = fillColor;
         setAlpha(original.getAlpha());
         if (changed) {
             System.arraycopy(shape, 0, radii, 0, 8);
@@ -50,12 +53,19 @@ public final class GlassDrawable extends Drawable {
             clip.reset(); clip.addRoundRect(rect, radii, Path.Direction.CW);
             canvas.clipPath(clip);
             backdrop.draw(canvas, bounds);
+            fill.setColor(fillColor);
+            fill.setAlpha(android.graphics.Color.alpha(fillColor) * alpha / 255);
+            canvas.drawRect(rect, fill);
             if (shader != null) {
                 shader.setFloatUniform("size", (float) bounds.width(), (float) bounds.height());
                 shader.setFloatUniform("origin", (float) bounds.left, (float) bounds.top);
                 shader.setFloatUniform("corners", radii[0], radii[2], radii[4], radii[6]);
-                shader.setFloatUniform("density", density);
-                shader.setFloatUniform("strength", spec.edgeStrength);
+                shader.setFloatUniform("bevel", GlassSpec.bevelPx(spec.rimDp, density, bounds.width(), bounds.height()));
+                shader.setFloatUniform("hair", GlassSpec.hairPx(spec.hairDp, density));
+                shader.setFloatUniform("fringe", spec.fringe);
+                shader.setFloatUniform("light", spec.lightX, spec.lightY);
+                shader.setFloatUniform("specular", spec.specular);
+                shader.setFloatUniform("shadow", spec.innerShadow);
                 canvas.drawRect(rect, paint);
             }
         } catch (RuntimeException e) {
