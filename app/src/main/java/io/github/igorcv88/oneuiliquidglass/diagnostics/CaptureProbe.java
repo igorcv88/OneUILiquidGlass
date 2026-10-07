@@ -18,6 +18,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 import java.util.function.ObjIntConsumer;
 
 /**
@@ -309,7 +310,7 @@ public final class CaptureProbe {
             setProtected = optional(builderClass, "setAllowProtected", boolean.class);
             setExclude = builderClass.getMethod("setExcludeLayers", SurfaceControl[].class);
             build = builderClass.getMethod("build");
-            listenerCtor = listenerClass.getConstructor(ObjIntConsumer.class);
+            listenerCtor = listenerCtor(listenerClass);
             getBuffer = shotClass.getMethod("getHardwareBuffer");
             getSecure = shotClass.getMethod("containsSecureLayers");
             getHdr = optional(shotClass, "containsHdrLayers");
@@ -340,13 +341,20 @@ public final class CaptureProbe {
             throw new ClassNotFoundException("ScreenshotHardwareBuffer next to " + args.getName());
         }
 
+        /** Android 14-15 listeners take ObjIntConsumer(buffer, status); later ones take Consumer(buffer). */
+        private static Constructor<?> listenerCtor(Class<?> listener) throws NoSuchMethodException {
+            try { return listener.getConstructor(ObjIntConsumer.class); }
+            catch (NoSuchMethodException e) { return listener.getConstructor(Consumer.class); }
+        }
+
         private static Method optional(Class<?> owner, String name, Class<?>... args) {
             try { return owner.getMethod(name, args); } catch (NoSuchMethodException e) { return null; }
         }
 
         String describe() {
             return "path=IWindowManager.captureDisplay args=" + argsClass.getName() + " listener=" + listenerClass.getName()
-                    + " shot=" + shotClass.getName() + " secureSetter=" + (setSecure != null)
+                    + " shot=" + shotClass.getName() + " callback=" + listenerCtor.getParameterTypes()[0].getSimpleName()
+                    + " secureSetter=" + (setSecure != null)
                     + " protectedSetter=" + (setProtected != null) + " hdrGetter=" + (getHdr != null);
         }
 
@@ -361,7 +369,10 @@ public final class CaptureProbe {
         }
 
         Object listener(ObjIntConsumer<Object> consumer) throws ReflectiveOperationException {
-            return listenerCtor.newInstance(consumer);
+            if (listenerCtor.getParameterTypes()[0] == ObjIntConsumer.class) return listenerCtor.newInstance(consumer);
+            // No status in this shape: a delivered buffer is success, a null one is failure.
+            Consumer<Object> single = shot -> consumer.accept(shot, shot == null ? -1 : 0);
+            return listenerCtor.newInstance(single);
         }
 
         void capture(int displayId, Object args, Object listener) throws ReflectiveOperationException {
