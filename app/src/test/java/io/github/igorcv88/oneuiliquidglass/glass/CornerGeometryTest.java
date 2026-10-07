@@ -18,4 +18,9 @@ public final class CornerGeometryTest {
         assertFalse(CornerGeometry.supported(new float[]{Float.POSITIVE_INFINITY,Float.POSITIVE_INFINITY,0,0,0,0,0,0}));
         assertFalse(CornerGeometry.supported(new float[]{-1,-1,0,0,0,0,0,0}));
     }
+    @Test public void singleRadiusBackdropRequiresUniformCorners() {
+        assertTrue(CornerGeometry.uniform(new float[]{95,95,95,95,95,95,95,95}));
+        assertFalse(CornerGeometry.uniform(new float[]{16,16,16,16,8,8,8,8}));
+        assertFalse(CornerGeometry.uniform(null));
+    }
 }

@@ -13,11 +13,13 @@ public final class SystemUIEntry implements IXposedHookLoadPackage {
         synchronized (SystemUIEntry.class) { if (installed) return; installed = true; }
         try {
             Probe.firmware();
-            XSharedPreferences prefs = new XSharedPreferences("io.github.igorcv88.oneuiliquidglass", "glass");
+            XSharedPreferences prefs = new XSharedPreferences(Config.PACKAGE, Config.PREFS);
             prefs.reload();
-            boolean enabled = prefs.getBoolean("enabled", false);
-            Probe.log("CONFIG", "enabled=" + enabled + " readable=" + prefs.getFile().canRead());
-            new HeadsUpHooks(p.classLoader, enabled).install();
+            boolean readable = prefs.getFile().canRead();
+            boolean enabled = prefs.getBoolean(Config.KEY_ENABLED, false);
+            Probe.log("CONFIG", "enabled=" + enabled + " readable=" + readable);
+            // Unreadable file: the value is fetched from ConfigProvider once SystemUI has a Context.
+            new HeadsUpHooks(p.classLoader, readable ? Boolean.valueOf(enabled) : null).install();
         } catch (RuntimeException | LinkageError e) { Probe.error("INSTALL_FAILED", e); }
     }
 }

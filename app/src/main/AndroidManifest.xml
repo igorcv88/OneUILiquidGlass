@@ -6,6 +6,8 @@
         <meta-data android:name="xposedminversion" android:value="93" />
         <meta-data android:name="xposedsharedprefs" android:value="true" />
         <meta-data android:name="xposedscope" android:resource="@array/xposed_scope" />
+        <!-- SystemUI reads the switch here when LSPosed does not redirect the preferences file. -->
+        <provider android:name=".ConfigProvider" android:authorities="io.github.igorcv88.oneuiliquidglass.config" android:exported="true" />
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
         </activity>
