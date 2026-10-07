@@ -27,4 +27,12 @@ public final class EligibilityTest {
     @Test public void nativeInteractionUsesOriginalStatefulDrawable() {
         assertFalse(Eligibility.glass(true, true, false, false, true, true, true));
     }
+    @Test public void reasonNamesFirstBlockingCondition() {
+        assertNull(Eligibility.reason(true, true, false, false, true, true, false));
+        assertEquals("disabled", Eligibility.reason(false, null, null, null, false, false, true));
+        assertEquals("headsUp=unknown", Eligibility.reason(true, null, false, false, true, true, false));
+        assertEquals("keyguard=true", Eligibility.reason(true, true, true, false, true, true, false));
+        assertEquals("shade=unknown", Eligibility.reason(true, true, false, null, true, true, false));
+        assertEquals("interacting", Eligibility.reason(true, true, false, false, true, true, true));
+    }
 }

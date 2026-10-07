@@ -1,6 +1,9 @@
 package io.github.igorcv88.oneuiliquidglass.diagnostics;
 
+import android.content.Context;
 import android.os.Build;
+import android.os.PowerManager;
+import android.provider.Settings;
 import android.os.SystemClock;
 import android.util.Log;
 import android.view.View;
@@ -19,24 +22,35 @@ public final class Probe {
     public static void error(String event, Throwable error) {
         log(event, "error=" + error.getClass().getSimpleName());
     }
-    public static void firmware() {
-        String oneUi = "unknown";
+    private static String prop(String key) {
         try {
             Class<?> props = Class.forName("android.os.SystemProperties");
-            oneUi = (String) props.getMethod("get", String.class).invoke(null, "ro.build.version.oneui");
-        } catch (ReflectiveOperationException | RuntimeException ignored) { }
-        log("PROCESS", "model=" + Build.MODEL + " sdk=" + Build.VERSION.SDK_INT + " oneui=" + oneUi + " fingerprint=" + Build.FINGERPRINT);
+            return (String) props.getMethod("get", String.class).invoke(null, key);
+        } catch (ReflectiveOperationException | RuntimeException ignored) { return "unknown"; }
+    }
+    public static void firmware() {
+        log("PROCESS", "model=" + Build.MODEL + " sdk=" + Build.VERSION.SDK_INT + " oneui=" + prop("ro.build.version.oneui") + " fingerprint=" + Build.FINGERPRINT);
+    }
+    /** Inputs AOSP combines into WindowManager.isCrossWindowBlurEnabled(). */
+    public static void blurEnvironment(Context context) {
+        String disabled = null; Boolean powerSave = null;
+        try { disabled = Settings.Global.getString(context.getContentResolver(), "disable_window_blurs"); }
+        catch (RuntimeException ignored) { }
+        try { PowerManager pm = context.getSystemService(PowerManager.class); if (pm != null) powerSave = pm.isPowerSaveMode(); }
+        catch (RuntimeException ignored) { }
+        log("BLUR_ENV", "supportsBackgroundBlur=" + prop("ro.surface_flinger.supports_background_blur")
+                + " disableWindowBlurs=" + disabled + " powerSave=" + powerSave);
     }
     public static void resolved(Class<?> c) {
         log("CLASS", "name=" + c.getName());
         for (Field f : c.getDeclaredFields()) {
             String n = f.getName().toLowerCase(java.util.Locale.ROOT);
-            if (n.contains("background") || n.contains("corner") || n.contains("expand") || n.contains("headsup") || n.contains("keyguard") || n.contains("surface"))
+            if (n.contains("background") || n.contains("corner") || n.contains("expand") || n.contains("headsup") || n.contains("keyguard") || n.contains("surface") || n.contains("pin") || n.contains("blur"))
                 log("FIELD", "owner=" + c.getName() + " name=" + f.getName() + " type=" + f.getType().getName());
         }
         for (Method m : c.getDeclaredMethods()) {
             String n = m.getName().toLowerCase(java.util.Locale.ROOT);
-            if (n.contains("headsup") || n.contains("appear") || n.contains("background") || n.contains("radius") || n.contains("expand") || n.contains("show") || n.contains("dismiss"))
+            if (n.contains("headsup") || n.contains("appear") || n.contains("background") || n.contains("radius") || n.contains("expand") || n.contains("show") || n.contains("dismiss") || n.contains("pin") || n.contains("blur"))
                 log("METHOD", "owner=" + c.getName() + " name=" + m.getName() + " args=" + Arrays.toString(m.getParameterTypes()));
         }
     }
