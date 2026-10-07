@@ -16,7 +16,9 @@ public final class SemBlurBridge implements Backdrop {
     static final String INFO = "android.view.SemBlurInfo";
     private final View host;
     private final Method set;
-    private final Constructor<?> builder;
+    // Builder(int mode) or Builder() + setBlurMode(int); the firmware's variant is logged.
+    private final Constructor<?> builderWithMode, builderPlain;
+    private final Method setMode;
     private final int mode;
     private final Method radius, color, corner, build;
     private Object pending;
@@ -28,12 +30,19 @@ public final class SemBlurBridge implements Backdrop {
         Class<?> info = Class.forName(INFO);
         Class<?> builderClass = Class.forName(INFO + "$Builder");
         set = View.class.getMethod("semSetBlurInfo", info);
-        builder = builderClass.getConstructor(int.class);
+        // Recon on One UI 9 confirmed BLUR_MODE_WINDOW exists; it must be an int constant for this bridge.
         mode = info.getField("BLUR_MODE_WINDOW").getInt(null);
-        radius = builderClass.getMethod("setRadius", int.class);
+        builderWithMode = optionalCtor(builderClass, int.class);
+        builderPlain = builderWithMode == null ? builderClass.getConstructor() : null;
+        setMode = builderWithMode == null ? builderClass.getMethod("setBlurMode", int.class) : null;
+        Method r = optional(builderClass, "setRadius", int.class);
+        radius = r != null ? r : builderClass.getMethod("setBlurRadius", int.class);
         build = builderClass.getMethod("build");
         color = optional(builderClass, "setBackgroundColor", int.class);
         corner = optional(builderClass, "setBackgroundCornerRadius", float.class);
+    }
+    private static Constructor<?> optionalCtor(Class<?> c, Class<?> arg) {
+        try { return c.getConstructor(arg); } catch (NoSuchMethodException e) { return null; }
     }
     private static Method optional(Class<?> c, String name, Class<?> arg) {
         try { return c.getMethod(name, arg); } catch (NoSuchMethodException e) { return null; }
@@ -47,12 +56,15 @@ public final class SemBlurBridge implements Backdrop {
     }
     public static SemBlurBridge create(View host) throws ReflectiveOperationException {
         SemBlurBridge bridge = new SemBlurBridge(host);
-        Probe.log("SEM_BLUR_BRIDGE", "mode=" + bridge.mode + " color=" + (bridge.color != null) + " corner=" + (bridge.corner != null));
+        Probe.log("SEM_BLUR_BRIDGE", "mode=" + bridge.mode + " builder=" + (bridge.builderWithMode != null ? "Builder(int)" : "Builder()+setBlurMode")
+                + " radius=" + bridge.radius.getName() + " color=" + (bridge.color != null) + " corner=" + (bridge.corner != null));
         return bridge;
     }
     @Override public String name() { return "samsung"; }
     @Override public void update(int px, int tint, float[] radii) throws ReflectiveOperationException {
-        Object b = builder.newInstance(mode);
+        Object b;
+        if (builderWithMode != null) b = builderWithMode.newInstance(mode);
+        else { b = builderPlain.newInstance(); setMode.invoke(b, mode); }
         radius.invoke(b, px);
         if (color != null) color.invoke(b, tint);
         // Single scalar radius: callers only select this backdrop for uniform circular corners.
