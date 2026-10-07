@@ -177,6 +177,7 @@ public final class HeadsUpHooks {
         boolean failed;
         boolean reportedCapability;
         Boolean lastEligible;
+        String lastReason = "";
         int width = -1, height = -1;
         final float[] lastRadii = new float[8];
         State(View background, View row) { this.background = new WeakReference<>(background); this.row = new WeakReference<>(row); }
@@ -215,6 +216,12 @@ public final class HeadsUpHooks {
             try {
                 View v = background.get(); if (v == null) return true;
                 boolean eligible = eligible();
+                String reason = reason();
+                if (!lastReason.equals(String.valueOf(reason))) {
+                    lastReason = String.valueOf(reason);
+                    Probe.log("DECISION", "viewId=" + Integer.toHexString(System.identityHashCode(v))
+                            + (reason == null ? " glass=true" : " glass=false reason=" + reason));
+                }
                 if (lastEligible == null || lastEligible != eligible) {
                     lastEligible = eligible;
                     event("ELIGIBILITY");
@@ -233,6 +240,20 @@ public final class HeadsUpHooks {
             Boolean keyguard = Reflect.bool(r, "isOnKeyguard", "mOnKeyguard");
             return Eligibility.glass(enabled, Reflect.bool(r, "isHeadsUpState", "mIsHeadsUp"), keyguard, shadeExpanded,
                     v.isAttachedToWindow(), v.isHardwareAccelerated(), r.isPressed() || r.isFocused() || r.isHovered());
+        }
+        /** Diagnostic mirror of eligible() plus the compositor capability checked in material(). */
+        String reason() {
+            View v = background.get(), r = row.get();
+            if (v == null || r == null) return "collected";
+            if (failed) return "failed";
+            if (!drawHook) return "drawHook=false";
+            if (!v.isShown()) return "hidden";
+            if (v.getWidth() <= 0 || v.getHeight() <= 0) return "empty";
+            String policy = Eligibility.reason(enabled, Reflect.bool(r, "isHeadsUpState", "mIsHeadsUp"),
+                    Reflect.bool(r, "isOnKeyguard", "mOnKeyguard"), shadeExpanded,
+                    v.isAttachedToWindow(), v.isHardwareAccelerated(), r.isPressed() || r.isFocused() || r.isHovered());
+            if (policy != null) return policy;
+            return blurEnabled ? null : "crossWindowBlur=false";
         }
         void event(String event) {
             View v = background.get(), r = row.get(); if (v == null || r == null) return;
@@ -285,9 +306,11 @@ public final class HeadsUpHooks {
         }
     }
     private final class DrawHook extends XC_MethodHook {
+        private boolean reported;
         @Override protected void beforeHookedMethod(MethodHookParam p) {
             if (!(p.thisObject instanceof View) || backgroundField == null) return;
             View v = (View) p.thisObject;
+            if (!reported) { reported = true; Probe.log("DRAW_HOOK_CALLED", "view=" + v.getClass().getName()); }
             try {
                 View row = findRow(v); if (row == null) return;
                 State s = state(v, row);
