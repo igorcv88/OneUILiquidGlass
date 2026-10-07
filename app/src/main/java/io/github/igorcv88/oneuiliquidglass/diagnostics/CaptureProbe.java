@@ -58,6 +58,12 @@ public final class CaptureProbe {
         start(new Session("shade", anyShadeView, 2, true));
     }
 
+    /** Shade collapsed: further captures would see the foreground app, not the app under the shade. */
+    public static void onShadeCollapsed() {
+        Session s = active;
+        if (s != null && s.region) s.stop("shadeCollapsed");
+    }
+
     public static void onHeadsUpEnded(View background) {
         Session s = active;
         if (s != null && !s.region && s.view.get() == background) s.stop("headsupEnded");
@@ -93,8 +99,8 @@ public final class CaptureProbe {
         final List<Double> callMs = new ArrayList<>(), readyMs = new ArrayList<>();
         int requested, skipped, failed, timeouts, secure, hdr, newBuffers, changed, compared;
         long lastBufferId = Long.MIN_VALUE, lastHash;
-        boolean hasHash, inFlight, stopped;
-        String firstError;
+        boolean hasHash, inFlight, stopped, summarized;
+        String firstError, endReason;
 
         Session(String kind, View view, int hz, boolean region) {
             this.kind = kind; this.view = new java.lang.ref.WeakReference<>(view); this.hz = hz; this.region = region;
@@ -131,22 +137,32 @@ public final class CaptureProbe {
 
         void capture(int displayId, Rect crop, SurfaceControl shade) {
             long t0 = SystemClock.elapsedRealtimeNanos();
+            Object lock = new Object();
             Object[] result = new Object[1];
             int[] status = {-1};
+            boolean[] abandoned = {false};
             CountDownLatch done = new CountDownLatch(1);
             long[] tCall = {0};
             try {
                 Object args = api.args(crop, SCALE, shade);
-                Object listener = api.listener((buffer, st) -> { result[0] = buffer; status[0] = st; done.countDown(); });
+                Object listener = api.listener((buffer, st) -> {
+                    synchronized (lock) {
+                        // A result arriving after the timeout is nobody's: release its buffer here.
+                        if (abandoned[0]) { closeQuietly(buffer); return; }
+                        result[0] = buffer; status[0] = st;
+                    }
+                    done.countDown();
+                });
                 api.capture(displayId, args, listener);
                 tCall[0] = SystemClock.elapsedRealtimeNanos();
                 boolean ok = done.await(TIMEOUT_MS, TimeUnit.MILLISECONDS);
+                if (!ok) synchronized (lock) { abandoned[0] = true; if (result[0] != null) { closeQuietly(result[0]); result[0] = null; } }
                 long tReady = SystemClock.elapsedRealtimeNanos();
                 MAIN.post(() -> record(ok, status[0], result[0], (tCall[0] - t0) / 1e6, (tReady - t0) / 1e6, crop));
             } catch (ReflectiveOperationException | RuntimeException | LinkageError | InterruptedException e) {
                 String name = e instanceof java.lang.reflect.InvocationTargetException && e.getCause() != null
                         ? e.getCause().getClass().getSimpleName() + ":" + e.getCause().getMessage() : e.getClass().getSimpleName();
-                MAIN.post(() -> { inFlight = false; failed++; note(name); });
+                MAIN.post(() -> { inFlight = false; failed++; note(name); finishIfStopped(); });
             } finally {
                 shade.release();
             }
@@ -154,12 +170,17 @@ public final class CaptureProbe {
 
         void record(boolean ok, int st, Object shot, double call, double ready, Rect crop) {
             inFlight = false;
+            try { recordInner(ok, st, shot, call, ready, crop); } finally { finishIfStopped(); }
+        }
+
+        void recordInner(boolean ok, int st, Object shot, double call, double ready, Rect crop) {
             if (!ok) { timeouts++; note("timeout"); return; }
-            if (st != 0 || shot == null) { failed++; note("status=" + st); return; }
+            if (st != 0 || shot == null) { failed++; note("status=" + st); closeQuietly(shot); return; }
             callMs.add(call); readyMs.add(ready);
             String line;
+            HardwareBuffer hb = null;
             try {
-                HardwareBuffer hb = api.hardwareBuffer(shot);
+                hb = api.hardwareBuffer(shot);
                 boolean sec = api.secure(shot), isHdr = api.hdr(shot);
                 if (sec) secure++;
                 if (isHdr) hdr++;
@@ -177,8 +198,11 @@ public final class CaptureProbe {
                 line = "session=" + id() + " n=" + callMs.size() + " callMs=" + fmt(call) + " readyMs=" + fmt(ready)
                         + " w=" + hb.getWidth() + " h=" + hb.getHeight() + " crop=" + crop.toShortString()
                         + " newBuffer=" + fresh + " secure=" + sec + " hdr=" + isHdr + " changed=" + diff;
-                hb.close();
-            } catch (RuntimeException | ReflectiveOperationException e) { line = "session=" + id() + " inspectFailed=" + e.getClass().getSimpleName(); }
+            } catch (RuntimeException | ReflectiveOperationException e) {
+                line = "session=" + id() + " inspectFailed=" + e.getClass().getSimpleName();
+            } finally {
+                if (hb != null) hb.close();
+            }
             Probe.log("CAPTURE", line);
         }
 
@@ -186,17 +210,30 @@ public final class CaptureProbe {
 
         void note(String error) { if (firstError == null) firstError = error; }
 
+        /** Stops scheduling; the summary waits for an in-flight capture so its counters are final. */
         void stop(String why) {
             if (stopped) return;
-            stopped = true;
+            stopped = true; endReason = why;
             if (active == this) active = null;
-            Probe.log("CAPTURE_SUMMARY", "session=" + id + " kind=" + kind + " end=" + why + " requested=" + requested
+            finishIfStopped();
+        }
+
+        void finishIfStopped() {
+            if (!stopped || inFlight || summarized) return;
+            summarized = true;
+            Probe.log("CAPTURE_SUMMARY", "session=" + id + " kind=" + kind + " end=" + endReason + " requested=" + requested
                     + " ok=" + callMs.size() + " skipped=" + skipped + " failed=" + failed + " timeouts=" + timeouts
                     + " readyP50=" + pct(readyMs, 50) + " readyP95=" + pct(readyMs, 95) + " readyP99=" + pct(readyMs, 99)
                     + " readyMax=" + pct(readyMs, 100) + " callP50=" + pct(callMs, 50)
                     + " newBuffers=" + newBuffers + " secure=" + secure + " hdr=" + hdr
                     + " changed=" + changed + "/" + compared + " firstError=" + firstError);
         }
+    }
+
+    private static void closeQuietly(Object shot) {
+        if (shot == null || api == null) return;
+        try { HardwareBuffer hb = api.hardwareBuffer(shot); if (hb != null) hb.close(); }
+        catch (ReflectiveOperationException | RuntimeException ignored) { }
     }
 
     /** Coarse 8x4 luminance hash for change detection only; pixels are discarded immediately. */

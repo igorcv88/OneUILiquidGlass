@@ -190,12 +190,18 @@ public final class HeadsUpHooks {
         if (next != null && !next.equals(shadeExpanded)) {
             shadeExpanded = next; Probe.log("SHADE", "expanded=" + next);
             for (State state : new ArrayList<>(states.values())) state.invalidate();
-            View sample = null;
-            for (State state : new ArrayList<>(states.values())) { View v = state.background.get(); if (v != null && v.isAttachedToWindow()) { sample = v; break; } }
+            if (!next) CaptureProbe.onShadeCollapsed();
+            // The panel controller's own view works with an empty shade; a row is only the fallback.
+            Object panel = Reflect.read(controller, "mView");
+            View sample = panel instanceof View && ((View) panel).isAttachedToWindow() ? (View) panel : null;
+            for (State state : new ArrayList<>(states.values())) {
+                if (sample != null) break;
+                View v = state.background.get(); if (v != null && v.isAttachedToWindow()) sample = v;
+            }
             if (sample != null) {
                 Probe.scrims(sample.getRootView(), next ? "shadeExpanded" : "shadeCollapsed");
                 if (next) CaptureProbe.onShadeExpanded(sample);
-            }
+            } else Probe.log("SHADE_PROBE_SKIPPED", "reason=noAttachedView");
         }
     }
     private void observeRow(View row, String event) {
