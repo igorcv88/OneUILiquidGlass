@@ -12,7 +12,9 @@ package io.github.igorcv88.oneuiliquidglass.glass;
  * shadow that starts inside the outline rather than on it.</p>
  *
  * <p>Output is premultiplied: rgb is added light (alpha 0 under src-over is additive) and alpha is
- * the thickness shadow. Written for this module; see docs/references.md.</p>
+ * the thickness shadow. Rim, hairline and shadow terms are adapted from the author's WaEnhancerX
+ * Community {@code LiquidLens}; its backdrop-sampling terms (refraction, backdrop dispersion,
+ * saturation) are omitted because a cross-process compositor blur exposes no pixels.</p>
  */
 public final class LiquidGlassShader {
     private LiquidGlassShader() {}
@@ -36,9 +38,6 @@ public final class LiquidGlassShader {
                                 : (p.x < 0.0 ? corners.w : corners.z);
             return roundedBox(p, hs, clamp(r, 0.0, min(hs.x, hs.y)));
         }
-        float ridge(float depth, float center, float w) {
-            return 1.0 - smoothstep(w * 0.5, w * 1.5, abs(depth - center));
-        }
         half4 main(float2 coord) {
             float2 hs = size * 0.5;
             float2 p = coord - origin - hs;
@@ -55,16 +54,23 @@ public final class LiquidGlassShader {
             float facing = dot(n, -normalize(light + float2(0.0001, 0.0)));
             float2 q = p / max(hs, float2(1.0, 1.0));
             float angle = atan(q.y, q.x);
-            float runs = clamp(0.5 + 0.3 * sin(angle * 3.0 + 0.6) + 0.2 * sin(angle * 5.0 - 1.9), 0.08, 1.0);
+            float runs = clamp(0.52 + 0.31 * sin(angle * 3.0 + 0.7) + 0.17 * sin(angle * 5.0 - 2.1), 0.06, 1.0);
             float under = clamp(n.y, 0.0, 1.0);
 
-            float w = max(hair, 1.0);
-            float shift = w * 0.6 * fringe;
-            float3 line = float3(ridge(depth, w + shift, w), ridge(depth, w, w), ridge(depth, w - shift, w));
+            float hw = max(hair, 1.0);
+            float sep = hw * 0.90 * fringe;
+            float core = max(0.9, hw * 0.32);
+            float ramp = max(hw * 0.5, 1.0);
+            float reach = sep + core + ramp;
+            float3 line = float3(
+                clamp((reach - abs(d + reach + 2.0 * sep)) / ramp, 0.0, 1.0),
+                clamp((reach - abs(d + reach + sep)) / ramp, 0.0, 1.0),
+                clamp((reach - abs(d + reach)) / ramp, 0.0, 1.0));
+            line *= clamp(1.0 - abs(d + reach + sep) / (reach + sep), 0.0, 1.0);
             float lo = min(line.r, min(line.g, line.b));
-            line = mix(float3(lo), line, 0.5);
+            line = mix(float3(lo), line, 0.55) * 0.86;
             float lineGain = (0.70 + 0.22 * max(facing, 0.0)) * mix(1.0, runs, 0.35)
-                    * (1.0 - 0.30 * under * under) * 0.55;
+                    * (1.0 - 0.30 * under * under) * 0.60;
 
             float bandW = max(bevel * 0.34, 3.0);
             float band = clamp(1.0 - depth / bandW, 0.0, 1.0);
