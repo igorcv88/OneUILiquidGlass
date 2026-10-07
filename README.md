@@ -20,7 +20,11 @@ JDK 17, Android SDK 36 and Gradle 8.11.1:
 ./gradlew testDebugUnitTest lintDebug assembleDebug
 ```
 
-The **Build diagnostic APK** workflow is `workflow_dispatch` only. No push/PR CI or automatic workflow triggers are configured. The debug APK is signed with the build environment's debug key, so different environments can require uninstall/reinstall.
+Releases are published to GitHub Releases by **Build One UI Liquid Glass APK** (`.github/workflows/release.yml`), the same pipeline as the other repositories:
+
+- Dispatch it on `main` (optionally with an exact `app_sha`), or push `.github/release-trigger` to `main` with a line `app_sha=<40-char commit>`. The trigger workflow dispatches the pinned release.
+- Each run tags `v0.1.N` (versionCode `100 + N`), runs tests and lint, builds the release APK, signs it with the fixed release key from the `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS` and `KEY_PASSWORD` secrets, and attaches the APK and its SHA-256.
+- Because every release uses the same key and a higher versionCode, a new release installs over the previous one as an update. Builds signed with a debug key (local or older workflow artifacts) need one uninstall before the first release install.
 
 1. Install the APK and enable the module for **SystemUI** in LSPosed.
 2. Leave glass off for the first probe. Restart SystemUI (or reboot).

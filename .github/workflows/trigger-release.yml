@@ -1,0 +1,42 @@
+name: Trigger One UI Liquid Glass Release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/release-trigger
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch:
+    name: Dispatch pinned APK release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enforce repository
+        run: test "$GITHUB_REPOSITORY" = "igorcv88/OneUILiquidGlass"
+
+      - name: Checkout trigger metadata
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Dispatch pinned release workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          APP_SHA="$(sed -n 's/^app_sha=//p' .github/release-trigger | tail -n 1)"
+
+          [[ "$APP_SHA" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "::error::.github/release-trigger must contain app_sha=<40-char sha>" >&2
+            exit 1
+          }
+
+          gh workflow run release.yml \
+            --repo "igorcv88/OneUILiquidGlass" \
+            --ref main \
+            -f app_sha="$APP_SHA"
