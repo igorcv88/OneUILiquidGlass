@@ -83,7 +83,7 @@ Fallbacks:
 - In all three cases the affected rows fall back to Samsung blur.
 
 `LiquidGlassShader.REFRACT_SOURCE` draws the opaque material from the captured bitmap. Each channel is displaced inward along the outline normal by the Snell shift of a quarter-circle bevel. The shift is mirrored by `GlassSpec.refractionShift`, with a peak of 16.19 px about 11 px inside the outline for b = 70 px and n = 1.5. The program then:
-- frosts the sample with a 9-tap ring;
+- samples it already blurred: the frame is drawn into a RenderNode (bounds plus a 2 × radius + 2 px margin, CLAMP edges) whose effect chain runs a Skia Gaussian blur and then this program, so no blur is approximated by taps (a fixed 9-tap ring produced ghosted copies at radius 10);
 - saturates it;
 - veils it with a light tint and the fill;
 - applies the shared edge optics.
@@ -97,7 +97,7 @@ Live knobs are read as `debug.oulg.*` system properties, at most once a second, 
 | `backdrop` | `auto` | `grid` draws a synthetic numbered grid (lines every 40 px); `off` disables capture |
 | `refract` | 1.0 | Multiplier on the physical shift (about 2.6 gives the stylised 42 px peak) |
 | `ior` | 1.5 | Refractive index |
-| `blur` | 3 | Frost radius, screen px |
+| `blur` | 8 | Gaussian blur radius (RenderEffect), screen px, max 32 |
 | `sat` | 1.2 | Saturation |
 | `disp` | 0.10 | Relative red/blue shift; physical glass is about 0.01 |
 | `hz` | 15 | Heads-up capture rate |

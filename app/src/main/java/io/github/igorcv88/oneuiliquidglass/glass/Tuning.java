@@ -14,7 +14,7 @@ public final class Tuning {
     /** Multiplier on the physical Snell shift: 1 = physical (~16 px peak at a 70 px bevel). */
     public final float refract;
     public final float ior;
-    /** Frost radius in screen px; 0 samples the backdrop sharp. */
+    /** Gaussian blur radius in screen px (RenderEffect); 0 samples the backdrop sharp. */
     public final float blur;
     public final float saturation;
     /** Relative shift difference between red and blue; physical glass is ~0.01 (invisible). */
@@ -32,7 +32,8 @@ public final class Tuning {
         backdrop = b.equals("grid") || b.equals("off") ? b : "auto";
         refract = clamp(number("refract", 1f), 0f, 6f);
         ior = clamp(number("ior", 1.5f), 1.0f, 2.4f);
-        blur = clamp(number("blur", 3f), 0f, 24f);
+        // The node margin (2 x radius + 2) must stay inside CaptureHub's 80 px capture margin.
+        blur = clamp(number("blur", 8f), 0f, 32f);
         saturation = clamp(number("sat", 1.2f), 0f, 2.5f);
         dispersion = clamp(number("disp", 0.10f), 0f, 0.5f);
         hz = Math.round(clamp(number("hz", 15f), 1f, 30f));

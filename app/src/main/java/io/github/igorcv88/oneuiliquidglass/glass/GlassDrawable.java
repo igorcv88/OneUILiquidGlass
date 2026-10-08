@@ -9,6 +9,9 @@ import android.graphics.Path;
 import android.graphics.PixelFormat;
 import android.graphics.Rect;
 import android.graphics.RectF;
+import android.graphics.RecordingCanvas;
+import android.graphics.RenderEffect;
+import android.graphics.RenderNode;
 import android.graphics.RuntimeShader;
 import android.graphics.Shader;
 import android.graphics.drawable.Drawable;
@@ -30,7 +33,11 @@ public final class GlassDrawable extends Drawable {
     private final float[] radii = new float[8];
     private RuntimeShader shader;
     private RuntimeShader refract;
-    private final Paint refractPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private RenderNode node;
+    private RenderEffect blur;
+    private float blurRadius = -1f;
+    private final Paint imagePaint = new Paint(Paint.FILTER_BITMAP_FLAG);
+    private final android.graphics.Matrix imageMatrix = new android.graphics.Matrix();
     private CaptureHub.Frame boundFrame;
     private final int[] screen = new int[2];
     private int tintColor;
@@ -42,7 +49,7 @@ public final class GlassDrawable extends Drawable {
     public GlassDrawable(Backdrop backdrop, float density, GlassSpec spec) {
         this.backdrop = backdrop; this.density = density; this.spec = spec;
         if (backdrop instanceof SampledBackdrop && !refractBroken) {
-            try { refract = new RuntimeShader(LiquidGlassShader.REFRACT_SOURCE); refractPaint.setShader(refract); }
+            try { refract = new RuntimeShader(LiquidGlassShader.REFRACT_SOURCE); }
             catch (RuntimeException e) {
                 // Compiled on the device only: keep the compiler message, and stop choosing capture.
                 refractBroken = true;
@@ -109,8 +116,16 @@ public final class GlassDrawable extends Drawable {
         s.setFloatUniform("specular", spec.specular);
         s.setFloatUniform("shadow", spec.innerShadow);
     }
-    /** False until the first frame arrives; the caller then draws veil and edge alone. */
+    /**
+     * False until the first frame arrives; the caller then draws veil and edge alone.
+     *
+     * <p>The frame is drawn into a RenderNode covering the bounds plus a blur margin, mapped so node
+     * pixels line up with the screen. The node's effect chain blurs it (Skia Gaussian, on the GPU at
+     * render time) and then runs the refraction program with the blurred image as its input, so the
+     * shader displaces frosted pixels instead of approximating a blur with a few taps.</p>
+     */
     private boolean drawSampled(Canvas canvas, Rect bounds) {
+        if (!(canvas instanceof RecordingCanvas)) return false;
         SampledBackdrop sampled = (SampledBackdrop) backdrop;
         CaptureHub.Frame frame = sampled.frame();
         android.view.View view = sampled.view();
@@ -118,26 +133,46 @@ public final class GlassDrawable extends Drawable {
         if (frame != boundFrame) {
             BitmapShader image = new BitmapShader(frame.bitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
             image.setFilterMode(BitmapShader.FILTER_MODE_LINEAR);
-            refract.setInputShader("backdrop", image);
+            imagePaint.setShader(image);
             frame.retain();
             unbind(view);
             boundFrame = frame;
         }
         Tuning t = Tuning.get();
         view.getLocationOnScreen(screen);
+        int margin = (int) Math.ceil(t.blur * 2f) + 2;
+        int w = bounds.width() + 2 * margin, h = bounds.height() + 2 * margin;
+        if (node == null) node = new RenderNode("oulg-glass");
+        node.setPosition(0, 0, w, h);
+        RecordingCanvas content = node.beginRecording(w, h);
+        try {
+            // node (0,0) is view-local (bounds.left - margin, bounds.top - margin); bitmap px = (screen - crop) * scale.
+            // CLAMP extends the edge pixels where the crop stops short of the node (top of the screen).
+            imageMatrix.setScale(1f / frame.scale, 1f / frame.scale);
+            imageMatrix.postTranslate(frame.crop.left - (screen[0] + bounds.left - margin), frame.crop.top - (screen[1] + bounds.top - margin));
+            imagePaint.getShader().setLocalMatrix(imageMatrix);
+            content.drawRect(0f, 0f, w, h, imagePaint);
+        } finally { node.endRecording(); }
+
         edgeUniforms(refract, bounds);
-        refract.setFloatUniform("bdOrigin", screen[0] - frame.crop.left, screen[1] - frame.crop.top);
-        refract.setFloatUniform("bdScale", frame.scale);
-        refract.setFloatUniform("bdSize", frame.bitmap.getWidth(), frame.bitmap.getHeight());
+        refract.setFloatUniform("origin", (float) margin, (float) margin);
         refract.setFloatUniform("refractScale", t.refract);
         refract.setFloatUniform("ior", t.ior);
-        refract.setFloatUniform("blurPx", t.blur);
         refract.setFloatUniform("saturation", t.saturation);
         refract.setFloatUniform("dispersion", t.dispersion);
         int veil = t.tintAlpha >= 0 ? (tintColor & 0x00ffffff) | (t.tintAlpha << 24) : tintColor;
         premultiplied(refract, "tint", veil);
         premultiplied(refract, "fillColor", fillColor);
-        canvas.drawRect(rect, refractPaint);
+        RenderEffect optics = RenderEffect.createRuntimeShaderEffect(refract, "backdrop");
+        if (t.blur >= 0.5f) {
+            if (blur == null || blurRadius != t.blur) { blur = RenderEffect.createBlurEffect(t.blur, t.blur, Shader.TileMode.CLAMP); blurRadius = t.blur; }
+            optics = RenderEffect.createChainEffect(optics, blur);
+        }
+        node.setRenderEffect(optics);
+        int save = canvas.save();
+        canvas.translate(bounds.left - margin, bounds.top - margin);
+        ((RecordingCanvas) canvas).drawRenderNode(node);
+        canvas.restoreToCount(save);
         return true;
     }
     /**
@@ -157,13 +192,14 @@ public final class GlassDrawable extends Drawable {
         s.setFloatUniform(name, Color.red(color) / 255f * a, Color.green(color) / 255f * a, Color.blue(color) / 255f * a, a);
     }
     @Override public void setAlpha(int value) {
-        alpha = value; backdrop.setAlpha(value); paint.setAlpha(value); refractPaint.setAlpha(value);
+        alpha = value; backdrop.setAlpha(value); paint.setAlpha(value);
     }
     @Override public int getAlpha() { return alpha; }
-    @Override public void setColorFilter(ColorFilter filter) { paint.setColorFilter(filter); refractPaint.setColorFilter(filter); }
+    @Override public void setColorFilter(ColorFilter filter) { paint.setColorFilter(filter); }
     @Override public int getOpacity() { return PixelFormat.TRANSLUCENT; }
     public void release() {
         if (backdrop instanceof SampledBackdrop) unbind(((SampledBackdrop) backdrop).view());
         backdrop.release(); nativeDrawable = null; setCallback(null);
+        if (node != null) { node.discardDisplayList(); node = null; }
     }
 }
