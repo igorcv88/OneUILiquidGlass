@@ -45,7 +45,7 @@ public final class GlassDrawable extends Drawable {
     private int alpha = 255;
     private boolean failed;
     private boolean configured;
-    private int lastTint, fillColor;
+    private int lastTint, fillColor, tuningGeneration;
     public GlassDrawable(Backdrop backdrop, float density, GlassSpec spec) {
         this.backdrop = backdrop; this.density = density; this.spec = spec;
         if (backdrop instanceof SampledBackdrop && !refractBroken) {
@@ -70,7 +70,8 @@ public final class GlassDrawable extends Drawable {
     /** fillColor is drawn by the material; blurColor is handed to the backdrop. */
     public void configure(Drawable original, float[] shape, int fillColor, int tint) throws ReflectiveOperationException {
         nativeDrawable = original;
-        boolean changed = !configured || lastTint != tint || !java.util.Arrays.equals(shape, radii);
+        boolean changed = !configured || lastTint != tint || !java.util.Arrays.equals(shape, radii)
+                || tuningGeneration != Tuning.generation;
         this.fillColor = fillColor;
         this.tintColor = tint;
         // Over a capture the native alpha is Samsung's translucency, not a fade (row fades use view
@@ -79,7 +80,7 @@ public final class GlassDrawable extends Drawable {
         if (changed) {
             System.arraycopy(shape, 0, radii, 0, 8);
             backdrop.update(Math.round(spec.blurDp * density), tint, radii);
-            configured = true; lastTint = tint;
+            configured = true; lastTint = tint; tuningGeneration = Tuning.generation;
         }
     }
     @Override public void draw(Canvas canvas) {

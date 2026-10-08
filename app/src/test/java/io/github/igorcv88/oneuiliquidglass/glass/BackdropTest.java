@@ -8,9 +8,9 @@ public final class BackdropTest {
         assertEquals(Backdrop.Kind.SHARED, Backdrop.choose(true, true, true, true));
         assertEquals(Backdrop.Kind.SHARED, Backdrop.choose(false, false, true, false));
     }
-    @Test public void captureIsPreferredForRowsOverAppsOrWallpaper() {
-        assertEquals(Backdrop.Kind.CAPTURE, Backdrop.choose(true, true, false, true));
-        assertEquals(Backdrop.Kind.CAPTURE, Backdrop.choose(false, false, false, true));
+    @Test public void sampledIsPreferredForRowsWithASampleableBackground() {
+        assertEquals(Backdrop.Kind.SAMPLED, Backdrop.choose(true, true, false, true));
+        assertEquals(Backdrop.Kind.SAMPLED, Backdrop.choose(false, false, false, true));
     }
     @Test public void compositorBlurIsPreferredWhenSupported() {
         assertEquals(Backdrop.Kind.COMPOSITOR, Backdrop.choose(true, true, false, false));

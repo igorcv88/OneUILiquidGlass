@@ -9,7 +9,11 @@ import io.github.igorcv88.oneuiliquidglass.diagnostics.Probe;
  * Defaults are the physical model; each value is clamped to a safe range.
  */
 public final class Tuning {
-    /** auto: capture where available; grid: synthetic numbered texture; off: never capture. */
+    /**
+     * auto: lockscreen rows refract the wallpaper, everything else uses the compositor blur
+     * (live, same frame); capture: heads-up and lockscreen rows sample periodic screen captures
+     * (laggy behind motion, experimental); grid: synthetic numbered texture; off: no sampling.
+     */
     public final String backdrop;
     /** Multiplier on the physical Snell shift: 1 = physical (~16 px peak at a 70 px bevel). */
     public final float refract;
@@ -22,6 +26,12 @@ public final class Tuning {
     public final int hz, keyguardHz;
     /** Veil alpha override (0-255), -1 for the spec default. */
     public final int tintAlpha;
+    /** Samsung compositor blur: radius px (-1 = spec), color curve (spatial|dim|ultra|none|"s,c,x0,x1,y0,y1"), veil alpha. */
+    public final int semRadius;
+    public final String semCurve;
+    public final int semAlpha;
+    /** Bumped whenever any knob changes, so cached backdrop parameters are rebuilt. */
+    public static int generation;
 
     private static Tuning cached;
     private static long readAt;
@@ -29,7 +39,7 @@ public final class Tuning {
 
     private Tuning() {
         String b = prop("backdrop", "auto");
-        backdrop = b.equals("grid") || b.equals("off") ? b : "auto";
+        backdrop = b.equals("grid") || b.equals("off") || b.equals("capture") ? b : "auto";
         refract = clamp(number("refract", 1f), 0f, 6f);
         ior = clamp(number("ior", 1.5f), 1.0f, 2.4f);
         // The node margin (2 x radius + 2) must stay inside CaptureHub's 80 px capture margin.
@@ -39,6 +49,9 @@ public final class Tuning {
         hz = Math.round(clamp(number("hz", 15f), 1f, 30f));
         keyguardHz = Math.round(clamp(number("hzkg", 5f), 1f, 30f));
         tintAlpha = Math.round(clamp(number("tint", -1f), -1f, 255f));
+        semRadius = Math.round(clamp(number("semradius", -1f), -1f, 400f));
+        semCurve = prop("semcurve", "spatial");
+        semAlpha = Math.round(clamp(number("semalpha", -1f), -1f, 255f));
     }
 
     public static Tuning get() {
@@ -46,14 +59,15 @@ public final class Tuning {
         if (cached == null || now - readAt > 1000) {
             cached = new Tuning(); readAt = now;
             String line = cached.toString();
-            if (!line.equals(lastLogged)) { lastLogged = line; Probe.log("TUNING", line); }
+            if (!line.equals(lastLogged)) { lastLogged = line; generation++; Probe.log("TUNING", line); }
         }
         return cached;
     }
 
     @Override public String toString() {
         return "backdrop=" + backdrop + " refract=" + refract + " ior=" + ior + " blur=" + blur + " sat=" + saturation
-                + " disp=" + dispersion + " hz=" + hz + " hzkg=" + keyguardHz + " tint=" + tintAlpha;
+                + " disp=" + dispersion + " hz=" + hz + " hzkg=" + keyguardHz + " tint=" + tintAlpha
+                + " semradius=" + semRadius + " semcurve=" + semCurve + " semalpha=" + semAlpha;
     }
 
     private static float clamp(float v, float lo, float hi) { return Float.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : lo; }
