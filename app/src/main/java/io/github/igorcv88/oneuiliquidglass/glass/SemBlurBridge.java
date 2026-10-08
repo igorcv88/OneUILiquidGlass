@@ -29,6 +29,14 @@ public final class SemBlurBridge implements Backdrop {
     private Object pending;
     private boolean posted, released;
     private final Runnable apply = this::applyPending;
+    // Last info this bridge applied, and what the view held right after: if the view later holds
+    // anything else, the blur was replaced or dropped behind our back and is applied again.
+    private Object lastInfo, applied;
+    private long lastReassert;
+    private int reasserts;
+    // Inputs of the last build: a clip path is sized to the view and is rebuilt when the view resizes.
+    private int lastPx, lastTint, builtWidth, builtHeight;
+    private final float[] lastRadii = new float[8];
 
     private SemBlurBridge(View host) throws ReflectiveOperationException {
         this.host = host;
@@ -75,7 +83,36 @@ public final class SemBlurBridge implements Backdrop {
     }
     /** Shapes the Samsung blur can reproduce without guessing a corner order. */
     public static boolean supports(Object shape) {
+        // A clip path reproduces any circular-corner shape; the native fallback for other shapes
+        // drew Samsung's dark background mid-animation and could stay recorded.
+        if (clipPathAvailable()) return CornerGeometry.supported(shape);
         return fourRadii() ? CornerGeometry.symmetric(shape) : CornerGeometry.uniform(shape);
+    }
+    private static Boolean clipPathAvailable;
+    private static boolean clipPathAvailable() {
+        if (clipPathAvailable == null) {
+            try {
+                Class.forName(INFO + "$Builder").getMethod("setBackgroundClipPath", android.graphics.Path.class);
+                clipPathAvailable = true;
+            } catch (ReflectiveOperationException | LinkageError e) { clipPathAvailable = false; }
+        }
+        return clipPathAvailable;
+    }
+    private static java.lang.reflect.Field infoField;
+    private static boolean infoFieldResolved;
+    /** The View field holding the applied SemBlurInfo, found by type; null if the firmware has none. */
+    private static java.lang.reflect.Field infoField(Class<?> info) {
+        if (infoFieldResolved) return infoField;
+        infoFieldResolved = true;
+        try {
+            for (java.lang.reflect.Field f : View.class.getDeclaredFields()) {
+                if (f.getType() == info && !java.lang.reflect.Modifier.isStatic(f.getModifiers())) {
+                    f.setAccessible(true); infoField = f; break;
+                }
+            }
+        } catch (RuntimeException | LinkageError e) { infoField = null; }
+        Probe.log("SEM_BLUR_FIELD", "field=" + (infoField == null ? "none" : infoField.getName()));
+        return infoField;
     }
     private static Boolean fourRadii;
     private static boolean fourRadii() {
@@ -102,6 +139,8 @@ public final class SemBlurBridge implements Backdrop {
         Tuning t = Tuning.get();
         radius.invoke(b, t.semRadius >= 0 ? t.semRadius : GlassSpec.SAMSUNG_RADIUS);
         String shape = applyShape(b, t.semShape, radii);
+        lastPx = px; lastTint = tint; System.arraycopy(radii, 0, lastRadii, 0, 8);
+        builtWidth = host.getWidth(); builtHeight = host.getHeight();
         if (!shape.equals(lastShape)) { lastShape = shape; Probe.log("SEM_BLUR_SHAPE", "mode=" + shape + " radius=" + radii[0] + " size=" + host.getWidth() + "x" + host.getHeight()); }
         if (color != null) color.invoke(b, t.semAlpha >= 0 ? (tint & 0x00ffffff) | (t.semAlpha << 24) : tint);
         applyCurve(b, t.semCurve);
@@ -164,9 +203,47 @@ public final class SemBlurBridge implements Backdrop {
     private void applyPending() {
         posted = false;
         if (released || pending == null) return;
-        try { applying = true; set.invoke(host, pending); }
+        try {
+            applying = true; set.invoke(host, pending);
+            lastInfo = pending;
+            java.lang.reflect.Field f = infoField(infoClass);
+            applied = f != null ? f.get(host) : pending;
+        }
         catch (ReflectiveOperationException | RuntimeException e) { Probe.error("SEM_BLUR_APPLY_FAILED", e); }
         finally { applying = false; }
+    }
+    /**
+     * Called every frame: re-applies the blur when the view no longer holds what this bridge set
+     * (another component replaced it, or the framework dropped it). Without this the card kept
+     * Samsung's dark look until the next notification rebuilt every material.
+     */
+    @Override public boolean verify() {
+        if (released || posted || lastInfo == null) return false;
+        if ("path".equals(lastShape) && (host.getWidth() != builtWidth || host.getHeight() != builtHeight)) {
+            try { update(lastPx, lastTint, lastRadii); return true; }
+            catch (ReflectiveOperationException | RuntimeException e) { Probe.error("SEM_BLUR_RESIZE_FAILED", e); return false; }
+        }
+        java.lang.reflect.Field f = infoField;
+        if (f == null) return false;
+        Object current;
+        try { current = f.get(host); } catch (IllegalAccessException | RuntimeException e) { return false; }
+        // Our own info held directly is healthy too, e.g. if the field is written after the setter returns.
+        if (current == applied || current == lastInfo) { applied = current; return false; }
+        long now = android.os.SystemClock.uptimeMillis();
+        // Bounded: something replacing the blur every frame costs at most five re-applies a second.
+        if (now - lastReassert < 200) return false;
+        lastReassert = now;
+        if (++reasserts <= 20 || reasserts % 100 == 0) {
+            Probe.log("SEM_BLUR_REASSERT", "viewId=" + Integer.toHexString(System.identityHashCode(host))
+                    + " held=" + (current == null ? "null" : "foreign") + " count=" + reasserts);
+        }
+        reassert();
+        return true;
+    }
+    /** Applies the last blur again, e.g. after the shade opened or the row changed state. */
+    @Override public void reassert() {
+        if (released || lastInfo == null || posted) return;
+        pending = lastInfo; posted = true; host.post(apply);
     }
     @Override public void draw(Canvas canvas, Rect bounds) { }
     @Override public void setAlpha(int alpha) { }
