@@ -63,6 +63,9 @@ public final class SemBlurBridge implements Backdrop {
     private static Method optional(Class<?> c, String name, Class<?> arg) {
         try { return c.getMethod(name, arg); } catch (NoSuchMethodException e) { return null; }
     }
+    /** Main thread only: true while this bridge itself calls semSetBlurInfo (see the blur guard). */
+    private static boolean applying;
+    public static boolean applying() { return applying; }
     public static boolean available() {
         try {
             Class<?> info = Class.forName(INFO);
@@ -161,15 +164,17 @@ public final class SemBlurBridge implements Backdrop {
     private void applyPending() {
         posted = false;
         if (released || pending == null) return;
-        try { set.invoke(host, pending); }
+        try { applying = true; set.invoke(host, pending); }
         catch (ReflectiveOperationException | RuntimeException e) { Probe.error("SEM_BLUR_APPLY_FAILED", e); }
+        finally { applying = false; }
     }
     @Override public void draw(Canvas canvas, Rect bounds) { }
     @Override public void setAlpha(int alpha) { }
     @Override public void release() {
         released = true; pending = null;
         host.removeCallbacks(apply);
-        try { set.invoke(host, (Object) null); }
+        try { applying = true; set.invoke(host, (Object) null); }
         catch (ReflectiveOperationException | RuntimeException e) { Probe.error("SEM_BLUR_CLEAR_FAILED", e); }
+        finally { applying = false; }
     }
 }

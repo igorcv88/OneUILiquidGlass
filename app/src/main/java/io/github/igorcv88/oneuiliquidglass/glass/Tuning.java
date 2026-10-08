@@ -40,6 +40,8 @@ public final class Tuning {
     public final int semAlpha;
     /** Samsung blur region shape: auto|single|path|four|none (see SemBlurBridge.applyShape). */
     public final String semShape;
+    /** Expanded-shade rows get their own Samsung blur instead of sharing the shade backdrop. */
+    public final boolean shadeBlur;
     /** Bumped whenever any knob changes, so cached backdrop parameters are rebuilt. */
     public static int generation;
 
@@ -68,6 +70,7 @@ public final class Tuning {
         semCurve = prop("semcurve", "none");
         semAlpha = Math.round(clamp(number("semalpha", -1f), -1f, 255f));
         String shape = prop("semshape", "auto");
+        shadeBlur = number("shadeblur", 0f) >= 1f;
         semShape = shape.equals("single") || shape.equals("path") || shape.equals("four") || shape.equals("none") ? shape : "auto";
     }
 
@@ -85,7 +88,7 @@ public final class Tuning {
         return "backdrop=" + backdrop + " profile=" + profile + " lens=" + lens + " rimhz=" + rimHz + " rimblur=" + rimBlur
                 + " refract=" + refract + " ior=" + ior + " blur=" + blur + " sat=" + saturation
                 + " disp=" + dispersion + " hz=" + hz + " hzkg=" + keyguardHz + " tint=" + tintAlpha
-                + " semradius=" + semRadius + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape;
+                + " semradius=" + semRadius + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur;
     }
 
     private static float clamp(float v, float lo, float hi) { return Float.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : lo; }
