@@ -25,6 +25,7 @@ public final class HybridBackdrop implements SampledBackdrop {
     @Override public void draw(Canvas canvas, Rect bounds) { }
     @Override public void setAlpha(int alpha) { }
     @Override public void release() { rim.release(); body.release(); }
+    @Override public void reassert() { body.reassert(); }
     @Override public CaptureHub.Frame frame() { return rim.frame(); }
     @Override public View view() { return rim.view(); }
     @Override public boolean unavailable() { return rim.unavailable(); }

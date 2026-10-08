@@ -11,6 +11,8 @@ public interface Backdrop {
     void draw(Canvas canvas, Rect bounds);
     void setAlpha(int alpha);
     void release();
+    /** Applies a compositor-side backdrop again; called on events that can drop it. */
+    default void reassert() { }
 
     /**
      * Shade rows share the shade's own blurred backdrop. Rows with a sampleable background (the

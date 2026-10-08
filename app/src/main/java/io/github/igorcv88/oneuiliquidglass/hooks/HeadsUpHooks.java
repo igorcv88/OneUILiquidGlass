@@ -184,12 +184,7 @@ public final class HeadsUpHooks {
                     if (SemBlurBridge.applying() || !(p.thisObject instanceof View)) return;
                     try {
                         View v = (View) p.thisObject;
-                        State s = states.get(v);
-                        if (s == null && rowClass != null && rowClass.isInstance(v)) {
-                            Object bg = Reflect.read(v, "mBackgroundNormal");
-                            s = bg instanceof View ? states.get(bg) : null;
-                        }
-                        boolean managed = s != null && s.glass != null && (s.glassKind == Backdrop.Kind.SAMSUNG || s.glass.hybrid());
+                        boolean managed = compositorState(v) != null;
                         String caller = foreignBlurTraces > 0 && foreignBlurLogged.size() < 40 ? blurCaller() : null;
                         if (caller != null) foreignBlurTraces--;
                         if (caller != null && foreignBlurLogged.add(v.getClass().getName() + "|" + caller + "|" + managed)) {
@@ -202,15 +197,70 @@ public final class HeadsUpHooks {
             });
             Probe.log("BLUR_GUARD", "installed=true");
         } catch (RuntimeException | LinkageError e) { Probe.error("BLUR_GUARD_INSTALL_FAILED", e); }
+        installBlurMutators();
     }
-    private static String blurCaller() {
-        for (StackTraceElement e : new Throwable().getStackTrace()) {
-            String c = e.getClassName(), lower = c.toLowerCase(java.util.Locale.ROOT);
-            if (c.startsWith("io.github.igorcv88.") || c.startsWith("android.view.View") || c.startsWith("java.") || c.startsWith("dalvik.")
-                    || lower.contains("xposed") || lower.contains("lsp") || c.startsWith("J.")) continue;
-            return c + "." + e.getMethodName();
+    /** The row state whose material drives this view's Samsung blur (Samsung or hybrid), if any. */
+    private State compositorState(View v) {
+        State s = states.get(v);
+        if (s == null && rowClass != null && rowClass.isInstance(v)) {
+            Object bg = Reflect.read(v, "mBackgroundNormal");
+            s = bg instanceof View ? states.get(bg) : null;
         }
-        return "unknown";
+        return s != null && s.glass != null && (s.glassKind == Backdrop.Kind.SAMSUNG || s.glass.hybrid()) ? s : null;
+    }
+    private final Set<String> mutatorLogged = new java.util.HashSet<>();
+    /**
+     * Event-driven repair instead of polling: every other View method that changes blur state
+     * (whatever this firmware names them) is hooked once. They cost nothing until called; when one
+     * touches a card whose blur this module drives, that card's blur is applied again once.
+     */
+    private void installBlurMutators() {
+        java.util.List<String> names = new ArrayList<>();
+        try {
+            for (Method m : View.class.getDeclaredMethods()) {
+                String n = m.getName();
+                String lower = n.toLowerCase(java.util.Locale.ROOT);
+                // Setter-like names only: a per-frame draw/update path would turn repair into polling.
+                if (m.getReturnType() != void.class || n.equals("semSetBlurInfo") || !lower.contains("blur")
+                        || !lower.matches("^(sem)?(set|clear|reset|remove|enable|disable).*")
+                        || java.lang.reflect.Modifier.isAbstract(m.getModifiers())) continue;
+                try {
+                    XposedBridge.hookMethod(m, new XC_MethodHook() {
+                        @Override protected void afterHookedMethod(MethodHookParam p) {
+                            if (SemBlurBridge.applying() || !(p.thisObject instanceof View)) return;
+                            try {
+                                State s = compositorState((View) p.thisObject);
+                                if (s == null) return;
+                                if (mutatorLogged.size() < 40 && mutatorLogged.add(n + "|" + p.thisObject.getClass().getName())) {
+                                    Probe.log("SEM_BLUR_MUTATED", "method=" + n + " view=" + p.thisObject.getClass().getName()
+                                            + " caller=" + caller(n));
+                                }
+                                s.glass.reassertBackdrop();
+                            } catch (RuntimeException | LinkageError e) { Probe.error("BLUR_MUTATOR_FAILED", e); }
+                        }
+                    });
+                    names.add(n);
+                } catch (RuntimeException | LinkageError e) { Probe.error("BLUR_MUTATOR_HOOK_FAILED", e); }
+            }
+        } catch (RuntimeException | LinkageError e) { Probe.error("BLUR_MUTATORS_UNREADABLE", e); }
+        Probe.log("BLUR_MUTATORS", "hooked=" + names);
+    }
+    /**
+     * The code that called a hooked View method: the frames after its last frame (the hooked
+     * method or its LSPosed stub). Matching hook classes by name failed: LSPosed obfuscates them.
+     */
+    private static String blurCaller() { return caller("semSetBlurInfo"); }
+    private static String caller(String method) {
+        StackTraceElement[] stack = new Throwable().getStackTrace();
+        int last = -1;
+        for (int i = 0; i < stack.length; i++) if (method.equals(stack[i].getMethodName())) last = i;
+        if (last < 0 || last + 1 >= stack.length) return "unknown";
+        StringBuilder out = new StringBuilder();
+        for (int i = last + 1; i < Math.min(stack.length, last + 4); i++) {
+            if (out.length() > 0) out.append('<');
+            out.append(stack[i].getClassName()).append('.').append(stack[i].getMethodName());
+        }
+        return out.toString();
     }
     private static String owner(XC_MethodHook.MethodHookParam p) {
         return p.thisObject != null ? p.thisObject.getClass().getName() : ((Method) p.method).getDeclaringClass().getName();
@@ -241,7 +291,11 @@ public final class HeadsUpHooks {
                 ? ((Number) height).floatValue() > 0.5f : null;
         if (next != null && !next.equals(shadeExpanded)) {
             shadeExpanded = next; Probe.log("SHADE", "expanded=" + next);
-            for (State state : new ArrayList<>(states.values())) state.invalidate();
+            for (State state : new ArrayList<>(states.values())) {
+                // Opening the shade is when cards were seen without their blur: apply it again.
+                if (state.glass != null) state.glass.reassertBackdrop();
+                state.invalidate();
+            }
             // The panel controller's own view works with an empty shade; a row is only the fallback.
             Object panel = Reflect.read(controller, "mView");
             View sample = panel instanceof View && ((View) panel).isAttachedToWindow() ? (View) panel : null;
@@ -293,6 +347,8 @@ public final class HeadsUpHooks {
         boolean reportedCapability;
         Boolean lastEligible;
         String lastReason = "";
+        /** Last reason the native background was drawn instead of the glass; null while glass draws. */
+        String lastFallback;
         Boolean lastHeadsUp;
         int width = -1, height = -1;
         final float[] lastRadii = new float[8];
@@ -445,6 +501,7 @@ public final class HeadsUpHooks {
         }
         void event(String event) {
             View v = background.get(), r = row.get(); if (v == null || r == null) return;
+            if (glass != null) glass.reassertBackdrop();
             Probe.view("ROW_EVENT", v);
             Probe.log("LIFECYCLE", "callback=" + event + " rowId=" + Integer.toHexString(System.identityHashCode(r))
                     + " headsUp=" + Reflect.bool(r, "isHeadsUpState", "mIsHeadsUp") + " keyguard=" + Reflect.read(r, "mOnKeyguard")
@@ -471,21 +528,22 @@ public final class HeadsUpHooks {
         GlassDrawable material(Drawable original) throws ReflectiveOperationException {
             View v = background.get();
             Backdrop.Kind kind = kind();
-            if (v == null || !eligible() || kind == null) { release(); return null; }
+            if (v == null || !eligible() || kind == null) { release(); return fallback(v == null ? "collected" : kind == null ? "noBackdrop" : reason()); }
             for (int state : original.getState()) {
                 if (state == android.R.attr.state_pressed || state == android.R.attr.state_focused || state == android.R.attr.state_hovered) {
-                    release(); return null;
+                    release(); return fallback("pressed");
                 }
             }
-            if (glass != null && glass.failed()) { failed = true; release(); return null; }
+            if (glass != null && glass.failed()) { failed = true; release(); return fallback("glassFailed"); }
             String source = kind == Backdrop.Kind.SAMPLED ? sampledSource(v) : null;
             if (glass != null && (glassKind != kind || glass.stale() || !java.util.Objects.equals(source, glassSource))) release();
             if (!CornerGeometry.supported(Reflect.read(v, "mCornerRadii"))) {
-                failed = true; Probe.log("GEOMETRY_UNSUPPORTED", "view=" + v.getClass().getName()); return null;
+                // Not sticky: a shape seen mid-animation must not leave the row native for its lifetime.
+                release(); return fallback("geometry");
             }
             if (kind == Backdrop.Kind.SAMSUNG && !SemBlurBridge.supports(Reflect.read(v, "mCornerRadii"))) {
                 // Corner order is only known for top/bottom-symmetric shapes; others stay native this frame.
-                release(); return null;
+                release(); return fallback("corners");
             }
             if (glass == null) {
                 Backdrop backdrop = kind == Backdrop.Kind.SHARED ? new SharedBackdrop()
@@ -506,11 +564,24 @@ public final class HeadsUpHooks {
                     : kind == Backdrop.Kind.SAMPLED ? (dark ? spec.captureDarkTint : spec.captureLightTint)
                     : dark ? spec.darkBlurColor : spec.lightBlurColor;
             glass.configure(original, shape(), fill, tone);
+            if (lastFallback != null) { lastFallback = null; Probe.log("NATIVE_FALLBACK", "viewId=" + Integer.toHexString(System.identityHashCode(v)) + " reason=none"); }
             if (!materialReported) {
                 materialReported = true;
                 Probe.material(v, row.get(), original, String.valueOf(kind), fill, tone);
             }
             return glass;
+        }
+        /** The native background draws this frame; logged when the reason changes. */
+        GlassDrawable fallback(String why) {
+            why = String.valueOf(why);
+            if (!why.equals(lastFallback)) {
+                lastFallback = why;
+                View v = background.get(), r = row.get();
+                Probe.log("NATIVE_FALLBACK", "viewId=" + (v == null ? "null" : Integer.toHexString(System.identityHashCode(v))) + " reason=" + why
+                        + " headsUp=" + (r == null ? null : Reflect.bool(r, "isHeadsUpState", "mIsHeadsUp")) + " shadeExpanded=" + shadeExpanded
+                        + " radii=" + java.util.Arrays.toString(shape()));
+            }
+            return null;
         }
         /** See {@link Eligibility#sharedBackdrop}. */
         boolean sharedBackdrop() {

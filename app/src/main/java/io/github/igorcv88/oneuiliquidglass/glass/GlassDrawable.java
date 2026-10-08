@@ -60,6 +60,8 @@ public final class GlassDrawable extends Drawable {
         catch (RuntimeException e) { Probe.error("SHADER_UNAVAILABLE", e); }
     }
     public boolean failed() { return failed; }
+    /** See {@link Backdrop#reassert()}. */
+    public void reassertBackdrop() { if (!failed) backdrop.reassert(); }
     /** Compositor-blur body with a captured lens band (see {@link HybridBackdrop}). */
     public boolean hybrid() { return backdrop instanceof HybridBackdrop; }
     /** A sampled backdrop that can no longer be used: the owner swaps to another backdrop kind. */
