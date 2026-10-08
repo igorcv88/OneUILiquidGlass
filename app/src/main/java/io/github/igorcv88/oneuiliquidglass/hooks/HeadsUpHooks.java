@@ -488,6 +488,8 @@ public final class HeadsUpHooks {
             if (r == null || v == null || sharedBackdrop()) return false;
             String mode = Tuning.get().backdrop;
             if (mode.equals("off") || !GlassDrawable.refractionAvailable()) return false;
+            // The compositor refracts these cards itself: keep the live Samsung blur, no capture.
+            if (Tuning.get().sfRefract) return false;
             Boolean keyguard = Reflect.bool(r, "isOnKeyguard", "mOnKeyguard");
             if (!Eligibility.captureSurface(Reflect.bool(r, "isHeadsUpState", "mIsHeadsUp"), keyguard, shadeExpanded)) return false;
             switch (mode) {

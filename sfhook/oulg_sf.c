@@ -1,8 +1,9 @@
-// Phase 1 SurfaceFlinger probe: loaded first in surfaceflinger's DT_NEEDED list, so its exported
-// glShaderSource / eglGetProcAddress interpose RenderEngine's. It changes nothing: every distinct
-// shader source is written once, complete, to DUMP and passed through to the real driver entry
-// point. Logcat gets one short line per shader: it truncates long messages and prunes a noisy
-// process, which lost most of the sources on device.
+// SurfaceFlinger hook: loaded first in surfaceflinger's DT_NEEDED list, so its exported
+// glShaderSource / eglGetProcAddress interpose RenderEngine's. Every distinct shader source is
+// written once, complete, to DUMP (logcat truncates and prunes). Rounded-rect texture programs are
+// rewritten by refract.h so the module's own cards (tagged by a magic corner radius) refract at the
+// rim; a rewrite the driver does not compile is reverted to the original source on the spot.
+// debug.oulg.sf.norewrite=1 (read when a shader is first seen) keeps every source unchanged.
 #define _GNU_SOURCE
 #include <android/log.h>
 #include <dlfcn.h>
@@ -13,8 +14,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/system_properties.h>
 #include <EGL/egl.h>
 #include <GLES2/gl2.h>
+#include "refract.h"
 
 #define TAG "OULG_SF"
 #define DUMP "/data/misc/surfaceflinger/oulg_shaders.txt"
@@ -24,6 +27,10 @@ typedef void (*ShaderSourceFn)(GLuint, GLsizei, const GLchar *const *, const GLi
 typedef __eglMustCastToProperFunctionPointerType (*GetProcFn)(const char *);
 
 static ShaderSourceFn real_shader_source;
+typedef void (*CompileFn)(GLuint);
+typedef void (*GetShaderivFn)(GLuint, GLenum, GLint *);
+static CompileFn real_compile;
+static GetShaderivFn real_get_shaderiv;
 static GetProcFn real_get_proc;
 static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 static uint64_t seen[MAX_SEEN];
@@ -73,10 +80,59 @@ static void log_source(GLuint shader, GLsizei count, const GLchar *const *string
     free(buf);
 }
 
+static int rewrite_disabled(void) {
+    char v[PROP_VALUE_MAX] = {0};
+    return __system_property_get("debug.oulg.sf.norewrite", v) > 0 && v[0] == '1';
+}
+
+static void dump_text(const char *tag, GLuint shader, const char *text) {
+    int fd = open(DUMP, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0644);
+    if (fd < 0) return;
+    char head[96];
+    int n = snprintf(head, sizeof head, "\n===== %s shader=%u =====\n", tag, shader);
+    write(fd, head, (size_t) n);
+    write(fd, text, strlen(text));
+    close(fd);
+}
+
 void glShaderSource(GLuint shader, GLsizei count, const GLchar *const *strings, const GLint *lengths) {
     if (!real_shader_source) real_shader_source = (ShaderSourceFn) dlsym(RTLD_NEXT, "glShaderSource");
-    if (strings && count > 0) log_source(shader, count, strings, lengths);
-    if (real_shader_source) real_shader_source(shader, count, strings, lengths);
+    if (!real_shader_source) return;
+    if (!strings || count <= 0) { real_shader_source(shader, count, strings, lengths); return; }
+    log_source(shader, count, strings, lengths);
+    char *joined = NULL, *rewritten = NULL;
+    if (!rewrite_disabled()) {
+        size_t total = 0;
+        for (GLsizei i = 0; i < count; i++) total += lengths && lengths[i] >= 0 ? (size_t) lengths[i] : strlen(strings[i]);
+        joined = malloc(total + 1);
+        if (joined) {
+            size_t at = 0;
+            for (GLsizei i = 0; i < count; i++) {
+                size_t n = lengths && lengths[i] >= 0 ? (size_t) lengths[i] : strlen(strings[i]);
+                memcpy(joined + at, strings[i], n); at += n;
+            }
+            joined[at] = 0;
+            rewritten = oulg_refract_rewrite(joined);
+        }
+    }
+    if (rewritten && !real_compile) {
+        real_compile = (CompileFn) dlsym(RTLD_NEXT, "glCompileShader");
+        real_get_shaderiv = (GetShaderivFn) dlsym(RTLD_NEXT, "glGetShaderiv");
+    }
+    if (rewritten && real_compile && real_get_shaderiv) {
+        const GLchar *one[1] = {rewritten};
+        real_shader_source(shader, 1, one, NULL);
+        GLint ok = 0;
+        real_compile(shader);
+        real_get_shaderiv(shader, GL_COMPILE_STATUS, &ok);
+        __android_log_print(ANDROID_LOG_INFO, TAG, "REWRITE shader=%u compiled=%d", shader, ok);
+        dump_text(ok ? "REWRITE_OK" : "REWRITE_FAILED", shader, rewritten);
+        if (!ok) real_shader_source(shader, count, strings, lengths);
+    } else {
+        real_shader_source(shader, count, strings, lengths);
+    }
+    free(rewritten);
+    free(joined);
 }
 
 __eglMustCastToProperFunctionPointerType eglGetProcAddress(const char *name) {

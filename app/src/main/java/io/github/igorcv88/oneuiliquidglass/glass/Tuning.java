@@ -42,6 +42,12 @@ public final class Tuning {
     public final String semShape;
     /** Expanded-shade rows get their own Samsung blur instead of sharing the shade backdrop. */
     public final boolean shadeBlur;
+    /**
+     * Compositor refraction (sfhook module): heads-up and lockscreen cards use the Samsung blur
+     * with a magic corner radius that tags them for the SurfaceFlinger shader rewrite, and the
+     * captured lens band is not drawn (debug.oulg.sfrefract).
+     */
+    public final boolean sfRefract;
     /** Bumped whenever any knob changes, so cached backdrop parameters are rebuilt. */
     public static int generation;
 
@@ -71,6 +77,7 @@ public final class Tuning {
         semAlpha = Math.round(clamp(number("semalpha", -1f), -1f, 255f));
         String shape = prop("semshape", "auto");
         shadeBlur = number("shadeblur", 0f) >= 1f;
+        sfRefract = number("sfrefract", 0f) >= 1f;
         semShape = shape.equals("single") || shape.equals("path") || shape.equals("four") || shape.equals("none") ? shape : "auto";
     }
 
@@ -88,7 +95,7 @@ public final class Tuning {
         return "backdrop=" + backdrop + " profile=" + profile + " lens=" + lens + " rimhz=" + rimHz + " rimblur=" + rimBlur
                 + " refract=" + refract + " ior=" + ior + " blur=" + blur + " sat=" + saturation
                 + " disp=" + dispersion + " hz=" + hz + " hzkg=" + keyguardHz + " tint=" + tintAlpha
-                + " semradius=" + semRadius + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur;
+                + " semradius=" + semRadius + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract;
     }
 
     private static float clamp(float v, float lo, float hi) { return Float.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : lo; }
