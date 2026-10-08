@@ -230,9 +230,12 @@ The Samsung blur used to be applied only when the material was built or its shap
 - a non-circular radius left the row native for its whole lifetime.
 
 Changes:
-- **Self-healing blur.** `SemBlurBridge` locates the `View` field that holds the applied `SemBlurInfo`, found by type. Every frame it checks that the view still holds what the bridge set.
-  - If not, the blur is applied again. This is logged as `SEM_BLUR_REASSERT`, with at most five re-applies a second per row.
-  - The blur is also applied again when the shade opens or closes, and on each row lifecycle event.
+- **Event-driven blur repair.** Nothing polls and nothing runs per frame. The blur is applied again on events that can drop it:
+  - the shade opening or closing;
+  - each row lifecycle event;
+  - a call to any setter-like View blur method that touches a card whose blur this module drives. Every such method is hooked once at install and logged as `BLUR_MUTATORS`. A call is logged as `SEM_BLUR_MUTATED` with its caller.
+
+  A clip-path blur is rebuilt from a layout listener when the view resizes. After each apply, the `SemBlurInfo` field is read once. If the call was swallowed, this is logged as `SEM_BLUR_SWALLOWED`.
 - **Corners.** A shape the corner setters cannot express uses the clip path. It no longer falls back to the native background.
 - **Fallback log.** A geometry rejection is no longer sticky. Every frame where the native background draws instead of the glass is logged as `NATIVE_FALLBACK reason=…`, deduplicated per reason change.
 - **Caller.** `SEM_BLUR_FOREIGN` names the three frames after the last `semSetBlurInfo` frame instead of filtering class names.

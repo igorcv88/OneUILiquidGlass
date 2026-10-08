@@ -184,12 +184,7 @@ public final class HeadsUpHooks {
                     if (SemBlurBridge.applying() || !(p.thisObject instanceof View)) return;
                     try {
                         View v = (View) p.thisObject;
-                        State s = states.get(v);
-                        if (s == null && rowClass != null && rowClass.isInstance(v)) {
-                            Object bg = Reflect.read(v, "mBackgroundNormal");
-                            s = bg instanceof View ? states.get(bg) : null;
-                        }
-                        boolean managed = s != null && s.glass != null && (s.glassKind == Backdrop.Kind.SAMSUNG || s.glass.hybrid());
+                        boolean managed = compositorState(v) != null;
                         String caller = foreignBlurTraces > 0 && foreignBlurLogged.size() < 40 ? blurCaller() : null;
                         if (caller != null) foreignBlurTraces--;
                         if (caller != null && foreignBlurLogged.add(v.getClass().getName() + "|" + caller + "|" + managed)) {
@@ -202,15 +197,63 @@ public final class HeadsUpHooks {
             });
             Probe.log("BLUR_GUARD", "installed=true");
         } catch (RuntimeException | LinkageError e) { Probe.error("BLUR_GUARD_INSTALL_FAILED", e); }
+        installBlurMutators();
+    }
+    /** The row state whose material drives this view's Samsung blur (Samsung or hybrid), if any. */
+    private State compositorState(View v) {
+        State s = states.get(v);
+        if (s == null && rowClass != null && rowClass.isInstance(v)) {
+            Object bg = Reflect.read(v, "mBackgroundNormal");
+            s = bg instanceof View ? states.get(bg) : null;
+        }
+        return s != null && s.glass != null && (s.glassKind == Backdrop.Kind.SAMSUNG || s.glass.hybrid()) ? s : null;
+    }
+    private final Set<String> mutatorLogged = new java.util.HashSet<>();
+    /**
+     * Event-driven repair instead of polling: every other View method that changes blur state
+     * (whatever this firmware names them) is hooked once. They cost nothing until called; when one
+     * touches a card whose blur this module drives, that card's blur is applied again once.
+     */
+    private void installBlurMutators() {
+        java.util.List<String> names = new ArrayList<>();
+        try {
+            for (Method m : View.class.getDeclaredMethods()) {
+                String n = m.getName();
+                String lower = n.toLowerCase(java.util.Locale.ROOT);
+                // Setter-like names only: a per-frame draw/update path would turn repair into polling.
+                if (m.getReturnType() != void.class || n.equals("semSetBlurInfo") || !lower.contains("blur")
+                        || !lower.matches("^(sem)?(set|clear|reset|remove|enable|disable).*")
+                        || java.lang.reflect.Modifier.isAbstract(m.getModifiers())) continue;
+                try {
+                    XposedBridge.hookMethod(m, new XC_MethodHook() {
+                        @Override protected void afterHookedMethod(MethodHookParam p) {
+                            if (SemBlurBridge.applying() || !(p.thisObject instanceof View)) return;
+                            try {
+                                State s = compositorState((View) p.thisObject);
+                                if (s == null) return;
+                                if (mutatorLogged.size() < 40 && mutatorLogged.add(n + "|" + p.thisObject.getClass().getName())) {
+                                    Probe.log("SEM_BLUR_MUTATED", "method=" + n + " view=" + p.thisObject.getClass().getName()
+                                            + " caller=" + caller(n));
+                                }
+                                s.glass.reassertBackdrop();
+                            } catch (RuntimeException | LinkageError e) { Probe.error("BLUR_MUTATOR_FAILED", e); }
+                        }
+                    });
+                    names.add(n);
+                } catch (RuntimeException | LinkageError e) { Probe.error("BLUR_MUTATOR_HOOK_FAILED", e); }
+            }
+        } catch (RuntimeException | LinkageError e) { Probe.error("BLUR_MUTATORS_UNREADABLE", e); }
+        Probe.log("BLUR_MUTATORS", "hooked=" + names);
     }
     /**
-     * The code that called semSetBlurInfo: the frame after the last semSetBlurInfo frame (the hooked
+     * The code that called a hooked View method: the frames after its last frame (the hooked
      * method or its LSPosed stub). Matching hook classes by name failed: LSPosed obfuscates them.
      */
-    private static String blurCaller() {
+    private static String blurCaller() { return caller("semSetBlurInfo"); }
+    private static String caller(String method) {
         StackTraceElement[] stack = new Throwable().getStackTrace();
         int last = -1;
-        for (int i = 0; i < stack.length; i++) if ("semSetBlurInfo".equals(stack[i].getMethodName())) last = i;
+        for (int i = 0; i < stack.length; i++) if (method.equals(stack[i].getMethodName())) last = i;
         if (last < 0 || last + 1 >= stack.length) return "unknown";
         StringBuilder out = new StringBuilder();
         for (int i = last + 1; i < Math.min(stack.length, last + 4); i++) {
@@ -365,7 +408,6 @@ public final class HeadsUpHooks {
                     Probe.log("DECISION", "viewId=" + Integer.toHexString(System.identityHashCode(v)) + " surface=" + surface
                             + (reason == null ? " glass=true backdrop=" + kind() : " glass=false reason=" + reason));
                 }
-                if (glass != null) glass.verifyBackdrop();
                 if (tuningGeneration != Tuning.generation) {
                     // A debug.oulg.* knob changed: redraw so the material (and Samsung blur) rebuilds now.
                     tuningGeneration = Tuning.generation; v.invalidate();

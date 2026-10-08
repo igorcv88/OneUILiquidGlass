@@ -11,9 +11,7 @@ public interface Backdrop {
     void draw(Canvas canvas, Rect bounds);
     void setAlpha(int alpha);
     void release();
-    /** Restores a compositor-side backdrop that was replaced or dropped; true when it re-applied. */
-    default boolean verify() { return false; }
-    /** Applies a compositor-side backdrop again unconditionally. */
+    /** Applies a compositor-side backdrop again; called on events that can drop it. */
     default void reassert() { }
 
     /**

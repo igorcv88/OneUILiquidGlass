@@ -29,15 +29,18 @@ public final class SemBlurBridge implements Backdrop {
     private Object pending;
     private boolean posted, released;
     private final Runnable apply = this::applyPending;
-    // Last info this bridge applied, and what the view held right after: if the view later holds
-    // anything else, the blur was replaced or dropped behind our back and is applied again.
-    private Object lastInfo, applied;
-    private static final Object UNAPPLIED = new Object();
-    private long lastReassert;
-    private int reasserts;
+    /** Last info this bridge applied; {@link #reassert()} applies it again. */
+    private Object lastInfo;
+    private int swallowed;
     // Inputs of the last build: a clip path is sized to the view and is rebuilt when the view resizes.
-    private int lastPx, lastTint, builtWidth, builtHeight;
+    private int lastPx, lastTint;
     private final float[] lastRadii = new float[8];
+    /** Event-driven: a layout that resizes the view rebuilds a clip-path blur, nothing polls. */
+    private final View.OnLayoutChangeListener resize = (v, l, t, r, b, ol, ot, or, ob) -> {
+        if (released || !"path".equals(this.lastShape) || (r - l == or - ol && b - t == ob - ot)) return;
+        try { update(lastPx, lastTint, lastRadii); }
+        catch (ReflectiveOperationException | RuntimeException e) { Probe.error("SEM_BLUR_RESIZE_FAILED", e); }
+    };
 
     private SemBlurBridge(View host) throws ReflectiveOperationException {
         this.host = host;
@@ -127,6 +130,7 @@ public final class SemBlurBridge implements Backdrop {
     }
     public static SemBlurBridge create(View host) throws ReflectiveOperationException {
         SemBlurBridge bridge = new SemBlurBridge(host);
+        host.addOnLayoutChangeListener(bridge.resize);
         Probe.log("SEM_BLUR_BRIDGE", "mode=" + bridge.mode + " builder=" + (bridge.builderWithMode != null ? "Builder(int)" : "Builder()+setBlurMode")
                 + " radius=" + bridge.radius.getName() + " color=" + (bridge.color != null) + " corner=" + (bridge.corner != null) + " corners4=" + (bridge.corners != null)
                 + " curvePreset=" + (bridge.curvePreset != null) + " curve=" + (bridge.curve != null));
@@ -141,7 +145,6 @@ public final class SemBlurBridge implements Backdrop {
         radius.invoke(b, t.semRadius >= 0 ? t.semRadius : GlassSpec.SAMSUNG_RADIUS);
         String shape = applyShape(b, t.semShape, radii);
         lastPx = px; lastTint = tint; System.arraycopy(radii, 0, lastRadii, 0, 8);
-        builtWidth = host.getWidth(); builtHeight = host.getHeight();
         if (!shape.equals(lastShape)) { lastShape = shape; Probe.log("SEM_BLUR_SHAPE", "mode=" + shape + " radius=" + radii[0] + " size=" + host.getWidth() + "x" + host.getHeight()); }
         if (color != null) color.invoke(b, t.semAlpha >= 0 ? (tint & 0x00ffffff) | (t.semAlpha << 24) : tint);
         applyCurve(b, t.semCurve);
@@ -210,43 +213,21 @@ public final class SemBlurBridge implements Backdrop {
             Object before = f != null ? f.get(host) : null;
             set.invoke(host, pending);
             lastInfo = pending;
+            // The view holds our info or a fresh copy of it. If another hook swallowed the call, the
+            // field keeps the old or foreign value; that is logged, and the next row event retries.
             Object after = f != null ? f.get(host) : pending;
-            // The view holds our info, or a fresh copy of it. If another hook swallowed the call, the
-            // field keeps the old or foreign value: leave it unblessed so verify() retries.
-            applied = after == pending || (after != null && after != before) ? after : UNAPPLIED;
+            if (after != pending && (after == null || after == before) && (++swallowed <= 10 || swallowed % 100 == 0)) {
+                Probe.log("SEM_BLUR_SWALLOWED", "viewId=" + Integer.toHexString(System.identityHashCode(host))
+                        + " held=" + (after == null ? "null" : "foreign") + " count=" + swallowed);
+            }
         }
         catch (ReflectiveOperationException | RuntimeException e) { Probe.error("SEM_BLUR_APPLY_FAILED", e); }
         finally { applying = false; }
     }
     /**
-     * Called every frame: re-applies the blur when the view no longer holds what this bridge set
-     * (another component replaced it, or the framework dropped it). Without this the card kept
-     * Samsung's dark look until the next notification rebuilt every material.
+     * Applies the last blur again. Called on events that can drop it (shade opened or closed, row
+     * state change, a framework blur method touching the view), never on a timer or per frame.
      */
-    @Override public boolean verify() {
-        if (released || posted || lastInfo == null) return false;
-        if ("path".equals(lastShape) && (host.getWidth() != builtWidth || host.getHeight() != builtHeight)) {
-            try { update(lastPx, lastTint, lastRadii); return true; }
-            catch (ReflectiveOperationException | RuntimeException e) { Probe.error("SEM_BLUR_RESIZE_FAILED", e); return false; }
-        }
-        java.lang.reflect.Field f = infoField;
-        if (f == null) return false;
-        Object current;
-        try { current = f.get(host); } catch (IllegalAccessException | RuntimeException e) { return false; }
-        // Our own info held directly is healthy too, e.g. if the field is written after the setter returns.
-        if (current == applied || current == lastInfo) { applied = current; return false; }
-        long now = android.os.SystemClock.uptimeMillis();
-        // Bounded: something replacing the blur every frame costs at most five re-applies a second.
-        if (now - lastReassert < 200) return false;
-        lastReassert = now;
-        if (++reasserts <= 20 || reasserts % 100 == 0) {
-            Probe.log("SEM_BLUR_REASSERT", "viewId=" + Integer.toHexString(System.identityHashCode(host))
-                    + " held=" + (current == null ? "null" : "foreign") + " count=" + reasserts);
-        }
-        reassert();
-        return true;
-    }
-    /** Applies the last blur again, e.g. after the shade opened or the row changed state. */
     @Override public void reassert() {
         if (released || lastInfo == null || posted) return;
         pending = lastInfo; posted = true; host.post(apply);
@@ -256,6 +237,7 @@ public final class SemBlurBridge implements Backdrop {
     @Override public void release() {
         released = true; pending = null;
         host.removeCallbacks(apply);
+        host.removeOnLayoutChangeListener(resize);
         try { applying = true; set.invoke(host, (Object) null); }
         catch (ReflectiveOperationException | RuntimeException e) { Probe.error("SEM_BLUR_CLEAR_FAILED", e); }
         finally { applying = false; }
