@@ -202,3 +202,18 @@ Changes:
 - The veil is a light white frost in both themes, closer to the iOS notification material: `0x40ffffff` in light mode, `0x14ffffff` in dark mode. `semalpha` still overrides it.
 - `Probe.painters` logs, once per row, every view under a notification row that paints a background (`PAINTER`). This is to name the opaque layer that covers the glass when Theme Park is off.
 
+### Theme Park and foreign blurs (2026-10-08, third device pass)
+
+Device evidence:
+- **Theme Park off.** The heads-up row showed a full-card compositor blur. With `semshape=none` it came out as a rectangle with visible square corners.
+- **Theme Park on.** The blur appeared only in a band in the middle of the card, whatever the shape mode.
+- **No PAINTER lines.** No view under a row paints an opaque background, so the module does not need Theme Park. The black card without it is the native drawable, which the module already replaces.
+
+Working hypothesis: Theme Park sets its own Samsung blur on the same notification views and replaces ours.
+
+Changes:
+- **Blur guard.** `View.semSetBlurInfo` is hooked in SystemUI.
+  - Calls that do not come from `SemBlurBridge` are logged once per view class and caller, as `SEM_BLUR_FOREIGN`.
+  - Such calls are blocked on background views, and on their rows, when the module drives that material with the Samsung blur (Samsung or hybrid).
+- **`shadeblur` knob.** With `debug.oulg.shadeblur=1`, expanded-shade rows get their own Samsung blur instead of the shared shade backdrop. This is an experiment for the case where Theme Park is off and the shade rows read flat grey.
+

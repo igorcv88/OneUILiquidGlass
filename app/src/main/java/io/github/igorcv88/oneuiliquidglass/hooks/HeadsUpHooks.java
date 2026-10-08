@@ -163,9 +163,51 @@ public final class HeadsUpHooks {
             });
         }
         WindowSurvey.installWindowHook();
+        installBlurGuard();
         // Shade state is only known once SystemUI constructs the controller, after this point.
         Probe.log("READY", "mode=" + (enabled ? "glass" : "probe") + " drawHook=" + drawHook + " shadeHook=" + shadeHook + " samsungBlur=" + samsungBlur);
         if (enabled && (!drawHook || !shadeHook)) Probe.log("GLASS_UNAVAILABLE", "drawHook=" + drawHook + " shadeHook=" + shadeHook);
+    }
+    private final Set<String> foreignBlurLogged = new java.util.HashSet<>();
+    /**
+     * Another component (a Theme Park theme on One UI) can set its own Samsung blur on the same
+     * notification views and replace ours: on device that left the blur in a band in the middle of
+     * the card. Calls not made by SemBlurBridge are logged once per view class and caller, and
+     * blocked on views whose material this module manages with the Samsung blur.
+     */
+    private void installBlurGuard() {
+        try {
+            XposedBridge.hookAllMethods(View.class, "semSetBlurInfo", new XC_MethodHook() {
+                @Override protected void beforeHookedMethod(MethodHookParam p) {
+                    if (SemBlurBridge.applying() || !(p.thisObject instanceof View)) return;
+                    try {
+                        View v = (View) p.thisObject;
+                        State s = states.get(v);
+                        if (s == null && rowClass != null && rowClass.isInstance(v)) {
+                            Object bg = Reflect.read(v, "mBackgroundNormal");
+                            s = bg instanceof View ? states.get(bg) : null;
+                        }
+                        boolean managed = s != null && s.glass != null && (s.glassKind == Backdrop.Kind.SAMSUNG || s.glass.hybrid());
+                        String caller = blurCaller();
+                        if (foreignBlurLogged.size() < 40 && foreignBlurLogged.add(v.getClass().getName() + "|" + caller + "|" + managed)) {
+                            Probe.log("SEM_BLUR_FOREIGN", "view=" + v.getClass().getName() + " id=" + Integer.toHexString(System.identityHashCode(v))
+                                    + " managed=" + managed + " blocked=" + managed + " caller=" + caller + " info=" + (p.args[0] == null ? "null" : "set"));
+                        }
+                        if (managed) p.setResult(null);
+                    } catch (RuntimeException | LinkageError e) { Probe.error("BLUR_GUARD_FAILED", e); }
+                }
+            });
+            Probe.log("BLUR_GUARD", "installed=true");
+        } catch (RuntimeException | LinkageError e) { Probe.error("BLUR_GUARD_INSTALL_FAILED", e); }
+    }
+    private static String blurCaller() {
+        for (StackTraceElement e : new Throwable().getStackTrace()) {
+            String c = e.getClassName(), lower = c.toLowerCase(java.util.Locale.ROOT);
+            if (c.startsWith("io.github.igorcv88.") || c.startsWith("android.view.View") || c.startsWith("java.") || c.startsWith("dalvik.")
+                    || lower.contains("xposed") || lower.contains("lsp") || c.startsWith("J.")) continue;
+            return c + "." + e.getMethodName();
+        }
+        return "unknown";
     }
     private static String owner(XC_MethodHook.MethodHookParam p) {
         return p.thisObject != null ? p.thisObject.getClass().getName() : ((Method) p.method).getDeclaringClass().getName();
@@ -470,7 +512,7 @@ public final class HeadsUpHooks {
         /** See {@link Eligibility#sharedBackdrop}. */
         boolean sharedBackdrop() {
             View r = row.get();
-            if (r == null) return false;
+            if (r == null || Tuning.get().shadeBlur) return false;
             return Eligibility.sharedBackdrop(shadeExpanded, Reflect.bool(r, "isOnKeyguard", "mOnKeyguard"));
         }
         void release() {
