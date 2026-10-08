@@ -1,11 +1,15 @@
 // Phase 1 SurfaceFlinger probe: loaded first in surfaceflinger's DT_NEEDED list, so its exported
 // glShaderSource / eglGetProcAddress interpose RenderEngine's. It changes nothing: every distinct
-// shader source is logged once (tag OULG_SF) and passed through to the real driver entry point.
+// shader source is written once, complete, to DUMP and passed through to the real driver entry
+// point. Logcat gets one short line per shader: it truncates long messages and prunes a noisy
+// process, which lost most of the sources on device.
 #define _GNU_SOURCE
 #include <android/log.h>
 #include <dlfcn.h>
+#include <fcntl.h>
 #include <pthread.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -13,7 +17,7 @@
 #include <GLES2/gl2.h>
 
 #define TAG "OULG_SF"
-#define CHUNK 3000
+#define DUMP "/data/misc/surfaceflinger/oulg_shaders.txt"
 #define MAX_SEEN 8192
 
 typedef void (*ShaderSourceFn)(GLuint, GLsizei, const GLchar *const *, const GLint *);
@@ -54,14 +58,17 @@ static void log_source(GLuint shader, GLsizei count, const GLchar *const *string
     int index = fresh ? ++logged : 0;
     pthread_mutex_unlock(&lock);
     if (fresh) {
-        int parts = (int) ((at + CHUNK - 1) / CHUNK);
-        __android_log_print(ANDROID_LOG_INFO, TAG, "SRC_BEGIN n=%d hash=%016llx shader=%u len=%zu parts=%d",
-                            index, (unsigned long long) h, shader, at, parts);
-        for (int p = 0; p < parts; p++) {
-            size_t off = (size_t) p * CHUNK, n = at - off < CHUNK ? at - off : CHUNK;
-            __android_log_print(ANDROID_LOG_INFO, TAG, "SRC n=%d p=%d|%.*s", index, p, (int) n, buf + off);
+        char head[160];
+        int n = snprintf(head, sizeof head, "\n===== SRC n=%d hash=%016llx shader=%u len=%zu =====\n",
+                         index, (unsigned long long) h, shader, at);
+        int fd = open(DUMP, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0644);
+        if (fd >= 0) {
+            write(fd, head, (size_t) n);
+            write(fd, buf, at);
+            close(fd);
         }
-        __android_log_print(ANDROID_LOG_INFO, TAG, "SRC_END n=%d", index);
+        __android_log_print(ANDROID_LOG_INFO, TAG, "SRC n=%d hash=%016llx len=%zu file=%s",
+                            index, (unsigned long long) h, at, fd >= 0 ? "ok" : "failed");
     }
     free(buf);
 }

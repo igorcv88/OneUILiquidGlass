@@ -281,7 +281,8 @@ Install (`customize.sh`):
 
 At runtime:
 - `oulg_sf.c` interposes `glShaderSource` and `eglGetProcAddress`.
-- It logs each distinct shader source once under the logcat tag `OULG_SF`, then passes the call through unchanged.
+- It writes each distinct shader source once, complete, to `/data/misc/surfaceflinger/oulg_shaders.txt`, then passes the call through unchanged.
+- Logcat (tag `OULG_SF`) only gets `LOADED` and one short line per shader. On device, logcat truncated messages at about 1000 characters and dropped most of the burst.
 
 Safety: a boot watchdog in `service.sh` disables the module and reboots if surfaceflinger restarts 4 times within 90 s.
 
