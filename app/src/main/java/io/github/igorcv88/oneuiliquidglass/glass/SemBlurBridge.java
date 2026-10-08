@@ -75,9 +75,39 @@ public final class SemBlurBridge implements Backdrop {
     private static Method optional(Class<?> c, String name, Class<?> arg) {
         try { return c.getMethod(name, arg); } catch (NoSuchMethodException e) { return null; }
     }
+    /**
+     * The blur SystemUI itself last set on each notification view (it does this once, e.g. under
+     * lockscreen notifications), recorded by the blur guard. Releasing a bridge restores it: clearing
+     * to null erased that native blur for the row's lifetime.
+     */
+    private static final java.util.Map<View, Object> NATIVE = new java.util.WeakHashMap<>();
+    /** Main thread only; called by the blur guard for every semSetBlurInfo call not made by a bridge. */
+    public static void recordNative(View view, Object info) { NATIVE.put(view, info); }
+    /**
+     * Re-applies the recorded SystemUI blur on a view no bridge hosts (a notification row whose
+     * blur calls were blocked while its background's material was managed). No-op if none recorded.
+     */
+    public static void restoreNative(View view) {
+        if (!NATIVE.containsKey(view)) return;
+        try {
+            Class<?> info = Class.forName(INFO);
+            applying = true;
+            View.class.getMethod("semSetBlurInfo", info).invoke(view, NATIVE.get(view));
+            Probe.log("SEM_BLUR_NATIVE_RESTORED", "viewId=" + Integer.toHexString(System.identityHashCode(view)) + " row=true");
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError e) { Probe.error("SEM_BLUR_NATIVE_RESTORE_FAILED", e); }
+        finally { applying = false; }
+    }
     /** Main thread only: true while this bridge itself calls semSetBlurInfo (see the blur guard). */
     private static boolean applying;
     public static boolean applying() { return applying; }
+    /**
+     * The view a bridge is applying its blur to, only for the duration of that call. Samsung's
+     * semSetBlurInfo installs a BackgroundBlurDrawable through setBackground(), and SystemUI's
+     * NotificationBackgroundView answers that with a nested semSetBlurInfo(null) that erased the
+     * blur we had just set (device log: every apply followed in the same ms by a null on that view).
+     */
+    private static View applyingHost;
+    public static View applyingHost() { return applyingHost; }
     public static boolean available() {
         try {
             Class<?> info = Class.forName(INFO);
@@ -208,7 +238,7 @@ public final class SemBlurBridge implements Backdrop {
         posted = false;
         if (released || pending == null) return;
         try {
-            applying = true;
+            applying = true; applyingHost = host;
             java.lang.reflect.Field f = infoField(infoClass);
             Object before = f != null ? f.get(host) : null;
             set.invoke(host, pending);
@@ -222,7 +252,7 @@ public final class SemBlurBridge implements Backdrop {
             }
         }
         catch (ReflectiveOperationException | RuntimeException e) { Probe.error("SEM_BLUR_APPLY_FAILED", e); }
-        finally { applying = false; }
+        finally { applying = false; applyingHost = null; }
     }
     /**
      * Applies the last blur again. Called on events that can drop it (shade opened or closed, row
@@ -238,8 +268,10 @@ public final class SemBlurBridge implements Backdrop {
         released = true; pending = null;
         host.removeCallbacks(apply);
         host.removeOnLayoutChangeListener(resize);
-        try { applying = true; set.invoke(host, (Object) null); }
+        Object restore = NATIVE.get(host);
+        try { applying = true; set.invoke(host, restore); }
         catch (ReflectiveOperationException | RuntimeException e) { Probe.error("SEM_BLUR_CLEAR_FAILED", e); }
         finally { applying = false; }
+        if (restore != null) Probe.log("SEM_BLUR_NATIVE_RESTORED", "viewId=" + Integer.toHexString(System.identityHashCode(host)));
     }
 }
