@@ -166,6 +166,29 @@ public final class Probe {
         Object main = Reflect.read(d, "mMainColor"), alpha = Reflect.read(d, "mAlpha");
         return main == null && alpha == null ? "" : "[main=" + hex(main) + " alpha=" + alpha + "]";
     }
+    /**
+     * Views under a notification row that paint their own background, with alpha and drawable, so
+     * an opaque layer covering the glass (e.g. without a Theme Park theme) can be named. Once per row.
+     */
+    private static final java.util.Set<Integer> PAINTERS_DUMPED = new java.util.HashSet<>();
+    public static void painters(View row) {
+        if (row == null || PAINTERS_DUMPED.size() > 32 || !PAINTERS_DUMPED.add(System.identityHashCode(row))) return;
+        int[] budget = {30};
+        walkPainters(row, 0, Integer.toHexString(System.identityHashCode(row)), budget);
+    }
+    private static void walkPainters(View v, int depth, String rowId, int[] budget) {
+        if (budget[0] <= 0 || depth > 12) return;
+        android.graphics.drawable.Drawable bg = v.getBackground();
+        if (bg != null && bg.getAlpha() > 0 && v.getWidth() > 0 && v.getHeight() > 0) {
+            budget[0]--;
+            log("PAINTER", "row=" + rowId + " depth=" + depth + " class=" + v.getClass().getName() + " shown=" + v.isShown()
+                    + " alpha=" + v.getAlpha() + " size=" + v.getWidth() + "x" + v.getHeight() + " bg=" + describe(bg, 0));
+        }
+        if (v instanceof android.view.ViewGroup) {
+            android.view.ViewGroup g = (android.view.ViewGroup) v;
+            for (int i = 0; i < g.getChildCount(); i++) walkPainters(g.getChildAt(i), depth + 1, rowId, budget);
+        }
+    }
     private static String describe(android.graphics.drawable.Drawable d, int depth) {
         if (d == null) return "null";
         StringBuilder b = new StringBuilder(d.getClass().getSimpleName()).append("{alpha=").append(d.getAlpha());

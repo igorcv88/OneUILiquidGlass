@@ -23,12 +23,15 @@ public final class GlassSpec {
     public final int captureLightTint = 0x1affffff;
     public final int captureDarkTint = 0x29000000;
     /**
-     * Veil the Samsung compositor blur draws over its blurred backdrop: light enough that motion
-     * behind stays visible (the earlier 0x47 dark veil read as a grey card). debug.oulg.semalpha
-     * overrides the alpha.
+     * Samsung compositor blur, in its own radius units (SystemUI's own shade/recents blur region uses
+     * 250 in traces; 56 read as a barely-frosted card). The veil is a light, whitish frost in both
+     * themes, like the iOS notification material, so the backdrop's colours carry through: about 25%
+     * white in light mode, 8% in dark mode where the text is white. debug.oulg.semradius / semalpha
+     * override radius and alpha.
      */
-    public final int samsungLightColor = 0x26ffffff;
-    public final int samsungDarkColor = 0x30101216;
+    public static final int SAMSUNG_RADIUS = 180;
+    public final int samsungLightColor = 0x40ffffff;
+    public final int samsungDarkColor = 0x14ffffff;
     /** Width of the lit bevel inside the outline. */
     public final float rimDp = 20f;
     public final float hairDp = 0.95f;
@@ -61,4 +64,16 @@ public final class GlassSpec {
         double theta2 = Math.asin(Math.max(-1, Math.min(1, Math.sin(theta1) / ior)));
         return bevel * s * Math.tan(theta1 - theta2);
     }
+    /**
+     * Stylised lens shift (px) at {@code depth} px inside the outline: {@code ratio x bevel x (1 - depth/bevel)^2}.
+     * Sampling at depth + shift, the map's slope is {@code 1 - 2 ratio (1 - depth/bevel)}, never below
+     * {@code 1 - 2 ratio}: with ratio <= 0.45 it stays monotonic (no fold, magnification <= 10x), the
+     * bound from the WaEnhancerX laudo (LG-01). Mirrors lensAt() in {@link LiquidGlassShader#REFRACT_SOURCE}.
+     */
+    public static double lensShift(double depth, double bevel, double ratio) {
+        if (bevel <= 0 || depth >= bevel || depth < 0) return 0;
+        double e = 1 - depth / bevel;
+        return ratio * bevel * e * e;
+    }
 }
+

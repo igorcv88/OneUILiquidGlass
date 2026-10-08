@@ -9,11 +9,17 @@ import java.lang.ref.WeakReference;
 public final class CaptureBackdrop implements SampledBackdrop, CaptureHub.Client {
     private final WeakReference<View> view;
     private final boolean keyguard;
+    private final java.util.function.IntSupplier rate;
     private CaptureHub.Frame frame;
     private boolean unavailable, released;
 
     public CaptureBackdrop(View view, boolean keyguard) {
-        this.view = new WeakReference<>(view); this.keyguard = keyguard;
+        this(view, keyguard, () -> keyguard ? Tuning.get().keyguardHz : Tuning.get().hz);
+    }
+
+    /** {@code rate} is read on every hub tick, so a debug.oulg.* change applies live. */
+    public CaptureBackdrop(View view, boolean keyguard, java.util.function.IntSupplier rate) {
+        this.view = new WeakReference<>(view); this.keyguard = keyguard; this.rate = rate;
         CaptureHub.register(this);
     }
 
@@ -27,7 +33,7 @@ public final class CaptureBackdrop implements SampledBackdrop, CaptureHub.Client
     @Override public View view() { return view.get(); }
     @Override public boolean unavailable() { return unavailable; }
 
-    @Override public int hz() { Tuning t = Tuning.get(); return keyguard ? t.keyguardHz : t.hz; }
+    @Override public int hz() { return rate.getAsInt(); }
     @Override public void onFrame(CaptureHub.Frame next) {
         if (released) return;
         frame = next;

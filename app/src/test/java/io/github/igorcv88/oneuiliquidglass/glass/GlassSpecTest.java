@@ -32,4 +32,19 @@ public final class GlassSpecTest {
         assertEquals(0, GlassSpec.refractionShift(30, 70, 1.0), 1e-9);
         assertTrue(GlassSpec.refractionShift(11, 70, 1.6) > GlassSpec.refractionShift(11, 70, 1.5));
     }
+    /** Lens profile: 0.30 x bevel at the outline, zero at the bevel, and a slope that never folds. */
+    @Test public void lensShiftStaysMonotonic() {
+        assertEquals(21.0, GlassSpec.lensShift(0, 70, 0.30), 1e-9);
+        assertEquals(0, GlassSpec.lensShift(70, 70, 0.30), 0);
+        for (double ratio : new double[]{0.30, 0.45}) {
+            double prev = GlassSpec.lensShift(0, 70, ratio);
+            for (double x = 0.5; x < 70; x += 0.5) {
+                double cur = GlassSpec.lensShift(x, 70, ratio);
+                double slope = 1 + (cur - prev) / 0.5; // d(depth + shift)/d(depth)
+                assertTrue("ratio " + ratio + " folds at " + x, slope >= 1 - 2 * ratio - 1e-6);
+                prev = cur;
+            }
+        }
+    }
 }
+

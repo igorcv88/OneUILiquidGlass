@@ -25,6 +25,7 @@ import io.github.igorcv88.oneuiliquidglass.glass.BackgroundBlurBridge;
 import io.github.igorcv88.oneuiliquidglass.glass.CaptureBackdrop;
 import io.github.igorcv88.oneuiliquidglass.glass.CaptureHub;
 import io.github.igorcv88.oneuiliquidglass.glass.GridBackdrop;
+import io.github.igorcv88.oneuiliquidglass.glass.HybridBackdrop;
 import io.github.igorcv88.oneuiliquidglass.glass.Tuning;
 import io.github.igorcv88.oneuiliquidglass.glass.WallpaperBackdrop;
 import io.github.igorcv88.oneuiliquidglass.glass.SemBlurBridge;
@@ -50,6 +51,8 @@ public final class HeadsUpHooks {
     private final boolean samsungBlur = SemBlurBridge.available();
     private final GlassSpec spec = new GlassSpec();
     private Boolean shadeExpanded;
+    /** Set once HybridBackdrop could not be built; heads-up rows then keep the plain compositor blur. */
+    private boolean hybridFailed;
     /** enabled == null: preferences unreadable, resolve through the module's ConfigProvider. */
     public HeadsUpHooks(ClassLoader loader, Boolean enabled) {
         this.loader = loader; this.enabled = Boolean.TRUE.equals(enabled); this.configPending = enabled == null;
@@ -234,6 +237,7 @@ public final class HeadsUpHooks {
         final WeakReference<View> row;
         GlassDrawable glass;
         Backdrop.Kind glassKind;
+        String glassSource;
         boolean materialReported;
         android.graphics.RenderNode scratch;
         WindowManager wm;
@@ -361,15 +365,37 @@ public final class HeadsUpHooks {
             switch (mode) {
                 case "grid": return true;
                 case "capture": return CaptureHub.available();
-                default: return Boolean.TRUE.equals(keyguard) && WallpaperBackdrop.available(v.getContext());
+                default:
+                    // Lockscreen: the still wallpaper, else a slow capture (the keyguard barely moves).
+                    if (Boolean.TRUE.equals(keyguard)) return WallpaperBackdrop.available(v.getContext()) || CaptureHub.available();
+                    // Heads-up: live compositor body plus a captured lens band; needs both halves.
+                    return samsungBlur && !hybridFailed && CaptureHub.available() && SemBlurBridge.supports(Reflect.read(v, "mCornerRadii"));
             }
         }
         boolean onKeyguard() { View r = row.get(); return r != null && Boolean.TRUE.equals(Reflect.bool(r, "isOnKeyguard", "mOnKeyguard")); }
-        Backdrop sampledBackdrop(View v) {
-            switch (Tuning.get().backdrop) {
+        /** Which sampled source this row wants now; a change replaces the material. */
+        String sampledSource(View v) {
+            String mode = Tuning.get().backdrop;
+            if (mode.equals("grid")) return "grid";
+            if (mode.equals("capture")) return onKeyguard() ? "capture-keyguard" : "capture";
+            if (onKeyguard()) return WallpaperBackdrop.available(v.getContext()) ? "wallpaper" : "capture-keyguard";
+            return "hybrid";
+        }
+        Backdrop sampledBackdrop(View v, String source) throws ReflectiveOperationException {
+            switch (source) {
                 case "grid": return new GridBackdrop(v);
-                case "capture": return new CaptureBackdrop(v, onKeyguard() && !Boolean.TRUE.equals(Reflect.bool(row.get(), "isHeadsUpState", "mIsHeadsUp")));
-                default: return new WallpaperBackdrop(v);
+                case "wallpaper": return new WallpaperBackdrop(v);
+                case "capture-keyguard": return new CaptureBackdrop(v, true);
+                case "hybrid":
+                    try { return new HybridBackdrop(v); }
+                    catch (ReflectiveOperationException | RuntimeException e) {
+                        // Never fall back to a full-surface capture here: that is the lagging body
+                        // the hybrid exists to avoid. Plain compositor blur, and no hybrid again.
+                        hybridFailed = true;
+                        Probe.error("HYBRID_FAILED", e);
+                        return SemBlurBridge.create(v);
+                    }
+                default: return new CaptureBackdrop(v, false);
             }
         }
         void event(String event) {
@@ -407,7 +433,8 @@ public final class HeadsUpHooks {
                 }
             }
             if (glass != null && glass.failed()) { failed = true; release(); return null; }
-            if (glass != null && (glassKind != kind || glass.stale())) release();
+            String source = kind == Backdrop.Kind.SAMPLED ? sampledSource(v) : null;
+            if (glass != null && (glassKind != kind || glass.stale() || !java.util.Objects.equals(source, glassSource))) release();
             if (!CornerGeometry.supported(Reflect.read(v, "mCornerRadii"))) {
                 failed = true; Probe.log("GEOMETRY_UNSUPPORTED", "view=" + v.getClass().getName()); return null;
             }
@@ -417,19 +444,21 @@ public final class HeadsUpHooks {
             }
             if (glass == null) {
                 Backdrop backdrop = kind == Backdrop.Kind.SHARED ? new SharedBackdrop()
-                        : kind == Backdrop.Kind.SAMPLED ? sampledBackdrop(v)
+                        : kind == Backdrop.Kind.SAMPLED ? sampledBackdrop(v, source)
                         : kind == Backdrop.Kind.SAMSUNG ? SemBlurBridge.create(v) : BackgroundBlurBridge.create(v);
                 glass = new GlassDrawable(backdrop, v.getResources().getDisplayMetrics().density, spec);
                 glassKind = kind;
+                glassSource = source;
                 glass.setCallback(v);
                 Probe.log("GLASS_APPLIED", "viewId=" + Integer.toHexString(System.identityHashCode(v)) + " source=" + backdrop.name()
                         + " optics=" + (kind == Backdrop.Kind.SAMPLED ? "refraction" : "edge_shader"));
                 materialReported = false;
+                Probe.painters(row.get());
             }
             boolean dark = (v.getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
             int fill = kind == Backdrop.Kind.SHARED ? (dark ? spec.shadeDarkFill : spec.shadeLightFill) : (dark ? spec.darkFill : spec.lightFill);
-            int tone = kind == Backdrop.Kind.SAMPLED ? (dark ? spec.captureDarkTint : spec.captureLightTint)
-                    : kind == Backdrop.Kind.SAMSUNG ? (dark ? spec.samsungDarkColor : spec.samsungLightColor)
+            int tone = glass.hybrid() || kind == Backdrop.Kind.SAMSUNG ? (dark ? spec.samsungDarkColor : spec.samsungLightColor)
+                    : kind == Backdrop.Kind.SAMPLED ? (dark ? spec.captureDarkTint : spec.captureLightTint)
                     : dark ? spec.darkBlurColor : spec.lightBlurColor;
             glass.configure(original, shape(), fill, tone);
             if (!materialReported) {
@@ -445,7 +474,7 @@ public final class HeadsUpHooks {
             return Eligibility.sharedBackdrop(shadeExpanded, Reflect.bool(r, "isOnKeyguard", "mOnKeyguard"));
         }
         void release() {
-            if (glass != null) { glass.release(); glass = null; glassKind = null; Probe.log("GLASS_RELEASED", "native=true"); }
+            if (glass != null) { glass.release(); glass = null; glassKind = null; glassSource = null; Probe.log("GLASS_RELEASED", "native=true"); }
         }
     }
     /**
