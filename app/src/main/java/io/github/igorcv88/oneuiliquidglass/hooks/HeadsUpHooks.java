@@ -348,7 +348,8 @@ public final class HeadsUpHooks {
             if (r == null || sharedBackdrop()) return false;
             String mode = Tuning.get().backdrop;
             if (mode.equals("off") || !GlassDrawable.refractionAvailable()) return false;
-            if (!Boolean.TRUE.equals(Reflect.bool(r, "isHeadsUpState", "mIsHeadsUp")) && !onKeyguard()) return false;
+            if (!Eligibility.captureSurface(Reflect.bool(r, "isHeadsUpState", "mIsHeadsUp"),
+                    Reflect.bool(r, "isOnKeyguard", "mOnKeyguard"), shadeExpanded)) return false;
             return mode.equals("grid") || CaptureHub.available();
         }
         boolean onKeyguard() { View r = row.get(); return r != null && Boolean.TRUE.equals(Reflect.bool(r, "isOnKeyguard", "mOnKeyguard")); }
@@ -418,17 +419,11 @@ public final class HeadsUpHooks {
             }
             return glass;
         }
-        /**
-         * Expanded-shade rows sit on the shade's own blurred scrim. Heads-up and lockscreen rows
-         * have the app or wallpaper directly behind the window and keep a real blur.
-         */
+        /** See {@link Eligibility#sharedBackdrop}. */
         boolean sharedBackdrop() {
             View r = row.get();
             if (r == null) return false;
-            // Unknown state keeps the real blur: only rows known not to be heads-up or keyguard share.
-            return Boolean.TRUE.equals(shadeExpanded)
-                    && Boolean.FALSE.equals(Reflect.bool(r, "isHeadsUpState", "mIsHeadsUp"))
-                    && Boolean.FALSE.equals(Reflect.bool(r, "isOnKeyguard", "mOnKeyguard"));
+            return Eligibility.sharedBackdrop(shadeExpanded, Reflect.bool(r, "isOnKeyguard", "mOnKeyguard"));
         }
         void release() {
             if (glass != null) { glass.release(); glass = null; glassKind = null; Probe.log("GLASS_RELEASED", "native=true"); }

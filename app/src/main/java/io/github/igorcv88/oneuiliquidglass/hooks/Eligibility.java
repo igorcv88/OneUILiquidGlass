@@ -21,4 +21,21 @@ public final class Eligibility {
         if (Boolean.TRUE.equals(shadeExpanded)) return "shade";
         return "unknown";
     }
+    /**
+     * Rows in the expanded shade sit on the shade's own scrim and blur, heads-up rows included: a
+     * notification arriving while the shade is open is a heads-up row (unpinned) drawn in the shade.
+     * Keyguard rows have the wallpaper behind; unknown keyguard state keeps a real backdrop.
+     */
+    public static boolean sharedBackdrop(Boolean shadeExpanded, Boolean keyguard) {
+        return Boolean.TRUE.equals(shadeExpanded) && Boolean.FALSE.equals(keyguard);
+    }
+    /**
+     * Rows with an app or the wallpaper directly behind the shade window, which a capture that
+     * excludes that window shows: lockscreen rows, and heads-up rows while the shade is not open.
+     */
+    public static boolean captureSurface(Boolean headsUp, Boolean keyguard, Boolean shadeExpanded) {
+        if (sharedBackdrop(shadeExpanded, keyguard)) return false;
+        if (Boolean.TRUE.equals(keyguard)) return true;
+        return Boolean.TRUE.equals(headsUp) && !Boolean.TRUE.equals(shadeExpanded);
+    }
 }

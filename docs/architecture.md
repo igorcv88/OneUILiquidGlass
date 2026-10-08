@@ -69,7 +69,7 @@ Probe data on S938BXXUCZZIC (One UI 9, SDK 37). The probe ran at scale 0.5, with
 
 Every capture allocated a new buffer.
 
-From this data, heads-up rows and lockscreen rows get backdrop kind `CAPTURE`. Expanded-shade rows keep `SHARED`, because the shade draws its own scrim and blur below them, and sampling the unblurred app there would bypass that scrim.
+From this data, lockscreen rows, and heads-up rows while the shade is closed, get backdrop kind `CAPTURE`. Every row in the expanded shade keeps `SHARED`, because the shade draws its own scrim and blur below them, and sampling the unblurred app there would bypass that scrim. That includes a heads-up row that arrives while the shade is open: it is an unpinned heads-up drawn in the shade, and capturing for it sampled the home screen behind the shade (`Eligibility.captureSurface`).
 
 `CaptureHub` runs one loop for all sampling rows:
 - each tick captures the union of their on-screen rectangles plus 80 px, at half scale, below their windows;
