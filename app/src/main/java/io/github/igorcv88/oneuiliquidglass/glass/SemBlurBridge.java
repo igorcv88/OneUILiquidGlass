@@ -32,6 +32,7 @@ public final class SemBlurBridge implements Backdrop {
     // Last info this bridge applied, and what the view held right after: if the view later holds
     // anything else, the blur was replaced or dropped behind our back and is applied again.
     private Object lastInfo, applied;
+    private static final Object UNAPPLIED = new Object();
     private long lastReassert;
     private int reasserts;
     // Inputs of the last build: a clip path is sized to the view and is rebuilt when the view resizes.
@@ -204,10 +205,15 @@ public final class SemBlurBridge implements Backdrop {
         posted = false;
         if (released || pending == null) return;
         try {
-            applying = true; set.invoke(host, pending);
-            lastInfo = pending;
+            applying = true;
             java.lang.reflect.Field f = infoField(infoClass);
-            applied = f != null ? f.get(host) : pending;
+            Object before = f != null ? f.get(host) : null;
+            set.invoke(host, pending);
+            lastInfo = pending;
+            Object after = f != null ? f.get(host) : pending;
+            // The view holds our info, or a fresh copy of it. If another hook swallowed the call, the
+            // field keeps the old or foreign value: leave it unblessed so verify() retries.
+            applied = after == pending || (after != null && after != before) ? after : UNAPPLIED;
         }
         catch (ReflectiveOperationException | RuntimeException e) { Probe.error("SEM_BLUR_APPLY_FAILED", e); }
         finally { applying = false; }
