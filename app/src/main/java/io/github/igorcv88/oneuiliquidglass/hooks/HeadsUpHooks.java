@@ -51,6 +51,8 @@ public final class HeadsUpHooks {
     private final boolean samsungBlur = SemBlurBridge.available();
     private final GlassSpec spec = new GlassSpec();
     private Boolean shadeExpanded;
+    /** Set once HybridBackdrop could not be built; heads-up rows then keep the plain compositor blur. */
+    private boolean hybridFailed;
     /** enabled == null: preferences unreadable, resolve through the module's ConfigProvider. */
     public HeadsUpHooks(ClassLoader loader, Boolean enabled) {
         this.loader = loader; this.enabled = Boolean.TRUE.equals(enabled); this.configPending = enabled == null;
@@ -367,7 +369,7 @@ public final class HeadsUpHooks {
                     // Lockscreen: the still wallpaper, else a slow capture (the keyguard barely moves).
                     if (Boolean.TRUE.equals(keyguard)) return WallpaperBackdrop.available(v.getContext()) || CaptureHub.available();
                     // Heads-up: live compositor body plus a captured lens band; needs both halves.
-                    return samsungBlur && CaptureHub.available() && SemBlurBridge.supports(Reflect.read(v, "mCornerRadii"));
+                    return samsungBlur && !hybridFailed && CaptureHub.available() && SemBlurBridge.supports(Reflect.read(v, "mCornerRadii"));
             }
         }
         boolean onKeyguard() { View r = row.get(); return r != null && Boolean.TRUE.equals(Reflect.bool(r, "isOnKeyguard", "mOnKeyguard")); }
@@ -379,15 +381,20 @@ public final class HeadsUpHooks {
             if (onKeyguard()) return WallpaperBackdrop.available(v.getContext()) ? "wallpaper" : "capture-keyguard";
             return "hybrid";
         }
-        Backdrop sampledBackdrop(View v, String source) {
+        Backdrop sampledBackdrop(View v, String source) throws ReflectiveOperationException {
             switch (source) {
                 case "grid": return new GridBackdrop(v);
                 case "wallpaper": return new WallpaperBackdrop(v);
                 case "capture-keyguard": return new CaptureBackdrop(v, true);
                 case "hybrid":
                     try { return new HybridBackdrop(v); }
-                    catch (ReflectiveOperationException | RuntimeException e) { Probe.error("HYBRID_FAILED", e); }
-                    return new CaptureBackdrop(v, false);
+                    catch (ReflectiveOperationException | RuntimeException e) {
+                        // Never fall back to a full-surface capture here: that is the lagging body
+                        // the hybrid exists to avoid. Plain compositor blur, and no hybrid again.
+                        hybridFailed = true;
+                        Probe.error("HYBRID_FAILED", e);
+                        return SemBlurBridge.create(v);
+                    }
                 default: return new CaptureBackdrop(v, false);
             }
         }
