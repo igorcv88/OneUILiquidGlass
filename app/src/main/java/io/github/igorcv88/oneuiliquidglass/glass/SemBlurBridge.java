@@ -83,6 +83,20 @@ public final class SemBlurBridge implements Backdrop {
     private static final java.util.Map<View, Object> NATIVE = new java.util.WeakHashMap<>();
     /** Main thread only; called by the blur guard for every semSetBlurInfo call not made by a bridge. */
     public static void recordNative(View view, Object info) { NATIVE.put(view, info); }
+    /**
+     * Re-applies the recorded SystemUI blur on a view no bridge hosts (a notification row whose
+     * blur calls were blocked while its background's material was managed). No-op if none recorded.
+     */
+    public static void restoreNative(View view) {
+        if (!NATIVE.containsKey(view)) return;
+        try {
+            Class<?> info = Class.forName(INFO);
+            applying = true;
+            View.class.getMethod("semSetBlurInfo", info).invoke(view, NATIVE.get(view));
+            Probe.log("SEM_BLUR_NATIVE_RESTORED", "viewId=" + Integer.toHexString(System.identityHashCode(view)) + " row=true");
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError e) { Probe.error("SEM_BLUR_NATIVE_RESTORE_FAILED", e); }
+        finally { applying = false; }
+    }
     /** Main thread only: true while this bridge itself calls semSetBlurInfo (see the blur guard). */
     private static boolean applying;
     public static boolean applying() { return applying; }

@@ -594,7 +594,12 @@ public final class HeadsUpHooks {
             return Eligibility.sharedBackdrop(shadeExpanded, Reflect.bool(r, "isOnKeyguard", "mOnKeyguard"));
         }
         void release() {
-            if (glass != null) { glass.release(); glass = null; glassKind = null; glassSource = null; Probe.log("GLASS_RELEASED", "native=true"); }
+            if (glass == null) return;
+            // The blur guard also blocked calls aimed at the row while this material was managed.
+            boolean compositor = glassKind == Backdrop.Kind.SAMSUNG || glass.hybrid();
+            glass.release(); glass = null; glassKind = null; glassSource = null; Probe.log("GLASS_RELEASED", "native=true");
+            View r = row.get();
+            if (compositor && r != null) SemBlurBridge.restoreNative(r);
         }
     }
     /**
