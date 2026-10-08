@@ -3,6 +3,8 @@
 EXPECTED="samsung/pa3qxxx/pa3q:17/CP2A.260605.016/S938BXXUCZZIC_OXMCZZIC:user/release-keys"
 FP="$(getprop ro.build.fingerprint)"
 [ "$FP" = "$EXPECTED" ] || abort "! Firmware diferente: $FP"
+# Files under $MODPATH/system only take effect through a metamodule that mounts them.
+[ -e /data/adb/metamodule ] || abort "! Nenhum metamodulo de montagem do /system (ex.: meta-overlayfs) instalado"
 mkdir -p "$MODPATH/system/bin" "$MODPATH/system/lib64"
 cp -f /system/bin/surfaceflinger "$MODPATH/system/bin/surfaceflinger" || abort "! copia do surfaceflinger falhou"
 chmod 0755 "$MODPATH/tools/dtneeded"
