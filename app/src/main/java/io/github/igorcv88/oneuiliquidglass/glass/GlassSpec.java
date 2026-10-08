@@ -22,6 +22,13 @@ public final class GlassSpec {
      */
     public final int captureLightTint = 0x1affffff;
     public final int captureDarkTint = 0x29000000;
+    /**
+     * Veil the Samsung compositor blur draws over its blurred backdrop: light enough that motion
+     * behind stays visible (the earlier 0x47 dark veil read as a grey card). debug.oulg.semalpha
+     * overrides the alpha.
+     */
+    public final int samsungLightColor = 0x26ffffff;
+    public final int samsungDarkColor = 0x30101216;
     /** Width of the lit bevel inside the outline. */
     public final float rimDp = 20f;
     public final float hairDp = 0.95f;

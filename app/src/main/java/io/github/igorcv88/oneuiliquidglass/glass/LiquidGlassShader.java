@@ -102,19 +102,16 @@ public final class LiquidGlassShader {
         """;
 
     /**
-     * Opaque material over a sampled backdrop. The backdrop child is in bitmap pixels:
-     * screen = coord + bdOrigin, bitmap = screen * bdScale. Each channel is displaced inward by the
-     * Snell shift (scaled by refractScale; red bends less, blue more by +-dispersion), frosted with a
-     * 9-tap ring, saturated, veiled by tint and fill, then lit and shadowed by edge().
+     * Opaque material over a sampled backdrop, run as a RenderEffect whose input {@code backdrop} is
+     * the captured image, already Gaussian-blurred, in the effect node's own pixels (origin is the
+     * glass bounds' offset inside that node). Each channel is displaced inward by the Snell shift
+     * (scaled by refractScale; red bends less, blue more by +-dispersion), saturated, veiled by tint
+     * and fill, then lit and shadowed by edge().
      */
     public static final String REFRACT_SOURCE = COMMON + """
         uniform shader backdrop;
-        uniform float2 bdOrigin;
-        uniform float bdScale;
-        uniform float2 bdSize;
         uniform float refractScale;
         uniform float ior;
-        uniform float blurPx;
         uniform float saturation;
         uniform float dispersion;
         uniform half4 tint;
@@ -130,19 +127,8 @@ public final class LiquidGlassShader {
             float t2 = asin(clamp(sin(t1) / ior, -1.0, 1.0));
             return b * s * tan(t1 - t2);
         }
-        half3 tap(float2 screen) {
-            float2 uv = clamp(screen * bdScale, float2(0.5), bdSize - float2(0.5));
-            return backdrop.eval(uv).rgb;
-        }
-        half3 frost(float2 q, float r) {
-            if (r < 0.5) {
-                return tap(q);
-            }
-            float k = r * 0.7071;
-            half3 c = tap(q) * 0.2;
-            c += (tap(q + float2(r, 0.0)) + tap(q - float2(r, 0.0)) + tap(q + float2(0.0, r)) + tap(q - float2(0.0, r))) * 0.12;
-            c += (tap(q + float2(k, k)) + tap(q - float2(k, k)) + tap(q + float2(k, -k)) + tap(q + float2(-k, k))) * 0.08;
-            return c;
+        half3 tap(float2 q) {
+            return backdrop.eval(q).rgb;
         }
         half4 main(float2 coord) {
             float2 hs = size * 0.5;
@@ -154,14 +140,13 @@ public final class LiquidGlassShader {
             }
             float2 n = outward(p, hs);
             float s = shiftAt(max(-d, 0.0), bevel) * refractScale;
-            float2 q = coord + bdOrigin;
             half3 c;
             if (s > 0.25 && dispersion > 0.0) {
-                c = half3(frost(q - n * (s * (1.0 - dispersion)), blurPx).r,
-                          frost(q - n * s, blurPx).g,
-                          frost(q - n * (s * (1.0 + dispersion)), blurPx).b);
+                c = half3(tap(coord - n * (s * (1.0 - dispersion))).r,
+                          tap(coord - n * s).g,
+                          tap(coord - n * (s * (1.0 + dispersion))).b);
             } else {
-                c = frost(q - n * s, blurPx);
+                c = tap(coord - n * s);
             }
             half l = dot(c, half3(0.2126, 0.7152, 0.0722));
             c = clamp(mix(half3(l), c, half(saturation)), 0.0, 1.0);
