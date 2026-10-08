@@ -24,6 +24,7 @@ public final class SemBlurBridge implements Backdrop {
     private final Method radius, color, corner, corners, build;
     // Color curve (saturation/contrast of the blurred backdrop): preset or explicit, both optional.
     private final Method curvePreset, curve;
+    private final Method clipPath;
     private final Class<?> infoClass;
     private Object pending;
     private boolean posted, released;
@@ -50,6 +51,7 @@ public final class SemBlurBridge implements Backdrop {
         catch (NoSuchMethodException e) { four = null; }
         corners = four;
         curvePreset = optional(builderClass, "setColorCurvePreset", int.class);
+        clipPath = optional(builderClass, "setBackgroundClipPath", android.graphics.Path.class);
         Method six;
         try { six = builderClass.getMethod("setColorCurve", float.class, float.class, float.class, float.class, float.class, float.class); }
         catch (NoSuchMethodException e) { six = null; }
@@ -95,16 +97,44 @@ public final class SemBlurBridge implements Backdrop {
         if (builderWithMode != null) b = builderWithMode.newInstance(mode);
         else { b = builderPlain.newInstance(); setMode.invoke(b, mode); }
         Tuning t = Tuning.get();
-        radius.invoke(b, t.semRadius >= 0 ? t.semRadius : px);
+        radius.invoke(b, t.semRadius >= 0 ? t.semRadius : GlassSpec.SAMSUNG_RADIUS);
+        String shape = applyShape(b, t.semShape, radii);
+        if (!shape.equals(lastShape)) { lastShape = shape; Probe.log("SEM_BLUR_SHAPE", "mode=" + shape + " radius=" + radii[0] + " size=" + host.getWidth() + "x" + host.getHeight()); }
         if (color != null) color.invoke(b, t.semAlpha >= 0 ? (tint & 0x00ffffff) | (t.semAlpha << 24) : tint);
         applyCurve(b, t.semCurve);
-        // Four-radius setter assumed top-first (TL, TR, BL, BR as in AOSP); callers pass only shapes
-        // with equal top and bottom pairs, so the bottom-pair order cannot matter.
-        if (corners != null) corners.invoke(b, radii[0], radii[2], radii[6], radii[4]);
-        else if (corner != null) corner.invoke(b, radii[0]);
         pending = build.invoke(b);
         // Updates arrive from the hooked onDraw; apply after the current traversal, not mid-draw.
         if (!posted) { posted = true; host.post(apply); }
+    }
+    private String lastShape;
+    /**
+     * How the blur region is shaped. On device the four-radius setter left the blur only in a band
+     * in the middle of the card, so a uniform shape now uses the single-radius setter; "path" clips
+     * to the exact rounded rect, "four" is the old behaviour, "none" leaves the region rectangular
+     * (debug.oulg.semshape).
+     */
+    private String applyShape(Object b, String mode, float[] radii) throws ReflectiveOperationException {
+        boolean uniform = radii[0] == radii[2] && radii[2] == radii[4] && radii[4] == radii[6];
+        if (mode.equals("auto")) mode = uniform && corner != null ? "single" : clipPath != null ? "path" : "four";
+        switch (mode) {
+            case "none": return mode;
+            case "single":
+                if (corner == null) break;
+                corner.invoke(b, radii[0]);
+                return mode;
+            case "path":
+                if (clipPath == null || host.getWidth() <= 0 || host.getHeight() <= 0) break;
+                android.graphics.Path path = new android.graphics.Path();
+                path.addRoundRect(new android.graphics.RectF(0, 0, host.getWidth(), host.getHeight()), radii, android.graphics.Path.Direction.CW);
+                clipPath.invoke(b, path);
+                return mode;
+            default: break;
+        }
+        // Four-radius setter assumed top-first (TL, TR, BL, BR as in AOSP); callers pass only shapes
+        // with equal top and bottom pairs, so the bottom-pair order cannot matter.
+        if (corners != null) { corners.invoke(b, radii[0], radii[2], radii[6], radii[4]); return "four"; }
+        if (corner != null) { corner.invoke(b, radii[0]); return "single"; }
+        return "none";
     }
     /** spatial|dim|ultra pick Samsung's presets for the current theme; "s,c,x0,x1,y0,y1" is explicit. */
     private void applyCurve(Object builder, String spec) {

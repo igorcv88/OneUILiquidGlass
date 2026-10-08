@@ -179,3 +179,26 @@ The physical Snell model (about 16 px, zero at the outline and weak to the eye) 
 
 `hz` and `hzkg` now accept up to 120 Hz.
 
+### Samsung blur shape, strength and veil (2026-10-08, second device pass)
+
+Screenshots of the compositor-only build showed three problems:
+- The blur sat in a band in the middle of the card, not out to the sides. The suspected cause is the four-radius corner setter.
+- Content behind the lower part stayed sharp.
+- Dark mode read as grey.
+
+Changes:
+- `SemBlurBridge.applyShape` now picks the blur shape by `semshape`:
+
+  | Value | Shape |
+  |---|---|
+  | `auto` (default) | Single-radius setter when the shape is uniform, otherwise the clip path |
+  | `single` | Single-radius setter |
+  | `path` | Exact rounded-rect `setBackgroundClipPath` |
+  | `four` | Previous behaviour (four-radius setter) |
+  | `none` | Rectangular region |
+
+  The mode in use is logged as `SEM_BLUR_SHAPE`.
+- The default compositor radius is `GlassSpec.SAMSUNG_RADIUS` = 180. SystemUI's own blur region uses 250 in traces.
+- The veil is a light white frost in both themes, closer to the iOS notification material: `0x40ffffff` in light mode, `0x14ffffff` in dark mode. `semalpha` still overrides it.
+- `Probe.painters` logs, once per row, every view under a notification row that paints a background (`PAINTER`). This is to name the opaque layer that covers the glass when Theme Park is off.
+

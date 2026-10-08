@@ -34,10 +34,12 @@ public final class Tuning {
     public final int hz, keyguardHz;
     /** Veil alpha override (0-255), -1 for the spec default. */
     public final int tintAlpha;
-    /** Samsung compositor blur: radius px (-1 = spec), color curve (spatial|dim|ultra|none|"s,c,x0,x1,y0,y1"), veil alpha. */
+    /** Samsung compositor blur: radius (-1 = GlassSpec.samsungRadius), color curve (spatial|dim|ultra|none|"s,c,x0,x1,y0,y1"), veil alpha. */
     public final int semRadius;
     public final String semCurve;
     public final int semAlpha;
+    /** Samsung blur region shape: auto|single|path|four|none (see SemBlurBridge.applyShape). */
+    public final String semShape;
     /** Bumped whenever any knob changes, so cached backdrop parameters are rebuilt. */
     public static int generation;
 
@@ -65,6 +67,8 @@ public final class Tuning {
         // "spatial" stopped the blur rendering on S938BXXUCZZIC (sharp backdrop in screenshots): off by default.
         semCurve = prop("semcurve", "none");
         semAlpha = Math.round(clamp(number("semalpha", -1f), -1f, 255f));
+        String shape = prop("semshape", "auto");
+        semShape = shape.equals("single") || shape.equals("path") || shape.equals("four") || shape.equals("none") ? shape : "auto";
     }
 
     public static Tuning get() {
@@ -81,7 +85,7 @@ public final class Tuning {
         return "backdrop=" + backdrop + " profile=" + profile + " lens=" + lens + " rimhz=" + rimHz + " rimblur=" + rimBlur
                 + " refract=" + refract + " ior=" + ior + " blur=" + blur + " sat=" + saturation
                 + " disp=" + dispersion + " hz=" + hz + " hzkg=" + keyguardHz + " tint=" + tintAlpha
-                + " semradius=" + semRadius + " semcurve=" + semCurve + " semalpha=" + semAlpha;
+                + " semradius=" + semRadius + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape;
     }
 
     private static float clamp(float v, float lo, float hi) { return Float.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : lo; }

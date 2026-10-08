@@ -23,12 +23,15 @@ public final class GlassSpec {
     public final int captureLightTint = 0x1affffff;
     public final int captureDarkTint = 0x29000000;
     /**
-     * Veil the Samsung compositor blur draws over its blurred backdrop: light enough that motion
-     * behind stays visible (the earlier 0x47 dark veil read as a grey card). debug.oulg.semalpha
-     * overrides the alpha.
+     * Samsung compositor blur, in its own radius units (SystemUI's own shade/recents blur region uses
+     * 250 in traces; 56 read as a barely-frosted card). The veil is a light, whitish frost in both
+     * themes, like the iOS notification material, so the backdrop's colours carry through: about 25%
+     * white in light mode, 8% in dark mode where the text is white. debug.oulg.semradius / semalpha
+     * override radius and alpha.
      */
-    public final int samsungLightColor = 0x26ffffff;
-    public final int samsungDarkColor = 0x30101216;
+    public static final int SAMSUNG_RADIUS = 180;
+    public final int samsungLightColor = 0x40ffffff;
+    public final int samsungDarkColor = 0x14ffffff;
     /** Width of the lit bevel inside the outline. */
     public final float rimDp = 20f;
     public final float hairDp = 0.95f;
