@@ -181,7 +181,16 @@ public final class HeadsUpHooks {
         try {
             XposedBridge.hookAllMethods(View.class, "semSetBlurInfo", new XC_MethodHook() {
                 @Override protected void beforeHookedMethod(MethodHookParam p) {
-                    if (SemBlurBridge.applying() || !(p.thisObject instanceof View)) return;
+                    if (!(p.thisObject instanceof View)) return;
+                    if (SemBlurBridge.applying()) {
+                        // A clear nested inside our own apply, on the view we are applying to.
+                        if (p.args[0] == null && p.thisObject == SemBlurBridge.applyingHost()) {
+                            if (nestedClears++ < 5) Probe.log("SEM_BLUR_NESTED_CLEAR", "view=" + p.thisObject.getClass().getName()
+                                    + " blocked=true caller=" + nestedCaller());
+                            p.setResult(null);
+                        }
+                        return;
+                    }
                     try {
                         View v = (View) p.thisObject;
                         // Remember SystemUI's own blur on notification views so a released material
@@ -254,6 +263,20 @@ public final class HeadsUpHooks {
      * method or its LSPosed stub). Matching hook classes by name failed: LSPosed obfuscates them.
      */
     private static String blurCaller() { return caller("semSetBlurInfo"); }
+    private int nestedClears;
+    /** Frames below the innermost semSetBlurInfo: who issued a clear nested inside our apply. */
+    private static String nestedCaller() {
+        StackTraceElement[] stack = new Throwable().getStackTrace();
+        int first = -1;
+        for (int i = 0; i < stack.length; i++) if ("semSetBlurInfo".equals(stack[i].getMethodName())) { first = i; break; }
+        if (first < 0) return "unknown";
+        StringBuilder out = new StringBuilder();
+        for (int i = first + 1; i < Math.min(stack.length, first + 9); i++) {
+            if (out.length() > 0) out.append('<');
+            out.append(stack[i].getClassName()).append('.').append(stack[i].getMethodName());
+        }
+        return out.toString();
+    }
     private static String caller(String method) {
         StackTraceElement[] stack = new Throwable().getStackTrace();
         int last = -1;

@@ -100,6 +100,14 @@ public final class SemBlurBridge implements Backdrop {
     /** Main thread only: true while this bridge itself calls semSetBlurInfo (see the blur guard). */
     private static boolean applying;
     public static boolean applying() { return applying; }
+    /**
+     * The view a bridge is applying its blur to, only for the duration of that call. Samsung's
+     * semSetBlurInfo installs a BackgroundBlurDrawable through setBackground(), and SystemUI's
+     * NotificationBackgroundView answers that with a nested semSetBlurInfo(null) that erased the
+     * blur we had just set (device log: every apply followed in the same ms by a null on that view).
+     */
+    private static View applyingHost;
+    public static View applyingHost() { return applyingHost; }
     public static boolean available() {
         try {
             Class<?> info = Class.forName(INFO);
@@ -230,7 +238,7 @@ public final class SemBlurBridge implements Backdrop {
         posted = false;
         if (released || pending == null) return;
         try {
-            applying = true;
+            applying = true; applyingHost = host;
             java.lang.reflect.Field f = infoField(infoClass);
             Object before = f != null ? f.get(host) : null;
             set.invoke(host, pending);
@@ -244,7 +252,7 @@ public final class SemBlurBridge implements Backdrop {
             }
         }
         catch (ReflectiveOperationException | RuntimeException e) { Probe.error("SEM_BLUR_APPLY_FAILED", e); }
-        finally { applying = false; }
+        finally { applying = false; applyingHost = null; }
     }
     /**
      * Applies the last blur again. Called on events that can drop it (shade opened or closed, row

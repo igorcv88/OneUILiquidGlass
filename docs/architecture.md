@@ -251,3 +251,14 @@ Cause: SystemUI sets its own blur on notification background views once, when th
 Fix:
 - The blur guard records the last blur that SystemUI (or a theme) set on each notification view.
 - On release, `SemBlurBridge` restores that blur instead of clearing it, and logs `SEM_BLUR_NATIVE_RESTORED`.
+
+### Nested clear blocked (2026-10-08, sixth device pass)
+
+Device evidence: Samsung's `View.semSetBlurInfo` logs every call. Each of our applies on a `NotificationBackgroundView` was followed, in the same millisecond and nested inside it, by `semSetBlurInfo(null)` on the same view. `SEM_BLUR_SWALLOWED held=null` was the result, and this is why the heads-up body showed no blur.
+
+The framework code, read from this firmware's `framework.jar`, shows the path:
+1. Window mode calls `invalidateBlurBackground()`.
+2. That installs a `BackgroundBlurDrawable` through `setBackground()`.
+3. `View` itself never passes null to `semSetBlurInfo`, so the clear comes from SystemUI's notification view reacting to the background change.
+
+Fix: while a bridge applies, the blur guard blocks a nested `semSetBlurInfo(null)` aimed at that same view. It logs `SEM_BLUR_NESTED_CLEAR` with the issuing frames, so the culprit is named on the next device log.
