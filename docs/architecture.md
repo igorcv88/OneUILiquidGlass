@@ -239,3 +239,15 @@ Changes:
 - **Corners.** A shape the corner setters cannot express uses the clip path. It no longer falls back to the native background.
 - **Fallback log.** A geometry rejection is no longer sticky. Every frame where the native background draws instead of the glass is logged as `NATIVE_FALLBACK reason=…`, deduplicated per reason change.
 - **Caller.** `SEM_BLUR_FOREIGN` names the three frames after the last `semSetBlurInfo` frame instead of filtering class names.
+
+### Native blur restored on release (2026-10-08, fifth device pass)
+
+Device evidence:
+- After a test that switched lockscreen rows to `backdrop=off` and back, lockscreen notifications lost their frosted look and showed only the refraction.
+- Cross-window blur was disabled in every log, including the earlier passes where the lockscreen looked right. That rules it out as the cause.
+
+Cause: SystemUI sets its own blur on notification background views once, when the row is created; on the lockscreen this is the frost under the refraction. `SemBlurBridge.release()` cleared the view's blur to `null`, which erased that native blur for the row's lifetime.
+
+Fix:
+- The blur guard records the last blur that SystemUI (or a theme) set on each notification view.
+- On release, `SemBlurBridge` restores that blur instead of clearing it, and logs `SEM_BLUR_NATIVE_RESTORED`.

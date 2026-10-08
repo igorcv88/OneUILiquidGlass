@@ -184,6 +184,10 @@ public final class HeadsUpHooks {
                     if (SemBlurBridge.applying() || !(p.thisObject instanceof View)) return;
                     try {
                         View v = (View) p.thisObject;
+                        // Remember SystemUI's own blur on notification views so a released material
+                        // hands it back instead of clearing it.
+                        if (states.containsKey(v) || (rowClass != null && rowClass.isInstance(v))
+                                || BACKGROUND.equals(v.getClass().getName())) SemBlurBridge.recordNative(v, p.args[0]);
                         boolean managed = compositorState(v) != null;
                         String caller = foreignBlurTraces > 0 && foreignBlurLogged.size() < 40 ? blurCaller() : null;
                         if (caller != null) foreignBlurTraces--;

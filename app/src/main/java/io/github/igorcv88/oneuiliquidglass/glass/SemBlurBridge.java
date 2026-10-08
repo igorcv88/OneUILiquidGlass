@@ -75,6 +75,14 @@ public final class SemBlurBridge implements Backdrop {
     private static Method optional(Class<?> c, String name, Class<?> arg) {
         try { return c.getMethod(name, arg); } catch (NoSuchMethodException e) { return null; }
     }
+    /**
+     * The blur SystemUI itself last set on each notification view (it does this once, e.g. under
+     * lockscreen notifications), recorded by the blur guard. Releasing a bridge restores it: clearing
+     * to null erased that native blur for the row's lifetime.
+     */
+    private static final java.util.Map<View, Object> NATIVE = new java.util.WeakHashMap<>();
+    /** Main thread only; called by the blur guard for every semSetBlurInfo call not made by a bridge. */
+    public static void recordNative(View view, Object info) { NATIVE.put(view, info); }
     /** Main thread only: true while this bridge itself calls semSetBlurInfo (see the blur guard). */
     private static boolean applying;
     public static boolean applying() { return applying; }
@@ -238,8 +246,10 @@ public final class SemBlurBridge implements Backdrop {
         released = true; pending = null;
         host.removeCallbacks(apply);
         host.removeOnLayoutChangeListener(resize);
-        try { applying = true; set.invoke(host, (Object) null); }
+        Object restore = NATIVE.get(host);
+        try { applying = true; set.invoke(host, restore); }
         catch (ReflectiveOperationException | RuntimeException e) { Probe.error("SEM_BLUR_CLEAR_FAILED", e); }
         finally { applying = false; }
+        if (restore != null) Probe.log("SEM_BLUR_NATIVE_RESTORED", "viewId=" + Integer.toHexString(System.identityHashCode(host)));
     }
 }
