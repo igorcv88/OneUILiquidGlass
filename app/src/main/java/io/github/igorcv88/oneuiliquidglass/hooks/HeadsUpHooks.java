@@ -169,6 +169,8 @@ public final class HeadsUpHooks {
         if (enabled && (!drawHook || !shadeHook)) Probe.log("GLASS_UNAVAILABLE", "drawHook=" + drawHook + " shadeHook=" + shadeHook);
     }
     private final Set<String> foreignBlurLogged = new java.util.HashSet<>();
+    /** Stack walks are costly on a per-frame path; provenance is only gathered for the first calls. */
+    private int foreignBlurTraces = 200;
     /**
      * Another component (a Theme Park theme on One UI) can set its own Samsung blur on the same
      * notification views and replace ours: on device that left the blur in a band in the middle of
@@ -188,8 +190,9 @@ public final class HeadsUpHooks {
                             s = bg instanceof View ? states.get(bg) : null;
                         }
                         boolean managed = s != null && s.glass != null && (s.glassKind == Backdrop.Kind.SAMSUNG || s.glass.hybrid());
-                        String caller = blurCaller();
-                        if (foreignBlurLogged.size() < 40 && foreignBlurLogged.add(v.getClass().getName() + "|" + caller + "|" + managed)) {
+                        String caller = foreignBlurTraces > 0 && foreignBlurLogged.size() < 40 ? blurCaller() : null;
+                        if (caller != null) foreignBlurTraces--;
+                        if (caller != null && foreignBlurLogged.add(v.getClass().getName() + "|" + caller + "|" + managed)) {
                             Probe.log("SEM_BLUR_FOREIGN", "view=" + v.getClass().getName() + " id=" + Integer.toHexString(System.identityHashCode(v))
                                     + " managed=" + managed + " blocked=" + managed + " caller=" + caller + " info=" + (p.args[0] == null ? "null" : "set"));
                         }
