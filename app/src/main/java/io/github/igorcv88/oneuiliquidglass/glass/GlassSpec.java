@@ -61,4 +61,16 @@ public final class GlassSpec {
         double theta2 = Math.asin(Math.max(-1, Math.min(1, Math.sin(theta1) / ior)));
         return bevel * s * Math.tan(theta1 - theta2);
     }
+    /**
+     * Stylised lens shift (px) at {@code depth} px inside the outline: {@code ratio x bevel x (1 - depth/bevel)^2}.
+     * Sampling at depth + shift, the map's slope is {@code 1 - 2 ratio (1 - depth/bevel)}, never below
+     * {@code 1 - 2 ratio}: with ratio <= 0.45 it stays monotonic (no fold, magnification <= 10x), the
+     * bound from the WaEnhancerX laudo (LG-01). Mirrors lensAt() in {@link LiquidGlassShader#REFRACT_SOURCE}.
+     */
+    public static double lensShift(double depth, double bevel, double ratio) {
+        if (bevel <= 0 || depth >= bevel || depth < 0) return 0;
+        double e = 1 - depth / bevel;
+        return ratio * bevel * e * e;
+    }
 }
+

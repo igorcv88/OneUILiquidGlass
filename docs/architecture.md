@@ -133,3 +133,49 @@ New Samsung knobs:
 
 Any knob change bumps `Tuning.generation`, which re-applies the Samsung blur and redraws the row on its next pre-draw.
 
+## Hybrid heads-up and lens profile (2026-10-08, after device test)
+
+### What the device test showed
+
+- **Lock wallpaper.** The lock wallpaper on the test device is a live wallpaper (`WALLPAPER_BACKDROP_UNAVAILABLE reason=live`), so lockscreen rows fell back to the Samsung blur.
+- **Samsung blur with the `spatial` curve.** With the `spatial` color-curve preset, screenshots showed the backdrop sharp behind heads-up rows: the Samsung blur did not render. `semcurve` now defaults to `none`.
+- **Compositor blur alone.** It reads as a grey card with no lens, which is not a liquid-glass material.
+
+### Policy in `auto`
+
+**Heads-up rows** use `HybridBackdrop`:
+- The body is the Samsung compositor blur, so it stays live.
+- The lens band is drawn from captures at `rimhz` (default 60 Hz), with a Gaussian of `rimblur` px (default 24) before refraction.
+- The shader runs with `rimOnly`: it is opaque over the first 35 % of the bevel, fades to transparent at the bevel and is transparent in the body.
+- Only that band can trail motion, by about one to two frames at 60 Hz, instead of the whole card lagging at 15 Hz.
+- The rim uses the Samsung veil colour and no saturation boost, so it matches the body.
+
+**Lockscreen rows** use the still wallpaper when there is one. Over a live wallpaper they use a capture at `hzkg`: the keyguard barely moves, so capture lag does not show.
+
+When the capture is unavailable (secure content, failures), heads-up rows drop to the plain Samsung blur.
+
+### Lens profile
+
+The default profile is the bounded-slope lens recommended by the WaEnhancerX laudo (LG-01):
+
+```
+shift = lens × bevel × (1 − depth/bevel)²
+```
+
+- Its sampling slope is at least 1 − 2 × lens, so the image never folds.
+- `lens` defaults to 0.30 (21 px at a 70 px bevel) and is capped at 0.45.
+- `GlassSpec.lensShift` mirrors the shader formula, and a unit test checks the slope bound.
+
+The physical Snell model (about 16 px, zero at the outline and weak to the eye) is still available with `debug.oulg.profile=snell`.
+
+### Knobs added
+
+| Property | Default | Meaning |
+|---|---|---|
+| `profile` | `lens` | `lens` or `snell` |
+| `lens` | 0.30 | Lens shift at the outline as a fraction of the bevel, 0–0.45 |
+| `rimhz` | 60 | Capture rate for the heads-up lens band, 1–120 Hz |
+| `rimblur` | 24 | Gaussian radius of the lens band, px |
+
+`hz` and `hzkg` now accept up to 120 Hz.
+

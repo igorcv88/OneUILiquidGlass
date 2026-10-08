@@ -60,6 +60,8 @@ public final class GlassDrawable extends Drawable {
         catch (RuntimeException e) { Probe.error("SHADER_UNAVAILABLE", e); }
     }
     public boolean failed() { return failed; }
+    /** Compositor-blur body with a captured lens band (see {@link HybridBackdrop}). */
+    public boolean hybrid() { return backdrop instanceof HybridBackdrop; }
     /** A sampled backdrop that can no longer be used: the owner swaps to another backdrop kind. */
     public boolean stale() {
         return backdrop instanceof SampledBackdrop && (refract == null || ((SampledBackdrop) backdrop).unavailable());
@@ -90,7 +92,15 @@ public final class GlassDrawable extends Drawable {
             Rect bounds = getBounds(); rect.set(bounds);
             clip.reset(); clip.addRoundRect(rect, radii, Path.Direction.CW);
             canvas.clipPath(clip);
-            if (refract != null && drawSampled(canvas, bounds)) return;
+            if (refract != null && drawSampled(canvas, bounds)) {
+                if (backdrop instanceof HybridBackdrop) {
+                    // The lens band is drawn; the body is the compositor blur: veil both alike.
+                    fill.setColor(fillColor);
+                    fill.setAlpha(android.graphics.Color.alpha(fillColor) * alpha / 255);
+                    canvas.drawRect(rect, fill);
+                }
+                return;
+            }
             backdrop.draw(canvas, bounds);
             fill.setColor(fillColor);
             fill.setAlpha(android.graphics.Color.alpha(fillColor) * alpha / 255);
@@ -140,8 +150,10 @@ public final class GlassDrawable extends Drawable {
             boundFrame = frame;
         }
         Tuning t = Tuning.get();
+        boolean hybrid = backdrop instanceof HybridBackdrop;
+        float radius = hybrid ? t.rimBlur : t.blur;
         view.getLocationOnScreen(screen);
-        int margin = (int) Math.ceil(t.blur * 2f) + 2;
+        int margin = (int) Math.ceil(radius * 2f) + 2;
         int w = bounds.width() + 2 * margin, h = bounds.height() + 2 * margin;
         if (node == null) node = new RenderNode("oulg-glass");
         node.setPosition(0, 0, w, h);
@@ -158,15 +170,20 @@ public final class GlassDrawable extends Drawable {
         edgeUniforms(refract, bounds);
         refract.setFloatUniform("origin", (float) margin, (float) margin);
         refract.setFloatUniform("refractScale", t.refract);
+        refract.setFloatUniform("lensRatio", t.lens);
+        refract.setFloatUniform("profile", t.profile.equals("snell") ? 1f : 0f);
+        refract.setFloatUniform("rimOnly", hybrid ? 1f : 0f);
         refract.setFloatUniform("ior", t.ior);
-        refract.setFloatUniform("saturation", t.saturation);
+        // The hybrid rim must match the compositor body's colour, which has no saturation boost.
+        refract.setFloatUniform("saturation", hybrid ? 1f : t.saturation);
         refract.setFloatUniform("dispersion", t.dispersion);
-        int veil = t.tintAlpha >= 0 ? (tintColor & 0x00ffffff) | (t.tintAlpha << 24) : tintColor;
+        int override = hybrid ? t.semAlpha : t.tintAlpha;
+        int veil = override >= 0 ? (tintColor & 0x00ffffff) | (override << 24) : tintColor;
         premultiplied(refract, "tint", veil);
-        premultiplied(refract, "fillColor", fillColor);
+        premultiplied(refract, "fillColor", hybrid ? 0 : fillColor);
         RenderEffect optics = RenderEffect.createRuntimeShaderEffect(refract, "backdrop");
-        if (t.blur >= 0.5f) {
-            if (blur == null || blurRadius != t.blur) { blur = RenderEffect.createBlurEffect(t.blur, t.blur, Shader.TileMode.CLAMP); blurRadius = t.blur; }
+        if (radius >= 0.5f) {
+            if (blur == null || blurRadius != radius) { blur = RenderEffect.createBlurEffect(radius, radius, Shader.TileMode.CLAMP); blurRadius = radius; }
             optics = RenderEffect.createChainEffect(optics, blur);
         }
         node.setRenderEffect(optics);

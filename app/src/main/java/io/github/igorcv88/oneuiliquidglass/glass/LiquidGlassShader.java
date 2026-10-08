@@ -104,13 +104,18 @@ public final class LiquidGlassShader {
     /**
      * Opaque material over a sampled backdrop, run as a RenderEffect whose input {@code backdrop} is
      * the captured image, already Gaussian-blurred, in the effect node's own pixels (origin is the
-     * glass bounds' offset inside that node). Each channel is displaced inward by the Snell shift
-     * (scaled by refractScale; red bends less, blue more by +-dispersion), saturated, veiled by tint
-     * and fill, then lit and shadowed by edge().
+     * glass bounds' offset inside that node). Each channel is displaced inward by the lens profile
+     * (lensAt, bounded slope; or the Snell shift scaled by refractScale when profile = 1; red bends
+     * less, blue more by +-dispersion), saturated, veiled by tint and fill, then lit and shadowed by
+     * edge(). With rimOnly the output fades to transparent across the bevel so a live compositor
+     * blur shows through the body.
      */
     public static final String REFRACT_SOURCE = COMMON + """
         uniform shader backdrop;
         uniform float refractScale;
+        uniform float lensRatio;
+        uniform float profile;
+        uniform float rimOnly;
         uniform float ior;
         uniform float saturation;
         uniform float dispersion;
@@ -127,6 +132,13 @@ public final class LiquidGlassShader {
             float t2 = asin(clamp(sin(t1) / ior, -1.0, 1.0));
             return b * s * tan(t1 - t2);
         }
+        float lensAt(float depth, float b) {
+            if (depth >= b || b <= 0.0) {
+                return 0.0;
+            }
+            float e = 1.0 - depth / b;
+            return lensRatio * b * e * e;
+        }
         half3 tap(float2 q) {
             return backdrop.eval(q).rgb;
         }
@@ -139,7 +151,13 @@ public final class LiquidGlassShader {
                 return half4(0.0);
             }
             float2 n = outward(p, hs);
-            float s = shiftAt(max(-d, 0.0), bevel) * refractScale;
+            float depth = max(-d, 0.0);
+            // rimOnly: the compositor blur fills the body live; only the lens band is drawn here.
+            float rim = rimOnly > 0.5 ? 1.0 - smoothstep(bevel * 0.35, bevel, depth) : 1.0;
+            if (rim <= 0.004) {
+                return half4(0.0);
+            }
+            float s = profile > 0.5 ? shiftAt(depth, bevel) * refractScale : lensAt(depth, bevel);
             half3 c;
             if (s > 0.25 && dispersion > 0.0) {
                 c = half3(tap(coord - n * (s * (1.0 - dispersion))).r,
@@ -154,7 +172,8 @@ public final class LiquidGlassShader {
             c = c * (1.0 - fillColor.a) + fillColor.rgb;
             half4 e = edge(p, hs, d, n);
             c = c * (1.0 - e.a) + e.rgb;
-            return half4(clamp(c, 0.0, 1.0) * half(cover), half(cover));
+            half a = half(cover * rim);
+            return half4(clamp(c, 0.0, 1.0) * a, a);
         }
         """;
 }
