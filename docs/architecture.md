@@ -262,3 +262,27 @@ The framework code, read from this firmware's `framework.jar`, shows the path:
 3. `View` itself never passes null to `semSetBlurInfo`, so the clear comes from SystemUI's notification view reacting to the background change.
 
 Fix: while a bridge applies, the blur guard blocks a nested `semSetBlurInfo(null)` aimed at that same view. It logs `SEM_BLUR_NESTED_CLEAR` with the issuing frames, so the culprit is named on the next device log.
+
+### SurfaceFlinger probe, phase 1 (2026-10-08)
+
+Facts that make a compositor-side refraction feasible on this firmware:
+- RenderEngine runs on **GLES (Ganesh)** and is linked statically into the stripped `surfaceflinger` binary.
+- The binary imports `glShaderSource` and `eglGetProcAddress` from the GL libraries, so a library loaded first can intercept every shader it compiles.
+- With the module's Samsung blur working, the heads-up card is a SurfaceFlinger blur region with its exact geometry, for example `50,152–1390,368 | 1340×216 | blur 180 | corner 108` on `VRI-NotificationShade`.
+
+`sfhook/` is a KernelSU module that only reads (phase 1).
+
+Install (`customize.sh`):
+- Refuses any firmware fingerprint other than `S938BXXUCZZIC`.
+- Copies `/system/bin/surfaceflinger` into the module and patches it on the device with `dtneeded`. No Samsung binary leaves the phone.
+  - `dtneeded` replaces the `DT_DEBUG` entry with a `DT_NEEDED` entry at the head of the list. The name reuses the `SurfaceFlingerProp.so` suffix of an existing `.dynstr` string.
+  - The change is 88 bytes, all inside `.dynamic`.
+- Installs `oulg_sf.c` under that name.
+
+At runtime:
+- `oulg_sf.c` interposes `glShaderSource` and `eglGetProcAddress`.
+- It logs each distinct shader source once under the logcat tag `OULG_SF`, then passes the call through unchanged.
+
+Safety: a boot watchdog in `service.sh` disables the module and reboots if surfaceflinger restarts 4 times within 90 s.
+
+Build: `ANDROID_NDK=… sfhook/build.sh` produces `sfhook/build/oulg-sf-phase1.zip`.

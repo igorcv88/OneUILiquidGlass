@@ -1,0 +1,6 @@
+id=oulg_sf
+name=OneUI Liquid Glass - SurfaceFlinger probe
+version=v0.1-phase1
+versionCode=1
+author=igorcv88
+description=Phase 1 (read-only): logs RenderEngine shader sources (logcat tag OULG_SF). Changes nothing on screen.
