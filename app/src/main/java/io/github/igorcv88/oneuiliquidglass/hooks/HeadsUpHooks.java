@@ -174,6 +174,8 @@ public final class HeadsUpHooks {
         if (enabled && (!drawHook || !shadeHook)) Probe.log("GLASS_UNAVAILABLE", "drawHook=" + drawHook + " shadeHook=" + shadeHook);
     }
     private final Set<String> foreignBlurLogged = new java.util.HashSet<>();
+    private int windowBlurLogs = 300, scrimAlphaLogs = 400;
+    private final java.util.Map<View, Float> scrimLogged = new WeakHashMap<>();
     /** Stack walks are costly on a per-frame path; provenance is only gathered for the first calls. */
     private int foreignBlurTraces = 200;
     /**
@@ -206,6 +208,12 @@ public final class HeadsUpHooks {
                         // hands it back instead of clearing it.
                         if (states.containsKey(v) || (rowClass != null && rowClass.isInstance(v))
                                 || BACKGROUND.equals(v.getClass().getName())) SemBlurBridge.recordNative(v, p.args[0]);
+                        if (Probe.trace && windowBlurLogs > 0 && v.getRootView() == v) {
+                            // Window-level blur (the panel blur on NotificationShadeWindowView): every call, with the state.
+                            windowBlurLogs--;
+                            Probe.log("WINDOW_BLUR", "view=" + v.getClass().getSimpleName() + " barState=" + barState + " shade=" + shadeExpanded
+                                    + " info=" + Probe.fields(p.args[0]));
+                        }
                         boolean managed = compositorState(v) != null;
                         String caller = Probe.trace && foreignBlurTraces > 0 && foreignBlurLogged.size() < 40 ? blurCaller() : null;
                         if (caller != null) foreignBlurTraces--;
@@ -337,11 +345,22 @@ public final class HeadsUpHooks {
             @Override protected void beforeHookedMethod(MethodHookParam p) {
                 if (!(p.thisObject instanceof View) || !(p.args.length > 0 && p.args[0] instanceof Float)) return;
                 View v = (View) p.thisObject;
+                if (Probe.trace && scrimAlphaLogs > 0) logScrimAlpha(v, (Float) p.args[0]);
                 if (!notificationsScrim(v)) return;
                 if (notificationScrims.add(v)) Probe.log("SCRIM_NOTIFICATIONS", "id=" + idName(v) + " view=" + Integer.toHexString(System.identityHashCode(v)));
                 if (barState != null && barState == Eligibility.BAR_KEYGUARD && (Float) p.args[0] > 0f) p.args[0] = 0f;
             }
         });
+    }
+    /** Trace only: scrim alpha steps (0, 1, or a move of 0.15 or more) with the bar state. */
+    private void logScrimAlpha(View v, float a) {
+        Float last = scrimLogged.get(v);
+        boolean step = last == null || Math.abs(a - last) >= 0.15f || (a == 0f) != (last == 0f) || (a >= 1f) != (last >= 1f);
+        if (!step) return;
+        scrimLogged.put(v, a);
+        scrimAlphaLogs--;
+        Probe.log("SCRIM_ALPHA", "id=" + idName(v) + " alpha=" + a + " barState=" + barState + " shade=" + shadeExpanded
+                + " tint=" + Probe.hex(Reflect.read(v, "mTintColor")) + " shown=" + v.isShown());
     }
     private void clampNotificationScrims() {
         for (View v : new ArrayList<>(notificationScrims)) {
