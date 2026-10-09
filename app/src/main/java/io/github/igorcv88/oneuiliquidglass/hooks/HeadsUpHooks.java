@@ -731,7 +731,13 @@ public final class HeadsUpHooks {
         }
         void refreshLens() {
             if (semBridge == null) return;
-            try { semBridge.setLens(Eligibility.lens(barState, shadeExpanded, Reflect.bool(row.get(), "isOnKeyguard", "mOnKeyguard"))); }
+            boolean lens = Eligibility.lens(barState, shadeExpanded, Reflect.bool(row.get(), "isOnKeyguard", "mOnKeyguard"));
+            // A pull-down from the lockscreen switches to the shade-over-keyguard state at once, while the
+            // lockscreen cards are still on screen sliding down (or springing back on a partial pull).
+            // Switching them to the shade material then flashed them gray once per move; a card keeps its
+            // lens through that state until it is hidden. Cards first shown in the shade get none.
+            if (!lens && barState != null && barState == Eligibility.BAR_SHADE_LOCKED && semBridge.built() && semBridge.lens()) return;
+            try { semBridge.setLens(lens); }
             catch (ReflectiveOperationException | RuntimeException e) { Probe.error("SEM_BLUR_LENS_FAILED", e); }
         }
         void release() {

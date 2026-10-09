@@ -238,6 +238,9 @@ public final class SemBlurBridge implements Backdrop {
      * Cards in the expanded shade stay a diffuse blur; the others carry the lens tag. A change
      * rebuilds the blur with the last inputs.
      */
+    public boolean lens() { return lens; }
+    /** Whether this bridge has applied a blur yet (a new one has not, and takes the current state). */
+    public boolean built() { return built; }
     public void setLens(boolean on) throws ReflectiveOperationException {
         if (lens == on) return;
         lens = on;
