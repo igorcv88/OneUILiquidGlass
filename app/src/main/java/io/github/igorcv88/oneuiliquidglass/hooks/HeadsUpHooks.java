@@ -154,6 +154,7 @@ public final class HeadsUpHooks {
         installShade();
         installBarState();
         installScrimClamp();
+        installCapturedBlurTrace();
         for (String manager : new String[]{"com.android.systemui.statusbar.notification.headsup.HeadsUpManagerImpl", "com.android.systemui.statusbar.policy.BaseHeadsUpManager", "com.android.systemui.statusbar.policy.HeadsUpManager"}) {
             Class<?> c = resolve(manager);
             for (String n : new String[]{"showNotification", "updateNotification", "removeNotification", "createHeadsUpEntry", "setEntryPinned"}) hook(c, n, new XC_MethodHook() {
@@ -226,6 +227,11 @@ public final class HeadsUpHooks {
                             windowBlurLogs--;
                             Probe.log("WINDOW_BLUR", "view=" + v.getClass().getSimpleName() + " barState=" + barState + " shade=" + shadeExpanded
                                     + " info=" + Probe.fields(p.args[0]));
+                        }
+                        if (Probe.trace && capturedLogs > 0 && p.args[0] != null && v.getRootView() != v
+                                && Boolean.TRUE.equals(Reflect.read(p.args[0], "mHasCapturedBitmap"))) {
+                            capturedLogs--;
+                            Probe.log("CAPTURED_BLUR_INFO", "view=" + v.getClass().getName() + " barState=" + barState + " info=" + Probe.fields(p.args[0]));
                         }
                         boolean managed = compositorState(v) != null;
                         if (Probe.trace && rowBlurLogs > 0 && ((rowClass != null && rowClass.isInstance(v)) || BACKGROUND.equals(v.getClass().getName()))) {
@@ -358,6 +364,40 @@ public final class HeadsUpHooks {
      * back until the next tap. Behind opaque native cards it never shows; behind glass it turned
      * lockscreen cards dark. On the keyguard state it is held at 0.
      */
+    private int capturedLogs = 400;
+    private String capturedLast;
+    /**
+     * Trace only: Samsung's CapturedBlurContainer (gray #5d5d5d background) during gestures. Every call
+     * on it, and alpha/visibility set on it from outside, with its state and the bar state.
+     */
+    private void installCapturedBlurTrace() {
+        Class<?> c = resolve("com.android.systemui.statusbar.phone.CapturedBlurContainer");
+        if (c == null) return;
+        XC_MethodHook log = new XC_MethodHook() {
+            @Override protected void afterHookedMethod(MethodHookParam p) {
+                if (!Probe.trace || capturedLogs <= 0 || !(p.thisObject instanceof View)) return;
+                View v = (View) p.thisObject;
+                if (!v.getClass().getName().endsWith("CapturedBlurContainer")) return;
+                StringBuilder a = new StringBuilder();
+                for (Object o : p.args) a.append(a.length() == 0 ? "" : ",").append(o == null ? "null" : o instanceof Number || o instanceof Boolean ? o.toString() : o.getClass().getSimpleName());
+                String state = "vis=" + v.getVisibility() + " alpha=" + v.getAlpha() + " size=" + v.getWidth() + "x" + v.getHeight() + " shown=" + v.isShown();
+                String line = ((Method) p.method).getName() + "(" + a + ") " + state;
+                if (line.equals(capturedLast)) return;
+                capturedLast = line;
+                capturedLogs--;
+                Probe.log("CAPTURED_BLUR", line + " barState=" + barState + " shade=" + shadeExpanded + " bg=" + Probe.describe(v.getBackground(), 0));
+            }
+        };
+        try {
+            for (Method m : c.getDeclaredMethods()) {
+                if (java.lang.reflect.Modifier.isAbstract(m.getModifiers())) continue;
+                try { XposedBridge.hookMethod(m, log); } catch (RuntimeException | LinkageError ignored) { }
+            }
+            for (String n : new String[]{"setAlpha", "setVisibility", "setTranslationY", "setBackground"}) {
+                for (Method m : View.class.getDeclaredMethods()) if (m.getName().equals(n) && m.getParameterCount() == 1) XposedBridge.hookMethod(m, log);
+            }
+        } catch (RuntimeException | LinkageError e) { Probe.error("CAPTURED_TRACE_FAILED", e); }
+    }
     private void installScrimClamp() {
         Class<?> c = resolve("com.android.systemui.scrim.ScrimView");
         hook(c, "setViewAlpha", new XC_MethodHook() {

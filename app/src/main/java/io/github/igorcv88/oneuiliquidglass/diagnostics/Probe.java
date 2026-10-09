@@ -202,7 +202,7 @@ public final class Probe {
             for (int i = 0; i < g.getChildCount(); i++) walkPainters(g.getChildAt(i), depth + 1, rowId, budget);
         }
     }
-    private static String describe(android.graphics.drawable.Drawable d, int depth) {
+    public static String describe(android.graphics.drawable.Drawable d, int depth) {
         if (d == null) return "null";
         StringBuilder b = new StringBuilder(d.getClass().getSimpleName()).append("{alpha=").append(d.getAlpha());
         if (d instanceof android.graphics.drawable.ColorDrawable) b.append(" color=").append(hex(((android.graphics.drawable.ColorDrawable) d).getColor()));
