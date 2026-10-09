@@ -43,6 +43,11 @@ public final class Tuning {
      * left to refract. -1 falls back to semradius.
      */
     public final int semRadiusLens;
+    /**
+     * Compositor lens strength: shift at the outline as a fraction of the bevel (0.1-1.2). It
+     * travels in the corner-radius tag, so a change shows without restarting SurfaceFlinger.
+     */
+    public final float sfLens;
     public final String semCurve;
     public final int semAlpha;
     /** Samsung blur region shape: auto|single|path|four|none (see SemBlurBridge.applyShape). */
@@ -84,6 +89,7 @@ public final class Tuning {
         tintAlpha = Math.round(clamp(number("tint", -1f), -1f, 255f));
         semRadius = Math.round(clamp(number("semradius", -1f), -1f, 400f));
         semRadiusLens = Math.round(clamp(number("semradiuslens", 12f), -1f, 400f));
+        sfLens = clamp(number("sflens", 0.45f), 0.1f, 1.2f);
         // "spatial" stopped the blur rendering on S938BXXUCZZIC (sharp backdrop in screenshots): off by default.
         semCurve = prop("semcurve", "none");
         semAlpha = Math.round(clamp(number("semalpha", -1f), -1f, 255f));
@@ -111,7 +117,7 @@ public final class Tuning {
         return "backdrop=" + backdrop + " profile=" + profile + " lens=" + lens + " rimhz=" + rimHz + " rimblur=" + rimBlur
                 + " refract=" + refract + " ior=" + ior + " blur=" + blur + " sat=" + saturation
                 + " disp=" + dispersion + " hz=" + hz + " hzkg=" + keyguardHz + " tint=" + tintAlpha
-                + " semradius=" + semRadius + " semradiuslens=" + semRadiusLens + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " perf=" + perf + " trace=" + trace;
+                + " semradius=" + semRadius + " semradiuslens=" + semRadiusLens + " sflens=" + sfLens + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " perf=" + perf + " trace=" + trace;
     }
 
     private static float clamp(float v, float lo, float hi) { return Float.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : lo; }

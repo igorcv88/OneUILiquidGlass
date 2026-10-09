@@ -8,8 +8,8 @@
 //
 // Vertex shaders of that op gain two outputs: voulg_tag = (tagged, radius px, half size px) and
 // voulg_vp = the position in the rect's normalized [-1, 1] space. The module tags its own cards
-// with a corner radius whose fraction is .625 (floor(r) - 0.375: never above the original radius,
-// so Skia does not clamp it on a pill whose radius is half its height). Fragment shaders that
+// with a corner radius whose fraction encodes the lens strength (see OULG_STRENGTH), below the
+// original radius so Skia does not clamp it on a pill whose radius is half its height. Fragment shaders that
 // sample one texture through vTransformedCoords then shift that sample inward near the rim of a
 // tagged card and add a rim highlight; any other draw keeps its exact output.
 //
@@ -28,6 +28,11 @@
 #define OULG_VS_POS_AT "gl_Position = vec4(devcoord, 0.0, 1.0);\n"
 #define OULG_FS_SAMPLE "texture(uTextureSampler_0_S1, vTransformedCoords_"
 #define OULG_FS_FINAL "sk_FragColor = output_S1 * outputCoverage_S0;"
+// The tag: the radius fraction lies in [0.55, 0.70] and carries the lens strength k (shift at the
+// outline as a fraction of the bevel), k = 0.1 + 1.1 * (fraction - 0.55) / 0.15. The rect must also
+// have whole-pixel sides: a window whose corner radius sweeps during an app-open animation is
+// scaled to fractional sizes, so a radius passing through the band does not pass for a card.
+#define OULG_STRENGTH(f, base) "(0.1 + 1.1 * clamp((" f " - " base ") / 0.15, 0.0, 1.0))"
 
 static int oulg_count(const char *src, const char *needle) {
     int n = 0;
@@ -83,9 +88,12 @@ static char *oulg_rewrite_vertex(const char *src, int full) {
         s = oulg_insert_after(s, 1, OULG_VS_RADII_AT, "highp vec2 oulg_r0 = radii;\n");
         s = oulg_insert_before(s, 1, OULG_VS_POS_AT,
             "{\n"
-            "highp vec2 oulg_hs = 1.0 / pixellength;\n"
+            "highp vec2 oulg_hs = vec2(length(skew.xz), length(skew.yw));\n"
             "highp float oulg_rpx = oulg_r0.x * oulg_hs.x;\n"
-            "voulg_tag = vec4((oulg_rpx > 40.0 && abs(fract(oulg_rpx) - 0.625) < 0.03) ? 1.0 : 0.0, oulg_rpx, oulg_hs);\n"
+            "highp float oulg_f = fract(oulg_rpx);\n"
+            "highp vec2 oulg_d = abs(fract(oulg_hs * 2.0 + 0.5) - 0.5);\n"
+            "bool oulg_ok = oulg_rpx > 40.0 && oulg_f > 0.54 && oulg_f < 0.71 && oulg_d.x < 0.02 && oulg_d.y < 0.02;\n"
+            "voulg_tag = vec4(oulg_ok ? " OULG_STRENGTH("oulg_f", "0.55") " : 0.0, oulg_rpx, oulg_hs);\n"
             "voulg_vp = vertexpos;\n"
             "}\n");
     } else {
@@ -94,7 +102,7 @@ static char *oulg_rewrite_vertex(const char *src, int full) {
     return s;
 }
 
-static char *oulg_rewrite_fragment(const char *src, float lens, int debug) {
+static char *oulg_rewrite_fragment(const char *src, int debug) {
     if (!strstr(src, "sk_FragColor") || strstr(src, "oulg_")) return NULL;
     if (oulg_count(src, OULG_FS_DECL_AT) != 1 || oulg_count(src, OULG_FS_SAMPLE) != 1 || oulg_count(src, OULG_FS_FINAL) != 1) return NULL;
     const char *call = strstr(src, OULG_FS_SAMPLE), *mainAt = strstr(src, "void main() {\n");
@@ -111,7 +119,7 @@ static char *oulg_rewrite_fragment(const char *src, float lens, int debug) {
         "highp vec2 oulg_ty = dFdy(%s);\n"
         "highp mat2 oulg_j = mat2(dFdx(voulg_vp), dFdy(voulg_vp));\n"
         "mediump float oulg_dbg = 0.0;\n"
-        "if (voulg_tag.x > 0.5 && abs(determinant(oulg_j)) > 1e-12) {\n"
+        "if (voulg_tag.x > 0.0 && abs(determinant(oulg_j)) > 1e-12) {\n"
         "  oulg_dbg = %s;\n"
         "  highp float oulg_r = voulg_tag.y;\n"
         "  highp vec2 oulg_hs = voulg_tag.zw;\n"
@@ -124,12 +132,12 @@ static char *oulg_rewrite_fragment(const char *src, float lens, int debug) {
         "    highp float oulg_t = 1.0 - oulg_depth / oulg_bevel;\n"
         // Outward unit direction in the rect's pixel axes, then an inward shift in normalized units.
         "    highp vec2 oulg_out = (oulg_v / oulg_l) * sign(voulg_vp);\n"
-        "    highp vec2 oulg_dvp = -oulg_out * (%.3f * oulg_bevel * oulg_t * oulg_t) / oulg_hs;\n"
+        "    highp vec2 oulg_dvp = -oulg_out * (voulg_tag.x * oulg_bevel * oulg_t * oulg_t) / oulg_hs;\n"
         "    highp vec2 oulg_ds = inverse(oulg_j) * oulg_dvp;\n"
         "    oulg_tc += oulg_tx * oulg_ds.x + oulg_ty * oulg_ds.y;\n"
         "  }\n"
         "}\n",
-        coords, coords, coords, debug ? "1.0" : "0.0", lens);
+        coords, coords, coords, debug ? "1.0" : "0.0");
     if (n <= 0 || (size_t) n >= sizeof block) return NULL;
 
     // Splice from the end backwards so earlier offsets stay valid.
@@ -144,9 +152,9 @@ static char *oulg_rewrite_fragment(const char *src, float lens, int debug) {
 }
 
 // Rounded-rect clip programs (CircularRRectEffect): the radius arrives as uradiusPlusHalf (r + 0.5)
-// and the rect inset by it as uinnerRect, in device pixels. With the tag fraction .625 on r, the
-// uniform's fraction is .125. Same lens; debug mode paints these cyan.
-static char *oulg_rewrite_clip(const char *src, float lens, int debug) {
+// and the rect inset by it as uinnerRect, in device pixels. The tag band [0.55, 0.70] on r is
+// [0.05, 0.20] on the uniform. Same lens and size check; debug mode paints these cyan.
+static char *oulg_rewrite_clip(const char *src, int debug) {
     if (!strstr(src, "sk_FragColor") || !strstr(src, "uradiusPlusHalf_S") || !strstr(src, "uinnerRect_S")) return NULL;
     if (strstr(src, "uinvRadiiXY") || strstr(src, "oulg_")) return NULL;
     char rect[64], rph[64], coords[64];
@@ -169,8 +177,12 @@ static char *oulg_rewrite_clip(const char *src, float lens, int debug) {
         "highp vec2 oulg_dy = dFdy(%s);\n"
         "mediump float oulg_dbg = 0.0;\n"
         "highp float oulg_rph = float(%s.x);\n"
-        "if (oulg_rph > 40.5 && abs(fract(oulg_rph) - 0.125) < 0.03) {\n"
+        "highp float oulg_f = fract(oulg_rph);\n"
+        "highp vec2 oulg_full = (%s.zw - %s.xy) + vec2(2.0 * (oulg_rph - 0.5));\n"
+        "highp vec2 oulg_d = abs(fract(oulg_full + 0.5) - 0.5);\n"
+        "if (oulg_rph > 40.5 && oulg_f > 0.04 && oulg_f < 0.21 && oulg_d.x < 0.02 && oulg_d.y < 0.02) {\n"
         "  oulg_dbg = %s;\n"
+        "  highp float oulg_k = " OULG_STRENGTH("oulg_f", "0.05") ";\n"
         "  highp float oulg_r = oulg_rph - 0.5;\n"
         "  highp vec2 oulg_p = sk_FragCoord.xy;\n"
         "  highp vec2 oulg_v = oulg_p - clamp(oulg_p, %s.xy, %s.zw);\n"
@@ -179,12 +191,12 @@ static char *oulg_rewrite_clip(const char *src, float lens, int debug) {
         "  highp float oulg_depth = oulg_r - oulg_l;\n"
         "  if (oulg_l > 0.0 && oulg_depth > 0.0 && oulg_depth < oulg_bevel) {\n"
         "    highp float oulg_t = 1.0 - oulg_depth / oulg_bevel;\n"
-        "    highp vec2 oulg_off = -(oulg_v / oulg_l) * (%.3f * oulg_bevel * oulg_t * oulg_t);\n"
+        "    highp vec2 oulg_off = -(oulg_v / oulg_l) * (oulg_k * oulg_bevel * oulg_t * oulg_t);\n"
         "%s"
         "    oulg_tc += oulg_dx * oulg_off.x + oulg_dy * oulg_off.y;\n"
         "  }\n"
         "}\n",
-        coords, coords, coords, rph, debug ? "1.0" : "0.0", rect, rect, lens,
+        coords, coords, coords, rph, rect, rect, debug ? "1.0" : "0.0", rect, rect,
         flip ? "    oulg_off.y *= u_skRTFlip.y;\n" : "");
     if (n <= 0 || (size_t) n >= sizeof block) return NULL;
     char *s = oulg_splice(src, (size_t) (final - src), 0, "output_S1.rgb = mix(output_S1.rgb, vec3(0.0, output_S1.a, output_S1.a), oulg_dbg * 0.6);\n");

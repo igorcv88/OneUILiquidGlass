@@ -371,6 +371,16 @@ Link safety: Skia compiles a program's fragment shader before its vertex shader.
   - Both are read when shaders compile.
   - On the 147-shader device dump: 12 vertex, 26 FillRRect and 13 clip rewrites, all compile.
 
+### Debug tint result and live lens (2026-10-09, later)
+
+`debug.oulg.sf.debug=1` painted lockscreen and heads-up cards magenta. The tag reaches SurfaceFlinger, and `FillRRectOp` draws the blur region. Expanded-shade cards stayed untinted, as designed.
+
+The tint also flashed on every app launch. A launching window's corner radius sweeps continuously, and some frames hit the tag band.
+
+Changes in v0.5:
+- **Whole-pixel sides.** A tagged rect must also have sides that are whole pixels: the half axes come from `skew` and the full size from the clip inset. A window scaled mid-animation is fractional.
+- **Live lens strength.** The tag fraction now spans [0.55, 0.70] and encodes the lens strength `k = 0.1 + 1.1·(f − 0.55)/0.15`. The module sets it from `debug.oulg.sflens` (default 0.45). The strength therefore changes live, without a SurfaceFlinger restart; the `debug.oulg.sf.lens` property is gone.
+
 ## Future work
 
 - **Separate blur for the notification center and the control center.** Theme Park and HomeUp set a single blur amount for both panels. The user runs 12 %: lower leaves the control center unreadable, higher over-blurs the notification list. A split needs its own investigation: find where SystemUI applies the panel blur, whether the two panels are separate blur regions or one window, and whether the module can own one of them.

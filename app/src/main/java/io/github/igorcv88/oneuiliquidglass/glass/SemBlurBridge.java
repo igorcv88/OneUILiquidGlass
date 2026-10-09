@@ -201,7 +201,7 @@ public final class SemBlurBridge implements Backdrop {
             case "none": return mode;
             case "single":
                 if (corner == null) break;
-                corner.invoke(b, Tuning.get().sfRefract && lens ? sfTag(radii[0]) : radii[0]);
+                corner.invoke(b, Tuning.get().sfRefract && lens ? sfTag(radii[0], Tuning.get().sfLens) : radii[0]);
                 return mode;
             case "path":
                 if (clipPath == null || host.getWidth() <= 0 || host.getHeight() <= 0) break;
@@ -218,12 +218,17 @@ public final class SemBlurBridge implements Backdrop {
         return "none";
     }
     /**
-     * Corner radius carrying the tag the sfhook shader rewrite looks for: fraction .625, read in
-     * SurfaceFlinger's rounded-rect vertex shader. floor(r) - 0.375 is never above r, so Skia keeps
-     * it on a pill whose radius is half its height (a larger radius is clamped and loses the tag).
-     * Off by at most 1.375 px; radii the shader ignores (40 px or less) stay untagged.
+     * Corner radius carrying the tag the sfhook shader rewrite looks for (sfhook/refract.h): a
+     * fraction in [0.55, 0.70] that encodes the lens strength k = 0.1 + 1.1 * (fraction - 0.55) / 0.15.
+     * floor(r) - 1 + fraction is never above r, so Skia keeps it on a pill whose radius is half its
+     * height (a larger radius is clamped and loses the tag). Off by at most 1.45 px; radii the shader
+     * ignores (40 px or less) stay untagged.
      */
-    static float sfTag(float radius) { return radius > 41f ? (float) Math.floor(radius) - 0.375f : radius; }
+    static float sfTag(float radius, float strength) {
+        if (radius <= 42f) return radius;
+        float s = Math.max(0f, Math.min(1f, (strength - 0.1f) / 1.1f));
+        return (float) Math.floor(radius) - 1f + 0.55f + 0.15f * s;
+    }
     /**
      * Cards in the expanded shade stay a diffuse blur; the others carry the lens tag. A change
      * rebuilds the blur with the last inputs.
