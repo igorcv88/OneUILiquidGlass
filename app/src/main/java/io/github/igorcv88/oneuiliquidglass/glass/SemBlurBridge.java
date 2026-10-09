@@ -196,7 +196,7 @@ public final class SemBlurBridge implements Backdrop {
             case "none": return mode;
             case "single":
                 if (corner == null) break;
-                corner.invoke(b, radii[0]);
+                corner.invoke(b, Tuning.get().sfRefract ? sfTag(radii[0]) : radii[0]);
                 return mode;
             case "path":
                 if (clipPath == null || host.getWidth() <= 0 || host.getHeight() <= 0) break;
@@ -212,6 +212,11 @@ public final class SemBlurBridge implements Backdrop {
         if (corner != null) { corner.invoke(b, radii[0]); return "single"; }
         return "none";
     }
+    /**
+     * Corner radius carrying the tag the sfhook shader rewrite looks for: fraction .125, which
+     * SurfaceFlinger passes on as radius + 0.5 = .625. Off by at most 0.875 px from the real radius.
+     */
+    static float sfTag(float radius) { return (float) Math.floor(radius) + 0.125f; }
     /** spatial|dim|ultra pick Samsung's presets for the current theme; "s,c,x0,x1,y0,y1" is explicit. */
     private void applyCurve(Object builder, String spec) {
         if (spec == null || spec.isEmpty() || spec.equals("none")) return;
