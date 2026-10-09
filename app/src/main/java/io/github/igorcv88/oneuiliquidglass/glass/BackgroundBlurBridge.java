@@ -52,7 +52,10 @@ public final class BackgroundBlurBridge implements Backdrop {
         float tl = radii[0], tr = radii[2], bl = radii[6], br = radii[4];
         if (lensMode) {
             Tuning t = Tuning.get();
-            px = lens && t.semRadiusLens >= 0 ? t.semRadiusLens : t.semRadius >= 0 ? t.semRadius : GlassSpec.SAMSUNG_RADIUS;
+            int lensPx = t.kgBlurRadius >= 0 ? t.kgBlurRadius : t.semRadiusLens;
+            px = lens && lensPx >= 0 ? lensPx : t.semRadius >= 0 ? t.semRadius : GlassSpec.SAMSUNG_RADIUS;
+            // The same veil as the Samsung path (semalpha over the Samsung tone).
+            if (t.semAlpha >= 0) tint = (tint & 0x00ffffff) | (t.semAlpha << 24);
             if (lens && t.sfRefract) {
                 tl = SemBlurBridge.sfTag(tl, t.sfLens); tr = SemBlurBridge.sfTag(tr, t.sfLens);
                 bl = SemBlurBridge.sfTag(bl, t.sfLens); br = SemBlurBridge.sfTag(br, t.sfLens);

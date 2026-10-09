@@ -73,6 +73,8 @@ public final class Tuning {
      * instead of a Samsung blur installed on the view.
      */
     public final int kgBlurPath;
+    /** Blur radius in px for that path (debug.oulg.kgblurradius); -1 = semradiuslens. */
+    public final int kgBlurRadius;
     /** Logs main-thread time spent in the module's hooks (see {@link Perf}). */
     public final boolean perf;
     /** Enables the view-tree and window diagnostic dumps (see {@link Probe#trace}). */
@@ -111,6 +113,7 @@ public final class Tuning {
         sfRefract = number("sfrefract", 0f) >= 1f;
         kgWinBlur = Math.round(clamp(number("kgwinblur", 0f), 0f, 3f));
         kgBlurPath = Math.round(clamp(number("kgblurpath", 0f), 0f, 1f));
+        kgBlurRadius = Math.round(clamp(number("kgblurradius", -1f), -1f, 400f));
         perf = number("perf", 0f) >= 1f;
         Perf.enabled = perf;
         trace = number("trace", 0f) >= 1f;
@@ -132,7 +135,7 @@ public final class Tuning {
         return "backdrop=" + backdrop + " profile=" + profile + " lens=" + lens + " rimhz=" + rimHz + " rimblur=" + rimBlur
                 + " refract=" + refract + " ior=" + ior + " blur=" + blur + " sat=" + saturation
                 + " disp=" + dispersion + " hz=" + hz + " hzkg=" + keyguardHz + " tint=" + tintAlpha
-                + " semradius=" + semRadius + " semradiuslens=" + semRadiusLens + " sflens=" + sfLens + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " kgwinblur=" + kgWinBlur + " kgblurpath=" + kgBlurPath + " perf=" + perf + " trace=" + trace;
+                + " semradius=" + semRadius + " semradiuslens=" + semRadiusLens + " sflens=" + sfLens + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " kgwinblur=" + kgWinBlur + " kgblurpath=" + kgBlurPath + " kgblurradius=" + kgBlurRadius + " perf=" + perf + " trace=" + trace;
     }
 
     private static float clamp(float v, float lo, float hi) { return Float.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : lo; }
