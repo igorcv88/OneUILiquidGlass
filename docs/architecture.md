@@ -328,6 +328,7 @@ gfxinfo for SystemUI over 10 shade open/close cycles:
 | Module off | 5 ms | 12 ms | 13.8 % | 30 |
 | Module on, before | 13 ms | 34 ms | 36.7 % | 163 |
 | Reflection cache | 5 ms | 17 ms | 23.6 % | 80 |
+| Cache, diagnostics gated | 5 ms | 12 ms | 20.1 % | 49 |
 
 GPU time was 1–7 ms in every run, so the cost is on SystemUI's main thread.
 
@@ -337,6 +338,7 @@ GPU time was 1–7 ms in every run, so the cost is on SystemUI's main thread.
   - window surveys;
   - caller stack walks.
 - **Perf slots.** The `shade` slot times the expanded-height hook.
+- **After gating.** With the cache and the dumps gated, the module is close to off: same median and 90th percentile, 49 vs 30 slow-UI-thread frames, 99th percentile 53 vs 42 ms. All hook bodies together take about 0.5 % of the main thread while the shade animates. The heaviest per call is `drawBefore`, about 40–75 µs per row redraw.
 
 ## Future work
 
