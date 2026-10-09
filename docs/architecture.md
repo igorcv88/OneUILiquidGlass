@@ -381,6 +381,18 @@ Changes in v0.5:
 - **Whole-pixel sides.** A tagged rect must also have sides that are whole pixels: the half axes come from `skew` and the full size from the clip inset. A window scaled mid-animation is fractional.
 - **Live lens strength.** The tag fraction now spans [0.55, 0.70] and encodes the lens strength `k = 0.1 + 1.1·(f − 0.55)/0.15`. The module sets it from `debug.oulg.sflens` (default 0.45). The strength therefore changes live, without a SurfaceFlinger restart; the `debug.oulg.sf.lens` property is gone.
 
+### Smooth blur texture on lens cards (v0.6)
+
+The device showed the lens working live at `sflens` 1.2 and `semradiuslens` 12, but two things looked wrong:
+- **Blocky body.** The blur read as a 144p video. The blur region's texture is downscaled, and bilinear upscaling of a lightly blurred image shows its texels as blocks.
+- **Over-strong rim.** The refraction at the rim was too intense at 1.2.
+
+Tagged cards now sample that texture through a cubic B-spline built from 4 bilinear taps. External (video) textures keep the plain sample, because `textureLod` is not allowed on them. Untagged draws are unchanged.
+
+The defaults move to `sflens` 0.8 and `semradiuslens` 16.
+
+The scrim trace no longer matches "dim" inside `*ImageView` class names. That match used up its budget before the real scrims were logged.
+
 ## Future work
 
 - **Separate blur for the notification center and the control center.** Theme Park and HomeUp set a single blur amount for both panels. The user runs 12 %: lower leaves the control center unreadable, higher over-blurs the notification list. A split needs its own investigation: find where SystemUI applies the panel blur, whether the two panels are separate blur regions or one window, and whether the module can own one of them.

@@ -24,6 +24,27 @@
 #define OULG_FS_DECL_AT "noperspective in highp vec2 varccoord_S0;\n"
 #define OULG_VS_DECL "flat out highp vec4 voulg_tag;\nnoperspective out highp vec2 voulg_vp;\n"
 #define OULG_FS_DECL "flat in highp vec4 voulg_tag;\nnoperspective in highp vec2 voulg_vp;\n"
+// The blur region's texture is downscaled; bilinear upscaling shows its texels as blocks at small
+// blur radii. Tagged cards read it through a cubic B-spline (4 bilinear taps) instead.
+#define OULG_FS_FUNCS \
+    "mediump vec4 oulg_bspline(sampler2D s, highp vec2 uv) {\n" \
+    "  highp vec2 ts = vec2(textureSize(s, 0));\n" \
+    "  highp vec2 st = uv * ts - 0.5;\n" \
+    "  highp vec2 i = floor(st);\n" \
+    "  highp vec2 f = st - i;\n" \
+    "  highp vec2 f2 = f * f, f3 = f2 * f;\n" \
+    "  highp vec2 w0 = (-f3 + 3.0 * f2 - 3.0 * f + 1.0) / 6.0;\n" \
+    "  highp vec2 w1 = (3.0 * f3 - 6.0 * f2 + 4.0) / 6.0;\n" \
+    "  highp vec2 w2 = (-3.0 * f3 + 3.0 * f2 + 3.0 * f + 1.0) / 6.0;\n" \
+    "  highp vec2 w3 = f3 / 6.0;\n" \
+    "  highp vec2 g0 = w0 + w1, g1 = w2 + w3;\n" \
+    "  highp vec2 h0 = (i - 0.5 + w1 / g0) / ts;\n" \
+    "  highp vec2 h1 = (i + 1.5 + w3 / g1) / ts;\n" \
+    "  return g0.y * (g0.x * textureLod(s, h0, 0.0) + g1.x * textureLod(s, vec2(h1.x, h0.y), 0.0))\n" \
+    "       + g1.y * (g0.x * textureLod(s, vec2(h0.x, h1.y), 0.0) + g1.x * textureLod(s, h1, 0.0));\n" \
+    "}\n" \
+    "mediump vec4 oulg_sample(sampler2D s, highp vec2 uv, float bias) { return voulg_tag.x > 0.0 ? oulg_bspline(s, uv) : texture(s, uv, bias); }\n" \
+    "mediump vec4 oulg_sample(sampler2D s, highp vec2 uv) { return voulg_tag.x > 0.0 ? oulg_bspline(s, uv) : texture(s, uv); }\n"
 #define OULG_VS_RADII_AT "highp vec2 neighbor_radii = radii_and_neighbors.zw;\n"
 #define OULG_VS_POS_AT "gl_Position = vec4(devcoord, 0.0, 1.0);\n"
 #define OULG_FS_SAMPLE "texture(uTextureSampler_0_S1, vTransformedCoords_"
@@ -147,8 +168,18 @@ static char *oulg_rewrite_fragment(const char *src, int debug) {
     size_t sampleAt = (size_t) (call - src) + strlen("texture(uTextureSampler_0_S1, ");
     char *t = oulg_splice(s, sampleAt, strlen(coords), "oulg_tc"); free(s);
     if (!t) return NULL;
-    t = oulg_insert_after(t, 1, "void main() {\n", block);
-    return oulg_insert_after(t, 1, OULG_FS_DECL_AT, OULG_FS_DECL);
+    // The sample goes through oulg_sample (B-spline on tagged cards, untouched otherwise). External
+    // (camera/video) textures allow neither textureLod nor that path; they keep the plain sample.
+    int external = strstr(src, "samplerExternalOES uTextureSampler_0_S1") != NULL;
+    char *u = t;
+    if (!external) {
+        const char *call2 = strstr(t, "texture(uTextureSampler_0_S1, oulg_tc");
+        u = call2 ? oulg_splice(t, (size_t) (call2 - t), strlen("texture("), "oulg_sample(") : NULL;
+        free(t);
+        if (!u) return NULL;
+    }
+    u = oulg_insert_after(u, 1, "void main() {\n", block);
+    return oulg_insert_after(u, 1, OULG_FS_DECL_AT, external ? OULG_FS_DECL : OULG_FS_DECL OULG_FS_FUNCS);
 }
 
 // Rounded-rect clip programs (CircularRRectEffect): the radius arrives as uradiusPlusHalf (r + 0.5)

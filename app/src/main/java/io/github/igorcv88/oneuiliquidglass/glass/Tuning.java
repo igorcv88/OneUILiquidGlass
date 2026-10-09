@@ -88,8 +88,8 @@ public final class Tuning {
         keyguardHz = Math.round(clamp(number("hzkg", 5f), 1f, 120f));
         tintAlpha = Math.round(clamp(number("tint", -1f), -1f, 255f));
         semRadius = Math.round(clamp(number("semradius", -1f), -1f, 400f));
-        semRadiusLens = Math.round(clamp(number("semradiuslens", 12f), -1f, 400f));
-        sfLens = clamp(number("sflens", 0.45f), 0.1f, 1.2f);
+        semRadiusLens = Math.round(clamp(number("semradiuslens", 16f), -1f, 400f));
+        sfLens = clamp(number("sflens", 0.8f), 0.1f, 1.2f);
         // "spatial" stopped the blur rendering on S938BXXUCZZIC (sharp backdrop in screenshots): off by default.
         semCurve = prop("semcurve", "none");
         semAlpha = Math.round(clamp(number("semalpha", -1f), -1f, 255f));
