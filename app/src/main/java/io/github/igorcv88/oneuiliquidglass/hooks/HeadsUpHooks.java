@@ -174,7 +174,7 @@ public final class HeadsUpHooks {
         if (enabled && (!drawHook || !shadeHook)) Probe.log("GLASS_UNAVAILABLE", "drawHook=" + drawHook + " shadeHook=" + shadeHook);
     }
     private final Set<String> foreignBlurLogged = new java.util.HashSet<>();
-    private int windowBlurLogs = 300, scrimAlphaLogs = 400, windowBlurClears;
+    private int windowBlurLogs = 300, scrimAlphaLogs = 400, windowBlurClears, rowBlurLogs = 300;
     private final java.util.Map<View, Float> scrimLogged = new WeakHashMap<>();
     /** Stack walks are costly on a per-frame path; provenance is only gathered for the first calls. */
     private int foreignBlurTraces = 200;
@@ -224,6 +224,12 @@ public final class HeadsUpHooks {
                                     + " info=" + Probe.fields(p.args[0]));
                         }
                         boolean managed = compositorState(v) != null;
+                        if (Probe.trace && rowBlurLogs > 0 && ((rowClass != null && rowClass.isInstance(v)) || BACKGROUND.equals(v.getClass().getName()))) {
+                            // Every blur SystemUI sets on a card, with the state: what replaces the glass after a pull-down.
+                            rowBlurLogs--;
+                            Probe.log("ROW_BLUR", "view=" + v.getClass().getSimpleName() + " id=" + Integer.toHexString(System.identityHashCode(v))
+                                    + " managed=" + managed + " barState=" + barState + " info=" + Probe.fields(p.args[0]));
+                        }
                         String caller = Probe.trace && foreignBlurTraces > 0 && foreignBlurLogged.size() < 40 ? blurCaller() : null;
                         if (caller != null) foreignBlurTraces--;
                         if (caller != null && foreignBlurLogged.add(v.getClass().getName() + "|" + caller + "|" + managed)) {
