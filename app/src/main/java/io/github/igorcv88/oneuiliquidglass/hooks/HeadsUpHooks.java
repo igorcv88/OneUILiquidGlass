@@ -325,7 +325,9 @@ public final class HeadsUpHooks {
                 if (!(state instanceof Integer) || state.equals(barState)) return;
                 barState = (Integer) state;
                 Probe.log("BAR_STATE", "state=" + barState);
-                for (State s : new ArrayList<>(states.values())) s.invalidate();
+                // The blur is a view property: a card SystemUI does not redraw (the shade springing
+                // back to the lockscreen) would keep the expanded-shade blur. Re-decide now.
+                for (State s : new ArrayList<>(states.values())) { s.refreshLens(); s.invalidate(); }
             }
         });
     }
@@ -347,6 +349,7 @@ public final class HeadsUpHooks {
             for (State state : new ArrayList<>(states.values())) {
                 // Opening the shade is when cards were seen without their blur: apply it again.
                 if (state.glass != null) state.glass.reassertBackdrop();
+                state.refreshLens();
                 state.invalidate();
             }
             // The panel controller's own view works with an empty shade; a row is only the fallback.
@@ -620,7 +623,7 @@ public final class HeadsUpHooks {
                     : kind == Backdrop.Kind.SAMPLED ? (dark ? spec.captureDarkTint : spec.captureLightTint)
                     : dark ? spec.darkBlurColor : spec.lightBlurColor;
             glass.setPressed(pressed);
-            if (semBridge != null) semBridge.setLens(Eligibility.lens(barState, shadeExpanded, Reflect.bool(row.get(), "isOnKeyguard", "mOnKeyguard")));
+            refreshLens();
             glass.configure(original, shape(), fill, tone);
             if (lastFallback != null) { lastFallback = null; Probe.log("NATIVE_FALLBACK", "viewId=" + Integer.toHexString(System.identityHashCode(v)) + " reason=none"); }
             if (!materialReported) {
@@ -646,6 +649,11 @@ public final class HeadsUpHooks {
             View r = row.get();
             if (r == null || Tuning.get().shadeBlur) return false;
             return Eligibility.sharedBackdrop(shadeExpanded, Reflect.bool(r, "isOnKeyguard", "mOnKeyguard"));
+        }
+        void refreshLens() {
+            if (semBridge == null) return;
+            try { semBridge.setLens(Eligibility.lens(barState, shadeExpanded, Reflect.bool(row.get(), "isOnKeyguard", "mOnKeyguard"))); }
+            catch (ReflectiveOperationException | RuntimeException e) { Probe.error("SEM_BLUR_LENS_FAILED", e); }
         }
         void release() {
             if (glass == null) return;
