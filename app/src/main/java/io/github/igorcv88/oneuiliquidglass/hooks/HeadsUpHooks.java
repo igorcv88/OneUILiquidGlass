@@ -153,6 +153,7 @@ public final class HeadsUpHooks {
         for (String n : new String[]{"onFinishInflate", "setHeadsUp", "setPinned", "setHeadsUpAnimatingAway", "startAppearAnimation", "onAppearAnimationFinished", "setUserExpanded", "setOnKeyguard", "onAttachedToWindow"}) hook(rowClass, n, rowEvent);
         installShade();
         installBarState();
+        installBlurFade();
         installScrimClamp();
         installCapturedBlurTrace();
         installSurfaceBlurHook();
@@ -480,6 +481,25 @@ public final class HeadsUpHooks {
             catch (ReflectiveOperationException | RuntimeException e) { Probe.error("SCRIM_CLAMP_FAILED", e); }
         }
     }
+    private int fadeLogs = 60;
+    /** Mirrors SystemUI's blur fade of a card onto the drawable-path glass and its blur region (see GlassDrawable.setFade). */
+    private void installBlurFade() {
+        XC_MethodHook fade = new XC_MethodHook() {
+            @Override protected void afterHookedMethod(MethodHookParam p) {
+                if (!(p.thisObject instanceof View) || p.args.length == 0 || !(p.args[0] instanceof Float)) return;
+                View r = (View) p.thisObject;
+                Object bg = Reflect.read(r, "mBackgroundNormal");
+                State s = bg instanceof View ? states.get(bg) : null;
+                if (s == null) return;
+                float a = (Float) p.args[0];
+                if (((Method) p.method).getName().equals("setContentAlpha")) s.contentFade = a; else s.parentFade = a;
+                if (Probe.trace && fadeLogs > 0) { fadeLogs--; Probe.log("BLUR_FADE", ((Method) p.method).getName() + "=" + a + " barState=" + barState); }
+                s.applyFade();
+            }
+        };
+        hook(rowClass, "setBlurAlphaFromParent", fade);
+        hook(rowClass, "setContentAlpha", fade);
+    }
     private void installBarState() {
         Class<?> c = resolve("com.android.systemui.statusbar.StatusBarStateControllerImpl");
         hook(c, "setState", new XC_MethodHook() {
@@ -570,6 +590,8 @@ public final class HeadsUpHooks {
         SemBlurBridge semBridge;
         /** The lens-mode BackgroundBlurDrawable behind glass (debug.oulg.kgblurpath=1). */
         BackgroundBlurBridge compBridge;
+        float parentFade = 1f, contentFade = 1f;
+        void applyFade() { if (compBridge != null && glass != null) glass.setFade(parentFade * contentFade); }
         Backdrop.Kind glassKind;
         String glassSource;
         boolean materialReported;
@@ -805,6 +827,7 @@ public final class HeadsUpHooks {
                 glassKind = kind;
                 glassSource = source;
                 glass.setCallback(v);
+                applyFade();
                 Probe.log("GLASS_APPLIED", "viewId=" + Integer.toHexString(System.identityHashCode(v)) + " source=" + backdrop.name()
                         + " optics=" + (kind == Backdrop.Kind.SAMPLED ? "refraction" : "edge_shader"));
                 materialReported = false;
