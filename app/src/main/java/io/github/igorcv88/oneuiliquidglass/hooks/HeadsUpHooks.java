@@ -176,6 +176,7 @@ public final class HeadsUpHooks {
     }
     private final Set<String> foreignBlurLogged = new java.util.HashSet<>();
     private int windowBlurLogs = 300, scrimAlphaLogs = 400, windowBlurBlocks, rowBlurLogs = 300;
+    private Object lastWindowInfo;
     private final java.util.Map<View, Float> scrimLogged = new WeakHashMap<>();
     /** Stack walks are costly on a per-frame path; provenance is only gathered for the first calls. */
     private int foreignBlurTraces = 200;
@@ -210,6 +211,21 @@ public final class HeadsUpHooks {
                         if (states.containsKey(v) || (rowClass != null && rowClass.isInstance(v))
                                 || BACKGROUND.equals(v.getClass().getName())) SemBlurBridge.recordNative(v, p.args[0]);
                         int kgWin = Tuning.get().kgWinBlur;
+                        if (kgWin == 3 && v.getRootView() == v && barState != null && Tuning.get().sfRefract
+                                && (barState == Eligibility.BAR_KEYGUARD || barState == Eligibility.BAR_SHADE_LOCKED)
+                                && v.getClass().getName().endsWith("NotificationShadeWindowView")) {
+                            // Diagnostic: the compositor hands lens cards a wrong (stale, heavily blurred)
+                            // texture for two frames after the window blur ends. Keep it alive at radius 1.
+                            if (p.args[0] != null) lastWindowInfo = p.args[0];
+                            else if (lastWindowInfo != null) p.args[0] = lastWindowInfo;
+                            Object r = p.args[0] == null ? null : Reflect.read(p.args[0], "mBlurRadius");
+                            if (r instanceof Integer && (Integer) r < 1) {
+                                try {
+                                    java.lang.reflect.Field f = p.args[0].getClass().getDeclaredField("mBlurRadius");
+                                    f.setAccessible(true); f.setInt(p.args[0], 1);
+                                } catch (ReflectiveOperationException | RuntimeException e) { Probe.error("WINDOW_BLUR_KEEP_FAILED", e); }
+                            }
+                        }
                         Object winRadius = p.args[0] == null ? null : Reflect.read(p.args[0], "mBlurRadius");
                         if (v.getRootView() == v && p.args[0] != null && barState != null && Tuning.get().sfRefract && kgWin != 1
                                 && v.getClass().getName().endsWith("NotificationShadeWindowView")

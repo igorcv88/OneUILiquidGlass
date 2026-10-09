@@ -63,7 +63,8 @@ public final class Tuning {
     /**
      * Panel blur on the shade window while the keyguard is up (debug.oulg.kgwinblur): 0 drops the
      * radius 1-4 touch ramps on the idle lockscreen (default), 1 lets everything through, 2 drops it
-     * all on the lockscreen and the shade over it (diagnostic).
+     * all on the lockscreen and the shade over it, 3 keeps it alive at radius 1 there instead of
+     * letting it end (diagnostics).
      */
     public final int kgWinBlur;
     /** Logs main-thread time spent in the module's hooks (see {@link Perf}). */
@@ -102,7 +103,7 @@ public final class Tuning {
         String shape = prop("semshape", "auto");
         shadeBlur = number("shadeblur", 0f) >= 1f;
         sfRefract = number("sfrefract", 0f) >= 1f;
-        kgWinBlur = Math.round(clamp(number("kgwinblur", 0f), 0f, 2f));
+        kgWinBlur = Math.round(clamp(number("kgwinblur", 0f), 0f, 3f));
         perf = number("perf", 0f) >= 1f;
         Perf.enabled = perf;
         trace = number("trace", 0f) >= 1f;
