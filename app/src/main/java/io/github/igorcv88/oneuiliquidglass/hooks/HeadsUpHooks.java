@@ -477,7 +477,7 @@ public final class HeadsUpHooks {
         boolean eligible() {
             View v = background.get(), r = row.get();
             if (v == null || r == null || failed || !drawHook || !v.isShown() || v.getWidth() <= 0 || v.getHeight() <= 0) return false;
-            return Eligibility.glass(enabled, v.isAttachedToWindow(), v.isHardwareAccelerated(), r.isPressed() || r.isFocused() || r.isHovered());
+            return Eligibility.glass(enabled, v.isAttachedToWindow(), v.isHardwareAccelerated());
         }
         /** Diagnostic mirror of eligible() plus the compositor capability checked in material(). */
         String reason() {
@@ -487,7 +487,7 @@ public final class HeadsUpHooks {
             if (!drawHook) return "drawHook=false";
             if (!v.isShown()) return "hidden";
             if (v.getWidth() <= 0 || v.getHeight() <= 0) return "empty";
-            String policy = Eligibility.reason(enabled, v.isAttachedToWindow(), v.isHardwareAccelerated(), r.isPressed() || r.isFocused() || r.isHovered());
+            String policy = Eligibility.reason(enabled, v.isAttachedToWindow(), v.isHardwareAccelerated());
             if (policy != null) return policy;
             return kind() != null ? null : "blur=unavailable";
         }
@@ -573,11 +573,8 @@ public final class HeadsUpHooks {
             View v = background.get();
             Backdrop.Kind kind = kind();
             if (v == null || !eligible() || kind == null) { release(); return fallback(v == null ? "collected" : kind == null ? "noBackdrop" : reason()); }
-            for (int state : original.getState()) {
-                if (state == android.R.attr.state_pressed || state == android.R.attr.state_focused || state == android.R.attr.state_hovered) {
-                    release(); return fallback("pressed");
-                }
-            }
+            boolean pressed = false;
+            for (int state : original.getState()) if (state == android.R.attr.state_pressed) pressed = true;
             if (glass != null && glass.failed()) { failed = true; release(); return fallback("glassFailed"); }
             String source = kind == Backdrop.Kind.SAMPLED ? sampledSource(v) : null;
             if (glass != null && (glassKind != kind || glass.stale() || !java.util.Objects.equals(source, glassSource))) release();
@@ -607,6 +604,7 @@ public final class HeadsUpHooks {
             int tone = glass.hybrid() || kind == Backdrop.Kind.SAMSUNG ? (dark ? spec.samsungDarkColor : spec.samsungLightColor)
                     : kind == Backdrop.Kind.SAMPLED ? (dark ? spec.captureDarkTint : spec.captureLightTint)
                     : dark ? spec.darkBlurColor : spec.lightBlurColor;
+            glass.setPressed(pressed);
             if (semBridge != null) semBridge.setLens(!Eligibility.sharedBackdrop(shadeExpanded, Reflect.bool(row.get(), "isOnKeyguard", "mOnKeyguard")));
             glass.configure(original, shape(), fill, tone);
             if (lastFallback != null) { lastFallback = null; Probe.log("NATIVE_FALLBACK", "viewId=" + Integer.toHexString(System.identityHashCode(v)) + " reason=none"); }

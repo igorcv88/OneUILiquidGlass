@@ -231,6 +231,7 @@ public final class SemBlurBridge implements Backdrop {
     public void setLens(boolean on) throws ReflectiveOperationException {
         if (lens == on) return;
         lens = on;
+        Probe.log("SEM_BLUR_LENS", "on=" + on + " view=" + Integer.toHexString(System.identityHashCode(host)));
         if (built && !released) update(lastPx, lastTint, lastRadii);
     }
     /** spatial|dim|ultra pick Samsung's presets for the current theme; "s,c,x0,x1,y0,y1" is explicit. */
