@@ -112,6 +112,18 @@ static int compiles(GLuint shader, const char *text) {
 // program already paired with it fails to link and Skia retries it unrewritten.
 static int vertex_broken;
 
+// Lens strength (shift at the outline as a fraction of the bevel) and the debug tint, read when a
+// shader is compiled: changing them needs a surfaceflinger restart with the shader cache cleared.
+static float lens_strength(void) {
+    char v[PROP_VALUE_MAX] = {0};
+    float k = __system_property_get("debug.oulg.sf.lens", v) > 0 ? strtof(v, NULL) : 0.45f;
+    return k >= 0.05f && k <= 1.2f ? k : 0.45f;
+}
+static int debug_tint(void) {
+    char v[PROP_VALUE_MAX] = {0};
+    return __system_property_get("debug.oulg.sf.debug", v) > 0 && v[0] == '1';
+}
+
 void glShaderSource(GLuint shader, GLsizei count, const GLchar *const *strings, const GLint *lengths) {
     if (!real_shader_source) real_shader_source = (ShaderSourceFn) dlsym(RTLD_NEXT, "glShaderSource");
     if (!real_shader_source) return;
@@ -158,8 +170,11 @@ void glShaderSource(GLuint shader, GLsizei count, const GLchar *const *strings, 
                 if (!used) { vertex_broken = 1; __android_log_print(ANDROID_LOG_WARN, TAG, "REWRITE vertex unusable; fragment rewrites off"); }
             }
         }
-    } else if (joined && !vertex_broken) {
-        char *frag = oulg_rewrite_fragment(joined);
+    } else if (joined) {
+        float k = lens_strength();
+        int dbg = debug_tint();
+        char *frag = vertex_broken ? NULL : oulg_rewrite_fragment(joined, k, dbg);
+        if (!frag) frag = oulg_rewrite_clip(joined, k, dbg);
         if (frag) {
             int ok = compiles(shader, frag);
             __android_log_print(ANDROID_LOG_INFO, TAG, "REWRITE fragment shader=%u compiled=%d", shader, ok);

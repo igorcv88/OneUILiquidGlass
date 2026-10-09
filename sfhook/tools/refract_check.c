@@ -17,12 +17,15 @@ int main(int argc, char **argv) {
         int idx = atoi(p + strlen(mark));
         char *next = strstr(hdrEnd, mark);
         size_t len = next ? (size_t)(next - hdrEnd) : strlen(hdrEnd);
+        char *other = strstr(hdrEnd, "\n===== ");
+        if (other && (size_t) (other - hdrEnd) < len) len = (size_t) (other - hdrEnd);
         char *src = malloc(len + 1); memcpy(src, hdrEnd, len); src[len] = 0;
         total++;
         int vertex = strstr(src, "gl_Position") != NULL;
         const char *ext = vertex ? "vert" : "frag";
         put(argv[2], "orig", idx, ext, src);
-        char *out = vertex ? oulg_rewrite_vertex(src, 1) : oulg_rewrite_fragment(src);
+        char *out = vertex ? oulg_rewrite_vertex(src, 1) : oulg_rewrite_fragment(src, 0.45f, 1);
+        if (!out && !vertex) out = oulg_rewrite_clip(src, 0.45f, 1);
         if (out) { put(argv[2], "mod", idx, ext, out); free(out); if (vertex) vs++; else fs++; }
         if (vertex && (out = oulg_rewrite_vertex(src, 0))) { put(argv[2], "min", idx, ext, out); free(out); }
         free(src); p = next;

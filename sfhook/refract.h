@@ -94,7 +94,7 @@ static char *oulg_rewrite_vertex(const char *src, int full) {
     return s;
 }
 
-static char *oulg_rewrite_fragment(const char *src) {
+static char *oulg_rewrite_fragment(const char *src, float lens, int debug) {
     if (!strstr(src, "sk_FragColor") || strstr(src, "oulg_")) return NULL;
     if (oulg_count(src, OULG_FS_DECL_AT) != 1 || oulg_count(src, OULG_FS_SAMPLE) != 1 || oulg_count(src, OULG_FS_FINAL) != 1) return NULL;
     const char *call = strstr(src, OULG_FS_SAMPLE), *mainAt = strstr(src, "void main() {\n");
@@ -103,15 +103,16 @@ static char *oulg_rewrite_fragment(const char *src) {
     char coords[64];
     if (!oulg_ident_after(call + strlen("texture(uTextureSampler_0_S1, "), "vTransformedCoords_", coords, sizeof coords)) return NULL;
 
-    char lens[2400];
-    int n = snprintf(lens, sizeof lens,
+    char block[2400];
+    int n = snprintf(block, sizeof block,
         // Derivatives first, in uniform control flow.
         "highp vec2 oulg_tc = %s;\n"
         "highp vec2 oulg_tx = dFdx(%s);\n"
         "highp vec2 oulg_ty = dFdy(%s);\n"
         "highp mat2 oulg_j = mat2(dFdx(voulg_vp), dFdy(voulg_vp));\n"
-        "mediump float oulg_hl = 0.0;\n"
+        "mediump float oulg_dbg = 0.0;\n"
         "if (voulg_tag.x > 0.5 && abs(determinant(oulg_j)) > 1e-12) {\n"
+        "  oulg_dbg = %s;\n"
         "  highp float oulg_r = voulg_tag.y;\n"
         "  highp vec2 oulg_hs = voulg_tag.zw;\n"
         "  highp vec2 oulg_q = abs(voulg_vp) * oulg_hs;\n"
@@ -123,23 +124,80 @@ static char *oulg_rewrite_fragment(const char *src) {
         "    highp float oulg_t = 1.0 - oulg_depth / oulg_bevel;\n"
         // Outward unit direction in the rect's pixel axes, then an inward shift in normalized units.
         "    highp vec2 oulg_out = (oulg_v / oulg_l) * sign(voulg_vp);\n"
-        "    highp vec2 oulg_dvp = -oulg_out * (0.30 * oulg_bevel * oulg_t * oulg_t) / oulg_hs;\n"
+        "    highp vec2 oulg_dvp = -oulg_out * (%.3f * oulg_bevel * oulg_t * oulg_t) / oulg_hs;\n"
         "    highp vec2 oulg_ds = inverse(oulg_j) * oulg_dvp;\n"
         "    oulg_tc += oulg_tx * oulg_ds.x + oulg_ty * oulg_ds.y;\n"
-        "    oulg_hl = oulg_t * oulg_t * oulg_t;\n"
         "  }\n"
         "}\n",
-        coords, coords, coords);
-    if (n <= 0 || (size_t) n >= sizeof lens) return NULL;
+        coords, coords, coords, debug ? "1.0" : "0.0", lens);
+    if (n <= 0 || (size_t) n >= sizeof block) return NULL;
 
     // Splice from the end backwards so earlier offsets stay valid.
-    char *s = oulg_splice(src, (size_t) (final - src), 0, "output_S1.rgb = mix(output_S1.rgb, vec3(output_S1.a), oulg_hl * 0.22);\n");
+    // Debug mode paints tagged cards magenta: proof that the tag reached this program.
+    char *s = oulg_splice(src, (size_t) (final - src), 0, "output_S1.rgb = mix(output_S1.rgb, vec3(output_S1.a, 0.0, output_S1.a), oulg_dbg * 0.6);\n");
     if (!s) return NULL;
     size_t sampleAt = (size_t) (call - src) + strlen("texture(uTextureSampler_0_S1, ");
     char *t = oulg_splice(s, sampleAt, strlen(coords), "oulg_tc"); free(s);
     if (!t) return NULL;
-    t = oulg_insert_after(t, 1, "void main() {\n", lens);
+    t = oulg_insert_after(t, 1, "void main() {\n", block);
     return oulg_insert_after(t, 1, OULG_FS_DECL_AT, OULG_FS_DECL);
+}
+
+// Rounded-rect clip programs (CircularRRectEffect): the radius arrives as uradiusPlusHalf (r + 0.5)
+// and the rect inset by it as uinnerRect, in device pixels. With the tag fraction .625 on r, the
+// uniform's fraction is .125. Same lens; debug mode paints these cyan.
+static char *oulg_rewrite_clip(const char *src, float lens, int debug) {
+    if (!strstr(src, "sk_FragColor") || !strstr(src, "uradiusPlusHalf_S") || !strstr(src, "uinnerRect_S")) return NULL;
+    if (strstr(src, "uinvRadiiXY") || strstr(src, "oulg_")) return NULL;
+    char rect[64], rph[64], coords[64];
+    const char *d = strstr(src, "vec4 uinnerRect_S"), *e = strstr(src, "vec2 uradiusPlusHalf_S");
+    if (!d || !e) return NULL;
+    if (!oulg_ident_after(d + 5, "uinnerRect_S", rect, sizeof rect)) return NULL;
+    if (!oulg_ident_after(e + 5, "uradiusPlusHalf_S", rph, sizeof rph)) return NULL;
+    if (oulg_count(src, OULG_FS_SAMPLE) != 1 || oulg_count(src, "texture(") != 1) return NULL;
+    const char *call = strstr(src, OULG_FS_SAMPLE);
+    if (!oulg_ident_after(call + strlen("texture(uTextureSampler_0_S1, "), "vTransformedCoords_", coords, sizeof coords)) return NULL;
+    const char *fc = strstr(src, "sk_FragCoord = vec4(");
+    const char *fcEnd = fc ? strchr(fc, '\n') : NULL;
+    const char *final = strstr(src, "sk_FragColor = output_S1");
+    if (!fcEnd || !final || call < fcEnd || final < call || !strstr(src, "mediump vec4 output_S1 =")) return NULL;
+    int flip = strstr(src, "u_skRTFlip") != NULL;
+    char block[2600];
+    int n = snprintf(block, sizeof block,
+        "highp vec2 oulg_tc = %s;\n"
+        "highp vec2 oulg_dx = dFdx(%s);\n"
+        "highp vec2 oulg_dy = dFdy(%s);\n"
+        "mediump float oulg_dbg = 0.0;\n"
+        "highp float oulg_rph = float(%s.x);\n"
+        "if (oulg_rph > 40.5 && abs(fract(oulg_rph) - 0.125) < 0.03) {\n"
+        "  oulg_dbg = %s;\n"
+        "  highp float oulg_r = oulg_rph - 0.5;\n"
+        "  highp vec2 oulg_p = sk_FragCoord.xy;\n"
+        "  highp vec2 oulg_v = oulg_p - clamp(oulg_p, %s.xy, %s.zw);\n"
+        "  highp float oulg_l = length(oulg_v);\n"
+        "  highp float oulg_bevel = clamp(oulg_r * 0.42, 16.0, 56.0);\n"
+        "  highp float oulg_depth = oulg_r - oulg_l;\n"
+        "  if (oulg_l > 0.0 && oulg_depth > 0.0 && oulg_depth < oulg_bevel) {\n"
+        "    highp float oulg_t = 1.0 - oulg_depth / oulg_bevel;\n"
+        "    highp vec2 oulg_off = -(oulg_v / oulg_l) * (%.3f * oulg_bevel * oulg_t * oulg_t);\n"
+        "%s"
+        "    oulg_tc += oulg_dx * oulg_off.x + oulg_dy * oulg_off.y;\n"
+        "  }\n"
+        "}\n",
+        coords, coords, coords, rph, debug ? "1.0" : "0.0", rect, rect, lens,
+        flip ? "    oulg_off.y *= u_skRTFlip.y;\n" : "");
+    if (n <= 0 || (size_t) n >= sizeof block) return NULL;
+    char *s = oulg_splice(src, (size_t) (final - src), 0, "output_S1.rgb = mix(output_S1.rgb, vec3(0.0, output_S1.a, output_S1.a), oulg_dbg * 0.6);\n");
+    if (!s) return NULL;
+    size_t sampleAt = (size_t) (call - src) + strlen("texture(uTextureSampler_0_S1, ");
+    char *t = oulg_splice(s, sampleAt, strlen(coords), "oulg_tc"); free(s);
+    if (!t) return NULL;
+    // The block goes right after the line defining sk_FragCoord, which it reads.
+    const char *fc2 = strstr(t, "sk_FragCoord = vec4(");
+    const char *fe2 = fc2 ? strchr(fc2, '\n') : NULL;
+    char *u = fe2 ? oulg_splice(t, (size_t) (fe2 - t) + 1, 0, block) : NULL;
+    free(t);
+    return u;
 }
 
 #endif
