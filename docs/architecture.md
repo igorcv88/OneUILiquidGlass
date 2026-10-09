@@ -306,3 +306,20 @@ Safety:
 Module side: `debug.oulg.sfrefract=1` changes two things.
 - `SemBlurBridge` sets the single corner radius to `floor(r) + 0.125`, the tag.
 - Heads-up and lockscreen rows keep the live Samsung blur instead of a sampled or captured backdrop, so the compositor's lens replaces the captured one.
+
+### Phase 2 on the device (2026-10-09)
+
+Diagnostic after a live swap: `LIB_NOVA=1 SRC=136 ALVO=66 RW_OK=12 RW_FAIL=0`. With `debug.oulg.sfrefract=1`:
+- **Lockscreen rows:** Samsung blur plus the compositor lens at the rim. This is the best result so far.
+- **Heads-up over apps:** the blur is slightly stronger than on the lockscreen, and refraction stays in the rim band by design.
+- **Expanded shade:** looks fine. A small stutter on pull-down is still open; it reads as dropping from 120 to 60 Hz. No A/B measurement yet.
+
+Operational notes:
+- **Updating without a reboot.** KernelSU stages an update of an installed module in `/data/adb/modules_update/<id>`, which moves to `modules/` only at boot. A live swap must bind-mount the library from `modules_update`, and it is checked with `grep -c "REWRITE shader"` inside surfaceflinger's mount namespace.
+- **Restarting surfaceflinger.** Every `stop`/`start` restarts the whole userspace (boot animation, system_server, apps). On the device each restart took longer, up to 4–5 min on "Powered by Android". The hook only works when a shader is first compiled, so a restart is needed only to load a new library and should otherwise be avoided. Cause not measured yet.
+- **Cache keeps the rewrite.** Skia caches the program binary it linked, rewrite included. `debug.oulg.sf.norewrite=1` or removing the module takes effect only after `skia_shaders` and `egl_shaders` are deleted. Leftover rewritten binaries are inert while no card carries the radius tag (`sfrefract=0`).
+
+## Future work
+
+- **Separate blur for the notification center and the control center.** Theme Park and HomeUp set a single blur amount for both panels. The user runs 12 %: lower leaves the control center unreadable, higher over-blurs the notification list. A split needs its own investigation: find where SystemUI applies the panel blur, whether the two panels are separate blur regions or one window, and whether the module can own one of them.
+- **Tuning the compositor lens without a restart.** Lens strength, bevel width and highlight are constants in `refract.h`, so each change needs a surfaceflinger restart and a cleared cache. The radius fraction already carries the tag and could also carry the strength, so the module could tune it live.
