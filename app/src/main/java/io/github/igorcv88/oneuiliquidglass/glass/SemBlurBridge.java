@@ -35,6 +35,9 @@ public final class SemBlurBridge implements Backdrop {
     // Inputs of the last build: a clip path is sized to the view and is rebuilt when the view resizes.
     private int lastPx, lastTint;
     private final float[] lastRadii = new float[8];
+    private boolean built;
+    /** Whether the corner radius carries the compositor-lens tag (with sfrefract); see {@link #setLens}. */
+    private boolean lens = true;
     /** Event-driven: a layout that resizes the view rebuilds a clip-path blur, nothing polls. */
     private final View.OnLayoutChangeListener resize = (v, l, t, r, b, ol, ot, or, ob) -> {
         if (released || !"path".equals(this.lastShape) || (r - l == or - ol && b - t == ob - ot)) return;
@@ -174,7 +177,7 @@ public final class SemBlurBridge implements Backdrop {
         Tuning t = Tuning.get();
         radius.invoke(b, t.semRadius >= 0 ? t.semRadius : GlassSpec.SAMSUNG_RADIUS);
         String shape = applyShape(b, t.semShape, radii);
-        lastPx = px; lastTint = tint; System.arraycopy(radii, 0, lastRadii, 0, 8);
+        lastPx = px; lastTint = tint; System.arraycopy(radii, 0, lastRadii, 0, 8); built = true;
         if (!shape.equals(lastShape)) { lastShape = shape; Probe.log("SEM_BLUR_SHAPE", "mode=" + shape + " radius=" + radii[0] + " size=" + host.getWidth() + "x" + host.getHeight()); }
         if (color != null) color.invoke(b, t.semAlpha >= 0 ? (tint & 0x00ffffff) | (t.semAlpha << 24) : tint);
         applyCurve(b, t.semCurve);
@@ -196,7 +199,7 @@ public final class SemBlurBridge implements Backdrop {
             case "none": return mode;
             case "single":
                 if (corner == null) break;
-                corner.invoke(b, Tuning.get().sfRefract ? sfTag(radii[0]) : radii[0]);
+                corner.invoke(b, Tuning.get().sfRefract && lens ? sfTag(radii[0]) : radii[0]);
                 return mode;
             case "path":
                 if (clipPath == null || host.getWidth() <= 0 || host.getHeight() <= 0) break;
@@ -213,10 +216,21 @@ public final class SemBlurBridge implements Backdrop {
         return "none";
     }
     /**
-     * Corner radius carrying the tag the sfhook shader rewrite looks for: fraction .125, which
-     * SurfaceFlinger passes on as radius + 0.5 = .625. Off by at most 0.875 px from the real radius.
+     * Corner radius carrying the tag the sfhook shader rewrite looks for: fraction .625, read in
+     * SurfaceFlinger's rounded-rect vertex shader. floor(r) - 0.375 is never above r, so Skia keeps
+     * it on a pill whose radius is half its height (a larger radius is clamped and loses the tag).
+     * Off by at most 1.375 px; radii the shader ignores (40 px or less) stay untagged.
      */
-    static float sfTag(float radius) { return (float) Math.floor(radius) + 0.125f; }
+    static float sfTag(float radius) { return radius > 41f ? (float) Math.floor(radius) - 0.375f : radius; }
+    /**
+     * Cards in the expanded shade stay a diffuse blur; the others carry the lens tag. A change
+     * rebuilds the blur with the last inputs.
+     */
+    public void setLens(boolean on) throws ReflectiveOperationException {
+        if (lens == on) return;
+        lens = on;
+        if (built && !released) update(lastPx, lastTint, lastRadii);
+    }
     /** spatial|dim|ultra pick Samsung's presets for the current theme; "s,c,x0,x1,y0,y1" is explicit. */
     private void applyCurve(Object builder, String spec) {
         if (spec == null || spec.isEmpty() || spec.equals("none")) return;

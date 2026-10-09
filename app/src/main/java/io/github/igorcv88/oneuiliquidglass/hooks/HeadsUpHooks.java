@@ -373,6 +373,8 @@ public final class HeadsUpHooks {
         final WeakReference<View> background;
         final WeakReference<View> row;
         GlassDrawable glass;
+        /** The Samsung blur behind glass, when glassKind is SAMSUNG. */
+        SemBlurBridge semBridge;
         Backdrop.Kind glassKind;
         String glassSource;
         boolean materialReported;
@@ -590,7 +592,7 @@ public final class HeadsUpHooks {
             if (glass == null) {
                 Backdrop backdrop = kind == Backdrop.Kind.SHARED ? new SharedBackdrop()
                         : kind == Backdrop.Kind.SAMPLED ? sampledBackdrop(v, source)
-                        : kind == Backdrop.Kind.SAMSUNG ? SemBlurBridge.create(v) : BackgroundBlurBridge.create(v);
+                        : kind == Backdrop.Kind.SAMSUNG ? (semBridge = SemBlurBridge.create(v)) : BackgroundBlurBridge.create(v);
                 glass = new GlassDrawable(backdrop, v.getResources().getDisplayMetrics().density, spec);
                 glassKind = kind;
                 glassSource = source;
@@ -605,6 +607,7 @@ public final class HeadsUpHooks {
             int tone = glass.hybrid() || kind == Backdrop.Kind.SAMSUNG ? (dark ? spec.samsungDarkColor : spec.samsungLightColor)
                     : kind == Backdrop.Kind.SAMPLED ? (dark ? spec.captureDarkTint : spec.captureLightTint)
                     : dark ? spec.darkBlurColor : spec.lightBlurColor;
+            if (semBridge != null) semBridge.setLens(!Eligibility.sharedBackdrop(shadeExpanded, Reflect.bool(row.get(), "isOnKeyguard", "mOnKeyguard")));
             glass.configure(original, shape(), fill, tone);
             if (lastFallback != null) { lastFallback = null; Probe.log("NATIVE_FALLBACK", "viewId=" + Integer.toHexString(System.identityHashCode(v)) + " reason=none"); }
             if (!materialReported) {
@@ -635,7 +638,7 @@ public final class HeadsUpHooks {
             if (glass == null) return;
             // The blur guard also blocked calls aimed at the row while this material was managed.
             boolean compositor = glassKind == Backdrop.Kind.SAMSUNG || glass.hybrid();
-            glass.release(); glass = null; glassKind = null; glassSource = null; Probe.log("GLASS_RELEASED", "native=true");
+            glass.release(); glass = null; glassKind = null; glassSource = null; semBridge = null; Probe.log("GLASS_RELEASED", "native=true");
             View r = row.get();
             if (compositor && r != null) SemBlurBridge.restoreNative(r);
         }
