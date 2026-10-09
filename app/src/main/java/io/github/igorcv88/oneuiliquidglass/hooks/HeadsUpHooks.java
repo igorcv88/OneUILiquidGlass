@@ -278,7 +278,7 @@ public final class HeadsUpHooks {
             Object bg = Reflect.read(v, "mBackgroundNormal");
             s = bg instanceof View ? states.get(bg) : null;
         }
-        return s != null && s.glass != null && (s.glassKind == Backdrop.Kind.SAMSUNG || s.glass.hybrid()) ? s : null;
+        return s != null && s.glass != null && (s.glassKind == Backdrop.Kind.SAMSUNG || s.glass.hybrid() || s.compBridge != null) ? s : null;
     }
     private final Set<String> mutatorLogged = new java.util.HashSet<>();
     /**
@@ -568,6 +568,8 @@ public final class HeadsUpHooks {
         GlassDrawable glass;
         /** The Samsung blur behind glass, when glassKind is SAMSUNG. */
         SemBlurBridge semBridge;
+        /** The lens-mode BackgroundBlurDrawable behind glass (debug.oulg.kgblurpath=1). */
+        BackgroundBlurBridge compBridge;
         Backdrop.Kind glassKind;
         String glassSource;
         boolean materialReported;
@@ -601,7 +603,7 @@ public final class HeadsUpHooks {
                     blurListener = supported -> {
                         blurEnabled = supported;
                         Probe.log("BLUR_CAPABILITY_CHANGED", "enabled=" + supported);
-                        if (!supported && glassKind == Backdrop.Kind.COMPOSITOR) release();
+                        if (!supported && glassKind == Backdrop.Kind.COMPOSITOR && compBridge == null) release();
                         invalidate();
                     };
                     wm.addCrossWindowBlurEnabledListener(view.getContext().getMainExecutor(), blurListener);
@@ -684,7 +686,20 @@ public final class HeadsUpHooks {
             if (policy != null) return policy;
             return kind() != null ? null : "blur=unavailable";
         }
-        Backdrop.Kind kind() { return Backdrop.choose(blurEnabled, samsungBlur, sharedBackdrop(), sampledRow()); }
+        Backdrop.Kind kind() {
+            Backdrop.Kind k = Backdrop.choose(blurEnabled, samsungBlur, sharedBackdrop(), sampledRow());
+            return k == Backdrop.Kind.SAMSUNG && drawablePath() ? Backdrop.Kind.COMPOSITOR : k;
+        }
+        /**
+         * Experiment: lockscreen cards (and the shade over the lockscreen) take their blur from a
+         * BackgroundBlurDrawable drawn with the glass, whatever cross-window blur reports (always
+         * false on this firmware, where Samsung's own blur still works).
+         */
+        boolean drawablePath() {
+            Tuning t = Tuning.get();
+            return t.kgBlurPath == 1 && t.sfRefract && barState != null
+                    && (barState == Eligibility.BAR_KEYGUARD || barState == Eligibility.BAR_SHADE_LOCKED);
+        }
         /**
          * Rows whose background can be sampled and refracted. By default only lockscreen rows: the
          * wallpaper is static, so it is redrawn on the GPU every frame with no lag. The app behind a
@@ -783,7 +798,9 @@ public final class HeadsUpHooks {
                 nativePending = false;
                 Backdrop backdrop = kind == Backdrop.Kind.SHARED ? new SharedBackdrop()
                         : kind == Backdrop.Kind.SAMPLED ? sampledBackdrop(v, source)
-                        : kind == Backdrop.Kind.SAMSUNG ? (semBridge = SemBlurBridge.create(v)) : BackgroundBlurBridge.create(v);
+                        : kind == Backdrop.Kind.SAMSUNG ? (semBridge = SemBlurBridge.create(v))
+                        : drawablePath() ? (compBridge = BackgroundBlurBridge.create(v, true)) : BackgroundBlurBridge.create(v);
+                if (compBridge != null) SemBlurBridge.clearNative(v);
                 glass = new GlassDrawable(backdrop, v.getResources().getDisplayMetrics().density, spec);
                 glassKind = kind;
                 glassSource = source;
@@ -828,6 +845,11 @@ public final class HeadsUpHooks {
             return Eligibility.sharedBackdrop(shadeExpanded, Reflect.bool(r, "isOnKeyguard", "mOnKeyguard"));
         }
         void refreshLens() {
+            if (compBridge != null) {
+                try { compBridge.setLens(Eligibility.lens(barState, shadeExpanded, Reflect.bool(row.get(), "isOnKeyguard", "mOnKeyguard"))); }
+                catch (ReflectiveOperationException | RuntimeException e) { Probe.error("BLUR_DRAWABLE_LENS_FAILED", e); }
+                return;
+            }
             if (semBridge == null) return;
             boolean lens = Eligibility.lens(barState, shadeExpanded, Reflect.bool(row.get(), "isOnKeyguard", "mOnKeyguard"));
             // A pull-down from the lockscreen switches to the shade-over-keyguard state at once, while the
@@ -851,12 +873,16 @@ public final class HeadsUpHooks {
         void release(boolean restore) {
             if (glass == null) return;
             // The blur guard also blocked calls aimed at the row while this material was managed.
-            boolean compositor = glassKind == Backdrop.Kind.SAMSUNG || glass.hybrid();
+            boolean compositor = glassKind == Backdrop.Kind.SAMSUNG || glass.hybrid() || compBridge != null;
+            boolean drawable = compBridge != null;
             if (!restore && semBridge != null) semBridge.clearOnRelease();
-            glass.release(); glass = null; glassKind = null; glassSource = null; semBridge = null;
+            glass.release(); glass = null; glassKind = null; glassSource = null; semBridge = null; compBridge = null;
             Probe.log("GLASS_RELEASED", "native=" + restore);
             View r = row.get();
             if (compositor && r != null && restore) SemBlurBridge.restoreNative(r);
+            // The Samsung blur was taken off the background itself for the drawable path.
+            View bg = background.get();
+            if (drawable && bg != null && restore) SemBlurBridge.restoreNative(bg);
             nativePending = compositor && !restore;
         }
         /** The native blur was cleared on a hidden release and is still owed if no glass comes back. */

@@ -100,6 +100,15 @@ public final class SemBlurBridge implements Backdrop {
         } catch (ReflectiveOperationException | RuntimeException | LinkageError e) { Probe.error("SEM_BLUR_NATIVE_RESTORE_FAILED", e); }
         finally { applying = false; }
     }
+    /** Removes the Samsung blur from a view whose blur the module now draws another way. */
+    public static void clearNative(View view) {
+        try {
+            Class<?> info = Class.forName(INFO);
+            applying = true;
+            View.class.getMethod("semSetBlurInfo", info).invoke(view, (Object) null);
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError e) { Probe.error("SEM_BLUR_CLEAR_FAILED", e); }
+        finally { applying = false; }
+    }
     /** Main thread only: true while this bridge itself calls semSetBlurInfo (see the blur guard). */
     private static boolean applying;
     public static boolean applying() { return applying; }

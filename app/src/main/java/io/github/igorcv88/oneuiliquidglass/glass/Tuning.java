@@ -67,6 +67,12 @@ public final class Tuning {
      * letting it end (diagnostics).
      */
     public final int kgWinBlur;
+    /**
+     * Experiment (debug.oulg.kgblurpath=1): on the lockscreen and the shade over it, lens cards get
+     * their blur from a BackgroundBlurDrawable drawn inside the glass, with the glass's own bounds,
+     * instead of a Samsung blur installed on the view.
+     */
+    public final int kgBlurPath;
     /** Logs main-thread time spent in the module's hooks (see {@link Perf}). */
     public final boolean perf;
     /** Enables the view-tree and window diagnostic dumps (see {@link Probe#trace}). */
@@ -104,6 +110,7 @@ public final class Tuning {
         shadeBlur = number("shadeblur", 0f) >= 1f;
         sfRefract = number("sfrefract", 0f) >= 1f;
         kgWinBlur = Math.round(clamp(number("kgwinblur", 0f), 0f, 3f));
+        kgBlurPath = Math.round(clamp(number("kgblurpath", 0f), 0f, 1f));
         perf = number("perf", 0f) >= 1f;
         Perf.enabled = perf;
         trace = number("trace", 0f) >= 1f;
@@ -125,7 +132,7 @@ public final class Tuning {
         return "backdrop=" + backdrop + " profile=" + profile + " lens=" + lens + " rimhz=" + rimHz + " rimblur=" + rimBlur
                 + " refract=" + refract + " ior=" + ior + " blur=" + blur + " sat=" + saturation
                 + " disp=" + dispersion + " hz=" + hz + " hzkg=" + keyguardHz + " tint=" + tintAlpha
-                + " semradius=" + semRadius + " semradiuslens=" + semRadiusLens + " sflens=" + sfLens + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " kgwinblur=" + kgWinBlur + " perf=" + perf + " trace=" + trace;
+                + " semradius=" + semRadius + " semradiuslens=" + semRadiusLens + " sflens=" + sfLens + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " kgwinblur=" + kgWinBlur + " kgblurpath=" + kgBlurPath + " perf=" + perf + " trace=" + trace;
     }
 
     private static float clamp(float v, float lo, float hi) { return Float.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : lo; }
