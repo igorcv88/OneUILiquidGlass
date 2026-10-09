@@ -89,7 +89,7 @@ public final class Tuning {
         tintAlpha = Math.round(clamp(number("tint", -1f), -1f, 255f));
         semRadius = Math.round(clamp(number("semradius", -1f), -1f, 400f));
         semRadiusLens = Math.round(clamp(number("semradiuslens", 16f), -1f, 400f));
-        sfLens = clamp(number("sflens", 0.8f), 0.1f, 1.2f);
+        sfLens = clamp(number("sflens", 0.7f), 0.1f, 1.2f);
         // "spatial" stopped the blur rendering on S938BXXUCZZIC (sharp backdrop in screenshots): off by default.
         semCurve = prop("semcurve", "none");
         semAlpha = Math.round(clamp(number("semalpha", -1f), -1f, 255f));
