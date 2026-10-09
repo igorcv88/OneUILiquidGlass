@@ -408,7 +408,7 @@ Two nested Samsung blur regions were rejected: SurfaceFlinger draws each with a 
 Parameters, read when the shader compiles (restart SurfaceFlinger with the cache cleared to change them):
 - `debug.oulg.sf.core`: body radius in px, default 48; 0 turns the second blur off.
 - `debug.oulg.sf.taps`: taps per pixel, default 24, 4–48.
-- `debug.oulg.sf.ramp`: depth where the body radius is reached, in bevels, default 1.5.
+- `debug.oulg.sf.ramp`: depth where the body radius is reached, in bevels, default 1.5, 0.5–8.
 
 Host checks: the rewrite compiles and links with `glslangValidator`, and a WebGL2 render of the rewritten fragment shader (Chromium/SwiftShader, synthetic quarter-resolution blur texture) shows the gradient from a sharp refracted rim to a blurred body. With a lightly blurred source, 16 taps left visible grain at a 48 px radius; 32 were clean; 24 is the default. The device dump was not available in this session, so the check ran on synthetic FillRRect shaders modelled on Skia's, not on the 147-shader dump. Cost: `taps` extra texture reads per pixel of tagged cards only.
 

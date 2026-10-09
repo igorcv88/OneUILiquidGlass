@@ -168,7 +168,7 @@ static char *oulg_rewrite_fragment(const char *src, int debug, float core, int t
 
     if (!(core >= 0.0f && core <= 400.0f)) core = OULG_CORE_DEFAULT;
     if (taps < 4 || taps > 48) taps = OULG_TAPS_DEFAULT;
-    if (!(ramp >= 0.25f && ramp <= 8.0f)) ramp = OULG_RAMP_DEFAULT;
+    if (!(ramp >= 0.5f && ramp <= 8.0f)) ramp = OULG_RAMP_DEFAULT;  // above the 0.25 ramp start: smoothstep needs edge0 < edge1
 
     char block[4096];
     int n = snprintf(block, sizeof block,
