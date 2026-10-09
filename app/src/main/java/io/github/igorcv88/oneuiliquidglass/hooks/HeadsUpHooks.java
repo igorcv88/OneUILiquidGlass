@@ -154,8 +154,6 @@ public final class HeadsUpHooks {
         installShade();
         installBarState();
         installScrimClamp();
-        installCapturedBlurTrace();
-        installSurfaceBlurHook();
         for (String manager : new String[]{"com.android.systemui.statusbar.notification.headsup.HeadsUpManagerImpl", "com.android.systemui.statusbar.policy.BaseHeadsUpManager", "com.android.systemui.statusbar.policy.HeadsUpManager"}) {
             Class<?> c = resolve(manager);
             for (String n : new String[]{"showNotification", "updateNotification", "removeNotification", "createHeadsUpEntry", "setEntryPinned"}) hook(c, n, new XC_MethodHook() {
@@ -176,9 +174,6 @@ public final class HeadsUpHooks {
         if (enabled && (!drawHook || !shadeHook)) Probe.log("GLASS_UNAVAILABLE", "drawHook=" + drawHook + " shadeHook=" + shadeHook);
     }
     private final Set<String> foreignBlurLogged = new java.util.HashSet<>();
-    private int windowBlurLogs = 300, scrimAlphaLogs = 400, windowBlurBlocks, rowBlurLogs = 300;
-    private Object lastWindowInfo;
-    private final java.util.Map<View, Float> scrimLogged = new WeakHashMap<>();
     /** Stack walks are costly on a per-frame path; provenance is only gathered for the first calls. */
     private int foreignBlurTraces = 200;
     /**
@@ -211,52 +206,15 @@ public final class HeadsUpHooks {
                         // hands it back instead of clearing it.
                         if (states.containsKey(v) || (rowClass != null && rowClass.isInstance(v))
                                 || BACKGROUND.equals(v.getClass().getName())) SemBlurBridge.recordNative(v, p.args[0]);
-                        int kgWin = Tuning.get().kgWinBlur;
-                        if (kgWin == 3 && v.getRootView() == v && barState != null && Tuning.get().sfRefract
-                                && (barState == Eligibility.BAR_KEYGUARD || barState == Eligibility.BAR_SHADE_LOCKED)
-                                && v.getClass().getName().endsWith("NotificationShadeWindowView")) {
-                            // Diagnostic: the compositor hands lens cards a wrong (stale, heavily blurred)
-                            // texture for two frames after the window blur ends. Keep it alive at radius 1.
-                            if (p.args[0] != null) lastWindowInfo = p.args[0];
-                            else if (lastWindowInfo != null) p.args[0] = lastWindowInfo;
-                            Object r = p.args[0] == null ? null : Reflect.read(p.args[0], "mBlurRadius");
-                            if (r instanceof Integer && (Integer) r < 1) {
-                                try {
-                                    java.lang.reflect.Field f = p.args[0].getClass().getDeclaredField("mBlurRadius");
-                                    f.setAccessible(true); f.setInt(p.args[0], 1);
-                                } catch (ReflectiveOperationException | RuntimeException e) { Probe.error("WINDOW_BLUR_KEEP_FAILED", e); }
-                            }
-                        }
-                        Object winRadius = p.args[0] == null ? null : Reflect.read(p.args[0], "mBlurRadius");
-                        if (v.getRootView() == v && p.args[0] != null && barState != null && Tuning.get().sfRefract && kgWin != 1
-                                && v.getClass().getName().endsWith("NotificationShadeWindowView")
-                                && (kgWin == 2 ? barState == Eligibility.BAR_KEYGUARD || barState == Eligibility.BAR_SHADE_LOCKED
-                                    : barState == Eligibility.BAR_KEYGUARD && winRadius instanceof Integer && (Integer) winRadius <= 4)) {
-                            // On the idle lockscreen every touch makes the panel blur ramp to a radius of 1-3
-                            // and back; each step carries the panel's dark color curve and flashed the lens
-                            // cards gray. Only radii up to 4 are dropped: a pull-down (or the bouncer) passes
-                            // that within a few frames and keeps its blur.
+                        if (v.getRootView() == v && p.args[0] != null && barState != null && barState == Eligibility.BAR_KEYGUARD
+                                && Tuning.get().sfRefract && !Tuning.get().kgWinBlur && v.getClass().getName().endsWith("NotificationShadeWindowView")
+                                && Reflect.read(p.args[0], "mBlurRadius") instanceof Integer && (Integer) Reflect.read(p.args[0], "mBlurRadius") <= 4) {
+                            // On the idle lockscreen a touch makes the panel blur ramp the shade window to a
+                            // radius of 1-3 and back, each step with the panel's dark color curve. Only radii
+                            // up to 4 are dropped: a pull-down or the bouncer passes that within a few frames.
                             p.args[0] = null;
-                            if (windowBlurBlocks++ < 20) Probe.log("WINDOW_BLUR_BLOCKED", "view=" + v.getClass().getSimpleName() + " barState=" + barState);
-                        }
-                        if (Probe.trace && windowBlurLogs > 0 && v.getRootView() == v) {
-                            // Window-level blur (the panel blur on NotificationShadeWindowView): every call, with the state.
-                            windowBlurLogs--;
-                            Probe.log("WINDOW_BLUR", "view=" + v.getClass().getSimpleName() + " barState=" + barState + " shade=" + shadeExpanded
-                                    + " info=" + Probe.fields(p.args[0]));
-                        }
-                        if (Probe.trace && capturedLogs > 0 && p.args[0] != null && v.getRootView() != v
-                                && Boolean.TRUE.equals(Reflect.read(p.args[0], "mHasCapturedBitmap"))) {
-                            capturedLogs--;
-                            Probe.log("CAPTURED_BLUR_INFO", "view=" + v.getClass().getName() + " barState=" + barState + " info=" + Probe.fields(p.args[0]));
                         }
                         boolean managed = compositorState(v) != null;
-                        if (Probe.trace && rowBlurLogs > 0 && ((rowClass != null && rowClass.isInstance(v)) || BACKGROUND.equals(v.getClass().getName()))) {
-                            // Every blur SystemUI sets on a card, with the state: what replaces the glass after a pull-down.
-                            rowBlurLogs--;
-                            Probe.log("ROW_BLUR", "view=" + v.getClass().getSimpleName() + " id=" + Integer.toHexString(System.identityHashCode(v))
-                                    + " managed=" + managed + " barState=" + barState + " info=" + Probe.fields(p.args[0]));
-                        }
                         String caller = Probe.trace && foreignBlurTraces > 0 && foreignBlurLogged.size() < 40 ? blurCaller() : null;
                         if (caller != null) foreignBlurTraces--;
                         if (caller != null && foreignBlurLogged.add(v.getClass().getName() + "|" + caller + "|" + managed)) {
@@ -381,98 +339,17 @@ public final class HeadsUpHooks {
      * back until the next tap. Behind opaque native cards it never shows; behind glass it turned
      * lockscreen cards dark. On the keyguard state it is held at 0.
      */
-    private int surfaceBlurLogs = 300;
-    private int lastSurfaceBlur = -1;
-    /**
-     * AOSP's shade depth blur goes straight to SurfaceControl.Transaction.setBackgroundBlurRadius,
-     * not through semSetBlurInfo. Trace: every radius change with the bar state and caller.
-     * kgwinblur=2 also drops it on the keyguard and the shade over it (diagnostic).
-     */
-    private void installSurfaceBlurHook() {
-        try {
-            Class<?> t = Class.forName("android.view.SurfaceControl$Transaction");
-            for (Method m : t.getDeclaredMethods()) {
-                if (!m.getName().equals("setBackgroundBlurRadius") || m.getParameterCount() != 2) continue;
-                XposedBridge.hookMethod(m, new XC_MethodHook() {
-                    @Override protected void beforeHookedMethod(MethodHookParam p) {
-                        if (!(p.args[1] instanceof Integer)) return;
-                        int radius = (Integer) p.args[1];
-                        boolean keyguard = barState != null && (barState == Eligibility.BAR_KEYGUARD || barState == Eligibility.BAR_SHADE_LOCKED);
-                        boolean drop = keyguard && radius > 0 && Tuning.get().sfRefract && Tuning.get().kgWinBlur == 2;
-                        if (drop) p.args[1] = 0;
-                        if (Probe.trace && surfaceBlurLogs > 0 && radius != lastSurfaceBlur) {
-                            lastSurfaceBlur = radius;
-                            surfaceBlurLogs--;
-                            StringBuilder c = new StringBuilder();
-                            StackTraceElement[] st = new Throwable().getStackTrace();
-                            for (int i = 0, n = 0; i < st.length && n < 4; i++) {
-                                String cls = st[i].getClassName();
-                                if (cls.startsWith("de.robv") || cls.startsWith("LSP") || cls.contains("oneuiliquidglass") || cls.startsWith("java.lang.reflect")) continue;
-                                c.append(n++ == 0 ? "" : "<").append(cls.substring(cls.lastIndexOf('.') + 1)).append('.').append(st[i].getMethodName());
-                            }
-                            Probe.log("SURFACE_BLUR", "radius=" + radius + " dropped=" + drop + " barState=" + barState + " surface=" + p.args[0] + " caller=" + c);
-                        }
-                    }
-                });
-            }
-        } catch (ReflectiveOperationException | RuntimeException | LinkageError e) { Probe.error("SURFACE_BLUR_HOOK_FAILED", e); }
-    }
-    private int capturedLogs = 400;
-    private String capturedLast;
-    /**
-     * Trace only: Samsung's CapturedBlurContainer (gray #5d5d5d background) during gestures. Every call
-     * on it, and alpha/visibility set on it from outside, with its state and the bar state.
-     */
-    private void installCapturedBlurTrace() {
-        Class<?> c = resolve("com.android.systemui.statusbar.phone.CapturedBlurContainer");
-        if (c == null) return;
-        XC_MethodHook log = new XC_MethodHook() {
-            @Override protected void afterHookedMethod(MethodHookParam p) {
-                if (!Probe.trace || capturedLogs <= 0 || !(p.thisObject instanceof View)) return;
-                View v = (View) p.thisObject;
-                if (!v.getClass().getName().endsWith("CapturedBlurContainer")) return;
-                StringBuilder a = new StringBuilder();
-                for (Object o : p.args) a.append(a.length() == 0 ? "" : ",").append(o == null ? "null" : o instanceof Number || o instanceof Boolean ? o.toString() : o.getClass().getSimpleName());
-                String state = "vis=" + v.getVisibility() + " alpha=" + v.getAlpha() + " size=" + v.getWidth() + "x" + v.getHeight() + " shown=" + v.isShown();
-                String line = ((Method) p.method).getName() + "(" + a + ") " + state;
-                if (line.equals(capturedLast)) return;
-                capturedLast = line;
-                capturedLogs--;
-                Probe.log("CAPTURED_BLUR", line + " barState=" + barState + " shade=" + shadeExpanded + " bg=" + Probe.describe(v.getBackground(), 0));
-            }
-        };
-        try {
-            for (Method m : c.getDeclaredMethods()) {
-                if (java.lang.reflect.Modifier.isAbstract(m.getModifiers())) continue;
-                try { XposedBridge.hookMethod(m, log); } catch (RuntimeException | LinkageError ignored) { }
-            }
-            for (String n : new String[]{"setAlpha", "setVisibility", "setTranslationY", "setBackground"}) {
-                for (Method m : View.class.getDeclaredMethods()) if (m.getName().equals(n) && m.getParameterCount() == 1) XposedBridge.hookMethod(m, log);
-            }
-        } catch (RuntimeException | LinkageError e) { Probe.error("CAPTURED_TRACE_FAILED", e); }
-    }
     private void installScrimClamp() {
         Class<?> c = resolve("com.android.systemui.scrim.ScrimView");
         hook(c, "setViewAlpha", new XC_MethodHook() {
             @Override protected void beforeHookedMethod(MethodHookParam p) {
                 if (!(p.thisObject instanceof View) || !(p.args.length > 0 && p.args[0] instanceof Float)) return;
                 View v = (View) p.thisObject;
-                if (Probe.trace && scrimAlphaLogs > 0) logScrimAlpha(v, (Float) p.args[0]);
                 if (!notificationsScrim(v)) return;
                 if (notificationScrims.add(v)) Probe.log("SCRIM_NOTIFICATIONS", "id=" + idName(v) + " view=" + Integer.toHexString(System.identityHashCode(v)));
                 if (barState != null && barState == Eligibility.BAR_KEYGUARD && (Float) p.args[0] > 0f) p.args[0] = 0f;
             }
         });
-    }
-    /** Trace only: scrim alpha steps (0, 1, or a move of 0.15 or more) with the bar state. */
-    private void logScrimAlpha(View v, float a) {
-        Float last = scrimLogged.get(v);
-        boolean step = last == null || Math.abs(a - last) >= 0.15f || (a == 0f) != (last == 0f) || (a >= 1f) != (last >= 1f);
-        if (!step) return;
-        scrimLogged.put(v, a);
-        scrimAlphaLogs--;
-        Probe.log("SCRIM_ALPHA", "id=" + idName(v) + " alpha=" + a + " barState=" + barState + " shade=" + shadeExpanded
-                + " tint=" + Probe.hex(Reflect.read(v, "mTintColor")) + " shown=" + v.isShown());
     }
     private void clampNotificationScrims() {
         for (View v : new ArrayList<>(notificationScrims)) {
@@ -562,14 +439,13 @@ public final class HeadsUpHooks {
         if (bg.isAttachedToWindow()) s.onViewAttachedToWindow(bg);
         return s;
     }
-    private int fadeLogs = 80;
     private final class State implements View.OnAttachStateChangeListener, ViewTreeObserver.OnPreDrawListener {
         final WeakReference<View> background;
         final WeakReference<View> row;
         GlassDrawable glass;
         /** The Samsung blur behind glass, when glassKind is SAMSUNG. */
         SemBlurBridge semBridge;
-        /** The lens-mode BackgroundBlurDrawable behind glass (debug.oulg.kgblurpath=1). */
+        /** The lens-mode BackgroundBlurDrawable behind glass on the lockscreen (debug.oulg.kgblurpath). */
         BackgroundBlurBridge compBridge;
         Backdrop.Kind glassKind;
         String glassSource;
@@ -629,12 +505,11 @@ public final class HeadsUpHooks {
             try {
                 View v = background.get(); if (v == null) return true;
                 if (compBridge != null) {
+                    // Ancestor alpha (a pull up from the lockscreen) fades the drawn glass but not
+                    // the compositor's blur region, which stayed behind as a ghost of the card.
                     float a = 1f;
                     for (Object p = v; p instanceof View; p = ((View) p).getParent()) a *= ((View) p).getAlpha();
-                    if (compBridge.setRegionFade(a)) {
-                        if (Probe.trace && fadeLogs > 0) { fadeLogs--; Probe.log("REGION_FADE", "alpha=" + a + " barState=" + barState); }
-                        v.invalidate();
-                    }
+                    if (compBridge.setRegionFade(a)) v.invalidate();
                 }
                 boolean eligible = eligible();
                 View r = row.get();
@@ -700,9 +575,10 @@ public final class HeadsUpHooks {
             return k == Backdrop.Kind.SAMSUNG && drawablePath() ? Backdrop.Kind.COMPOSITOR : k;
         }
         /**
-         * Experiment: lockscreen cards (and the shade over the lockscreen) take their blur from a
+         * Lockscreen cards (and the shade over the lockscreen) take their blur from a
          * BackgroundBlurDrawable drawn with the glass, whatever cross-window blur reports (always
-         * false on this firmware, where Samsung's own blur still works).
+         * false on One UI 9, where Samsung's own blur still works). The Samsung blur installed on
+         * the view covered the view's bounds, not the card's, and lagged it by a frame.
          */
         boolean drawablePath() {
             Tuning t = Tuning.get();
@@ -860,13 +736,7 @@ public final class HeadsUpHooks {
                 return;
             }
             if (semBridge == null) return;
-            boolean lens = Eligibility.lens(barState, shadeExpanded, Reflect.bool(row.get(), "isOnKeyguard", "mOnKeyguard"));
-            // A pull-down from the lockscreen switches to the shade-over-keyguard state at once, while the
-            // lockscreen cards are still on screen sliding down (or springing back on a partial pull).
-            // Switching them to the shade material then flashed them gray once per move; a card keeps its
-            // lens through that state until it is hidden. Cards first shown in the shade get none.
-            if (!lens && barState != null && barState == Eligibility.BAR_SHADE_LOCKED && semBridge.built() && semBridge.lens()) return;
-            try { semBridge.setLens(lens); }
+            try { semBridge.setLens(Eligibility.lens(barState, shadeExpanded, Reflect.bool(row.get(), "isOnKeyguard", "mOnKeyguard"))); }
             catch (ReflectiveOperationException | RuntimeException e) { Probe.error("SEM_BLUR_LENS_FAILED", e); }
         }
         void release() {
@@ -876,8 +746,8 @@ public final class HeadsUpHooks {
         /**
          * restore=false (the card is being hidden) clears the blur instead of handing SystemUI's own
          * back: the compositor keeps a blur region for a frame or two after its view stops drawing,
-         * and the native radius-180 blur flashed gray on lockscreen cards at the end of a pull-down.
-         * The native blur is handed back later if the card is shown without glass.
+         * and the native radius-180 blur would show on the card for those frames. The native blur
+         * is handed back later if the card is shown without glass.
          */
         void release(boolean restore) {
             if (glass == null) return;
@@ -887,11 +757,10 @@ public final class HeadsUpHooks {
             if (!restore && semBridge != null) semBridge.clearOnRelease();
             glass.release(); glass = null; glassKind = null; glassSource = null; semBridge = null; compBridge = null;
             Probe.log("GLASS_RELEASED", "native=" + restore);
-            View r = row.get();
-            if (compositor && r != null && restore) SemBlurBridge.restoreNative(r);
+            View r = row.get(), bg = background.get();
+            if (restore && compositor && r != null) SemBlurBridge.restoreNative(r);
             // The Samsung blur was taken off the background itself for the drawable path.
-            View bg = background.get();
-            if (drawable && bg != null && restore) SemBlurBridge.restoreNative(bg);
+            if (restore && drawable && bg != null) SemBlurBridge.restoreNative(bg);
             nativePending = compositor && !restore;
         }
         /** The native blur was cleared on a hidden release and is still owed if no glass comes back. */

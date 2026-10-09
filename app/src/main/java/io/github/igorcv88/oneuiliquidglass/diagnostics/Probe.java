@@ -202,7 +202,7 @@ public final class Probe {
             for (int i = 0; i < g.getChildCount(); i++) walkPainters(g.getChildAt(i), depth + 1, rowId, budget);
         }
     }
-    public static String describe(android.graphics.drawable.Drawable d, int depth) {
+    private static String describe(android.graphics.drawable.Drawable d, int depth) {
         if (d == null) return "null";
         StringBuilder b = new StringBuilder(d.getClass().getSimpleName()).append("{alpha=").append(d.getAlpha());
         if (d instanceof android.graphics.drawable.ColorDrawable) b.append(" color=").append(hex(((android.graphics.drawable.ColorDrawable) d).getColor()));
@@ -219,23 +219,7 @@ public final class Probe {
         }
         return b.append('}').toString();
     }
-    /** Declared scalar fields of an object (a SemBlurInfo), for trace logs; "null" for null. */
-    public static String fields(Object o) {
-        if (o == null) return "null";
-        StringBuilder b = new StringBuilder(o.getClass().getSimpleName()).append('{');
-        int n = 0;
-        for (Class<?> c = o.getClass(); c != null && c != Object.class && n < 24; c = c.getSuperclass()) {
-            for (java.lang.reflect.Field f : c.getDeclaredFields()) {
-                if (java.lang.reflect.Modifier.isStatic(f.getModifiers()) || n >= 24) continue;
-                Class<?> t = f.getType();
-                if (!t.isPrimitive() && t != String.class && t != Integer.class && t != Float.class && t != Boolean.class) continue;
-                try { f.setAccessible(true); b.append(n++ == 0 ? "" : " ").append(f.getName()).append('=').append(f.get(o)); }
-                catch (ReflectiveOperationException | RuntimeException ignored) { }
-            }
-        }
-        return b.append('}').toString();
-    }
-    public static String hex(Object color) {
+    private static String hex(Object color) {
         return color instanceof Integer ? String.format("#%08x", (Integer) color) : String.valueOf(color);
     }
 }

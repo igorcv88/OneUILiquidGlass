@@ -4,27 +4,21 @@ Documento para continuar o trabalho em outra conversa. Leia inteiro antes de mex
 
 ## 0. Atualização (sessão seguinte, PR #21)
 
-O handoff completo desta sessão, com a linha do tempo da investigação, o estado de cada chave e a tabela de commits, está no documento compartilhado: <https://claude.ai/code/artifact/06632b0e-8a50-473c-af62-3373690088d1>. Resumo:
+Documento compartilhado com a investigação completa: <https://claude.ai/code/artifact/06632b0e-8a50-473c-af62-3373690088d1>. Estado final:
 
-- **PR #21** (`claude/new-session-myjwlg` → `ccr-fa46d54c-s1s4b6`, empilhado sobre o #20).
-- **sfhook v0.7 (blur em camadas)** confirmado no aparelho: `VS_OK=24 FS_OK=36 FAIL=0`. No dump real de 138 shaders, os 47 programas reescritos compilam no `glslangValidator`.
+- **sfhook v0.7 (blur em camadas)** confirmado no aparelho: `VS_OK=24 FS_OK=36 FAIL=0`. No dump real de 138 shaders, os 47 programas reescritos compilam.
   - Chaves, lidas na compilação: `debug.oulg.sf.core` (48 px), `debug.oulg.sf.taps` (24), `debug.oulg.sf.ramp` (1,5).
-- **Cinza permanente depois do meio-arrasto: causa e correção confirmadas.**
-  - Causa: o blur Samsung sem curva de cor própria herda a curva escura do painel.
-  - Correção: `debug.oulg.semcurve=auto` (padrão), que aplica a curva neutra `0,0,0,255,0,255` nos cards com lente.
-  - O item 3 da seção 7 deste documento (clamp do `scrim_notifications`) estava errado: aquela camada tem tamanho 0x0.
-- **Restam dois defeitos na tela de bloqueio.** Os dois são do pipeline de blur do SurfaceFlinger da Samsung e estão fora do alcance do app.
-  - **A:** textura de blur errada por 2 quadros no início e no fim de arrastos lentos. Com `sf.debug=1` o card continua magenta nesses quadros, então o shader desenha e a marca chega; quem erra é a textura de entrada.
-  - **B:** região de blur atrasada um quadro durante o arrasto.
-  - **Testes sem efeito:** scrims, blur da janela (`kgwinblur` 0/2/3), troca de lente, `CapturedBlurContainer`, `setBackgroundBlurRadius`, `debug.sf.enable_layer_caching=0` (piorou).
-  - **Inconsistente:** `debug.renderengine.restore_blur_step=0` resolveu por um ciclo de bloqueio e depois voltou.
-- **Decisão pendente**, com outros desenvolvedores:
-  1. engenharia reversa do blur no binário do SurfaceFlinger;
-  2. tela de bloqueio no caminho `SAMPLED`, com a lente do SurfaceFlinger só no pop-up (recomendada);
-  3. aceitar os defeitos.
-- **Limpeza do PR #21 antes do merge.** Manter `435bc60`, `c6888cf` e a curva neutra de `e1188bc`. Retirar os diagnósticos e as tentativas sem efeito: `6c19b48`, `d05b0f1`, `c88b8b9`, o descarte de raio ≤ 4 em `e1188bc`, `0cd2961`, `e6eb9f5`, `8953c9a`, `70c8da3` e `d2d48e8`. Decidir sobre `840e5e9`.
-- **No aparelho:** APK de debug `d2d48e8`; lib do SurfaceFlinger `/data/adb/oulg_live/SurfaceFlingerProp.v7.so`.
-- **Build do app nesta nuvem:** o Maven Central respondeu 429; use um init script do Gradle que troque `repo.maven.apache.org` por `maven-central.storage-download.googleapis.com/maven2/`.
+- **Tela de bloqueio resolvida e confirmada pelo usuário em vários ciclos:** sem cinza, sem piscadas, sem fantasma, mesma aparência de antes.
+  - **Curva neutra:** `semcurve=auto` aplica `0,0,0,255,0,255` nos cards com lente, que deixam de herdar a curva escura do painel.
+  - **Blur desenhado junto com o vidro:** na tela de bloqueio, o blur vem de um `BackgroundBlurDrawable` desenhado dentro do vidro, com os mesmos limites, raio e marca da lente (`debug.oulg.kgblurpath=1`, padrão). O blur Samsung instalado na View seguia os limites da View e atrasava um quadro.
+  - **Véu e raio:** véu igual ao do caminho Samsung; raio em px por `debug.oulg.kgblurradius` (-1 = `semradiuslens`).
+  - **Fantasma:** a região de blur recebe o alpha acumulado das Views pai.
+- **Economia de energia:** no modo padrão o efeito se mantém. No máximo, a Samsung desativa todos os blurs; é o comportamento esperado.
+- **Correções a este documento:**
+  - O item 3 da seção 7 (clamp do `scrim_notifications`) estava errado: aquela camada tem tamanho 0x0. O clamp é inofensivo.
+  - O handoff anterior chegou a dizer que os defeitos estavam fora do alcance do app. Uma revisão externa mostrou que não estavam.
+- **Limpeza:** os diagnósticos e as tentativas sem efeito saíram do código no commit de limpeza do PR #21. A tabela de commits do documento compartilhado registra o que cada um fez.
+- **Build do app nesta nuvem:** o Maven Central respondeu 429. Use um init script do Gradle que troque `repo.maven.apache.org` por `maven-central.storage-download.googleapis.com/maven2/`.
 
 ## 1. Objetivo e preferências do usuário
 

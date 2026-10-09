@@ -61,19 +61,17 @@ public final class Tuning {
      */
     public final boolean sfRefract;
     /**
-     * Panel blur on the shade window while the keyguard is up (debug.oulg.kgwinblur): 0 drops the
-     * radius 1-4 touch ramps on the idle lockscreen (default), 1 lets everything through, 2 drops it
-     * all on the lockscreen and the shade over it, 3 keeps it alive at radius 1 there instead of
-     * letting it end (diagnostics).
-     */
-    public final int kgWinBlur;
-    /**
-     * Experiment (debug.oulg.kgblurpath=1): on the lockscreen and the shade over it, lens cards get
-     * their blur from a BackgroundBlurDrawable drawn inside the glass, with the glass's own bounds,
-     * instead of a Samsung blur installed on the view.
+     * Lockscreen blur source with the compositor lens (debug.oulg.kgblurpath): 1 (default) draws
+     * a BackgroundBlurDrawable inside the glass with the glass's own bounds; 0 installs the Samsung
+     * blur on the view, whose region lagged the card and showed a stale texture during pull-downs.
      */
     public final int kgBlurPath;
-    /** Blur radius in px for that path (debug.oulg.kgblurradius); -1 = semradiuslens. */
+    /**
+     * Panel blur on the shade window while the lockscreen sits idle (debug.oulg.kgwinblur): 0
+     * (default) drops the radius 1-4 ramps a touch starts there; 1 lets them through.
+     */
+    public final boolean kgWinBlur;
+    /** Blur radius in px for the drawable path (debug.oulg.kgblurradius); -1 = semradiuslens. */
     public final int kgBlurRadius;
     /** Logs main-thread time spent in the module's hooks (see {@link Perf}). */
     public final boolean perf;
@@ -111,8 +109,8 @@ public final class Tuning {
         String shape = prop("semshape", "auto");
         shadeBlur = number("shadeblur", 0f) >= 1f;
         sfRefract = number("sfrefract", 0f) >= 1f;
-        kgWinBlur = Math.round(clamp(number("kgwinblur", 0f), 0f, 3f));
-        kgBlurPath = Math.round(clamp(number("kgblurpath", 0f), 0f, 1f));
+        kgBlurPath = Math.round(clamp(number("kgblurpath", 1f), 0f, 1f));
+        kgWinBlur = number("kgwinblur", 0f) >= 1f;
         kgBlurRadius = Math.round(clamp(number("kgblurradius", -1f), -1f, 400f));
         perf = number("perf", 0f) >= 1f;
         Perf.enabled = perf;
@@ -135,7 +133,7 @@ public final class Tuning {
         return "backdrop=" + backdrop + " profile=" + profile + " lens=" + lens + " rimhz=" + rimHz + " rimblur=" + rimBlur
                 + " refract=" + refract + " ior=" + ior + " blur=" + blur + " sat=" + saturation
                 + " disp=" + dispersion + " hz=" + hz + " hzkg=" + keyguardHz + " tint=" + tintAlpha
-                + " semradius=" + semRadius + " semradiuslens=" + semRadiusLens + " sflens=" + sfLens + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " kgwinblur=" + kgWinBlur + " kgblurpath=" + kgBlurPath + " kgblurradius=" + kgBlurRadius + " perf=" + perf + " trace=" + trace;
+                + " semradius=" + semRadius + " semradiuslens=" + semRadiusLens + " sflens=" + sfLens + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " kgblurpath=" + kgBlurPath + " kgblurradius=" + kgBlurRadius + " kgwinblur=" + kgWinBlur + " perf=" + perf + " trace=" + trace;
     }
 
     private static float clamp(float v, float lo, float hi) { return Float.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : lo; }
