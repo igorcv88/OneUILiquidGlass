@@ -11,7 +11,7 @@
 // with a corner radius whose fraction encodes the lens strength (see OULG_STRENGTH), below the
 // original radius so Skia does not clamp it on a pill whose radius is half its height. Fragment shaders that
 // sample one texture through vTransformedCoords then shift that sample inward near the rim of a
-// tagged card and add a rim highlight; any other draw keeps its exact output.
+// tagged card and blur its body further (layered blur, below); any other draw keeps its exact output.
 //
 // Each function returns a malloc'd new source, or NULL to keep the original.
 #ifndef OULG_REFRACT_H
@@ -26,7 +26,16 @@
 #define OULG_FS_DECL "flat in highp vec4 voulg_tag;\nnoperspective in highp vec2 voulg_vp;\n"
 // The blur region's texture is downscaled; bilinear upscaling shows its texels as blocks at small
 // blur radii. Tagged cards read it through a cubic B-spline (4 bilinear taps) instead.
-#define OULG_FS_FUNCS \
+//
+// Layered blur: the blur region is a light blur (the rim needs detail to refract). Tagged cards add a
+// second blur on top, a Vogel disc of taps whose radius grows with the depth from the outline, from 0
+// at the rim to the core radius past the ramp, so the body is strongly blurred and the step is smooth.
+// oulg_br (radius px) and oulg_jx/oulg_jy (texture coords per screen pixel) are set in main() before
+// the sample. Each disc is rotated per pixel (interleaved gradient noise): residual tap gaps become
+// fine grain instead of ghost copies.
+#define OULG_FS_FUNCS_FMT \
+    "highp float oulg_br;\n" \
+    "highp vec2 oulg_jx, oulg_jy;\n" \
     "mediump vec4 oulg_bspline(sampler2D s, highp vec2 uv) {\n" \
     "  highp vec2 ts = vec2(textureSize(s, 0));\n" \
     "  highp vec2 st = uv * ts - 0.5;\n" \
@@ -43,8 +52,33 @@
     "  return g0.y * (g0.x * textureLod(s, h0, 0.0) + g1.x * textureLod(s, vec2(h1.x, h0.y), 0.0))\n" \
     "       + g1.y * (g0.x * textureLod(s, vec2(h0.x, h1.y), 0.0) + g1.x * textureLod(s, h1, 0.0));\n" \
     "}\n" \
-    "mediump vec4 oulg_sample(sampler2D s, highp vec2 uv, float bias) { return voulg_tag.x > 0.0 ? oulg_bspline(s, uv) : texture(s, uv, bias); }\n" \
-    "mediump vec4 oulg_sample(sampler2D s, highp vec2 uv) { return voulg_tag.x > 0.0 ? oulg_bspline(s, uv) : texture(s, uv); }\n"
+    "mediump vec4 oulg_disc(sampler2D s, highp vec2 uv) {\n" \
+    "  highp float a0 = 6.2831853 * fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));\n" \
+    "  highp vec2 dir = vec2(cos(a0), sin(a0));\n" \
+    "  const highp mat2 rot = mat2(-0.7373688, 0.6754903, -0.6754903, -0.7373688);\n" \
+    "  mediump vec4 acc = vec4(0.0);\n" \
+    "  mediump float wsum = 0.0;\n" \
+    "  for (int i = 0; i < %d; i++) {\n" \
+    "    highp float rr = sqrt((float(i) + 0.5) / %d.0);\n" \
+    "    highp vec2 o = dir * (rr * oulg_br);\n" \
+    "    mediump float w = exp(-2.0 * rr * rr);\n" \
+    "    acc += w * textureLod(s, uv + oulg_jx * o.x + oulg_jy * o.y, 0.0);\n" \
+    "    wsum += w;\n" \
+    "    dir = rot * dir;\n" \
+    "  }\n" \
+    "  return acc / wsum;\n" \
+    "}\n" \
+    "mediump vec4 oulg_lens(sampler2D s, highp vec2 uv) {\n" \
+    "  mediump vec4 c = oulg_bspline(s, uv);\n" \
+    "  return oulg_br < 0.5 ? c : mix(c, oulg_disc(s, uv), clamp(oulg_br / 6.0, 0.0, 1.0));\n" \
+    "}\n" \
+    "mediump vec4 oulg_sample(sampler2D s, highp vec2 uv, float bias) { return voulg_tag.x > 0.0 ? oulg_lens(s, uv) : texture(s, uv, bias); }\n" \
+    "mediump vec4 oulg_sample(sampler2D s, highp vec2 uv) { return voulg_tag.x > 0.0 ? oulg_lens(s, uv) : texture(s, uv); }\n"
+// Layered-blur defaults: core radius in px (0 turns the second blur off), taps per pixel, and the depth
+// at which the core radius is reached, as a multiple of the bevel.
+#define OULG_CORE_DEFAULT 48.0f
+#define OULG_TAPS_DEFAULT 24
+#define OULG_RAMP_DEFAULT 1.5f
 #define OULG_VS_RADII_AT "highp vec2 neighbor_radii = radii_and_neighbors.zw;\n"
 #define OULG_VS_POS_AT "gl_Position = vec4(devcoord, 0.0, 1.0);\n"
 #define OULG_FS_SAMPLE "texture(uTextureSampler_0_S1, vTransformedCoords_"
@@ -123,7 +157,7 @@ static char *oulg_rewrite_vertex(const char *src, int full) {
     return s;
 }
 
-static char *oulg_rewrite_fragment(const char *src, int debug) {
+static char *oulg_rewrite_fragment(const char *src, int debug, float core, int taps, float ramp) {
     if (!strstr(src, "sk_FragColor") || strstr(src, "oulg_")) return NULL;
     if (oulg_count(src, OULG_FS_DECL_AT) != 1 || oulg_count(src, OULG_FS_SAMPLE) != 1 || oulg_count(src, OULG_FS_FINAL) != 1) return NULL;
     const char *call = strstr(src, OULG_FS_SAMPLE), *mainAt = strstr(src, "void main() {\n");
@@ -132,7 +166,11 @@ static char *oulg_rewrite_fragment(const char *src, int debug) {
     char coords[64];
     if (!oulg_ident_after(call + strlen("texture(uTextureSampler_0_S1, "), "vTransformedCoords_", coords, sizeof coords)) return NULL;
 
-    char block[2400];
+    if (!(core >= 0.0f && core <= 400.0f)) core = OULG_CORE_DEFAULT;
+    if (taps < 4 || taps > 48) taps = OULG_TAPS_DEFAULT;
+    if (!(ramp >= 0.25f && ramp <= 8.0f)) ramp = OULG_RAMP_DEFAULT;
+
+    char block[4096];
     int n = snprintf(block, sizeof block,
         // Derivatives first, in uniform control flow.
         "highp vec2 oulg_tc = %s;\n"
@@ -140,15 +178,21 @@ static char *oulg_rewrite_fragment(const char *src, int debug) {
         "highp vec2 oulg_ty = dFdy(%s);\n"
         "highp mat2 oulg_j = mat2(dFdx(voulg_vp), dFdy(voulg_vp));\n"
         "mediump float oulg_dbg = 0.0;\n"
+        "oulg_br = 0.0;\n"
+        "oulg_jx = oulg_tx;\n"
+        "oulg_jy = oulg_ty;\n"
         "if (voulg_tag.x > 0.0 && abs(determinant(oulg_j)) > 1e-12) {\n"
         "  oulg_dbg = %s;\n"
         "  highp float oulg_r = voulg_tag.y;\n"
         "  highp vec2 oulg_hs = voulg_tag.zw;\n"
         "  highp vec2 oulg_q = abs(voulg_vp) * oulg_hs;\n"
-        "  highp vec2 oulg_v = max(oulg_q - (oulg_hs - vec2(oulg_r)), vec2(0.0));\n"
+        "  highp vec2 oulg_w = oulg_q - (oulg_hs - vec2(oulg_r));\n"
+        "  highp vec2 oulg_v = max(oulg_w, vec2(0.0));\n"
         "  highp float oulg_l = length(oulg_v);\n"
         "  highp float oulg_bevel = clamp(oulg_r * 0.42, 16.0, 56.0);\n"
-        "  highp float oulg_depth = oulg_r - oulg_l;\n"
+        // Depth from the outline in px, also past the corner arcs (rounded-rect distance).
+        "  highp float oulg_depth = oulg_r - oulg_l - min(max(oulg_w.x, oulg_w.y), 0.0);\n"
+        "  oulg_br = %.2f * smoothstep(0.25 * oulg_bevel, %.3f * oulg_bevel, oulg_depth);\n"
         "  if (oulg_l > 0.0 && oulg_depth > 0.0 && oulg_depth < oulg_bevel) {\n"
         "    highp float oulg_t = 1.0 - oulg_depth / oulg_bevel;\n"
         // Outward unit direction in the rect's pixel axes, then an inward shift in normalized units.
@@ -158,7 +202,7 @@ static char *oulg_rewrite_fragment(const char *src, int debug) {
         "    oulg_tc += oulg_tx * oulg_ds.x + oulg_ty * oulg_ds.y;\n"
         "  }\n"
         "}\n",
-        coords, coords, coords, debug ? "1.0" : "0.0");
+        coords, coords, coords, debug ? "1.0" : "0.0", (double) core, (double) ramp);
     if (n <= 0 || (size_t) n >= sizeof block) return NULL;
 
     // Splice from the end backwards so earlier offsets stay valid.
@@ -179,7 +223,12 @@ static char *oulg_rewrite_fragment(const char *src, int debug) {
         if (!u) return NULL;
     }
     u = oulg_insert_after(u, 1, "void main() {\n", block);
-    return oulg_insert_after(u, 1, OULG_FS_DECL_AT, external ? OULG_FS_DECL : OULG_FS_DECL OULG_FS_FUNCS);
+    // The globals are declared on the external path too, because main() assigns them.
+    char funcs[4096];
+    n = external ? snprintf(funcs, sizeof funcs, OULG_FS_DECL "highp float oulg_br;\nhighp vec2 oulg_jx, oulg_jy;\n")
+                 : snprintf(funcs, sizeof funcs, OULG_FS_DECL OULG_FS_FUNCS_FMT, taps, taps);
+    if (n <= 0 || (size_t) n >= sizeof funcs) { free(u); return NULL; }
+    return oulg_insert_after(u, 1, OULG_FS_DECL_AT, funcs);
 }
 
 // Rounded-rect clip programs (CircularRRectEffect): the radius arrives as uradiusPlusHalf (r + 0.5)

@@ -24,7 +24,7 @@ int main(int argc, char **argv) {
         int vertex = strstr(src, "gl_Position") != NULL;
         const char *ext = vertex ? "vert" : "frag";
         put(argv[2], "orig", idx, ext, src);
-        char *out = vertex ? oulg_rewrite_vertex(src, 1) : oulg_rewrite_fragment(src, 1);
+        char *out = vertex ? oulg_rewrite_vertex(src, 1) : oulg_rewrite_fragment(src, 1, OULG_CORE_DEFAULT, OULG_TAPS_DEFAULT, OULG_RAMP_DEFAULT);
         if (!out && !vertex) out = oulg_rewrite_clip(src, 1);
         if (out) { put(argv[2], "mod", idx, ext, out); free(out); if (vertex) vs++; else fs++; }
         if (vertex && (out = oulg_rewrite_vertex(src, 0))) { put(argv[2], "min", idx, ext, out); free(out); }
