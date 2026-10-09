@@ -309,9 +309,10 @@ Module side: `debug.oulg.sfrefract=1` changes two things.
 
 ### Phase 2 on the device (2026-10-09)
 
-Diagnostic after a live swap: `LIB_NOVA=1 SRC=136 ALVO=66 RW_OK=12 RW_FAIL=0`. With `debug.oulg.sfrefract=1`:
-- **Lockscreen rows:** Samsung blur plus the compositor lens at the rim. This is the best result so far.
-- **Heads-up over apps:** the blur is slightly stronger than on the lockscreen, and refraction stays in the rim band by design.
+Diagnostic after a live swap: `LIB_NOVA=1 SRC=136 ALVO=66 RW_OK=12 RW_FAIL=0`. The rewrite compiles on the device.
+
+Correction (later the same day): the look first credited here to the compositor lens came from the app at 0.1.14, which has no `sfrefract` and so never tags a card. That look is the module's own refraction: the wallpaper on the lockscreen, the captured rim on heads-up rows. From 0.1.15, with `debug.oulg.sfrefract=1`, cards carry the tag and drop the module's own refraction, and the device shows only the Samsung blur (radius 180) with no visible lens. So the rewritten programs do not reach the tagged blur regions, or the tag does not survive to SurfaceFlinger. Not resolved; `sfrefract` stays off by default.
+
 - **Expanded shade:** looks fine. A small stutter on pull-down is still open; it reads as dropping from 120 to 60 Hz. No A/B measurement yet.
 
 Operational notes:
