@@ -203,7 +203,7 @@ public final class HeadsUpHooks {
                         if (states.containsKey(v) || (rowClass != null && rowClass.isInstance(v))
                                 || BACKGROUND.equals(v.getClass().getName())) SemBlurBridge.recordNative(v, p.args[0]);
                         boolean managed = compositorState(v) != null;
-                        String caller = foreignBlurTraces > 0 && foreignBlurLogged.size() < 40 ? blurCaller() : null;
+                        String caller = Probe.trace && foreignBlurTraces > 0 && foreignBlurLogged.size() < 40 ? blurCaller() : null;
                         if (caller != null) foreignBlurTraces--;
                         if (caller != null && foreignBlurLogged.add(v.getClass().getName() + "|" + caller + "|" + managed)) {
                             Probe.log("SEM_BLUR_FOREIGN", "view=" + v.getClass().getName() + " id=" + Integer.toHexString(System.identityHashCode(v))
@@ -252,7 +252,7 @@ public final class HeadsUpHooks {
                                 if (s == null) return;
                                 if (mutatorLogged.size() < 40 && mutatorLogged.add(n + "|" + p.thisObject.getClass().getName())) {
                                     Probe.log("SEM_BLUR_MUTATED", "method=" + n + " view=" + p.thisObject.getClass().getName()
-                                            + " caller=" + caller(n));
+                                            + " caller=" + (Probe.trace ? caller(n) : "-"));
                                 }
                                 s.glass.reassertBackdrop();
                             } catch (RuntimeException | LinkageError e) { Probe.error("BLUR_MUTATOR_FAILED", e); }
@@ -315,6 +315,10 @@ public final class HeadsUpHooks {
         })) shadeHook = true;
     }
     private void updateShade(Object controller) {
+        long started = Perf.start();
+        try { applyShade(controller); } finally { Perf.end(Perf.SHADE, started); }
+    }
+    private void applyShade(Object controller) {
         Object height = Reflect.read(controller, "mExpandedHeight");
         if (!(height instanceof Number)) height = Reflect.read(controller, "expandedHeight");
         if (!(height instanceof Number)) {

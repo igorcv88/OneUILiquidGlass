@@ -51,6 +51,8 @@ public final class Tuning {
     public final boolean sfRefract;
     /** Logs main-thread time spent in the module's hooks (see {@link Perf}). */
     public final boolean perf;
+    /** Enables the view-tree and window diagnostic dumps (see {@link Probe#trace}). */
+    public final boolean trace;
     /** Bumped whenever any knob changes, so cached backdrop parameters are rebuilt. */
     public static int generation;
 
@@ -83,6 +85,8 @@ public final class Tuning {
         sfRefract = number("sfrefract", 0f) >= 1f;
         perf = number("perf", 0f) >= 1f;
         Perf.enabled = perf;
+        trace = number("trace", 0f) >= 1f;
+        Probe.trace = trace;
         semShape = shape.equals("single") || shape.equals("path") || shape.equals("four") || shape.equals("none") ? shape : "auto";
     }
 
@@ -100,7 +104,7 @@ public final class Tuning {
         return "backdrop=" + backdrop + " profile=" + profile + " lens=" + lens + " rimhz=" + rimHz + " rimblur=" + rimBlur
                 + " refract=" + refract + " ior=" + ior + " blur=" + blur + " sat=" + saturation
                 + " disp=" + dispersion + " hz=" + hz + " hzkg=" + keyguardHz + " tint=" + tintAlpha
-                + " semradius=" + semRadius + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " perf=" + perf;
+                + " semradius=" + semRadius + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " perf=" + perf + " trace=" + trace;
     }
 
     private static float clamp(float v, float lo, float hi) { return Float.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : lo; }

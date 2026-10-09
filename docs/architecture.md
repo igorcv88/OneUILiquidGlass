@@ -319,6 +319,25 @@ Operational notes:
 - **Restarting surfaceflinger.** Every `stop`/`start` restarts the whole userspace (boot animation, system_server, apps). On the device each restart took longer, up to 4–5 min on "Powered by Android". The hook only works when a shader is first compiled, so a restart is needed only to load a new library or to drop the rewrites, and should otherwise be avoided. Cause not measured yet.
 - **Cache keeps the rewrite.** Skia caches the program binary it linked, rewrite included. `debug.oulg.sf.norewrite=1` or removing the module takes effect only after `skia_shaders` and `egl_shaders` are deleted and surfaceflinger is restarted. The running process keeps its linked programs, and the flag is read only in `glShaderSource`. Leftover rewritten binaries are inert while no card carries the radius tag (`sfrefract=0`).
 
+### Main-thread cost in the shade (2026-10-09)
+
+gfxinfo for SystemUI over 10 shade open/close cycles:
+
+| Build | Median | 90th | Janky | Slow UI thread |
+|---|---|---|---|---|
+| Module off | 5 ms | 12 ms | 13.8 % | 30 |
+| Module on, before | 13 ms | 34 ms | 36.7 % | 163 |
+| Reflection cache | 5 ms | 17 ms | 23.6 % | 80 |
+
+GPU time was 1–7 ms in every run, so the cost is on SystemUI's main thread.
+
+- **Reflection cache.** The pre-draw listener and the draw hook run once per row per frame and read rows reflectively. `Reflect` now caches field and method lookups per class and name, misses included. An uncached lookup scanned declared members up the hierarchy and threw an exception per level it missed.
+- **Remaining jank.** `debug.oulg.perf=1` showed the hook bodies at about 1 % of the main thread, so the remaining jank lies elsewhere. The diagnostic dumps that walk view trees and windows ran on the main thread, the scrim walk right as the shade starts to open. They are now off unless `debug.oulg.trace=1`:
+  - scrims, painters, hierarchy, view and material snapshots;
+  - window surveys;
+  - caller stack walks.
+- **Perf slots.** The `shade` slot times the expanded-height hook.
+
 ## Future work
 
 - **Separate blur for the notification center and the control center.** Theme Park and HomeUp set a single blur amount for both panels. The user runs 12 %: lower leaves the control center unreadable, higher over-blurs the notification list. A split needs its own investigation: find where SystemUI applies the panel blur, whether the two panels are separate blur regions or one window, and whether the module can own one of them.

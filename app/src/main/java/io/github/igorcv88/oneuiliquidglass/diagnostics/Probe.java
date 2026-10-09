@@ -16,6 +16,12 @@ import io.github.igorcv88.oneuiliquidglass.hooks.Reflect;
 
 public final class Probe {
     private Probe() {}
+    /**
+     * Diagnostic dumps that walk view trees or windows (scrims, painters, hierarchy, view and
+     * material snapshots, window surveys) run on SystemUI's main thread, some of them as the shade
+     * starts to open; off unless debug.oulg.trace=1. Single-line events are always logged.
+     */
+    public static volatile boolean trace;
     public static void log(String event, String detail) {
         Log.i("OULG", "v=1 t=" + SystemClock.elapsedRealtime() + " event=" + event + " " + detail);
     }
@@ -74,6 +80,7 @@ public final class Probe {
         }
     }
     public static void hierarchy(View view) {
+        if (!trace) return;
         View current = view;
         for (int depth = 0; current != null && depth < 16; depth++) {
             log("ANCESTOR", "depth=" + depth + " class=" + current.getClass().getName());
@@ -81,6 +88,7 @@ public final class Probe {
         }
     }
     public static void view(String event, View view) {
+        if (!trace) return;
         int[] xy = new int[2]; view.getLocationOnScreen(xy);
         WindowInsets insets = view.getRootWindowInsets();
         Object root = null;
@@ -97,6 +105,7 @@ public final class Probe {
     /** What paints the native material: drawable chain, alphas and tint, logged when glass engages. */
     public static void material(View background, View row, android.graphics.drawable.Drawable original,
                                 String backdrop, int fill, int blurColor) {
+        if (!trace) return;
         log("MATERIAL", "viewId=" + Integer.toHexString(System.identityHashCode(background)) + " backdrop=" + backdrop
                 + " viewAlpha=" + background.getAlpha() + " rowAlpha=" + (row == null ? "null" : row.getAlpha())
                 + " transitionAlpha=" + Reflect.read(background, "mTransitionAlpha")
@@ -105,7 +114,7 @@ public final class Probe {
     }
     /** Scrims, overlays and tinted backgrounds in the shade window: alpha, visibility and tint. */
     public static void scrims(View root, String reason) {
-        if (root == null) return;
+        if (root == null || !trace) return;
         int[] budget = {40};
         walkScrims(root, 0, reason, budget);
     }
@@ -172,7 +181,7 @@ public final class Probe {
      */
     private static final java.util.Set<Integer> PAINTERS_DUMPED = new java.util.HashSet<>();
     public static void painters(View row) {
-        if (row == null || PAINTERS_DUMPED.size() > 32 || !PAINTERS_DUMPED.add(System.identityHashCode(row))) return;
+        if (row == null || !trace || PAINTERS_DUMPED.size() > 32 || !PAINTERS_DUMPED.add(System.identityHashCode(row))) return;
         int[] budget = {30};
         walkPainters(row, 0, Integer.toHexString(System.identityHashCode(row)), budget);
     }

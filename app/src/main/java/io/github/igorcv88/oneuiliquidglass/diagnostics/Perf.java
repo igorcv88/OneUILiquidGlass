@@ -8,8 +8,8 @@ package io.github.igorcv88.oneuiliquidglass.diagnostics;
  */
 public final class Perf {
     private Perf() {}
-    public static final int PREDRAW = 0, DRAW_BEFORE = 1, DRAW_AFTER = 2, GLASS_DRAW = 3, BLUR_GUARD = 4, BLUR_MUTATOR = 5;
-    private static final String[] NAMES = {"predraw", "drawBefore", "drawAfter", "glassDraw", "blurGuard", "blurMutator"};
+    public static final int PREDRAW = 0, DRAW_BEFORE = 1, DRAW_AFTER = 2, GLASS_DRAW = 3, BLUR_GUARD = 4, BLUR_MUTATOR = 5, SHADE = 6;
+    private static final String[] NAMES = {"predraw", "drawBefore", "drawAfter", "glassDraw", "blurGuard", "blurMutator", "shade"};
     private static final long WINDOW_NS = 2_000_000_000L;
     public static volatile boolean enabled;
     private static final long[] nanos = new long[NAMES.length];
