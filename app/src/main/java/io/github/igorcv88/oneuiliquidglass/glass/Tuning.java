@@ -61,10 +61,11 @@ public final class Tuning {
      */
     public final boolean sfRefract;
     /**
-     * Lets the panel blur reach the shade window while the lockscreen sits idle
-     * (debug.oulg.kgwinblur, default off): see the blur guard in HeadsUpHooks.
+     * Panel blur on the shade window while the keyguard is up (debug.oulg.kgwinblur): 0 drops the
+     * radius 1-4 touch ramps on the idle lockscreen (default), 1 lets everything through, 2 drops it
+     * all on the lockscreen and the shade over it (diagnostic).
      */
-    public final boolean kgWinBlur;
+    public final int kgWinBlur;
     /** Logs main-thread time spent in the module's hooks (see {@link Perf}). */
     public final boolean perf;
     /** Enables the view-tree and window diagnostic dumps (see {@link Probe#trace}). */
@@ -101,7 +102,7 @@ public final class Tuning {
         String shape = prop("semshape", "auto");
         shadeBlur = number("shadeblur", 0f) >= 1f;
         sfRefract = number("sfrefract", 0f) >= 1f;
-        kgWinBlur = number("kgwinblur", 0f) >= 1f;
+        kgWinBlur = Math.round(clamp(number("kgwinblur", 0f), 0f, 2f));
         perf = number("perf", 0f) >= 1f;
         Perf.enabled = perf;
         trace = number("trace", 0f) >= 1f;

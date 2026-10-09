@@ -208,9 +208,12 @@ public final class HeadsUpHooks {
                         // hands it back instead of clearing it.
                         if (states.containsKey(v) || (rowClass != null && rowClass.isInstance(v))
                                 || BACKGROUND.equals(v.getClass().getName())) SemBlurBridge.recordNative(v, p.args[0]);
-                        if (v.getRootView() == v && p.args[0] != null && barState != null && barState == Eligibility.BAR_KEYGUARD
-                                && Tuning.get().sfRefract && !Tuning.get().kgWinBlur && v.getClass().getName().endsWith("NotificationShadeWindowView")
-                                && Reflect.read(p.args[0], "mBlurRadius") instanceof Integer && (Integer) Reflect.read(p.args[0], "mBlurRadius") <= 4) {
+                        int kgWin = Tuning.get().kgWinBlur;
+                        Object winRadius = p.args[0] == null ? null : Reflect.read(p.args[0], "mBlurRadius");
+                        if (v.getRootView() == v && p.args[0] != null && barState != null && Tuning.get().sfRefract && kgWin != 1
+                                && v.getClass().getName().endsWith("NotificationShadeWindowView")
+                                && (kgWin == 2 ? barState == Eligibility.BAR_KEYGUARD || barState == Eligibility.BAR_SHADE_LOCKED
+                                    : barState == Eligibility.BAR_KEYGUARD && winRadius instanceof Integer && (Integer) winRadius <= 4)) {
                             // On the idle lockscreen every touch makes the panel blur ramp to a radius of 1-3
                             // and back; each step carries the panel's dark color curve and flashed the lens
                             // cards gray. Only radii up to 4 are dropped: a pull-down (or the bouncer) passes
