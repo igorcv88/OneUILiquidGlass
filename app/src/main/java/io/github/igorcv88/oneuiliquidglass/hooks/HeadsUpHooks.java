@@ -328,6 +328,17 @@ public final class HeadsUpHooks {
                 // The blur is a view property: a card SystemUI does not redraw (the shade springing
                 // back to the lockscreen) would keep the expanded-shade blur. Re-decide now.
                 for (State s : new ArrayList<>(states.values())) { s.refreshLens(); s.invalidate(); }
+                if (Probe.trace) {
+                    // Scrims settle after the state change; snapshot them once the animation is done.
+                    int at = barState;
+                    for (State s : states.values()) {
+                        View v = s.background.get();
+                        if (v == null || !v.isAttachedToWindow()) continue;
+                        View root = v.getRootView();
+                        v.postDelayed(() -> Probe.scrims(root, "barState=" + at), 900);
+                        break;
+                    }
+                }
             }
         });
     }
