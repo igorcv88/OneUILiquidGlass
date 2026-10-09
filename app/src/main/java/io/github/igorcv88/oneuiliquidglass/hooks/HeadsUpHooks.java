@@ -18,6 +18,7 @@ import java.util.function.Consumer;
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
 import io.github.igorcv88.oneuiliquidglass.Config;
+import io.github.igorcv88.oneuiliquidglass.diagnostics.Perf;
 import io.github.igorcv88.oneuiliquidglass.diagnostics.Probe;
 import io.github.igorcv88.oneuiliquidglass.diagnostics.WindowSurvey;
 import io.github.igorcv88.oneuiliquidglass.glass.Backdrop;
@@ -182,6 +183,10 @@ public final class HeadsUpHooks {
             XposedBridge.hookAllMethods(View.class, "semSetBlurInfo", new XC_MethodHook() {
                 @Override protected void beforeHookedMethod(MethodHookParam p) {
                     if (!(p.thisObject instanceof View)) return;
+                    long started = Perf.start();
+                    try { guard(p); } finally { Perf.end(Perf.BLUR_GUARD, started); }
+                }
+                private void guard(MethodHookParam p) {
                     if (SemBlurBridge.applying()) {
                         // A clear nested inside our own apply, on the view we are applying to.
                         if (p.args[0] == null && p.thisObject == SemBlurBridge.applyingHost()) {
@@ -241,6 +246,7 @@ public final class HeadsUpHooks {
                     XposedBridge.hookMethod(m, new XC_MethodHook() {
                         @Override protected void afterHookedMethod(MethodHookParam p) {
                             if (SemBlurBridge.applying() || !(p.thisObject instanceof View)) return;
+                            long started = Perf.start();
                             try {
                                 State s = compositorState((View) p.thisObject);
                                 if (s == null) return;
@@ -250,6 +256,7 @@ public final class HeadsUpHooks {
                                 }
                                 s.glass.reassertBackdrop();
                             } catch (RuntimeException | LinkageError e) { Probe.error("BLUR_MUTATOR_FAILED", e); }
+                            finally { Perf.end(Perf.BLUR_MUTATOR, started); }
                         }
                     });
                     names.add(n);
@@ -416,6 +423,7 @@ public final class HeadsUpHooks {
             Probe.view("DETACH", view);
         }
         @Override public boolean onPreDraw() {
+            long started = Perf.start();
             try {
                 View v = background.get(); if (v == null) return true;
                 boolean eligible = eligible();
@@ -457,6 +465,7 @@ public final class HeadsUpHooks {
                     width = v.getWidth(); height = v.getHeight(); Probe.view("GEOMETRY", v);
                 }
             } catch (RuntimeException | LinkageError e) { failed = true; release(); Probe.error("PREDRAW_FAILED", e); }
+            finally { Perf.end(Perf.PREDRAW, started); }
             return true;
         }
         boolean eligible() {
@@ -638,6 +647,7 @@ public final class HeadsUpHooks {
             if (!(p.thisObject instanceof View) || backgroundField == null || !(p.args[0] instanceof Canvas)) return;
             View v = (View) p.thisObject;
             if (!reported) { reported = true; Probe.log("DRAW_HOOK_CALLED", "view=" + v.getClass().getName()); }
+            long started = Perf.start();
             try {
                 View row = findRow(v); if (row == null) return;
                 State s = state(v, row);
@@ -651,15 +661,19 @@ public final class HeadsUpHooks {
             } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
                 State s = states.get(v); if (s != null) { s.failed = true; s.release(); }
                 Probe.error("DRAW_SWAP_FAILED", e);
-            }
+            } finally { Perf.end(Perf.DRAW_BEFORE, started); }
         }
         @Override protected void afterHookedMethod(MethodHookParam p) {
             Object real = p.getObjectExtra("oulgCanvas"); if (!(real instanceof Canvas)) return;
+            long started = Perf.start();
+            try { composeGlass(p, (Canvas) real); } finally { Perf.end(Perf.DRAW_AFTER, started); }
+        }
+        private void composeGlass(MethodHookParam p, Canvas real) {
             View v = (View) p.thisObject;
             State s = states.get(v);
             if (s != null && s.scratch != null) { s.scratch.endRecording(); s.scratch.discardDisplayList(); }
             p.args[0] = real;
-            Canvas canvas = (Canvas) real;
+            Canvas canvas = real;
             if (p.hasThrowable()) {
                 if (s != null) { s.failed = true; s.release(); }
                 Probe.error("NATIVE_DRAW_FAILED", p.getThrowable());
