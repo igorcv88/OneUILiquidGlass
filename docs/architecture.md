@@ -306,3 +306,41 @@ Safety:
 Module side: `debug.oulg.sfrefract=1` changes two things.
 - `SemBlurBridge` sets the single corner radius to `floor(r) + 0.125`, the tag.
 - Heads-up and lockscreen rows keep the live Samsung blur instead of a sampled or captured backdrop, so the compositor's lens replaces the captured one.
+
+### Phase 2 on the device (2026-10-09)
+
+Diagnostic after a live swap: `LIB_NOVA=1 SRC=136 ALVO=66 RW_OK=12 RW_FAIL=0`. With `debug.oulg.sfrefract=1`:
+- **Lockscreen rows:** Samsung blur plus the compositor lens at the rim. This is the best result so far.
+- **Heads-up over apps:** the blur is slightly stronger than on the lockscreen, and refraction stays in the rim band by design.
+- **Expanded shade:** looks fine. A small stutter on pull-down is still open; it reads as dropping from 120 to 60 Hz. No A/B measurement yet.
+
+Operational notes:
+- **Updating without a reboot.** KernelSU stages an update of an installed module in `/data/adb/modules_update/<id>`, which moves to `modules/` only at boot. A live swap must bind-mount the library from `modules_update`, and it is checked with `grep -c "REWRITE shader"` inside surfaceflinger's mount namespace.
+- **Restarting surfaceflinger.** Every `stop`/`start` restarts the whole userspace (boot animation, system_server, apps). On the device each restart took longer, up to 4–5 min on "Powered by Android". The hook only works when a shader is first compiled, so a restart is needed only to load a new library or to drop the rewrites, and should otherwise be avoided. Cause not measured yet.
+- **Cache keeps the rewrite.** Skia caches the program binary it linked, rewrite included. `debug.oulg.sf.norewrite=1` or removing the module takes effect only after `skia_shaders` and `egl_shaders` are deleted and surfaceflinger is restarted. The running process keeps its linked programs, and the flag is read only in `glShaderSource`. Leftover rewritten binaries are inert while no card carries the radius tag (`sfrefract=0`).
+
+### Main-thread cost in the shade (2026-10-09)
+
+gfxinfo for SystemUI over 10 shade open/close cycles:
+
+| Build | Median | 90th | Janky | Slow UI thread |
+|---|---|---|---|---|
+| Module off | 5 ms | 12 ms | 13.8 % | 30 |
+| Module on, before | 13 ms | 34 ms | 36.7 % | 163 |
+| Reflection cache | 5 ms | 17 ms | 23.6 % | 80 |
+| Cache, diagnostics gated | 5 ms | 12 ms | 20.1 % | 49 |
+
+GPU time was 1–7 ms in every run, so the cost is on SystemUI's main thread.
+
+- **Reflection cache.** The pre-draw listener and the draw hook run once per row per frame and read rows reflectively. `Reflect` now caches field and method lookups per class and name, misses included. An uncached lookup scanned declared members up the hierarchy and threw an exception per level it missed.
+- **Remaining jank.** `debug.oulg.perf=1` showed the hook bodies at about 1 % of the main thread, so the remaining jank lies elsewhere. The diagnostic dumps that walk view trees and windows ran on the main thread, the scrim walk right as the shade starts to open. They are now off unless `debug.oulg.trace=1`:
+  - scrims, painters, hierarchy, view and material snapshots;
+  - window surveys;
+  - caller stack walks.
+- **Perf slots.** The `shade` slot times the expanded-height hook.
+- **After gating.** With the cache and the dumps gated, the module is close to off: same median and 90th percentile, 49 vs 30 slow-UI-thread frames, 99th percentile 53 vs 42 ms. All hook bodies together take about 0.5 % of the main thread while the shade animates. The heaviest per call is `drawBefore`, about 40–75 µs per row redraw.
+
+## Future work
+
+- **Separate blur for the notification center and the control center.** Theme Park and HomeUp set a single blur amount for both panels. The user runs 12 %: lower leaves the control center unreadable, higher over-blurs the notification list. A split needs its own investigation: find where SystemUI applies the panel blur, whether the two panels are separate blur regions or one window, and whether the module can own one of them.
+- **Tuning the compositor lens without a restart.** Lens strength, bevel width and highlight are constants in `refract.h`, so each change needs a surfaceflinger restart and a cleared cache. The radius fraction already carries the tag and could also carry the strength, so the module could tune it live.

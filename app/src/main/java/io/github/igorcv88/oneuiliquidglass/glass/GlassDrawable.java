@@ -15,6 +15,7 @@ import android.graphics.RenderNode;
 import android.graphics.RuntimeShader;
 import android.graphics.Shader;
 import android.graphics.drawable.Drawable;
+import io.github.igorcv88.oneuiliquidglass.diagnostics.Perf;
 import io.github.igorcv88.oneuiliquidglass.diagnostics.Probe;
 
 /**
@@ -88,6 +89,10 @@ public final class GlassDrawable extends Drawable {
         }
     }
     @Override public void draw(Canvas canvas) {
+        long started = Perf.start();
+        try { drawGlass(canvas); } finally { Perf.end(Perf.GLASS_DRAW, started); }
+    }
+    private void drawGlass(Canvas canvas) {
         if (failed) { if (nativeDrawable != null) { nativeDrawable.setBounds(getBounds()); nativeDrawable.draw(canvas); } return; }
         int save = canvas.save();
         try {

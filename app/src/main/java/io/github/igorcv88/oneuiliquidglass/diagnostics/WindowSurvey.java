@@ -26,6 +26,7 @@ public final class WindowSurvey {
 
     /** Main thread only. */
     public static void schedule(String trigger) {
+        if (!Probe.trace) return;
         long now = SystemClock.uptimeMillis();
         if (now - lastScheduled < DEBOUNCE_MS) return;
         lastScheduled = now;
