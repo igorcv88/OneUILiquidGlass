@@ -60,6 +60,11 @@ public final class Tuning {
      * captured lens band is not drawn (debug.oulg.sfrefract).
      */
     public final boolean sfRefract;
+    /**
+     * Turns a window-level Samsung blur of radius 0 (what the panel blur leaves on the shade window
+     * after a pull-down) into no blur at all (debug.oulg.winblurclear, default on).
+     */
+    public final boolean winBlurClear;
     /** Logs main-thread time spent in the module's hooks (see {@link Perf}). */
     public final boolean perf;
     /** Enables the view-tree and window diagnostic dumps (see {@link Probe#trace}). */
@@ -96,6 +101,7 @@ public final class Tuning {
         String shape = prop("semshape", "auto");
         shadeBlur = number("shadeblur", 0f) >= 1f;
         sfRefract = number("sfrefract", 0f) >= 1f;
+        winBlurClear = number("winblurclear", 1f) >= 1f;
         perf = number("perf", 0f) >= 1f;
         Perf.enabled = perf;
         trace = number("trace", 0f) >= 1f;
@@ -117,7 +123,7 @@ public final class Tuning {
         return "backdrop=" + backdrop + " profile=" + profile + " lens=" + lens + " rimhz=" + rimHz + " rimblur=" + rimBlur
                 + " refract=" + refract + " ior=" + ior + " blur=" + blur + " sat=" + saturation
                 + " disp=" + dispersion + " hz=" + hz + " hzkg=" + keyguardHz + " tint=" + tintAlpha
-                + " semradius=" + semRadius + " semradiuslens=" + semRadiusLens + " sflens=" + sfLens + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " perf=" + perf + " trace=" + trace;
+                + " semradius=" + semRadius + " semradiuslens=" + semRadiusLens + " sflens=" + sfLens + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " winblurclear=" + winBlurClear + " perf=" + perf + " trace=" + trace;
     }
 
     private static float clamp(float v, float lo, float hi) { return Float.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : lo; }
