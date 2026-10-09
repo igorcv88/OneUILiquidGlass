@@ -129,7 +129,9 @@ public final class Probe {
             Object viewAlpha = null, tint = null;
             try { viewAlpha = Reflect.call(v, "getViewAlpha"); } catch (ReflectiveOperationException | RuntimeException ignored) { }
             try { tint = Reflect.call(v, "getTint"); } catch (ReflectiveOperationException | RuntimeException ignored) { }
-            log("SCRIM", "reason=" + reason + " class=" + name + " shown=" + v.isShown() + " alpha=" + v.getAlpha()
+            String id = "";
+            try { if (v.getId() != View.NO_ID) id = v.getResources().getResourceEntryName(v.getId()); } catch (RuntimeException ignored) { }
+            log("SCRIM", "reason=" + reason + " class=" + name + " idName=" + id + " shown=" + v.isShown() + " alpha=" + v.getAlpha()
                     + " viewAlpha=" + viewAlpha + " tint=" + hex(tint) + " size=" + v.getWidth() + "x" + v.getHeight()
                     + " bg=" + describe(v.getBackground(), 0));
             scrimFields(v, reason);

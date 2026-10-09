@@ -153,6 +153,7 @@ public final class HeadsUpHooks {
         for (String n : new String[]{"onFinishInflate", "setHeadsUp", "setPinned", "setHeadsUpAnimatingAway", "startAppearAnimation", "onAppearAnimationFinished", "setUserExpanded", "setOnKeyguard", "onAttachedToWindow"}) hook(rowClass, n, rowEvent);
         installShade();
         installBarState();
+        installScrimClamp();
         for (String manager : new String[]{"com.android.systemui.statusbar.notification.headsup.HeadsUpManagerImpl", "com.android.systemui.statusbar.policy.BaseHeadsUpManager", "com.android.systemui.statusbar.policy.HeadsUpManager"}) {
             Class<?> c = resolve(manager);
             for (String n : new String[]{"showNotification", "updateNotification", "removeNotification", "createHeadsUpEntry", "setEntryPinned"}) hook(c, n, new XC_MethodHook() {
@@ -317,6 +318,37 @@ public final class HeadsUpHooks {
             }
         })) shadeHook = true;
     }
+    /** Resource entry name of a view's id, or "" (scrims are told apart by their ids). */
+    private static String idName(View v) {
+        try { return v.getId() == View.NO_ID ? "" : v.getResources().getResourceEntryName(v.getId()); }
+        catch (RuntimeException e) { return ""; }
+    }
+    private static boolean notificationsScrim(View v) { return idName(v).contains("notification"); }
+    private final java.util.Set<View> notificationScrims = Collections.newSetFromMap(new WeakHashMap<>());
+    /**
+     * A partial pull-down on the lockscreen raises the notifications scrim (the tinted layer
+     * SystemUI draws behind the stack) to full opacity, and it stays there after the shade springs
+     * back until the next tap. Behind opaque native cards it never shows; behind glass it turned
+     * lockscreen cards dark. On the keyguard state it is held at 0.
+     */
+    private void installScrimClamp() {
+        Class<?> c = resolve("com.android.systemui.scrim.ScrimView");
+        hook(c, "setViewAlpha", new XC_MethodHook() {
+            @Override protected void beforeHookedMethod(MethodHookParam p) {
+                if (!(p.thisObject instanceof View) || !(p.args.length > 0 && p.args[0] instanceof Float)) return;
+                View v = (View) p.thisObject;
+                if (!notificationsScrim(v)) return;
+                if (notificationScrims.add(v)) Probe.log("SCRIM_NOTIFICATIONS", "id=" + idName(v) + " view=" + Integer.toHexString(System.identityHashCode(v)));
+                if (barState != null && barState == Eligibility.BAR_KEYGUARD && (Float) p.args[0] > 0f) p.args[0] = 0f;
+            }
+        });
+    }
+    private void clampNotificationScrims() {
+        for (View v : new ArrayList<>(notificationScrims)) {
+            try { v.getClass().getMethod("setViewAlpha", float.class).invoke(v, 0f); }
+            catch (ReflectiveOperationException | RuntimeException e) { Probe.error("SCRIM_CLAMP_FAILED", e); }
+        }
+    }
     private void installBarState() {
         Class<?> c = resolve("com.android.systemui.statusbar.StatusBarStateControllerImpl");
         hook(c, "setState", new XC_MethodHook() {
@@ -325,6 +357,7 @@ public final class HeadsUpHooks {
                 if (!(state instanceof Integer) || state.equals(barState)) return;
                 barState = (Integer) state;
                 Probe.log("BAR_STATE", "state=" + barState);
+                if (barState == Eligibility.BAR_KEYGUARD) clampNotificationScrims();
                 // The blur is a view property: a card SystemUI does not redraw (the shade springing
                 // back to the lockscreen) would keep the expanded-shade blur. Re-decide now.
                 for (State s : new ArrayList<>(states.values())) { s.refreshLens(); s.invalidate(); }
