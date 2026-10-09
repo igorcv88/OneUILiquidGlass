@@ -68,7 +68,21 @@ public final class BackgroundBlurBridge implements Backdrop {
         corners.invoke(drawable, tl, tr, bl, br);
     }
     @Override public void draw(Canvas canvas, Rect bounds) { drawable.setBounds(bounds); drawable.draw(canvas); }
-    @Override public void setAlpha(int alpha) { drawable.setAlpha(alpha); }
+    private int baseAlpha = 255;
+    private float regionFade = 1f;
+    @Override public void setAlpha(int alpha) { baseAlpha = alpha; drawable.setAlpha(Math.round(alpha * regionFade)); }
+    /**
+     * Ancestor view alpha fades what the view draws, the glass included, but not the compositor's
+     * blur region: on a pull up from the lockscreen the cards faded and their blur stayed (a ghost).
+     * The region takes the accumulated alpha of the view's ancestors. Returns whether it changed.
+     */
+    public boolean setRegionFade(float f) {
+        f = Math.max(0f, Math.min(1f, f));
+        if (Math.abs(f - regionFade) < 0.004f) return false;
+        regionFade = f;
+        drawable.setAlpha(Math.round(baseAlpha * regionFade));
+        return true;
+    }
     @Override public void release() {
         try { radius.invoke(drawable, 0); } catch (ReflectiveOperationException | RuntimeException ignored) { }
         drawable.setVisible(false, false);

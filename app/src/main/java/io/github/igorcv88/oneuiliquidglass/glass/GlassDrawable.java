@@ -228,22 +228,8 @@ public final class GlassDrawable extends Drawable {
         float a = Color.alpha(color) / 255f;
         s.setFloatUniform(name, Color.red(color) / 255f * a, Color.green(color) / 255f * a, Color.blue(color) / 255f * a, a);
     }
-    private int requestedAlpha = 255;
-    private float fade = 1f;
     @Override public void setAlpha(int value) {
-        requestedAlpha = value;
-        alpha = Math.round(value * fade); backdrop.setAlpha(alpha); paint.setAlpha(alpha);
-    }
-    /**
-     * SystemUI fades a card's blur with its content (setBlurAlphaFromParent / setContentAlpha)
-     * without touching view alpha; the glass and its compositor blur region fade with it.
-     */
-    public void setFade(float f) {
-        f = Math.max(0f, Math.min(1f, f));
-        if (f == fade) return;
-        fade = f;
-        setAlpha(requestedAlpha);
-        invalidateSelf();
+        alpha = value; backdrop.setAlpha(value); paint.setAlpha(value);
     }
     @Override public int getAlpha() { return alpha; }
     @Override public void setColorFilter(ColorFilter filter) { paint.setColorFilter(filter); }
