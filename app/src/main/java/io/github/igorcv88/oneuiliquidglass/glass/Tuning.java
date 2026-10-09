@@ -37,6 +37,12 @@ public final class Tuning {
     public final int tintAlpha;
     /** Samsung compositor blur: radius (-1 = GlassSpec.samsungRadius), color curve (spatial|dim|ultra|none|"s,c,x0,x1,y0,y1"), veil alpha. */
     public final int semRadius;
+    /**
+     * Compositor blur radius of cards that carry the lens tag (sfrefract, outside the expanded
+     * shade): a light blur leaves the backdrop detail the lens bends; at 180 px nothing visible is
+     * left to refract. -1 falls back to semradius.
+     */
+    public final int semRadiusLens;
     public final String semCurve;
     public final int semAlpha;
     /** Samsung blur region shape: auto|single|path|four|none (see SemBlurBridge.applyShape). */
@@ -77,6 +83,7 @@ public final class Tuning {
         keyguardHz = Math.round(clamp(number("hzkg", 5f), 1f, 120f));
         tintAlpha = Math.round(clamp(number("tint", -1f), -1f, 255f));
         semRadius = Math.round(clamp(number("semradius", -1f), -1f, 400f));
+        semRadiusLens = Math.round(clamp(number("semradiuslens", 12f), -1f, 400f));
         // "spatial" stopped the blur rendering on S938BXXUCZZIC (sharp backdrop in screenshots): off by default.
         semCurve = prop("semcurve", "none");
         semAlpha = Math.round(clamp(number("semalpha", -1f), -1f, 255f));
@@ -104,7 +111,7 @@ public final class Tuning {
         return "backdrop=" + backdrop + " profile=" + profile + " lens=" + lens + " rimhz=" + rimHz + " rimblur=" + rimBlur
                 + " refract=" + refract + " ior=" + ior + " blur=" + blur + " sat=" + saturation
                 + " disp=" + dispersion + " hz=" + hz + " hzkg=" + keyguardHz + " tint=" + tintAlpha
-                + " semradius=" + semRadius + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " perf=" + perf + " trace=" + trace;
+                + " semradius=" + semRadius + " semradiuslens=" + semRadiusLens + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " perf=" + perf + " trace=" + trace;
     }
 
     private static float clamp(float v, float lo, float hi) { return Float.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : lo; }

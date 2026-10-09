@@ -175,7 +175,9 @@ public final class SemBlurBridge implements Backdrop {
         if (builderWithMode != null) b = builderWithMode.newInstance(mode);
         else { b = builderPlain.newInstance(); setMode.invoke(b, mode); }
         Tuning t = Tuning.get();
-        radius.invoke(b, t.semRadius >= 0 ? t.semRadius : GlassSpec.SAMSUNG_RADIUS);
+        int blur = t.semRadius >= 0 ? t.semRadius : GlassSpec.SAMSUNG_RADIUS;
+        if (t.sfRefract && lens && t.semRadiusLens >= 0) blur = t.semRadiusLens;
+        radius.invoke(b, blur);
         String shape = applyShape(b, t.semShape, radii);
         lastPx = px; lastTint = tint; System.arraycopy(radii, 0, lastRadii, 0, 8); built = true;
         if (!shape.equals(lastShape)) { lastShape = shape; Probe.log("SEM_BLUR_SHAPE", "mode=" + shape + " radius=" + radii[0] + " size=" + host.getWidth() + "x" + host.getHeight()); }
