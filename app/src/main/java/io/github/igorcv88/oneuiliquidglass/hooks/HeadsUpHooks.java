@@ -727,6 +727,7 @@ public final class HeadsUpHooks {
                 release(); return fallback("corners");
             }
             if (glass == null) {
+                nativePending = false;
                 Backdrop backdrop = kind == Backdrop.Kind.SHARED ? new SharedBackdrop()
                         : kind == Backdrop.Kind.SAMPLED ? sampledBackdrop(v, source)
                         : kind == Backdrop.Kind.SAMSUNG ? (semBridge = SemBlurBridge.create(v)) : BackgroundBlurBridge.create(v);
@@ -757,6 +758,7 @@ public final class HeadsUpHooks {
         /** The native background draws this frame; logged when the reason changes. */
         GlassDrawable fallback(String why) {
             why = String.valueOf(why);
+            if (!why.equals("hidden")) restorePendingNative();
             if (!why.equals(lastFallback)) {
                 lastFallback = why;
                 View v = background.get(), r = row.get();
@@ -784,12 +786,34 @@ public final class HeadsUpHooks {
             catch (ReflectiveOperationException | RuntimeException e) { Probe.error("SEM_BLUR_LENS_FAILED", e); }
         }
         void release() {
+            View v = background.get();
+            release(v == null || v.isShown());
+        }
+        /**
+         * restore=false (the card is being hidden) clears the blur instead of handing SystemUI's own
+         * back: the compositor keeps a blur region for a frame or two after its view stops drawing,
+         * and the native radius-180 blur flashed gray on lockscreen cards at the end of a pull-down.
+         * The native blur is handed back later if the card is shown without glass.
+         */
+        void release(boolean restore) {
             if (glass == null) return;
             // The blur guard also blocked calls aimed at the row while this material was managed.
             boolean compositor = glassKind == Backdrop.Kind.SAMSUNG || glass.hybrid();
-            glass.release(); glass = null; glassKind = null; glassSource = null; semBridge = null; Probe.log("GLASS_RELEASED", "native=true");
+            if (!restore && semBridge != null) semBridge.clearOnRelease();
+            glass.release(); glass = null; glassKind = null; glassSource = null; semBridge = null;
+            Probe.log("GLASS_RELEASED", "native=" + restore);
             View r = row.get();
-            if (compositor && r != null) SemBlurBridge.restoreNative(r);
+            if (compositor && r != null && restore) SemBlurBridge.restoreNative(r);
+            nativePending = compositor && !restore;
+        }
+        /** The native blur was cleared on a hidden release and is still owed if no glass comes back. */
+        boolean nativePending;
+        void restorePendingNative() {
+            if (!nativePending) return;
+            nativePending = false;
+            View v = background.get(), r = row.get();
+            if (v != null) SemBlurBridge.restoreNative(v);
+            if (r != null) SemBlurBridge.restoreNative(r);
         }
     }
     /**

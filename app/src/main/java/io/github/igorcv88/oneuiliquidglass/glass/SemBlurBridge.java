@@ -299,11 +299,14 @@ public final class SemBlurBridge implements Backdrop {
     }
     @Override public void draw(Canvas canvas, Rect bounds) { }
     @Override public void setAlpha(int alpha) { }
+    private boolean clearOnRelease;
+    /** The next release clears the blur instead of restoring SystemUI's (the card is being hidden). */
+    public void clearOnRelease() { clearOnRelease = true; }
     @Override public void release() {
         released = true; pending = null;
         host.removeCallbacks(apply);
         host.removeOnLayoutChangeListener(resize);
-        Object restore = NATIVE.get(host);
+        Object restore = clearOnRelease ? null : NATIVE.get(host);
         try { applying = true; set.invoke(host, restore); }
         catch (ReflectiveOperationException | RuntimeException e) { Probe.error("SEM_BLUR_CLEAR_FAILED", e); }
         finally { applying = false; }
