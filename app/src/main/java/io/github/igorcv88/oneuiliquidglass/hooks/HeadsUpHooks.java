@@ -155,6 +155,7 @@ public final class HeadsUpHooks {
         installBarState();
         installScrimClamp();
         installCapturedBlurTrace();
+        installSurfaceBlurHook();
         for (String manager : new String[]{"com.android.systemui.statusbar.notification.headsup.HeadsUpManagerImpl", "com.android.systemui.statusbar.policy.BaseHeadsUpManager", "com.android.systemui.statusbar.policy.HeadsUpManager"}) {
             Class<?> c = resolve(manager);
             for (String n : new String[]{"showNotification", "updateNotification", "removeNotification", "createHeadsUpEntry", "setEntryPinned"}) hook(c, n, new XC_MethodHook() {
@@ -380,6 +381,42 @@ public final class HeadsUpHooks {
      * back until the next tap. Behind opaque native cards it never shows; behind glass it turned
      * lockscreen cards dark. On the keyguard state it is held at 0.
      */
+    private int surfaceBlurLogs = 300;
+    private int lastSurfaceBlur = -1;
+    /**
+     * AOSP's shade depth blur goes straight to SurfaceControl.Transaction.setBackgroundBlurRadius,
+     * not through semSetBlurInfo. Trace: every radius change with the bar state and caller.
+     * kgwinblur=2 also drops it on the keyguard and the shade over it (diagnostic).
+     */
+    private void installSurfaceBlurHook() {
+        try {
+            Class<?> t = Class.forName("android.view.SurfaceControl$Transaction");
+            for (Method m : t.getDeclaredMethods()) {
+                if (!m.getName().equals("setBackgroundBlurRadius") || m.getParameterCount() != 2) continue;
+                XposedBridge.hookMethod(m, new XC_MethodHook() {
+                    @Override protected void beforeHookedMethod(MethodHookParam p) {
+                        if (!(p.args[1] instanceof Integer)) return;
+                        int radius = (Integer) p.args[1];
+                        boolean keyguard = barState != null && (barState == Eligibility.BAR_KEYGUARD || barState == Eligibility.BAR_SHADE_LOCKED);
+                        boolean drop = keyguard && radius > 0 && Tuning.get().sfRefract && Tuning.get().kgWinBlur == 2;
+                        if (drop) p.args[1] = 0;
+                        if (Probe.trace && surfaceBlurLogs > 0 && radius != lastSurfaceBlur) {
+                            lastSurfaceBlur = radius;
+                            surfaceBlurLogs--;
+                            StringBuilder c = new StringBuilder();
+                            StackTraceElement[] st = new Throwable().getStackTrace();
+                            for (int i = 0, n = 0; i < st.length && n < 4; i++) {
+                                String cls = st[i].getClassName();
+                                if (cls.startsWith("de.robv") || cls.startsWith("LSP") || cls.contains("oneuiliquidglass") || cls.startsWith("java.lang.reflect")) continue;
+                                c.append(n++ == 0 ? "" : "<").append(cls.substring(cls.lastIndexOf('.') + 1)).append('.').append(st[i].getMethodName());
+                            }
+                            Probe.log("SURFACE_BLUR", "radius=" + radius + " dropped=" + drop + " barState=" + barState + " surface=" + p.args[0] + " caller=" + c);
+                        }
+                    }
+                });
+            }
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError e) { Probe.error("SURFACE_BLUR_HOOK_FAILED", e); }
+    }
     private int capturedLogs = 400;
     private String capturedLast;
     /**
