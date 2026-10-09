@@ -174,7 +174,7 @@ public final class HeadsUpHooks {
         if (enabled && (!drawHook || !shadeHook)) Probe.log("GLASS_UNAVAILABLE", "drawHook=" + drawHook + " shadeHook=" + shadeHook);
     }
     private final Set<String> foreignBlurLogged = new java.util.HashSet<>();
-    private int windowBlurLogs = 300, scrimAlphaLogs = 400, windowBlurClears, rowBlurLogs = 300;
+    private int windowBlurLogs = 300, scrimAlphaLogs = 400, windowBlurBlocks, rowBlurLogs = 300;
     private final java.util.Map<View, Float> scrimLogged = new WeakHashMap<>();
     /** Stack walks are costly on a per-frame path; provenance is only gathered for the first calls. */
     private int foreignBlurTraces = 200;
@@ -208,14 +208,15 @@ public final class HeadsUpHooks {
                         // hands it back instead of clearing it.
                         if (states.containsKey(v) || (rowClass != null && rowClass.isInstance(v))
                                 || BACKGROUND.equals(v.getClass().getName())) SemBlurBridge.recordNative(v, p.args[0]);
-                        if (v.getRootView() == v && p.args[0] != null && Tuning.get().winBlurClear
-                                && Integer.valueOf(0).equals(Reflect.read(p.args[0], "mBlurRadius"))) {
-                            // The panel blur ends a pull-down with a radius-0 info that stays set on the
-                            // shade window. Lockscreen lens cards turn gray after a partial pull-down
-                            // only on the compositor path; this residual window blur is the suspect.
-                            // Radius 0 blurs nothing, so clearing it changes nothing else.
+                        if (v.getRootView() == v && p.args[0] != null && barState != null && barState == Eligibility.BAR_KEYGUARD
+                                && Tuning.get().sfRefract && !Tuning.get().kgWinBlur && v.getClass().getName().endsWith("NotificationShadeWindowView")
+                                && Reflect.read(p.args[0], "mBlurRadius") instanceof Integer && (Integer) Reflect.read(p.args[0], "mBlurRadius") <= 4) {
+                            // On the idle lockscreen every touch makes the panel blur ramp to a radius of 1-3
+                            // and back; each step carries the panel's dark color curve and flashed the lens
+                            // cards gray. Only radii up to 4 are dropped: a pull-down (or the bouncer) passes
+                            // that within a few frames and keeps its blur.
                             p.args[0] = null;
-                            if (windowBlurClears++ < 20) Probe.log("WINDOW_BLUR_CLEARED", "view=" + v.getClass().getSimpleName() + " barState=" + barState);
+                            if (windowBlurBlocks++ < 20) Probe.log("WINDOW_BLUR_BLOCKED", "view=" + v.getClass().getSimpleName() + " barState=" + barState);
                         }
                         if (Probe.trace && windowBlurLogs > 0 && v.getRootView() == v) {
                             // Window-level blur (the panel blur on NotificationShadeWindowView): every call, with the state.

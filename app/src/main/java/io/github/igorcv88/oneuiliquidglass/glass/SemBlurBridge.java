@@ -182,12 +182,17 @@ public final class SemBlurBridge implements Backdrop {
         lastPx = px; lastTint = tint; System.arraycopy(radii, 0, lastRadii, 0, 8); built = true;
         if (!shape.equals(lastShape)) { lastShape = shape; Probe.log("SEM_BLUR_SHAPE", "mode=" + shape + " radius=" + radii[0] + " size=" + host.getWidth() + "x" + host.getHeight()); }
         if (color != null) color.invoke(b, t.semAlpha >= 0 ? (tint & 0x00ffffff) | (t.semAlpha << 24) : tint);
-        applyCurve(b, t.semCurve);
+        // "auto": lens cards carry an explicit neutral curve. A blur without one takes whatever curve
+        // the compositor last had, and the panel blur leaves its dark one behind after a pull-down
+        // (the lockscreen cards turned gray until the next lock). Shade cards keep the inherited look.
+        applyCurve(b, t.semCurve.equals("auto") ? (t.sfRefract && lens ? NEUTRAL_CURVE : "none") : t.semCurve);
         pending = build.invoke(b);
         // Updates arrive from the hooked onDraw; apply after the current traversal, not mid-draw.
         if (!posted) { posted = true; host.post(apply); }
     }
     private String lastShape;
+    /** Saturation, curve, x and y ranges that leave colors as they are (found on device). */
+    static final String NEUTRAL_CURVE = "0,0,0,255,0,255";
     /**
      * How the blur region is shaped. On device the four-radius setter left the blur only in a band
      * in the middle of the card, so a uniform shape now uses the single-radius setter; "path" clips

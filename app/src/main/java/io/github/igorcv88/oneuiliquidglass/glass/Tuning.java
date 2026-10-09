@@ -61,10 +61,10 @@ public final class Tuning {
      */
     public final boolean sfRefract;
     /**
-     * Turns a window-level Samsung blur of radius 0 (what the panel blur leaves on the shade window
-     * after a pull-down) into no blur at all (debug.oulg.winblurclear, default on).
+     * Lets the panel blur reach the shade window while the lockscreen sits idle
+     * (debug.oulg.kgwinblur, default off): see the blur guard in HeadsUpHooks.
      */
-    public final boolean winBlurClear;
+    public final boolean kgWinBlur;
     /** Logs main-thread time spent in the module's hooks (see {@link Perf}). */
     public final boolean perf;
     /** Enables the view-tree and window diagnostic dumps (see {@link Probe#trace}). */
@@ -96,12 +96,12 @@ public final class Tuning {
         semRadiusLens = Math.round(clamp(number("semradiuslens", 16f), -1f, 400f));
         sfLens = clamp(number("sflens", 0.7f), 0.1f, 1.2f);
         // "spatial" stopped the blur rendering on S938BXXUCZZIC (sharp backdrop in screenshots): off by default.
-        semCurve = prop("semcurve", "none");
+        semCurve = prop("semcurve", "auto");
         semAlpha = Math.round(clamp(number("semalpha", -1f), -1f, 255f));
         String shape = prop("semshape", "auto");
         shadeBlur = number("shadeblur", 0f) >= 1f;
         sfRefract = number("sfrefract", 0f) >= 1f;
-        winBlurClear = number("winblurclear", 1f) >= 1f;
+        kgWinBlur = number("kgwinblur", 0f) >= 1f;
         perf = number("perf", 0f) >= 1f;
         Perf.enabled = perf;
         trace = number("trace", 0f) >= 1f;
@@ -123,7 +123,7 @@ public final class Tuning {
         return "backdrop=" + backdrop + " profile=" + profile + " lens=" + lens + " rimhz=" + rimHz + " rimblur=" + rimBlur
                 + " refract=" + refract + " ior=" + ior + " blur=" + blur + " sat=" + saturation
                 + " disp=" + dispersion + " hz=" + hz + " hzkg=" + keyguardHz + " tint=" + tintAlpha
-                + " semradius=" + semRadius + " semradiuslens=" + semRadiusLens + " sflens=" + sfLens + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " winblurclear=" + winBlurClear + " perf=" + perf + " trace=" + trace;
+                + " semradius=" + semRadius + " semradiuslens=" + semRadiusLens + " sflens=" + sfLens + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " kgwinblur=" + kgWinBlur + " perf=" + perf + " trace=" + trace;
     }
 
     private static float clamp(float v, float lo, float hi) { return Float.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : lo; }
