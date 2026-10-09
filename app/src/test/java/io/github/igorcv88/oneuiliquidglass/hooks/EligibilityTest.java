@@ -44,4 +44,13 @@ public final class EligibilityTest {
         assertFalse(Eligibility.sharedBackdrop(false, false));
         assertFalse(Eligibility.sharedBackdrop(null, false));
     }
+    /** Regression: a partial pull-down on the lockscreen marked rows off the keyguard and dropped their lens. */
+    @Test public void lockscreenKeepsTheLensWhateverTheRowSays() {
+        assertTrue(Eligibility.lens(Eligibility.BAR_KEYGUARD, true, false));
+        assertFalse(Eligibility.lens(2, true, false));
+        assertFalse(Eligibility.lens(0, true, false));
+        assertTrue(Eligibility.lens(0, false, false));
+        assertTrue(Eligibility.lens(null, true, true));
+        assertFalse(Eligibility.lens(null, true, false));
+    }
 }

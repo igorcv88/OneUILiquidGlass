@@ -18,6 +18,18 @@ public final class Eligibility {
         if (!hardware) return "software";
         return null;
     }
+    /** StatusBarState.KEYGUARD: the lockscreen, shade not pulled down. */
+    public static final int BAR_KEYGUARD = 1;
+    /**
+     * Whether a Samsung-blur card carries the compositor lens (and its lighter blur). Cards in the
+     * expanded shade stay diffuse. On the lockscreen the status bar state decides, not the row: a
+     * partial pull-down marks rows off the keyguard and leaves them so after the shade springs back,
+     * which turned lockscreen cards into heavily blurred (dark) shade cards until the next tap.
+     */
+    public static boolean lens(Integer barState, Boolean shadeExpanded, Boolean keyguard) {
+        if (barState != null && barState == BAR_KEYGUARD) return true;
+        return !sharedBackdrop(shadeExpanded, keyguard);
+    }
     /** Diagnostic label only; unknown firmware state does not block rendering. */
     public static String surface(Boolean headsUp, Boolean keyguard, Boolean shadeExpanded) {
         if (Boolean.TRUE.equals(headsUp)) return "headsup";

@@ -52,6 +52,8 @@ public final class HeadsUpHooks {
     private final boolean samsungBlur = SemBlurBridge.available();
     private final GlassSpec spec = new GlassSpec();
     private Boolean shadeExpanded;
+    /** SystemUI's StatusBarState (0 shade, 1 keyguard, 2 shade over keyguard); null until first set. */
+    private Integer barState;
     /** Set once HybridBackdrop could not be built; heads-up rows then keep the plain compositor blur. */
     private boolean hybridFailed;
     /** enabled == null: preferences unreadable, resolve through the module's ConfigProvider. */
@@ -150,6 +152,7 @@ public final class HeadsUpHooks {
         };
         for (String n : new String[]{"onFinishInflate", "setHeadsUp", "setPinned", "setHeadsUpAnimatingAway", "startAppearAnimation", "onAppearAnimationFinished", "setUserExpanded", "setOnKeyguard", "onAttachedToWindow"}) hook(rowClass, n, rowEvent);
         installShade();
+        installBarState();
         for (String manager : new String[]{"com.android.systemui.statusbar.notification.headsup.HeadsUpManagerImpl", "com.android.systemui.statusbar.policy.BaseHeadsUpManager", "com.android.systemui.statusbar.policy.HeadsUpManager"}) {
             Class<?> c = resolve(manager);
             for (String n : new String[]{"showNotification", "updateNotification", "removeNotification", "createHeadsUpEntry", "setEntryPinned"}) hook(c, n, new XC_MethodHook() {
@@ -313,6 +316,18 @@ public final class HeadsUpHooks {
                 updateShade(p.thisObject);
             }
         })) shadeHook = true;
+    }
+    private void installBarState() {
+        Class<?> c = resolve("com.android.systemui.statusbar.StatusBarStateControllerImpl");
+        hook(c, "setState", new XC_MethodHook() {
+            @Override protected void afterHookedMethod(MethodHookParam p) {
+                Object state = Reflect.read(p.thisObject, "mState");
+                if (!(state instanceof Integer) || state.equals(barState)) return;
+                barState = (Integer) state;
+                Probe.log("BAR_STATE", "state=" + barState);
+                for (State s : new ArrayList<>(states.values())) s.invalidate();
+            }
+        });
     }
     private void updateShade(Object controller) {
         long started = Perf.start();
@@ -605,7 +620,7 @@ public final class HeadsUpHooks {
                     : kind == Backdrop.Kind.SAMPLED ? (dark ? spec.captureDarkTint : spec.captureLightTint)
                     : dark ? spec.darkBlurColor : spec.lightBlurColor;
             glass.setPressed(pressed);
-            if (semBridge != null) semBridge.setLens(!Eligibility.sharedBackdrop(shadeExpanded, Reflect.bool(row.get(), "isOnKeyguard", "mOnKeyguard")));
+            if (semBridge != null) semBridge.setLens(Eligibility.lens(barState, shadeExpanded, Reflect.bool(row.get(), "isOnKeyguard", "mOnKeyguard")));
             glass.configure(original, shape(), fill, tone);
             if (lastFallback != null) { lastFallback = null; Probe.log("NATIVE_FALLBACK", "viewId=" + Integer.toHexString(System.identityHashCode(v)) + " reason=none"); }
             if (!materialReported) {
