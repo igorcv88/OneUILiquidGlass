@@ -427,6 +427,59 @@ Three defects on the lockscreen with the compositor lens, all now fixed and conf
 
 The idea came from an outside review of the earlier handoff, which had concluded too early that both defects were out of the app's reach.
 
+### One optical library for both programs; per-surface profiles (sfhook v0.8, 2026-10-10)
+
+Device report at v0.7 with `sfrefract=1`, `sflens=0.30`, `semradiuslens=16`, `semalpha=12`:
+- `kgblurpath=0` (Samsung blur on the view): body homogeneous and well filtered, but the region flickers and lags on the lockscreen.
+- `kgblurpath=1` (`BackgroundBlurDrawable` drawn with the glass): stable, but the body looks under-filtered and blotchy.
+- `semradiuslens` 12 → 16 helped; 16 → 20 did not fix it.
+
+**Which program draws each path.** The Samsung path is proven to be the FillRRect program: `sf.debug=1` painted it magenta. The drawable path was never tinted, so its program is not proven on device. The code shows two rewrites with different content:
+- `oulg_rewrite_fragment` (FillRRect) applies the lens, the B-spline and the layered body blur.
+- `oulg_rewrite_clip` (CircularRRectEffect, uniforms `uinnerRect`/`uradiusPlusHalf`) applied only the lens. It sampled the texture bilinearly, the v0.6 "144p" defect, and had no body blur.
+
+A card drawn through the clip program looks exactly like the report: rim refraction present, body under-filtered and blotchy, better at radius 16 than 12 but not cured by 20. A WebGL2 render of the v0.7 clip rewrite over the same synthetic quarter-resolution texture leaves 17 times the background structure in the body that the FillRRect rewrite leaves (RMS 27.1 vs 1.6). This is strong evidence, not device proof. The deciding test is the tint: with `sf.debug=1` and `kgblurpath=1`, cyan means the clip program, magenta means FillRRect. If it is magenta, the remaining difference is the compositor's blur input, which the Samsung path may build differently (it can carry a color curve); `BLUR_DRAWABLE_API` logs what the drawable can set.
+
+**Change: one shared library.** Both rewrites now inject the same GLSL: `oulg_field`, the B-spline, the Vogel discs and the sampling switch. Each program only maps its own geometry into the card's pixel frame:
+- FillRRect: `q = vp · hs`, back to the screen through the inverse Jacobian of `vp`, then to the texture through the texture Jacobian.
+- Clip: `q = sk_FragCoord − centre`, where the centre and size come from `uinnerRect` and `uradiusPlusHalf`, back through `dFdx`/`dFdy`, with the `u_skRTFlip` sign on y.
+
+The clip path also gained the full rounded-rect depth, inside the inner rect too, which the body ramp needs. Before, its depth was only defined in the rim band. On the render check, the two programs draw the same card within 1/255.
+
+**Surface isolation: optical profiles.** Heads-up rendering is the established baseline and must not move with lockscreen work. The tag now carries a profile beside the strength:
+- **Profile 0, established:** fraction band [0.55, 0.70], unchanged. Heads-up cards, and lockscreen cards with `debug.oulg.kgoptics=0`.
+- **Profile 1, lockscreen:** fraction band [0.30, 0.45], taking the largest tagged radius not above r (at most 1.15 px off).
+- The vertex shader and the clip program decode `kp = k + 2·profile`, and `oulg_field` splits it.
+- **Who gets profile 1:** `Eligibility.keyguardOptics(barState, headsUp)` decides. It is true for bar state 1 or 2 and never for a heads-up.
+- **A/B:** the module sets the profile live from `debug.oulg.kgoptics` (default 1), so switching needs no SurfaceFlinger restart.
+
+Profile 0's output is bit-identical to v0.7's: the render check shows a maximum difference of 0 against the v0.7 FillRRect rewrite. The expanded shade is untagged and samples exactly as before.
+
+**Lockscreen material (profile 1).** Parameters, read at compile time:
+- `sf.kgcore` 56 px: body blur radius.
+- `sf.kgtaps` 32: same tap density as 24 at 48 px.
+- `sf.kgramp` 1.5.
+- `sf.kgsat` 1.25: vibrancy. The body's saturation rises with the body blur, around Rec. 709 luma, and stays premultiplied-valid. It counters the gray, washed-out look of a veiled, desaturated blur.
+
+The lens is the same as profile 0: the rim matches within 2/255, the residue of the 0.25 px tag-radius difference. On the synthetic texture, profile 1 leaves less body structure (1.44 vs 1.62) at slightly more grain (3.93 vs 3.79, mostly chroma from the vibrancy).
+
+**Cost.** The B-spline is skipped once the disc fully replaces it (body radius ≥ 6 px).
+- Profile 0 drops from about 24.3 to 21.3 texture reads per card pixel on a 1340×216 card, at identical output.
+- Profile 1 reads about 26–28 per pixel in the body.
+- Cards drawn by the clip program go from 1 to about 21–28 reads per pixel. That is the price of the filtering they were missing, and equals what FillRRect-drawn cards already cost.
+- Untagged draws are unchanged.
+
+**Field validation** (`sfhook/tools/field_check.c`, 8·10⁷ grid points, 7 card shapes, 6 strengths, both profiles):
+- Shift is inward and at most `k·bevel`.
+- C1 at the band's inner edge.
+- 2-D Jacobian of `q → q + s(q)` matches `det = (1 − 2kt)(1 − k·bevel·t²/ρ)` within 2·10⁻⁹. On the straight edges the second factor is 1.
+- det > 0 for k ≤ 0.5. The map folds, as a mirrored rim band, exactly where t > 1/(2k) for k > 0.5. At the user's 0.30 the minimum radial stretch is 0.4, so there is no fold. The code default `sflens` 0.7 does fold over the outer 29 % of the bevel.
+- The body radius is monotone, 0 before a quarter bevel and the core radius past the ramp.
+- Both programs decode the same `kp`.
+- A mediump (fp16) `uradiusPlusHalf` keeps the profile below r = 127.5. From 128 the fp16 step can drop a clip-drawn card's tag (both profiles; FillRRect is highp).
+
+**Host checks:** `sfhook/tools/check.sh` runs the field check, then rewrites `tools/testdata/synthetic_dump.txt`. That dump holds Skia-style FillRRect and clip programs, sampler2D and external, flipped and not. Every rewrite must compile and link with glslangValidator. `sfhook/tools/render_check.mjs` renders both programs and both profiles in WebGL2 (headless Chromium, SwiftShader) and prints the comparisons above. The synthetic programs are modelled on Skia's output; the device's 138-shader dump was not available in this session.
+
 ## Future work
 
 - **Separate blur for the notification center and the control center.** Theme Park and HomeUp set a single blur amount for both panels. The user runs 12 %: lower leaves the control center unreadable, higher over-blurs the notification list. A split needs its own investigation: find where SystemUI applies the panel blur, whether the two panels are separate blur regions or one window, and whether the module can own one of them.

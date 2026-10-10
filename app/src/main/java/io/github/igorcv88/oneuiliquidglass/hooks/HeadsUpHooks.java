@@ -730,13 +730,16 @@ public final class HeadsUpHooks {
             return Eligibility.sharedBackdrop(shadeExpanded, Reflect.bool(r, "isOnKeyguard", "mOnKeyguard"));
         }
         void refreshLens() {
+            View r = row.get();
+            Boolean keyguard = Reflect.bool(r, "isOnKeyguard", "mOnKeyguard");
+            boolean kgSurface = Eligibility.keyguardOptics(barState, Reflect.bool(r, "isHeadsUpState", "mIsHeadsUp"));
             if (compBridge != null) {
-                try { compBridge.setLens(Eligibility.lens(barState, shadeExpanded, Reflect.bool(row.get(), "isOnKeyguard", "mOnKeyguard"))); }
+                try { compBridge.setKeyguard(kgSurface); compBridge.setLens(Eligibility.lens(barState, shadeExpanded, keyguard)); }
                 catch (ReflectiveOperationException | RuntimeException e) { Probe.error("BLUR_DRAWABLE_LENS_FAILED", e); }
                 return;
             }
             if (semBridge == null) return;
-            try { semBridge.setLens(Eligibility.lens(barState, shadeExpanded, Reflect.bool(row.get(), "isOnKeyguard", "mOnKeyguard"))); }
+            try { semBridge.setKeyguard(kgSurface); semBridge.setLens(Eligibility.lens(barState, shadeExpanded, keyguard)); }
             catch (ReflectiveOperationException | RuntimeException e) { Probe.error("SEM_BLUR_LENS_FAILED", e); }
         }
         void release() {
