@@ -393,6 +393,40 @@ The defaults move to `sflens` 0.8 and `semradiuslens` 16.
 
 The scrim trace no longer matches "dim" inside `*ImageView` class names. That match used up its budget before the real scrims were logged.
 
+### Layered blur on lens cards (v0.7)
+
+The device at v0.6 showed a good rim, but the body was too readable through: one blur (`semradiuslens`, light so the rim has detail to bend) covered the whole card. The user wants a strong blur in the body and a light one at the rim, with a gradual step.
+
+The FillRRect fragment rewrite now adds a second blur on tagged cards, inside the same draw:
+- **Depth.** The rounded-rect distance from the outline, in px, now also inside the straight part (before, it saturated at the corner radius).
+- **Radius.** `core · smoothstep(0.25·bevel, ramp·bevel, depth)`: 0 at the rim, where the B-spline sample and the lens stay as in v0.6, the full core radius in the body.
+- **Disc.** A Vogel (golden-angle) disc of bilinear taps, Gaussian-weighted (`exp(−2ρ²)`), in screen pixels mapped to texture space by the derivatives of the texture coordinates. It is centred on the lens-shifted coordinate. Each pixel rotates its disc by interleaved gradient noise, so tap gaps show as fine grain rather than ghost copies.
+- **Blend.** Below a 6 px radius the disc fades into the B-spline sample, so the start of the ramp does not show bilinear blocks.
+
+Two nested Samsung blur regions were rejected: SurfaceFlinger draws each with a hard edge, a step and not a gradient.
+
+Parameters, read when the shader compiles (restart SurfaceFlinger with the cache cleared to change them):
+- `debug.oulg.sf.core`: body radius in px, default 48; 0 turns the second blur off.
+- `debug.oulg.sf.taps`: taps per pixel, default 24, 4–48.
+- `debug.oulg.sf.ramp`: depth where the body radius is reached, in bevels, default 1.5, 0.5–8.
+
+Host checks: the rewrite compiles and links with `glslangValidator`, and a WebGL2 render of the rewritten fragment shader (Chromium/SwiftShader, synthetic quarter-resolution blur texture) shows the gradient from a sharp refracted rim to a blurred body. With a lightly blurred source, 16 taps left visible grain at a 48 px radius; 32 were clean; 24 is the default. The device dump was not available in this session, so the check ran on synthetic FillRRect shaders modelled on Skia's, not on the 147-shader dump. Cost: `taps` extra texture reads per pixel of tagged cards only.
+
+### Lockscreen gray and flashes: blur drawn with the glass (2026-10-09, later)
+
+Three defects on the lockscreen with the compositor lens, all now fixed and confirmed on device over several lock cycles:
+
+- **Gray cards after a partial pull-down, until the next lock.** A Samsung blur with no color curve of its own takes the compositor's last one, and the panel blur leaves its dark curve behind. `semcurve=spatial` reproduced the gray permanently; the explicit curve `0,0,0,255,0,255` kept the glass normal. `debug.oulg.semcurve` now defaults to `auto`: that neutral curve on lens cards, none on shade cards.
+- **Two frames of a wrong, heavily blurred texture at the start and end of a slow pull, and the blur region lagging the card by a frame ("ghost").** With `sf.debug=1` the card stayed magenta in those frames, so the rewritten shader drew them; the input texture was wrong. Ruled out on the way: the scrims, the panel window blur (dropped, or kept alive at radius 1), `setBackgroundBlurRadius`, the `CapturedBlurContainer`, keeping the lens through the shade-locked state, SurfaceFlinger layer caching (worse when off) and `debug.renderengine.restore_blur_step` (helped for one lock cycle only).
+  - **Cause:** the Samsung blur was installed on the view with `semSetBlurInfo`, so its region followed the view's bounds and update path. The glass follows the native drawable's bounds, which track the card's actual height during the pull.
+  - **Fix:** on the lockscreen and the shade over it, lens cards take their blur from the `BackgroundBlurDrawable` that `ViewRootImpl.createBackgroundBlurDrawable()` returns, drawn inside the glass with the glass's bounds. It carries the same radius and lens tag (`BackgroundBlurBridge` lens mode). This path works although `isCrossWindowBlurEnabled()` reports false on this firmware: the listener no longer releases it, and the Samsung blur is taken off the view while managed and restored on release.
+  - **Veil and radius:** the path uses the Samsung veil (`semalpha` over the Samsung tone). `setBlurRadius` takes px; `debug.oulg.kgblurradius` sets it, -1 = `semradiuslens`.
+- **Ghost on a pull up toward the bouncer.** The cards fade through ancestor view alpha. That fades the drawn glass but not the compositor's blur region. Before each frame the region now takes the accumulated alpha of the view's ancestors.
+
+`debug.oulg.kgblurpath` (default 1) switches the lockscreen back to the Samsung path with 0. A hidden card's blur is cleared rather than set back to SystemUI's radius-180 blur, which is restored only if the card is shown without glass. The radius 1–4 panel blur ramps a touch starts on the idle lockscreen are still dropped (`debug.oulg.kgwinblur=1` lets them through). Neither was isolated as necessary; both were active in the configuration confirmed on device.
+
+The idea came from an outside review of the earlier handoff, which had concluded too early that both defects were out of the app's reach.
+
 ## Future work
 
 - **Separate blur for the notification center and the control center.** Theme Park and HomeUp set a single blur amount for both panels. The user runs 12 %: lower leaves the control center unreadable, higher over-blurs the notification list. A split needs its own investigation: find where SystemUI applies the panel blur, whether the two panels are separate blur regions or one window, and whether the module can own one of them.

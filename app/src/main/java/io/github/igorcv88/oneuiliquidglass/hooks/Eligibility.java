@@ -20,6 +20,8 @@ public final class Eligibility {
     }
     /** StatusBarState.KEYGUARD: the lockscreen, shade not pulled down. */
     public static final int BAR_KEYGUARD = 1;
+    /** StatusBarState.SHADE_LOCKED: the shade pulled down over the keyguard. */
+    public static final int BAR_SHADE_LOCKED = 2;
     /**
      * Whether a Samsung-blur card carries the compositor lens (and its lighter blur). Cards in the
      * expanded shade stay diffuse. On the lockscreen the status bar state decides, not the row: a

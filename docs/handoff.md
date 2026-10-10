@@ -2,6 +2,24 @@
 
 Documento para continuar o trabalho em outra conversa. Leia inteiro antes de mexer em qualquer coisa. O histórico técnico detalhado está em `docs/architecture.md`, nas seções de 2026-10-07 a 2026-10-09.
 
+## 0. Atualização (sessão seguinte, PR #21)
+
+Documento compartilhado com a investigação completa: <https://claude.ai/code/artifact/06632b0e-8a50-473c-af62-3373690088d1>. Estado final:
+
+- **sfhook v0.7 (blur em camadas)** confirmado no aparelho: `VS_OK=24 FS_OK=36 FAIL=0`. No dump real de 138 shaders, os 47 programas reescritos compilam.
+  - Chaves, lidas na compilação: `debug.oulg.sf.core` (48 px), `debug.oulg.sf.taps` (24), `debug.oulg.sf.ramp` (1,5).
+- **Tela de bloqueio resolvida e confirmada pelo usuário em vários ciclos:** sem cinza, sem piscadas, sem fantasma, mesma aparência de antes.
+  - **Curva neutra:** `semcurve=auto` aplica `0,0,0,255,0,255` nos cards com lente, que deixam de herdar a curva escura do painel.
+  - **Blur desenhado junto com o vidro:** na tela de bloqueio, o blur vem de um `BackgroundBlurDrawable` desenhado dentro do vidro, com os mesmos limites, raio e marca da lente (`debug.oulg.kgblurpath=1`, padrão). O blur Samsung instalado na View seguia os limites da View e atrasava um quadro.
+  - **Véu e raio:** véu igual ao do caminho Samsung; raio em px por `debug.oulg.kgblurradius` (-1 = `semradiuslens`).
+  - **Fantasma:** a região de blur recebe o alpha acumulado das Views pai.
+- **Economia de energia:** no modo padrão o efeito se mantém. No máximo, a Samsung desativa todos os blurs; é o comportamento esperado.
+- **Correções a este documento:**
+  - O item 3 da seção 7 (clamp do `scrim_notifications`) estava errado: aquela camada tem tamanho 0x0. O clamp é inofensivo.
+  - O handoff anterior chegou a dizer que os defeitos estavam fora do alcance do app. Uma revisão externa mostrou que não estavam.
+- **Limpeza:** os diagnósticos e as tentativas sem efeito saíram do código no commit de limpeza do PR #21. A tabela de commits do documento compartilhado registra o que cada um fez.
+- **Build do app nesta nuvem:** o Maven Central respondeu 429. Use um init script do Gradle que troque `repo.maven.apache.org` por `maven-central.storage-download.googleapis.com/maven2/`.
+
 ## 1. Objetivo e preferências do usuário
 
 - Liquid Glass no estilo iOS 26 nas notificações do One UI 9. Aparelho: Samsung S25 Ultra (SM-S938B), firmware S938BXXUCZZIC, Android 17.
