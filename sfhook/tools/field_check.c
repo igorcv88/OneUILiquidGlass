@@ -3,8 +3,10 @@
 //  - the shift is zero outside the bevel band and C1 at its inner edge (depth = bevel);
 //  - the shift points inward and never exceeds k * bevel;
 //  - the 2-D Jacobian of the sampling map q -> q + s(q), by central differences, matches the closed
-//    form det = (1 - 2 k t) * (1 - k bevel t^2 / rho) (rho = distance to the corner centre; 1 on the
-//    straight edges), and is positive everywhere for k <= 0.5 (no fold);
+//    form det = m(t) * (1 - |s| / rho) (rho = distance to the corner centre; 1 on the straight
+//    edges), with m = 1 - 2 k t for profile 0 (positive for k <= 0.5, folds exactly where
+//    t > 1 / (2 k) above) and m = 1 - 6 A t (1 - t), A = min(k, 0.55), for profile 1 (never folds;
+//    1 at the outline);
 //  - the body blur radius rises monotonically from 0 at the rim to the core radius;
 //  - the clip program's geometry (centre and half size rebuilt from uinnerRect and uradiusPlusHalf)
 //    is the FillRRect program's, and both decode the same strength and profile from the corner tag;
@@ -32,8 +34,9 @@ static void field(double qx, double qy, double hx, double hy, double r, double k
     s[0] = s[1] = 0;
     if (l <= 0 || depth <= 0 || depth >= bevel) return;
     double t = 1 - depth / bevel;
-    s[0] = -(vx / l) * signd(qx) * (k * bevel * t * t);
-    s[1] = -(vy / l) * signd(qy) * (k * bevel * t * t);
+    double mag = pf ? fmin(k, 0.55) * bevel * t * t * (3 - 2 * t) : k * bevel * t * t;
+    s[0] = -(vx / l) * signd(qx) * mag;
+    s[1] = -(vy / l) * signd(qy) * mag;
 }
 
 // SemBlurBridge.sfTag and the two decoders (OULG_DECODE; FillRRect: radius fraction, clip: fraction
@@ -55,7 +58,7 @@ int main(void) {
     const double sizes[][3] = {{670, 108, 108}, {670, 300, 92}, {700, 160, 56}, {540, 400, 140}, {670, 96, 48}, {670, 200, 91.875}, {670, 200, 108.4}};
     const double ks[] = {0.1, 0.3, 0.45, 0.5, 0.7, 1.2};
     long points = 0;
-    double worstErr = 0, minDetLow = 1e9;
+    double worstErr = 0, minDetLow = 1e9, minDet1 = 1e9, minM1[6] = {1e9, 1e9, 1e9, 1e9, 1e9, 1e9};
     for (unsigned si = 0; si < sizeof sizes / sizeof sizes[0]; si++) {
         double hx = sizes[si][0], hy = sizes[si][1], r0 = sizes[si][2];
         for (unsigned ki = 0; ki < 2 * sizeof ks / sizeof ks[0]; ki++) {
@@ -75,12 +78,6 @@ int main(void) {
                 double kh = decodeClip(h16 - floor(h16));
                 CHECK(kh > 0 && (kh >= 2) == pf, "fp16 clip tag r=%.3f -> %.4f decodes %.3f", r, h16, kh);
             }
-            // The other profile's lens is the same; only the body radius differs.
-            {
-                double a[2], b[2], ba, bb, q[2] = {hx - 3, hy - 3};
-                field(q[0], q[1], hx, hy, r, k, a, &ba); field(q[0], q[1], hx, hy, r, k + 2, b, &bb);
-                CHECK(a[0] == b[0] && a[1] == b[1], "profiles bend differently");
-            }
             // Clip geometry: Skia uploads the rect inset by r and r + 0.5; the rewrite rebuilds it.
             double L = 100, T = 400, inner[4] = {L + r, T + r, L + 2 * hx - r, T + 2 * hy - r}, rph = r + 0.5;
             double fullx = (inner[2] - inner[0]) + 2 * (rph - 0.5), fully = (inner[3] - inner[1]) + 2 * (rph - 0.5);
@@ -97,7 +94,7 @@ int main(void) {
                 if (depth <= 0) continue;  // outside the card: coverage is zero there
                 points++;
                 double mag = hypot(s[0], s[1]);
-                CHECK(mag <= k * bevel + 1e-9, "shift %.3f > k*bevel", mag);
+                CHECK(mag <= (pf ? fmin(k, 0.55) : k) * bevel + 1e-9, "shift %.3f > k*bevel", mag);
                 if (depth >= bevel) { CHECK(mag == 0, "shift outside band"); }
                 else {
                     // Inward: against the outward normal (v / l) * sign(q).
@@ -113,15 +110,21 @@ int main(void) {
                 double j00 = 1 + (sx1[0] - sx0[0]) / (2 * h), j10 = (sx1[1] - sx0[1]) / (2 * h);
                 double j01 = (sy1[0] - sy0[0]) / (2 * h), j11 = 1 + (sy1[1] - sy0[1]) / (2 * h);
                 double det = j00 * j11 - j01 * j10;
-                double expect = 1;
+                double expect = 1, m = 1;
                 if (depth < bevel) {
                     int corner = wx > 0 && wy > 0;
-                    expect = (1 - 2 * k * t) * (corner ? 1 - k * bevel * t * t / l : 1);
+                    double A = fmin(k, 0.55);
+                    m = pf ? 1 - 6 * A * t * (1 - t) : 1 - 2 * k * t;
+                    expect = m * (corner ? 1 - mag / l : 1);
                 }
                 double err = fabs(det - expect);
                 if (err > worstErr) worstErr = err;
                 CHECK(err < 1e-4, "jacobian k=%.2f at %.2f,%.2f det=%.6f expect=%.6f", k, qx, qy, det, expect);
-                if (k <= 0.5) { CHECK(det > 0 || (k == 0.5 && det > -1e-6), "fold at k=%.2f det=%.6f", k, det); if (det < minDetLow) minDetLow = det; }
+                if (pf) {
+                    CHECK(det > 0.1, "profile 1 fold at k=%.2f det=%.6f", k, det);
+                    if (det < minDet1) minDet1 = det;
+                    if (depth < bevel && m < minM1[ki / 2]) minM1[ki / 2] = m;
+                } else if (k <= 0.5) { CHECK(det > 0 || (k == 0.5 && det > -1e-6), "fold at k=%.2f det=%.6f", k, det); if (det < minDetLow) minDetLow = det; }
                 else CHECK((det < 0) == (t > 1 / (2 * k)), "fold region k=%.2f t=%.3f det=%.4f", k, t, det);
             }
             // C1 at the inner band edge and monotone body radius, along a straight-edge normal.
@@ -137,7 +140,10 @@ int main(void) {
             }
         }
     }
-    printf("field: %ld points, max |det - closed form| = %.2e, min det (k <= 0.5) = %.3f, failures = %d\n",
-           points, worstErr, minDetLow, failures);
+    printf("field: %ld points, max |det - closed form| = %.2e, min det profile 0 (k <= 0.5) = %.3f, profile 1 (all k) = %.3f\n",
+           points, worstErr, minDetLow, minDet1);
+    printf("field: profile 1 min radial stretch by k:");
+    for (unsigned i = 0; i < sizeof ks / sizeof ks[0]; i++) printf(" %.2f->%.3f", ks[i], minM1[i]);
+    printf("\nfield: failures = %d\n", failures);
     return failures != 0;
 }

@@ -480,6 +480,58 @@ The lens is the same as profile 0: the rim matches within 2/255, the residue of 
 
 **Host checks:** `sfhook/tools/check.sh` runs the field check, then rewrites `tools/testdata/synthetic_dump.txt`. That dump holds Skia-style FillRRect and clip programs, sampler2D and external, flipped and not. Every rewrite must compile and link with glslangValidator. `sfhook/tools/render_check.mjs` renders both programs and both profiles in WebGL2 (headless Chromium, SwiftShader) and prints the comparisons above. The synthetic programs are modelled on Skia's output; the device's 138-shader dump was not available in this session.
 
+### Lockscreen material: one thick-slab model (sfhook v0.9, 2026-10-10)
+
+Brief: surpass both lockscreen renderers while keeping `kgblurpath=1`'s stability. The interior read as cloudy and dirty, and the rim as low-quality refraction with a decorative glowing outline. Heads-up rendering stays the reference: profile 0 is untouched (bit-identical to v0.7) and the expanded shade is untagged. All of this lives in profile 1, which lockscreen cards carry by default.
+
+**One spatial model.** Every term derives from the bevel coordinate `t = 1 − depth/bevel`, the outward normal `n` and one profile `G(t) = t²(3 − 2t)`.
+
+- **Refraction.** The shift is `A·bevel·G(t)`, with `A = min(k, 0.55)`. The radial Jacobian is `1 − 6At(1−t)`:
+  - It is 1 at the outline, so text crossing the rim is offset, not stretched.
+  - It is 1 at the inner edge, so the join to the interior is C1.
+  - Its minimum is mid-band, `1 − 1.5A ≥ 0.175`, so the map never folds.
+  - Profile 0's quadratic, by contrast, has its strongest stretch at the outline (`1 − 2k`) and folds above k = 0.5.
+  - Magnification stays ≤ 1 on both axes, so the B-spline never minifies (no aliasing).
+- **Rim transmission and reflection.** The surface tilt follows the same `G` (shift ∝ thickness × slope), reaching 1.2 rad at the outline. Schlick's excess reflectance mixes the refracted backdrop toward a bright environment. The rim therefore brightens over dark backdrops and stays nearly neutral over bright ones; no outline is drawn.
+- **Specular.** A crescent on the light-facing rim (light from the upper left, as the module's edge optics) and a fainter internal one opposite. They are tinted 30 % by the backdrop's hue and fade over bright backdrops.
+- **Interior.**
+  - A 56 px Vogel disc with 40 taps.
+  - Vibrancy: saturation rises with the body blur, to 1.25.
+  - A soft knee on luma above 0.65, at most −15 %, against milky glare on bright wallpapers.
+- **Lighting moved to the compositor, for profile-1 cards only.** The compositor now owns the lighting, from the real backdrop. The module's edge shader steps back on those cards (`GlassDrawable.setCompositorLit`): no lit runs, no thickness shadow, and the hairline at half gain for the outline. With `kgblurpath=1` the region and the glass are drawn in the same frame, so the v0.4 problem of two misaligned rims does not apply. Heads-up and shade cards keep `decor = hairGain = 1`, which gives identical output.
+
+**Knobs.**
+- **Live:**
+  - `debug.oulg.kgoptics` (lockscreen material on or off).
+  - `debug.oulg.kglens` (profile-1 strength, default 0.40; −1 follows `sflens`).
+  - `debug.oulg.huoptics=1`: opt-in preview of the lockscreen material on heads-up cards.
+- **Compile time** (SurfaceFlinger restart with the cache cleared): `debug.oulg.sf.kgcore` 56, `.kgtaps` 40, `.kgramp` 1.5, `.kgsat` 1.25, `.kgtone` 0.15, `.kgrim` 1.0, `.kgspec` 0.18.
+
+**Measured on the host** (`render_check.mjs`). Reference backdrop: a photographic gradient with a bright half and a dark half, large high-contrast text crossing the top and bottom rims, turned into the compositor's input by a 4× downscale and a light blur. Card 720×300, corner 92.
+
+| | grain | structure (5–40 px) |
+|---|---|---|
+| v0.7 clip (the suspected `kgblurpath=1` program) | 0.33 | 12.5 |
+| profile 0 (heads-up; v0.7 FillRRect, identical) | 1.04 | 2.61 |
+| profile 1 at 24 / 32 / 40 / 48 taps | 1.27 / 0.87 / 0.67 / 0.54 | 2.25 |
+
+- **Lighting alone.** Profile 1 minus the same build without it, mean luma on the straight rims in 1/255: lit top edge +6.7 over bright and +10.0 over dark; bottom edge +1.8 and +3.0.
+- **Program equivalence.** FillRRect and clip draw the same card within 1/255 in both profiles.
+- **Cost** (SwiftShader, relative only). About 0.27 ms of CPU-rasterizer time per 1000 tap-pixels, linear in taps. Per pixel in the body, profile 1 at 40 taps reads ~1.7× profile 0, plus the lighting ALU in the band. Measured lighting cost: about +15 % of a card draw.
+- **Rejected.** Gaussian importance sampling of the disc (taps by the radial CDF, equal weights). It draws the same kernel and was expected to give ~31 % more effective samples by the i.i.d. argument. Measured: more grain (1.33 vs 1.04 at 24 taps). A stratified pattern's outer rings get too sparse.
+
+**Still device-dependent.**
+- Which program draws `kgblurpath=1` (tint test).
+- The real compositor input: its downscale factor and its blur algorithm (Kawase or Samsung's).
+- Adreno timing (`timestats renderEngineTiming`).
+- Whether 40 taps is the right point for battery.
+- Real WhatsApp notifications.
+
+**Considered, not built.**
+- **Sampling the full-resolution original under the rim.** RenderEngine mixes the original input into blur regions below a radius of 10 px (`mixFactor`). A rewrite of that two-texture program could refract sharp content at the rim while the body uses the blur, the strongest rim quality available. Its GLSL is not in any dump seen so far, and a blind rewrite would not match. Next step: the device dump with `kgblurradius` below 10.
+- **Mip-based reconstruction.** The blur texture has no mip chain (`SkMipmapMode::kNone`), so `textureLod` cannot reach coarser levels.
+- **Quad-shared samples through derivatives.** Derivatives are undefined in the non-uniform branch that samples, and coarse derivatives would raise the variance.
+
 ## Future work
 
 - **Separate blur for the notification center and the control center.** Theme Park and HomeUp set a single blur amount for both panels. The user runs 12 %: lower leaves the control center unreadable, higher over-blurs the notification list. A split needs its own investigation: find where SystemUI applies the panel blur, whether the two panels are separate blur regions or one window, and whether the module can own one of them.

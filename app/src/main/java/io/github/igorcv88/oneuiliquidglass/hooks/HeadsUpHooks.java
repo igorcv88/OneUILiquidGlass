@@ -733,13 +733,17 @@ public final class HeadsUpHooks {
             View r = row.get();
             Boolean keyguard = Reflect.bool(r, "isOnKeyguard", "mOnKeyguard");
             boolean kgSurface = Eligibility.keyguardOptics(barState, Reflect.bool(r, "isHeadsUpState", "mIsHeadsUp"));
+            boolean lens = Eligibility.lens(barState, shadeExpanded, keyguard);
+            // A card carrying profile 1 is lit by the compositor; the edge shader then steps back.
+            if (glass != null) glass.setCompositorLit((compBridge != null || semBridge != null) && lens
+                    && Tuning.get().sfRefract && SemBlurBridge.profile(kgSurface) == 1);
             if (compBridge != null) {
-                try { compBridge.setKeyguard(kgSurface); compBridge.setLens(Eligibility.lens(barState, shadeExpanded, keyguard)); }
+                try { compBridge.setKeyguard(kgSurface); compBridge.setLens(lens); }
                 catch (ReflectiveOperationException | RuntimeException e) { Probe.error("BLUR_DRAWABLE_LENS_FAILED", e); }
                 return;
             }
             if (semBridge == null) return;
-            try { semBridge.setKeyguard(kgSurface); semBridge.setLens(Eligibility.lens(barState, shadeExpanded, keyguard)); }
+            try { semBridge.setKeyguard(kgSurface); semBridge.setLens(lens); }
             catch (ReflectiveOperationException | RuntimeException e) { Probe.error("SEM_BLUR_LENS_FAILED", e); }
         }
         void release() {

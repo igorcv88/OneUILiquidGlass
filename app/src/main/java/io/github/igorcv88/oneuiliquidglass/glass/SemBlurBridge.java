@@ -215,7 +215,7 @@ public final class SemBlurBridge implements Backdrop {
             case "none": return mode;
             case "single":
                 if (corner == null) break;
-                corner.invoke(b, Tuning.get().sfRefract && lens ? sfTag(radii[0], Tuning.get().sfLens, profile(keyguard)) : radii[0]);
+                corner.invoke(b, Tuning.get().sfRefract && lens ? sfTag(radii[0], strength(profile(keyguard)), profile(keyguard)) : radii[0]);
                 return mode;
             case "path":
                 if (clipPath == null || host.getWidth() <= 0 || host.getHeight() <= 0) break;
@@ -249,8 +249,19 @@ public final class SemBlurBridge implements Backdrop {
         float tag = (float) Math.floor(radius) + 0.30f + 0.15f * s;
         return tag <= radius ? tag : tag - 1f;
     }
-    /** The optics profile of a lens card: 1 for lockscreen cards unless debug.oulg.kgoptics=0. */
-    static int profile(boolean keyguard) { return keyguard && Tuning.get().kgOptics == 1 ? 1 : 0; }
+    /**
+     * The optics profile of a lens card: 1 (lockscreen material) for lockscreen cards unless
+     * debug.oulg.kgoptics=0, and for heads-up cards only with debug.oulg.huoptics=1.
+     */
+    public static int profile(boolean keyguard) {
+        Tuning t = Tuning.get();
+        return (keyguard ? t.kgOptics : t.huOptics) == 1 ? 1 : 0;
+    }
+    /** Lens strength carried by a profile's tag: kglens for profile 1 (unless -1), sflens otherwise. */
+    public static float strength(int profile) {
+        Tuning t = Tuning.get();
+        return profile == 1 && t.kgLens >= 0f ? t.kgLens : t.sfLens;
+    }
     /** Whether this card sits on the lockscreen (or the shade over it) rather than in a heads-up. */
     private boolean keyguard;
     /** Sets the surface that picks the optics profile; a change rebuilds the blur with the last inputs. */

@@ -2,6 +2,23 @@
 
 Documento para continuar o trabalho em outra conversa. Leia inteiro antes de mexer em qualquer coisa. O histórico técnico detalhado está em `docs/architecture.md`, nas seções de 2026-10-07 a 2026-10-09.
 
+## 0b. Atualização (sfhook v0.9, material da tela de bloqueio)
+
+Detalhes em `docs/architecture.md`, seção "Lockscreen material: one thick-slab model".
+- **Pop-up intocado:** perfil 0, bit a bit igual à v0.7. A central continua sem marca.
+- **Tela de bloqueio (perfil 1):** um único modelo de placa espessa.
+  - Refração em curva S, que nunca dobra.
+  - Reflexão de Fresnel e brilho especular calculados no compositor a partir do fundo real.
+  - Miolo de 56 px com 40 leituras, vibração e joelho de brilho.
+  - Nesses cards, o shader de borda do app deixa de desenhar as faixas de luz e a sombra.
+- **Ao vivo:**
+  - `debug.oulg.kgoptics` (0 = material do pop-up);
+  - `debug.oulg.kglens` (força da tela de bloqueio, padrão 0,40);
+  - `debug.oulg.huoptics=1` (prévia do material novo no pop-up).
+- **Na compilação:** `debug.oulg.sf.kgcore`, `.kgtaps`, `.kgramp`, `.kgsat`, `.kgtone`, `.kgrim`, `.kgspec`.
+- **Troca ao vivo da lib:** `SurfaceFlingerProp.v9.so`. Confirme com `grep -c kgspec`.
+- **Protocolo:** o mesmo da seção 0a. No passo 4, compare também `kglens` 0,30, 0,40 e 0,50.
+
 ## 0a. Atualização (sfhook v0.8, perfis ópticos por superfície)
 
 Detalhes técnicos em `docs/architecture.md`, seção "One optical library for both programs; per-surface profiles".

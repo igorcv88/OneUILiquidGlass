@@ -88,8 +88,9 @@ public final class BackgroundBlurBridge implements Backdrop {
             if (t.semAlpha >= 0) tint = (tint & 0x00ffffff) | (t.semAlpha << 24);
             if (lens && t.sfRefract) {
                 int profile = SemBlurBridge.profile(keyguard);
-                tl = SemBlurBridge.sfTag(tl, t.sfLens, profile); tr = SemBlurBridge.sfTag(tr, t.sfLens, profile);
-                bl = SemBlurBridge.sfTag(bl, t.sfLens, profile); br = SemBlurBridge.sfTag(br, t.sfLens, profile);
+                float k = SemBlurBridge.strength(profile);
+                tl = SemBlurBridge.sfTag(tl, k, profile); tr = SemBlurBridge.sfTag(tr, k, profile);
+                bl = SemBlurBridge.sfTag(bl, k, profile); br = SemBlurBridge.sfTag(br, k, profile);
             }
         }
         drawable.setVisible(true, false);
