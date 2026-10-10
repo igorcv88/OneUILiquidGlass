@@ -32,6 +32,15 @@ public final class Eligibility {
         if (barState != null && barState == BAR_KEYGUARD) return true;
         return !sharedBackdrop(shadeExpanded, keyguard);
     }
+    /**
+     * Whether a lens card takes the lockscreen optics profile: the keyguard or the shade over it, by
+     * the status bar state like {@link #lens}, and never a heads-up, which keeps its established
+     * material wherever it shows.
+     */
+    public static boolean keyguardOptics(Integer barState, Boolean headsUp) {
+        if (Boolean.TRUE.equals(headsUp) || barState == null) return false;
+        return barState == BAR_KEYGUARD || barState == BAR_SHADE_LOCKED;
+    }
     /** Diagnostic label only; unknown firmware state does not block rendering. */
     public static String surface(Boolean headsUp, Boolean keyguard, Boolean shadeExpanded) {
         if (Boolean.TRUE.equals(headsUp)) return "headsup";

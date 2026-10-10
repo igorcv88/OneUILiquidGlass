@@ -11,6 +11,10 @@ package io.github.igorcv88.oneuiliquidglass.glass;
  * the side facing the light, a fainter cool run opposite, a damped lower edge, and a thickness
  * shadow that starts inside the outline rather than on it.</p>
  *
+ * <p>hairGain scales the hairline and decor the lit runs and the thickness shadow (1 by default). A
+ * card the compositor lights itself (sfhook profile 1) takes decor 0 and a thinner hairline, so its
+ * rim is not lit twice.</p>
+ *
  * <p>Output is premultiplied: rgb is added light (alpha 0 under src-over is additive) and alpha is
  * the thickness shadow. Rim, hairline and shadow terms are adapted from the author's WaEnhancerX
  * Community {@code LiquidLens}; its backdrop-sampling terms (refraction, backdrop dispersion,
@@ -33,6 +37,8 @@ public final class LiquidGlassShader {
         uniform float2 light;
         uniform float specular;
         uniform float shadow;
+        uniform float hairGain;
+        uniform float decor;
 
         float roundedBox(float2 p, float2 hs, float r) {
             float2 q = abs(p) - hs + r;
@@ -76,13 +82,13 @@ public final class LiquidGlassShader {
             float band = clamp(1.0 - depth / bandW, 0.0, 1.0);
             float lit = pow(max(facing, 0.0), 3.0) * band * runs;
             float back = pow(max(-facing, 0.0), 1.4) * band * runs * (1.0 - 0.82 * under * under);
-            float3 added = line * lineGain * specular
-                    + float3(1.0, 0.995, 0.98) * lit * 0.26 * specular
-                    + float3(0.95, 0.975, 1.0) * back * 0.10 * specular;
+            float3 added = line * lineGain * specular * hairGain
+                    + float3(1.0, 0.995, 0.98) * lit * 0.26 * specular * decor
+                    + float3(0.95, 0.975, 1.0) * back * 0.10 * specular * decor;
 
             float t = clamp(depth / max(bevel, 1.0), 0.0, 1.0);
             float sw = clamp(bevel * 0.9, 4.0, 40.0);
-            float thick = pow(clamp(1.0 - depth / sw, 0.0, 1.0), 1.5) * t * max(-facing, 0.0) * shadow;
+            float thick = pow(clamp(1.0 - depth / sw, 0.0, 1.0), 1.5) * t * max(-facing, 0.0) * shadow * decor;
             return half4(half3(clamp(added, 0.0, 1.0)), half(0.26 * thick));
         }
         """;

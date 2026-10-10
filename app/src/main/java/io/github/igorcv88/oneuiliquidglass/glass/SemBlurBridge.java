@@ -215,7 +215,7 @@ public final class SemBlurBridge implements Backdrop {
             case "none": return mode;
             case "single":
                 if (corner == null) break;
-                corner.invoke(b, Tuning.get().sfRefract && lens ? sfTag(radii[0], Tuning.get().sfLens) : radii[0]);
+                corner.invoke(b, Tuning.get().sfRefract && lens ? sfTag(radii[0], strength(profile(keyguard)), profile(keyguard)) : radii[0]);
                 return mode;
             case "path":
                 if (clipPath == null || host.getWidth() <= 0 || host.getHeight() <= 0) break;
@@ -233,15 +233,42 @@ public final class SemBlurBridge implements Backdrop {
     }
     /**
      * Corner radius carrying the tag the sfhook shader rewrite looks for (sfhook/refract.h): a
-     * fraction in [0.55, 0.70] that encodes the lens strength k = 0.1 + 1.1 * (fraction - 0.55) / 0.15.
-     * floor(r) - 1 + fraction is never above r, so Skia keeps it on a pill whose radius is half its
-     * height (a larger radius is clamped and loses the tag). Off by at most 1.45 px; radii the shader
-     * ignores (40 px or less) stay untagged.
+     * fraction in a 0.15-wide band that encodes the lens strength k = 0.1 + 1.1 * (fraction - base)
+     * / 0.15. The band is the optical profile: [0.55, 0.70] the established (heads-up) material,
+     * [0.30, 0.45] the lockscreen material. floor(r) - 1 + fraction is never above r, so Skia keeps
+     * it on a pill whose radius is half its height (a larger radius is clamped and loses the tag).
+     * Off by at most 1.45 px (heads-up band, kept as it was) or 1.15 px (lockscreen band); radii the
+     * shader ignores (40 px or less) stay untagged.
      */
-    static float sfTag(float radius, float strength) {
+    static float sfTag(float radius, float strength) { return sfTag(radius, strength, 0); }
+    static float sfTag(float radius, float strength, int profile) {
         if (radius <= 42f) return radius;
         float s = Math.max(0f, Math.min(1f, (strength - 0.1f) / 1.1f));
-        return (float) Math.floor(radius) - 1f + 0.55f + 0.15f * s;
+        if (profile != 1) return (float) Math.floor(radius) - 1f + 0.55f + 0.15f * s;
+        // The lockscreen band takes the largest tagged radius not above r (at most 1.15 px off).
+        float tag = (float) Math.floor(radius) + 0.30f + 0.15f * s;
+        return tag <= radius ? tag : tag - 1f;
+    }
+    /**
+     * The optics profile of a lens card: 1 (lockscreen material) for lockscreen cards unless
+     * debug.oulg.kgoptics=0, and for heads-up cards only with debug.oulg.huoptics=1.
+     */
+    public static int profile(boolean keyguard) {
+        Tuning t = Tuning.get();
+        return (keyguard ? t.kgOptics : t.huOptics) == 1 ? 1 : 0;
+    }
+    /** Lens strength carried by a profile's tag: kglens for profile 1 (unless -1), sflens otherwise. */
+    public static float strength(int profile) {
+        Tuning t = Tuning.get();
+        return profile == 1 && t.kgLens >= 0f ? t.kgLens : t.sfLens;
+    }
+    /** Whether this card sits on the lockscreen (or the shade over it) rather than in a heads-up. */
+    private boolean keyguard;
+    /** Sets the surface that picks the optics profile; a change rebuilds the blur with the last inputs. */
+    public void setKeyguard(boolean on) throws ReflectiveOperationException {
+        if (keyguard == on) return;
+        keyguard = on;
+        if (built && !released) update(lastPx, lastTint, lastRadii);
     }
     /**
      * Cards in the expanded shade stay a diffuse blur; the others carry the lens tag. A change
@@ -253,17 +280,24 @@ public final class SemBlurBridge implements Backdrop {
         Probe.log("SEM_BLUR_LENS", "on=" + on + " view=" + Integer.toHexString(System.identityHashCode(host)));
         if (built && !released) update(lastPx, lastTint, lastRadii);
     }
+    /** "s,c,x0,x1,y0,y1" as six floats; null for anything else (presets, none, malformed). */
+    static float[] explicitCurve(String spec) {
+        if (spec == null || spec.indexOf(',') < 0) return null;
+        String[] p = spec.split(",");
+        if (p.length != 6) return null;
+        float[] v = new float[6];
+        try { for (int i = 0; i < 6; i++) v[i] = Float.parseFloat(p[i].trim()); }
+        catch (NumberFormatException e) { return null; }
+        return v;
+    }
     /** spatial|dim|ultra pick Samsung's presets for the current theme; "s,c,x0,x1,y0,y1" is explicit. */
     private void applyCurve(Object builder, String spec) {
         if (spec == null || spec.isEmpty() || spec.equals("none")) return;
         try {
             if (spec.indexOf(',') >= 0) {
-                if (curve == null) return;
-                String[] p = spec.split(",");
-                if (p.length != 6) return;
-                Object[] v = new Object[6];
-                for (int i = 0; i < 6; i++) v[i] = Float.parseFloat(p[i].trim());
-                curve.invoke(builder, v);
+                float[] f = explicitCurve(spec);
+                if (curve == null || f == null) return;
+                curve.invoke(builder, f[0], f[1], f[2], f[3], f[4], f[5]);
                 return;
             }
             if (curvePreset == null) return;

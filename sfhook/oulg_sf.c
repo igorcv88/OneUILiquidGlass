@@ -127,13 +127,24 @@ static float prop_float(const char *name, float fallback) {
     return end != v ? f : fallback;
 }
 
-// Layered blur, read when a shader is compiled like the debug tint: debug.oulg.sf.core (body blur
-// radius in px, 0 = off), debug.oulg.sf.taps (taps per pixel) and debug.oulg.sf.ramp (depth where
-// the body radius is reached, in bevels).
-static void layered_blur(float *core, int *taps, float *ramp) {
-    *core = prop_float("debug.oulg.sf.core", OULG_CORE_DEFAULT);
-    *taps = (int) prop_float("debug.oulg.sf.taps", OULG_TAPS_DEFAULT);
-    *ramp = prop_float("debug.oulg.sf.ramp", OULG_RAMP_DEFAULT);
+// Optical profiles, read when a shader is compiled like the debug tint. Profile 0 (heads-up; the
+// established material): debug.oulg.sf.core (body blur radius in px, 0 = off), debug.oulg.sf.taps
+// (taps per pixel) and debug.oulg.sf.ramp (depth where the body radius is reached, in bevels).
+// Profile 1 (lockscreen): debug.oulg.sf.kgcore, .kgtaps, .kgramp, .kgsat (body saturation),
+// .kgtone (highlight knee), .kgrim (rim reflectance gain) and .kgspec (specular strength). Which
+// profile a card gets travels in its tag, set live by the module.
+static void layered_blur(struct oulg_profile p[2]) {
+    p[0] = OULG_PROFILES_DEFAULT[0];
+    p[0].core = prop_float("debug.oulg.sf.core", OULG_CORE_DEFAULT);
+    p[0].taps = (int) prop_float("debug.oulg.sf.taps", OULG_TAPS_DEFAULT);
+    p[0].ramp = prop_float("debug.oulg.sf.ramp", OULG_RAMP_DEFAULT);
+    p[1].core = prop_float("debug.oulg.sf.kgcore", OULG_KG_CORE_DEFAULT);
+    p[1].taps = (int) prop_float("debug.oulg.sf.kgtaps", OULG_KG_TAPS_DEFAULT);
+    p[1].ramp = prop_float("debug.oulg.sf.kgramp", OULG_KG_RAMP_DEFAULT);
+    p[1].sat = prop_float("debug.oulg.sf.kgsat", OULG_KG_SAT_DEFAULT);
+    p[1].tone = prop_float("debug.oulg.sf.kgtone", OULG_KG_TONE_DEFAULT);
+    p[1].rim = prop_float("debug.oulg.sf.kgrim", OULG_KG_RIM_DEFAULT);
+    p[1].spec = prop_float("debug.oulg.sf.kgspec", OULG_KG_SPEC_DEFAULT);
 }
 
 void glShaderSource(GLuint shader, GLsizei count, const GLchar *const *strings, const GLint *lengths) {
@@ -183,11 +194,11 @@ void glShaderSource(GLuint shader, GLsizei count, const GLchar *const *strings, 
             }
         }
     } else if (joined) {
-        int dbg = debug_tint(), taps;
-        float core, ramp;
-        layered_blur(&core, &taps, &ramp);
-        char *frag = vertex_broken ? NULL : oulg_rewrite_fragment(joined, dbg, core, taps, ramp);
-        if (!frag) frag = oulg_rewrite_clip(joined, dbg);
+        int dbg = debug_tint();
+        struct oulg_profile profiles[2];
+        layered_blur(profiles);
+        char *frag = vertex_broken ? NULL : oulg_rewrite_fragment(joined, dbg, profiles);
+        if (!frag) frag = oulg_rewrite_clip(joined, dbg, profiles);
         if (frag) {
             int ok = compiles(shader, frag);
             __android_log_print(ANDROID_LOG_INFO, TAG, "REWRITE fragment shader=%u compiled=%d", shader, ok);

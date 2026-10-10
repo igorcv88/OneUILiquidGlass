@@ -73,6 +73,25 @@ public final class Tuning {
     public final boolean kgWinBlur;
     /** Blur radius in px for the drawable path (debug.oulg.kgblurradius); -1 = semradiuslens. */
     public final int kgBlurRadius;
+    /**
+     * Compositor optics profile of lockscreen cards (debug.oulg.kgoptics): 1 (default) the lockscreen
+     * material of sfhook/refract.h (wider body blur, more taps, vibrancy); 0 the established heads-up
+     * material. Heads-up cards always carry profile 0. It travels in the corner tag: a change shows
+     * live, without restarting SurfaceFlinger.
+     */
+    public final int kgOptics;
+    /**
+     * Opt-in preview of the lockscreen material on heads-up cards (debug.oulg.huoptics=1), for A/B
+     * on the device. Default 0: heads-up cards keep the established material.
+     */
+    public final int huOptics;
+    /**
+     * Lens strength of profile-1 (lockscreen material) cards, as sflens is for the others
+     * (debug.oulg.kglens, live). Its S-curve profile never folds, so it takes more than sflens can:
+     * 0.40 shifts the outline by 0.4 bevel with a radial stretch of at least 0.4, mid-band. -1
+     * follows sflens.
+     */
+    public final float kgLens;
     /** Logs main-thread time spent in the module's hooks (see {@link Perf}). */
     public final boolean perf;
     /** Enables the view-tree and window diagnostic dumps (see {@link Probe#trace}). */
@@ -112,6 +131,10 @@ public final class Tuning {
         kgBlurPath = Math.round(clamp(number("kgblurpath", 1f), 0f, 1f));
         kgWinBlur = number("kgwinblur", 0f) >= 1f;
         kgBlurRadius = Math.round(clamp(number("kgblurradius", -1f), -1f, 400f));
+        kgOptics = Math.round(clamp(number("kgoptics", 1f), 0f, 1f));
+        huOptics = Math.round(clamp(number("huoptics", 0f), 0f, 1f));
+        float kl = number("kglens", 0.40f);
+        kgLens = kl < 0f ? -1f : clamp(kl, 0.1f, 1.2f);
         perf = number("perf", 0f) >= 1f;
         Perf.enabled = perf;
         trace = number("trace", 0f) >= 1f;
@@ -133,7 +156,7 @@ public final class Tuning {
         return "backdrop=" + backdrop + " profile=" + profile + " lens=" + lens + " rimhz=" + rimHz + " rimblur=" + rimBlur
                 + " refract=" + refract + " ior=" + ior + " blur=" + blur + " sat=" + saturation
                 + " disp=" + dispersion + " hz=" + hz + " hzkg=" + keyguardHz + " tint=" + tintAlpha
-                + " semradius=" + semRadius + " semradiuslens=" + semRadiusLens + " sflens=" + sfLens + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " kgblurpath=" + kgBlurPath + " kgblurradius=" + kgBlurRadius + " kgwinblur=" + kgWinBlur + " perf=" + perf + " trace=" + trace;
+                + " semradius=" + semRadius + " semradiuslens=" + semRadiusLens + " sflens=" + sfLens + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " kgblurpath=" + kgBlurPath + " kgblurradius=" + kgBlurRadius + " kgoptics=" + kgOptics + " huoptics=" + huOptics + " kglens=" + kgLens + " kgwinblur=" + kgWinBlur + " perf=" + perf + " trace=" + trace;
     }
 
     private static float clamp(float v, float lo, float hi) { return Float.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : lo; }

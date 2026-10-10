@@ -2,6 +2,55 @@
 
 Documento para continuar o trabalho em outra conversa. Leia inteiro antes de mexer em qualquer coisa. O histórico técnico detalhado está em `docs/architecture.md`, nas seções de 2026-10-07 a 2026-10-09.
 
+## 0b. Atualização (sfhook v0.9, material da tela de bloqueio)
+
+Detalhes em `docs/architecture.md`, seção "Lockscreen material: one thick-slab model".
+- **Pop-up intocado:** perfil 0, bit a bit igual à v0.7. A central continua sem marca.
+- **Tela de bloqueio (perfil 1):** um único modelo de placa espessa.
+  - Refração em curva S, que nunca dobra.
+  - Reflexão de Fresnel e brilho especular calculados no compositor a partir do fundo real.
+  - Miolo de 56 px com 40 leituras, vibração e joelho de brilho.
+  - Nesses cards, o shader de borda do app deixa de desenhar as faixas de luz e a sombra.
+- **Ao vivo:**
+  - `debug.oulg.kgoptics` (0 = material do pop-up);
+  - `debug.oulg.kglens` (força da tela de bloqueio, padrão 0,40);
+  - `debug.oulg.huoptics=1` (prévia do material novo no pop-up).
+- **Na compilação:** `debug.oulg.sf.kgcore`, `.kgtaps`, `.kgramp`, `.kgsat`, `.kgtone`, `.kgrim`, `.kgspec`.
+- **Troca ao vivo da lib:** `SurfaceFlingerProp.v9.so`. Confirme com `grep -c kgspec`.
+- **Protocolo:** o mesmo da seção 0a. No passo 4, compare também `kglens` 0,30, 0,40 e 0,50.
+
+## 0a. Atualização (sfhook v0.8, perfis ópticos por superfície)
+
+Detalhes técnicos em `docs/architecture.md`, seção "One optical library for both programs; per-surface profiles".
+
+- **Hipótese do miolo ruim com `kgblurpath=1`.** O programa de recorte (`oulg_rewrite_clip`) só deslocava a amostra: não aplicava a B-spline nem o blur do miolo. Se o caminho do drawable for desenhado por ele, o miolo fica exatamente como o relatado. **Falta a prova no aparelho**, que é o teste de cor do passo 3 abaixo.
+- **Correção.** Os dois programas usam a mesma biblioteca GLSL: o campo, a B-spline e o disco.
+- **Perfis por superfície.** A marca carrega o perfil:
+  - Pop-up: perfil 0. A saída dele é bit a bit igual à da v0.7.
+  - Tela de bloqueio: perfil 1, com miolo de 56 px, 32 leituras e saturação de 1,25.
+  - A/B ao vivo, sem reiniciar o SurfaceFlinger: `debug.oulg.kgoptics` (1 = material novo, 0 = material do pop-up).
+  - Parâmetros do perfil 1, lidos na compilação: `debug.oulg.sf.kgcore`, `.kgtaps`, `.kgramp`, `.kgsat`.
+- **Testes no host:** `sfhook/tools/check.sh` (Jacobiano, marcas, compilação e link GLSL) e `sfhook/tools/render_check.mjs` (render WebGL2 dos dois programas e dos dois perfis).
+
+### Protocolo de validação no aparelho (v0.8)
+
+1. Troca ao vivo da lib, com o procedimento da seção 4 e o nome `SurfaceFlingerProp.v8.so`. Confirme com `nsenter -t 1 -m -- grep -c kgsat /system/lib64/SurfaceFlingerProp.so`, que deve dar 1 ou mais.
+2. Reinicie o SurfaceFlinger com o cache limpo (seção 4). Critério: `FAIL=0` no diagnóstico de shaders.
+3. **Teste decisivo do programa** (antes de avaliar a estética):
+   - `setprop debug.oulg.sf.debug 1`, reinicie o SurfaceFlinger com o cache limpo e use `kgblurpath=1`.
+   - Card da tela de bloqueio **ciano**: é o programa de recorte, a hipótese se confirma e a v0.8 corrige.
+   - Card **magenta**: é o FillRRect, e a diferença vem da textura de entrada. Mande a linha `BLUR_DRAWABLE_API` do log.
+   - Card **sem cor**: é uma terceira família de programa. Mande o `oulg_shaders.txt`.
+   - Volte com `sf.debug=0` e reinicie de novo.
+4. A/B estético na tela de bloqueio, ao vivo: `setprop debug.oulg.kgoptics 1` e depois `0`.
+5. Regressão do pop-up: o perfil 0 tem que sair idêntico ao da v0.7. Compare uma notificação real do WhatsApp com botões, sobre fundo claro e sobre fundo escuro, e texto grande de alto contraste cruzando a borda.
+6. Custo de GPU:
+   - `dumpsys SurfaceFlinger --timestats -clear -enable`;
+   - 30 s de arrasto na tela de bloqueio;
+   - `--timestats -dump > /sdcard/Download/ts_kgN.txt`, com N = 0 ou 1 conforme o `kgoptics`, e depois `--timestats -disable`.
+   - Critério: mediana e p90 de `renderEngineTiming` com `kgoptics=1` no máximo ~1 ms acima de `kgoptics=0`, e sem aumento de quadros perdidos.
+7. Estabilidade: ciclos de bloqueio, meio-arrasto, toque, subida ao bouncer e economia de energia. Os defeitos já resolvidos (fantasma, cinza, piscadas) não podem voltar.
+
 ## 0. Atualização (sessão seguinte, PR #21)
 
 Documento compartilhado com a investigação completa: <https://claude.ai/code/artifact/06632b0e-8a50-473c-af62-3373690088d1>. Estado final:
