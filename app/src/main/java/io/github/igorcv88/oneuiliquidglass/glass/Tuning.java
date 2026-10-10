@@ -107,7 +107,7 @@ public final class Tuning {
         semCurve = prop("semcurve", "auto");
         semAlpha = Math.round(clamp(number("semalpha", -1f), -1f, 255f));
         String shape = prop("semshape", "auto");
-        shadeBlur = number("shadeblur", 0f) >= 1f;
+        shadeBlur = number("shadeblur", 1f) >= 1f;
         sfRefract = number("sfrefract", 0f) >= 1f;
         kgBlurPath = Math.round(clamp(number("kgblurpath", 1f), 0f, 1f));
         kgWinBlur = number("kgwinblur", 0f) >= 1f;
