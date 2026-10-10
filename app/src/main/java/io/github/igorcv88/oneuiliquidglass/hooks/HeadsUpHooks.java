@@ -52,6 +52,8 @@ public final class HeadsUpHooks {
     private final boolean samsungBlur = SemBlurBridge.available();
     private final GlassSpec spec = new GlassSpec();
     private Boolean shadeExpanded;
+    /** SystemUI's StatusBarState (0 shade, 1 keyguard, 2 shade over keyguard); null until first set. */
+    private Integer barState;
     /** Set once HybridBackdrop could not be built; heads-up rows then keep the plain compositor blur. */
     private boolean hybridFailed;
     /** enabled == null: preferences unreadable, resolve through the module's ConfigProvider. */
@@ -150,6 +152,8 @@ public final class HeadsUpHooks {
         };
         for (String n : new String[]{"onFinishInflate", "setHeadsUp", "setPinned", "setHeadsUpAnimatingAway", "startAppearAnimation", "onAppearAnimationFinished", "setUserExpanded", "setOnKeyguard", "onAttachedToWindow"}) hook(rowClass, n, rowEvent);
         installShade();
+        installBarState();
+        installScrimClamp();
         for (String manager : new String[]{"com.android.systemui.statusbar.notification.headsup.HeadsUpManagerImpl", "com.android.systemui.statusbar.policy.BaseHeadsUpManager", "com.android.systemui.statusbar.policy.HeadsUpManager"}) {
             Class<?> c = resolve(manager);
             for (String n : new String[]{"showNotification", "updateNotification", "removeNotification", "createHeadsUpEntry", "setEntryPinned"}) hook(c, n, new XC_MethodHook() {
@@ -202,6 +206,14 @@ public final class HeadsUpHooks {
                         // hands it back instead of clearing it.
                         if (states.containsKey(v) || (rowClass != null && rowClass.isInstance(v))
                                 || BACKGROUND.equals(v.getClass().getName())) SemBlurBridge.recordNative(v, p.args[0]);
+                        if (v.getRootView() == v && p.args[0] != null && barState != null && barState == Eligibility.BAR_KEYGUARD
+                                && Tuning.get().sfRefract && !Tuning.get().kgWinBlur && v.getClass().getName().endsWith("NotificationShadeWindowView")
+                                && Reflect.read(p.args[0], "mBlurRadius") instanceof Integer && (Integer) Reflect.read(p.args[0], "mBlurRadius") <= 4) {
+                            // On the idle lockscreen a touch makes the panel blur ramp the shade window to a
+                            // radius of 1-3 and back, each step with the panel's dark color curve. Only radii
+                            // up to 4 are dropped: a pull-down or the bouncer passes that within a few frames.
+                            p.args[0] = null;
+                        }
                         boolean managed = compositorState(v) != null;
                         String caller = Probe.trace && foreignBlurTraces > 0 && foreignBlurLogged.size() < 40 ? blurCaller() : null;
                         if (caller != null) foreignBlurTraces--;
@@ -224,7 +236,7 @@ public final class HeadsUpHooks {
             Object bg = Reflect.read(v, "mBackgroundNormal");
             s = bg instanceof View ? states.get(bg) : null;
         }
-        return s != null && s.glass != null && (s.glassKind == Backdrop.Kind.SAMSUNG || s.glass.hybrid()) ? s : null;
+        return s != null && s.glass != null && (s.glassKind == Backdrop.Kind.SAMSUNG || s.glass.hybrid() || s.compBridge != null) ? s : null;
     }
     private final Set<String> mutatorLogged = new java.util.HashSet<>();
     /**
@@ -314,6 +326,63 @@ public final class HeadsUpHooks {
             }
         })) shadeHook = true;
     }
+    /** Resource entry name of a view's id, or "" (scrims are told apart by their ids). */
+    private static String idName(View v) {
+        try { return v.getId() == View.NO_ID ? "" : v.getResources().getResourceEntryName(v.getId()); }
+        catch (RuntimeException e) { return ""; }
+    }
+    private static boolean notificationsScrim(View v) { return idName(v).contains("notification"); }
+    private final java.util.Set<View> notificationScrims = Collections.newSetFromMap(new WeakHashMap<>());
+    /**
+     * A partial pull-down on the lockscreen raises the notifications scrim (the tinted layer
+     * SystemUI draws behind the stack) to full opacity, and it stays there after the shade springs
+     * back until the next tap. Behind opaque native cards it never shows; behind glass it turned
+     * lockscreen cards dark. On the keyguard state it is held at 0.
+     */
+    private void installScrimClamp() {
+        Class<?> c = resolve("com.android.systemui.scrim.ScrimView");
+        hook(c, "setViewAlpha", new XC_MethodHook() {
+            @Override protected void beforeHookedMethod(MethodHookParam p) {
+                if (!(p.thisObject instanceof View) || !(p.args.length > 0 && p.args[0] instanceof Float)) return;
+                View v = (View) p.thisObject;
+                if (!notificationsScrim(v)) return;
+                if (notificationScrims.add(v)) Probe.log("SCRIM_NOTIFICATIONS", "id=" + idName(v) + " view=" + Integer.toHexString(System.identityHashCode(v)));
+                if (barState != null && barState == Eligibility.BAR_KEYGUARD && (Float) p.args[0] > 0f) p.args[0] = 0f;
+            }
+        });
+    }
+    private void clampNotificationScrims() {
+        for (View v : new ArrayList<>(notificationScrims)) {
+            try { v.getClass().getMethod("setViewAlpha", float.class).invoke(v, 0f); }
+            catch (ReflectiveOperationException | RuntimeException e) { Probe.error("SCRIM_CLAMP_FAILED", e); }
+        }
+    }
+    private void installBarState() {
+        Class<?> c = resolve("com.android.systemui.statusbar.StatusBarStateControllerImpl");
+        hook(c, "setState", new XC_MethodHook() {
+            @Override protected void afterHookedMethod(MethodHookParam p) {
+                Object state = Reflect.read(p.thisObject, "mState");
+                if (!(state instanceof Integer) || state.equals(barState)) return;
+                barState = (Integer) state;
+                Probe.log("BAR_STATE", "state=" + barState);
+                if (barState == Eligibility.BAR_KEYGUARD) clampNotificationScrims();
+                // The blur is a view property: a card SystemUI does not redraw (the shade springing
+                // back to the lockscreen) would keep the expanded-shade blur. Re-decide now.
+                for (State s : new ArrayList<>(states.values())) { s.refreshLens(); s.invalidate(); }
+                if (Probe.trace) {
+                    // Scrims settle after the state change; snapshot them once the animation is done.
+                    int at = barState;
+                    for (State s : states.values()) {
+                        View v = s.background.get();
+                        if (v == null || !v.isAttachedToWindow()) continue;
+                        View root = v.getRootView();
+                        v.postDelayed(() -> Probe.scrims(root, "barState=" + at), 900);
+                        break;
+                    }
+                }
+            }
+        });
+    }
     private void updateShade(Object controller) {
         long started = Perf.start();
         try { applyShade(controller); } finally { Perf.end(Perf.SHADE, started); }
@@ -332,6 +401,7 @@ public final class HeadsUpHooks {
             for (State state : new ArrayList<>(states.values())) {
                 // Opening the shade is when cards were seen without their blur: apply it again.
                 if (state.glass != null) state.glass.reassertBackdrop();
+                state.refreshLens();
                 state.invalidate();
             }
             // The panel controller's own view works with an empty shade; a row is only the fallback.
@@ -373,6 +443,10 @@ public final class HeadsUpHooks {
         final WeakReference<View> background;
         final WeakReference<View> row;
         GlassDrawable glass;
+        /** The Samsung blur behind glass, when glassKind is SAMSUNG. */
+        SemBlurBridge semBridge;
+        /** The lens-mode BackgroundBlurDrawable behind glass on the lockscreen (debug.oulg.kgblurpath). */
+        BackgroundBlurBridge compBridge;
         Backdrop.Kind glassKind;
         String glassSource;
         boolean materialReported;
@@ -406,7 +480,7 @@ public final class HeadsUpHooks {
                     blurListener = supported -> {
                         blurEnabled = supported;
                         Probe.log("BLUR_CAPABILITY_CHANGED", "enabled=" + supported);
-                        if (!supported && glassKind == Backdrop.Kind.COMPOSITOR) release();
+                        if (!supported && glassKind == Backdrop.Kind.COMPOSITOR && compBridge == null) release();
                         invalidate();
                     };
                     wm.addCrossWindowBlurEnabledListener(view.getContext().getMainExecutor(), blurListener);
@@ -430,6 +504,13 @@ public final class HeadsUpHooks {
             long started = Perf.start();
             try {
                 View v = background.get(); if (v == null) return true;
+                if (compBridge != null) {
+                    // Ancestor alpha (a pull up from the lockscreen) fades the drawn glass but not
+                    // the compositor's blur region, which stayed behind as a ghost of the card.
+                    float a = 1f;
+                    for (Object p = v; p instanceof View; p = ((View) p).getParent()) a *= ((View) p).getAlpha();
+                    if (compBridge.setRegionFade(a)) v.invalidate();
+                }
                 boolean eligible = eligible();
                 View r = row.get();
                 Boolean headsUp = r == null ? null : Reflect.bool(r, "isHeadsUpState", "mIsHeadsUp");
@@ -475,7 +556,7 @@ public final class HeadsUpHooks {
         boolean eligible() {
             View v = background.get(), r = row.get();
             if (v == null || r == null || failed || !drawHook || !v.isShown() || v.getWidth() <= 0 || v.getHeight() <= 0) return false;
-            return Eligibility.glass(enabled, v.isAttachedToWindow(), v.isHardwareAccelerated(), r.isPressed() || r.isFocused() || r.isHovered());
+            return Eligibility.glass(enabled, v.isAttachedToWindow(), v.isHardwareAccelerated());
         }
         /** Diagnostic mirror of eligible() plus the compositor capability checked in material(). */
         String reason() {
@@ -485,11 +566,25 @@ public final class HeadsUpHooks {
             if (!drawHook) return "drawHook=false";
             if (!v.isShown()) return "hidden";
             if (v.getWidth() <= 0 || v.getHeight() <= 0) return "empty";
-            String policy = Eligibility.reason(enabled, v.isAttachedToWindow(), v.isHardwareAccelerated(), r.isPressed() || r.isFocused() || r.isHovered());
+            String policy = Eligibility.reason(enabled, v.isAttachedToWindow(), v.isHardwareAccelerated());
             if (policy != null) return policy;
             return kind() != null ? null : "blur=unavailable";
         }
-        Backdrop.Kind kind() { return Backdrop.choose(blurEnabled, samsungBlur, sharedBackdrop(), sampledRow()); }
+        Backdrop.Kind kind() {
+            Backdrop.Kind k = Backdrop.choose(blurEnabled, samsungBlur, sharedBackdrop(), sampledRow());
+            return k == Backdrop.Kind.SAMSUNG && drawablePath() ? Backdrop.Kind.COMPOSITOR : k;
+        }
+        /**
+         * Lockscreen cards (and the shade over the lockscreen) take their blur from a
+         * BackgroundBlurDrawable drawn with the glass, whatever cross-window blur reports (always
+         * false on One UI 9, where Samsung's own blur still works). The Samsung blur installed on
+         * the view covered the view's bounds, not the card's, and lagged it by a frame.
+         */
+        boolean drawablePath() {
+            Tuning t = Tuning.get();
+            return t.kgBlurPath == 1 && t.sfRefract && barState != null
+                    && (barState == Eligibility.BAR_KEYGUARD || barState == Eligibility.BAR_SHADE_LOCKED);
+        }
         /**
          * Rows whose background can be sampled and refracted. By default only lockscreen rows: the
          * wallpaper is static, so it is redrawn on the GPU every frame with no lag. The app behind a
@@ -571,11 +666,8 @@ public final class HeadsUpHooks {
             View v = background.get();
             Backdrop.Kind kind = kind();
             if (v == null || !eligible() || kind == null) { release(); return fallback(v == null ? "collected" : kind == null ? "noBackdrop" : reason()); }
-            for (int state : original.getState()) {
-                if (state == android.R.attr.state_pressed || state == android.R.attr.state_focused || state == android.R.attr.state_hovered) {
-                    release(); return fallback("pressed");
-                }
-            }
+            boolean pressed = false;
+            for (int state : original.getState()) if (state == android.R.attr.state_pressed) pressed = true;
             if (glass != null && glass.failed()) { failed = true; release(); return fallback("glassFailed"); }
             String source = kind == Backdrop.Kind.SAMPLED ? sampledSource(v) : null;
             if (glass != null && (glassKind != kind || glass.stale() || !java.util.Objects.equals(source, glassSource))) release();
@@ -588,9 +680,12 @@ public final class HeadsUpHooks {
                 release(); return fallback("corners");
             }
             if (glass == null) {
+                nativePending = false;
                 Backdrop backdrop = kind == Backdrop.Kind.SHARED ? new SharedBackdrop()
                         : kind == Backdrop.Kind.SAMPLED ? sampledBackdrop(v, source)
-                        : kind == Backdrop.Kind.SAMSUNG ? SemBlurBridge.create(v) : BackgroundBlurBridge.create(v);
+                        : kind == Backdrop.Kind.SAMSUNG ? (semBridge = SemBlurBridge.create(v))
+                        : drawablePath() ? (compBridge = BackgroundBlurBridge.create(v, true)) : BackgroundBlurBridge.create(v);
+                if (compBridge != null) SemBlurBridge.clearNative(v);
                 glass = new GlassDrawable(backdrop, v.getResources().getDisplayMetrics().density, spec);
                 glassKind = kind;
                 glassSource = source;
@@ -602,9 +697,11 @@ public final class HeadsUpHooks {
             }
             boolean dark = (v.getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
             int fill = kind == Backdrop.Kind.SHARED ? (dark ? spec.shadeDarkFill : spec.shadeLightFill) : (dark ? spec.darkFill : spec.lightFill);
-            int tone = glass.hybrid() || kind == Backdrop.Kind.SAMSUNG ? (dark ? spec.samsungDarkColor : spec.samsungLightColor)
+            int tone = glass.hybrid() || kind == Backdrop.Kind.SAMSUNG || compBridge != null ? (dark ? spec.samsungDarkColor : spec.samsungLightColor)
                     : kind == Backdrop.Kind.SAMPLED ? (dark ? spec.captureDarkTint : spec.captureLightTint)
                     : dark ? spec.darkBlurColor : spec.lightBlurColor;
+            glass.setPressed(pressed);
+            refreshLens();
             glass.configure(original, shape(), fill, tone);
             if (lastFallback != null) { lastFallback = null; Probe.log("NATIVE_FALLBACK", "viewId=" + Integer.toHexString(System.identityHashCode(v)) + " reason=none"); }
             if (!materialReported) {
@@ -616,6 +713,7 @@ public final class HeadsUpHooks {
         /** The native background draws this frame; logged when the reason changes. */
         GlassDrawable fallback(String why) {
             why = String.valueOf(why);
+            if (!why.equals("hidden")) restorePendingNative();
             if (!why.equals(lastFallback)) {
                 lastFallback = why;
                 View v = background.get(), r = row.get();
@@ -631,13 +729,48 @@ public final class HeadsUpHooks {
             if (r == null || Tuning.get().shadeBlur) return false;
             return Eligibility.sharedBackdrop(shadeExpanded, Reflect.bool(r, "isOnKeyguard", "mOnKeyguard"));
         }
+        void refreshLens() {
+            if (compBridge != null) {
+                try { compBridge.setLens(Eligibility.lens(barState, shadeExpanded, Reflect.bool(row.get(), "isOnKeyguard", "mOnKeyguard"))); }
+                catch (ReflectiveOperationException | RuntimeException e) { Probe.error("BLUR_DRAWABLE_LENS_FAILED", e); }
+                return;
+            }
+            if (semBridge == null) return;
+            try { semBridge.setLens(Eligibility.lens(barState, shadeExpanded, Reflect.bool(row.get(), "isOnKeyguard", "mOnKeyguard"))); }
+            catch (ReflectiveOperationException | RuntimeException e) { Probe.error("SEM_BLUR_LENS_FAILED", e); }
+        }
         void release() {
+            View v = background.get();
+            release(v == null || v.isShown());
+        }
+        /**
+         * restore=false (the card is being hidden) clears the blur instead of handing SystemUI's own
+         * back: the compositor keeps a blur region for a frame or two after its view stops drawing,
+         * and the native radius-180 blur would show on the card for those frames. The native blur
+         * is handed back later if the card is shown without glass.
+         */
+        void release(boolean restore) {
             if (glass == null) return;
             // The blur guard also blocked calls aimed at the row while this material was managed.
-            boolean compositor = glassKind == Backdrop.Kind.SAMSUNG || glass.hybrid();
-            glass.release(); glass = null; glassKind = null; glassSource = null; Probe.log("GLASS_RELEASED", "native=true");
-            View r = row.get();
-            if (compositor && r != null) SemBlurBridge.restoreNative(r);
+            boolean compositor = glassKind == Backdrop.Kind.SAMSUNG || glass.hybrid() || compBridge != null;
+            boolean drawable = compBridge != null;
+            if (!restore && semBridge != null) semBridge.clearOnRelease();
+            glass.release(); glass = null; glassKind = null; glassSource = null; semBridge = null; compBridge = null;
+            Probe.log("GLASS_RELEASED", "native=" + restore);
+            View r = row.get(), bg = background.get();
+            if (restore && compositor && r != null) SemBlurBridge.restoreNative(r);
+            // The Samsung blur was taken off the background itself for the drawable path.
+            if (restore && drawable && bg != null) SemBlurBridge.restoreNative(bg);
+            nativePending = compositor && !restore;
+        }
+        /** The native blur was cleared on a hidden release and is still owed if no glass comes back. */
+        boolean nativePending;
+        void restorePendingNative() {
+            if (!nativePending) return;
+            nativePending = false;
+            View v = background.get(), r = row.get();
+            if (v != null) SemBlurBridge.restoreNative(v);
+            if (r != null) SemBlurBridge.restoreNative(r);
         }
     }
     /**

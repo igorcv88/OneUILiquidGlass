@@ -47,6 +47,9 @@ public final class GlassDrawable extends Drawable {
     private boolean failed;
     private boolean configured;
     private int lastTint, fillColor, tuningGeneration;
+    /** Touch feedback in place of the native pressed background: a light wash over the material. */
+    private static final int PRESSED_WASH = 0x24ffffff;
+    private boolean pressed;
     public GlassDrawable(Backdrop backdrop, float density, GlassSpec spec) {
         this.backdrop = backdrop; this.density = density; this.spec = spec;
         if (backdrop instanceof SampledBackdrop && !refractBroken) {
@@ -61,6 +64,7 @@ public final class GlassDrawable extends Drawable {
         catch (RuntimeException e) { Probe.error("SHADER_UNAVAILABLE", e); }
     }
     public boolean failed() { return failed; }
+    public void setPressed(boolean on) { if (pressed != on) { pressed = on; invalidateSelf(); } }
     /** See {@link Backdrop#reassert()}. */
     public void reassertBackdrop() { if (!failed) backdrop.reassert(); }
     /** Compositor-blur body with a captured lens band (see {@link HybridBackdrop}). */
@@ -106,12 +110,14 @@ public final class GlassDrawable extends Drawable {
                     fill.setAlpha(android.graphics.Color.alpha(fillColor) * alpha / 255);
                     canvas.drawRect(rect, fill);
                 }
+                drawPressed(canvas);
                 return;
             }
             backdrop.draw(canvas, bounds);
             fill.setColor(fillColor);
             fill.setAlpha(android.graphics.Color.alpha(fillColor) * alpha / 255);
             canvas.drawRect(rect, fill);
+            drawPressed(canvas);
             if (shader != null) {
                 edgeUniforms(shader, bounds);
                 canvas.drawRect(rect, paint);
@@ -122,6 +128,12 @@ public final class GlassDrawable extends Drawable {
         if (failed && nativeDrawable != null) {
             nativeDrawable.setBounds(getBounds()); nativeDrawable.draw(canvas);
         }
+    }
+    private void drawPressed(Canvas canvas) {
+        if (!pressed) return;
+        fill.setColor(PRESSED_WASH);
+        fill.setAlpha(android.graphics.Color.alpha(PRESSED_WASH) * alpha / 255);
+        canvas.drawRect(rect, fill);
     }
     private void edgeUniforms(RuntimeShader s, Rect bounds) {
         s.setFloatUniform("size", (float) bounds.width(), (float) bounds.height());

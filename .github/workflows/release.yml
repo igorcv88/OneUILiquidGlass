@@ -1,4 +1,4 @@
-name: Build One UI Liquid Glass APK
+name: Build One UI Liquid Glass APK and SurfaceFlinger module
 
 on:
   workflow_dispatch:
@@ -19,10 +19,12 @@ env:
   RELEASE_SERIES: "0.1"
   APP_REPOSITORY: igorcv88/OneUILiquidGlass
   APPLICATION_ID: io.github.igorcv88.oneuiliquidglass
+  # NDK r29, the toolchain the SurfaceFlinger library was validated with.
+  NDK_VERSION: "29.0.14206865"
 
 jobs:
   release:
-    name: Build, sign and publish APK
+    name: Build, sign and publish APK and module
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -121,7 +123,8 @@ jobs:
           set -euo pipefail
           SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           yes | "$SDKMANAGER" --licenses >/dev/null || true
-          "$SDKMANAGER" "platforms;android-36" "build-tools;35.0.0" >/dev/null
+          "$SDKMANAGER" "platforms;android-36" "build-tools;35.0.0" "ndk;${NDK_VERSION}" >/dev/null
+          test -x "$ANDROID_HOME/ndk/${NDK_VERSION}/toolchains/llvm/prebuilt/linux-x86_64/bin/clang"
 
       - name: Gradle cache
         uses: gradle/actions/setup-gradle@v6
@@ -200,14 +203,36 @@ jobs:
           sha256sum "$RELEASE_ASSET" | tee "${RELEASE_ASSET}.sha256"
           echo "RELEASE_ASSET=$RELEASE_ASSET" >> "$GITHUB_ENV"
 
+      # The KernelSU module (sfhook): the SurfaceFlinger library and the patcher, built from source.
+      - name: Build SurfaceFlinger module
+        run: |
+          set -euo pipefail
+          ANDROID_NDK="$ANDROID_HOME/ndk/${NDK_VERSION}" sh sfhook/build.sh
+          MODULE_VERSION="$(sed -n 's/^version=//p' sfhook/module/module.prop)"
+          test -n "$MODULE_VERSION"
+          MODULE_ASSET="OneUILiquidGlass-SurfaceFlinger-${MODULE_VERSION}.zip"
+          cp sfhook/build/oulg-sf.zip "$MODULE_ASSET"
+          unzip -l "$MODULE_ASSET" > "$RUNNER_TEMP/module-entries.txt"
+          for entry in module.prop customize.sh service.sh post-fs-data.sh lib/liboulg_sf.so tools/dtneeded; do
+            grep -qE " ${entry}\$" "$RUNNER_TEMP/module-entries.txt" || { echo "::error::module zip lacks $entry" >&2; exit 1; }
+          done
+          sha256sum "$MODULE_ASSET" | tee "${MODULE_ASSET}.sha256"
+          {
+            echo "MODULE_VERSION=$MODULE_VERSION"
+            echo "MODULE_ASSET=$MODULE_ASSET"
+          } >> "$GITHUB_ENV"
+
       - name: Build release notes
         run: |
           set -euo pipefail
           SHA256="$(awk '{print $1}' "${RELEASE_ASSET}.sha256")"
+          MODULE_SHA256="$(awk '{print $1}' "${MODULE_ASSET}.sha256")"
           NOTES_PATH="$RUNNER_TEMP/release-notes.md"
           {
             printf '# One UI Liquid Glass %s\n\n' "$VERSION_NAME"
-            printf 'SHA-256: `%s`\n\n' "$SHA256"
+            printf 'Install both: the APK (LSPosed module, scope SystemUI) and the KernelSU module zip. See the README.\n\n'
+            printf -- '- `%s` SHA-256: `%s`\n' "$RELEASE_ASSET" "$SHA256"
+            printf -- '- `%s` (module %s) SHA-256: `%s`\n\n' "$MODULE_ASSET" "$MODULE_VERSION" "$MODULE_SHA256"
             printf '### Pinned source provenance\n'
             printf -- '- App commit: `%s`\n' "$APP_COMMIT"
             printf -- '- Release-order commit: `%s`\n\n' "$RELEASE_ORDER_COMMIT"
@@ -234,6 +259,8 @@ jobs:
           gh release create "$RELEASE_TAG" \
             "$RELEASE_ASSET" \
             "${RELEASE_ASSET}.sha256" \
+            "$MODULE_ASSET" \
+            "${MODULE_ASSET}.sha256" \
             --verify-tag \
             --title "One UI Liquid Glass ${VERSION_NAME}" \
             --notes-file "$NOTES_PATH" \

@@ -1,8 +1,9 @@
 // SurfaceFlinger hook: loaded first in surfaceflinger's DT_NEEDED list, so its exported
 // glShaderSource / eglGetProcAddress interpose RenderEngine's. Every distinct shader source is
 // written once, complete, to DUMP (logcat truncates and prunes). Rounded-rect texture programs are
-// rewritten by refract.h so the module's own cards (tagged by a magic corner radius) refract at the
-// rim; a rewrite the driver does not compile is reverted to the original source on the spot.
+// rewritten by refract.h: rounded-rect vertex shaders pass the corner radius and position on, and
+// the matching fragment shaders refract the module's own cards (tagged by a magic corner radius) at
+// the rim. A rewrite the driver does not compile is reverted to the original source on the spot.
 // debug.oulg.sf.norewrite=1 (read when a shader is first seen) keeps every source unchanged.
 #define _GNU_SOURCE
 #include <android/log.h>
@@ -95,13 +96,57 @@ static void dump_text(const char *tag, GLuint shader, const char *text) {
     close(fd);
 }
 
+// Compiles text into shader now and reports whether the driver accepted it.
+static int compiles(GLuint shader, const char *text) {
+    const GLchar *one[1] = {text};
+    real_shader_source(shader, 1, one, NULL);
+    GLint ok = 0;
+    real_compile(shader);
+    real_get_shaderiv(shader, GL_COMPILE_STATUS, &ok);
+    return ok;
+}
+
+// Fragment rewrites read outputs that only rewritten vertex shaders declare. Skia compiles a
+// program's fragment shader before its vertex shader, so a vertex shader that cannot carry them
+// (neither the full nor the zero-output version compiles) stops further fragment rewrites; the one
+// program already paired with it fails to link and Skia retries it unrewritten.
+static int vertex_broken;
+
+// Debug tint, read when a shader is compiled: changing it needs a surfaceflinger restart with the
+// shader cache cleared. The lens strength travels in the tag, set live by the module.
+static int debug_tint(void) {
+    char v[PROP_VALUE_MAX] = {0};
+    return __system_property_get("debug.oulg.sf.debug", v) > 0 && v[0] == '1';
+}
+
+static float prop_float(const char *name, float fallback) {
+    char v[PROP_VALUE_MAX] = {0};
+    if (__system_property_get(name, v) <= 0) return fallback;
+    char *end = NULL;
+    float f = strtof(v, &end);
+    return end != v ? f : fallback;
+}
+
+// Layered blur, read when a shader is compiled like the debug tint: debug.oulg.sf.core (body blur
+// radius in px, 0 = off), debug.oulg.sf.taps (taps per pixel) and debug.oulg.sf.ramp (depth where
+// the body radius is reached, in bevels).
+static void layered_blur(float *core, int *taps, float *ramp) {
+    *core = prop_float("debug.oulg.sf.core", OULG_CORE_DEFAULT);
+    *taps = (int) prop_float("debug.oulg.sf.taps", OULG_TAPS_DEFAULT);
+    *ramp = prop_float("debug.oulg.sf.ramp", OULG_RAMP_DEFAULT);
+}
+
 void glShaderSource(GLuint shader, GLsizei count, const GLchar *const *strings, const GLint *lengths) {
     if (!real_shader_source) real_shader_source = (ShaderSourceFn) dlsym(RTLD_NEXT, "glShaderSource");
     if (!real_shader_source) return;
     if (!strings || count <= 0) { real_shader_source(shader, count, strings, lengths); return; }
     log_source(shader, count, strings, lengths);
-    char *joined = NULL, *rewritten = NULL;
-    if (!rewrite_disabled()) {
+    if (!real_compile) {
+        real_compile = (CompileFn) dlsym(RTLD_NEXT, "glCompileShader");
+        real_get_shaderiv = (GetShaderivFn) dlsym(RTLD_NEXT, "glGetShaderiv");
+    }
+    char *joined = NULL;
+    if (!rewrite_disabled() && real_compile && real_get_shaderiv) {
         size_t total = 0;
         for (GLsizei i = 0; i < count; i++) total += lengths && lengths[i] >= 0 ? (size_t) lengths[i] : strlen(strings[i]);
         joined = malloc(total + 1);
@@ -112,26 +157,46 @@ void glShaderSource(GLuint shader, GLsizei count, const GLchar *const *strings, 
                 memcpy(joined + at, strings[i], n); at += n;
             }
             joined[at] = 0;
-            rewritten = oulg_refract_rewrite(joined);
         }
     }
-    if (rewritten && !real_compile) {
-        real_compile = (CompileFn) dlsym(RTLD_NEXT, "glCompileShader");
-        real_get_shaderiv = (GetShaderivFn) dlsym(RTLD_NEXT, "glGetShaderiv");
+    int used = 0;
+    if (joined && strstr(joined, "gl_Position")) {
+        char *full = oulg_rewrite_vertex(joined, 1);
+        if (!full && strstr(joined, "radii_selector") && strstr(joined, "varccoord_S0") && strstr(joined, "vTransformedCoords_")) {
+            // A rounded-rect vertex shader this rewrite does not recognise: its fragment shader
+            // could expect outputs it lacks.
+            vertex_broken = 1;
+            __android_log_print(ANDROID_LOG_WARN, TAG, "REWRITE vertex unrecognised; fragment rewrites off");
+            dump_text("REWRITE_UNRECOGNISED vertex", shader, joined);
+        }
+        if (full) {
+            int ok = compiles(shader, full);
+            __android_log_print(ANDROID_LOG_INFO, TAG, "REWRITE vertex shader=%u compiled=%d", shader, ok);
+            dump_text(ok ? "REWRITE_OK vertex" : "REWRITE_FAILED vertex", shader, full);
+            free(full);
+            used = ok;
+            if (!ok) {
+                char *zero = oulg_rewrite_vertex(joined, 0);
+                used = zero && compiles(shader, zero);
+                free(zero);
+                if (!used) { vertex_broken = 1; __android_log_print(ANDROID_LOG_WARN, TAG, "REWRITE vertex unusable; fragment rewrites off"); }
+            }
+        }
+    } else if (joined) {
+        int dbg = debug_tint(), taps;
+        float core, ramp;
+        layered_blur(&core, &taps, &ramp);
+        char *frag = vertex_broken ? NULL : oulg_rewrite_fragment(joined, dbg, core, taps, ramp);
+        if (!frag) frag = oulg_rewrite_clip(joined, dbg);
+        if (frag) {
+            int ok = compiles(shader, frag);
+            __android_log_print(ANDROID_LOG_INFO, TAG, "REWRITE fragment shader=%u compiled=%d", shader, ok);
+            dump_text(ok ? "REWRITE_OK fragment" : "REWRITE_FAILED fragment", shader, frag);
+            free(frag);
+            used = ok;
+        }
     }
-    if (rewritten && real_compile && real_get_shaderiv) {
-        const GLchar *one[1] = {rewritten};
-        real_shader_source(shader, 1, one, NULL);
-        GLint ok = 0;
-        real_compile(shader);
-        real_get_shaderiv(shader, GL_COMPILE_STATUS, &ok);
-        __android_log_print(ANDROID_LOG_INFO, TAG, "REWRITE shader=%u compiled=%d", shader, ok);
-        dump_text(ok ? "REWRITE_OK" : "REWRITE_FAILED", shader, rewritten);
-        if (!ok) real_shader_source(shader, count, strings, lengths);
-    } else {
-        real_shader_source(shader, count, strings, lengths);
-    }
-    free(rewritten);
+    if (!used) real_shader_source(shader, count, strings, lengths);
     free(joined);
 }
 

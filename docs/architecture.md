@@ -309,9 +309,10 @@ Module side: `debug.oulg.sfrefract=1` changes two things.
 
 ### Phase 2 on the device (2026-10-09)
 
-Diagnostic after a live swap: `LIB_NOVA=1 SRC=136 ALVO=66 RW_OK=12 RW_FAIL=0`. With `debug.oulg.sfrefract=1`:
-- **Lockscreen rows:** Samsung blur plus the compositor lens at the rim. This is the best result so far.
-- **Heads-up over apps:** the blur is slightly stronger than on the lockscreen, and refraction stays in the rim band by design.
+Diagnostic after a live swap: `LIB_NOVA=1 SRC=136 ALVO=66 RW_OK=12 RW_FAIL=0`. The rewrite compiles on the device.
+
+Correction (later the same day): the look first credited here to the compositor lens came from the app at 0.1.14, which has no `sfrefract` and so never tags a card. That look is the module's own refraction: the wallpaper on the lockscreen, the captured rim on heads-up rows. From 0.1.15, with `debug.oulg.sfrefract=1`, cards carry the tag and drop the module's own refraction, and the device shows only the Samsung blur (radius 180) with no visible lens. So the rewritten programs do not reach the tagged blur regions, or the tag does not survive to SurfaceFlinger. Not resolved; `sfrefract` stays off by default.
+
 - **Expanded shade:** looks fine. A small stutter on pull-down is still open; it reads as dropping from 120 to 60 Hz. No A/B measurement yet.
 
 Operational notes:
@@ -339,6 +340,92 @@ GPU time was 1–7 ms in every run, so the cost is on SystemUI's main thread.
   - caller stack walks.
 - **Perf slots.** The `shade` slot times the expanded-height hook.
 - **After gating.** With the cache and the dumps gated, the module is close to off: same median and 90th percentile, 49 vs 30 slow-UI-thread frames, 99th percentile 53 vs 42 ms. All hook bodies together take about 0.5 % of the main thread while the shade animates. The heaviest per call is `drawBefore`, about 40–75 µs per row redraw.
+
+### Compositor lens, second attempt (2026-10-09)
+
+Why the first attempt never showed:
+- **Wrong programs.** The rewrite targeted programs that clip to a rounded rect (`uinnerRect`/`uradiusPlusHalf`). A blur region is drawn with `canvas->drawRRect` and an image shader, which Ganesh renders with `FillRRectOp`. In the device dump, that op's vertex shaders take `radii_selector`/`radii_x`/`radii_y`/`skew` as instance attributes. Its fragment shaders only get normalized arc coordinates (`varccoord_S0`). None of the 12 programs rewritten before draws a blur region.
+- **Tag destroyed.** The heads-up card is a pill: 216 px high with corner 108. The tag `floor(r) + 0.125` gave 108.125. `SkRRect` scales radii that exceed half the side, back to 108.0, so the fraction disappeared.
+
+The rewrite now works in two stages:
+- **Vertex shaders.** Rounded-rect vertex shaders with texture coordinates gain two outputs:
+  - `voulg_tag`: whether the card is tagged, the radius in px and the half size in px. The radius is `radii.x / pixellength.x`, read before Skia's clamps.
+  - `voulg_vp`: the normalized position.
+- **Fragment shaders.** Those that sample one texture through `vTransformedCoords` compute the rounded-rect distance in px. Inside the bevel they shift the sample inward, by `0.30·bevel·t²` with the same bevel and highlight as before. The shift is mapped to texture space through the Jacobians of `voulg_vp` and the texture coordinates, so rotation and flips are handled.
+- **New tag.** The tag is `floor(r) − 0.375`, fraction .625. It is never above the original radius, so Skia keeps it.
+- **Expanded shade.** Cards in the expanded shade (`shadeblur=1`) are not tagged and stay a diffuse blur.
+- **Blur radius of lens cards.** The lens bends the image that was already blurred. At the Samsung radius of 180 px nothing is left to bend, and on the device the cards read as a plain blur. Lens cards now take `semradiuslens`, default 12 px. With `semradius` 4 the device showed clear glass with a visible rim lens. In the expanded shade, cards blinked while the list scrolled at that radius, and stopped at 180. Samsung did not re-apply the blur during that scroll: `semSetBlurInfo` logged 0 calls. Shade cards keep `semradius`.
+
+On the host, 11 vertex and 24 fragment shaders of the device dump are rewritten, and all compile with `glslangValidator`.
+
+Link safety: Skia compiles a program's fragment shader before its vertex shader. A vertex rewrite that fails falls back to a version that declares the outputs and zeroes them. If that also fails, or a rounded-rect vertex shader is not recognised, fragment rewrites stop for the rest of the process.
+
+### Lockscreen and lens fixes (2026-10-09, later)
+
+- **Dark card on the lockscreen.** A pressed, focused or hovered row used to release its glass and draw Samsung's dark native card. That flashed on every tap, and a partial pull-down left the row focused. The glass now stays on, and a press adds a light wash.
+- **Lens after a partial pull-down.** On a partial pull-down the status bar state goes 1 → 2 → 1, and rows stay "off keyguard" after the shade springs back. The lens decision now follows `StatusBarState`: keyguard means lens. It is re-decided for every card when the state or the shade changes, because a card that is not redrawn keeps its blur, which is a view property.
+- **SurfaceFlinger v0.4.**
+  - It also rewrites rounded-rect clip programs. Their `uradiusPlusHalf` carries the tag as fraction .125.
+  - The rim highlight is dropped from the compositor; the module draws its own, and two rims misaligned by a frame flickered during drags.
+  - `debug.oulg.sf.lens` sets the lens strength, default 0.45. `debug.oulg.sf.debug=1` paints tagged cards magenta on the FillRRect path and cyan on the clip path, to show which path draws them.
+  - Both are read when shaders compile.
+  - On the 147-shader device dump: 12 vertex, 26 FillRRect and 13 clip rewrites, all compile.
+
+### Debug tint result and live lens (2026-10-09, later)
+
+`debug.oulg.sf.debug=1` painted lockscreen and heads-up cards magenta. The tag reaches SurfaceFlinger, and `FillRRectOp` draws the blur region. Expanded-shade cards stayed untinted, as designed.
+
+The tint also flashed on every app launch. A launching window's corner radius sweeps continuously, and some frames hit the tag band.
+
+Changes in v0.5:
+- **Whole-pixel sides.** A tagged rect must also have sides that are whole pixels: the half axes come from `skew` and the full size from the clip inset. A window scaled mid-animation is fractional.
+- **Live lens strength.** The tag fraction now spans [0.55, 0.70] and encodes the lens strength `k = 0.1 + 1.1·(f − 0.55)/0.15`. The module sets it from `debug.oulg.sflens` (default 0.45). The strength therefore changes live, without a SurfaceFlinger restart; the `debug.oulg.sf.lens` property is gone.
+
+### Smooth blur texture on lens cards (v0.6)
+
+The device showed the lens working live at `sflens` 1.2 and `semradiuslens` 12, but two things looked wrong:
+- **Blocky body.** The blur read as a 144p video. The blur region's texture is downscaled, and bilinear upscaling of a lightly blurred image shows its texels as blocks.
+- **Over-strong rim.** The refraction at the rim was too intense at 1.2.
+
+Tagged cards now sample that texture through a cubic B-spline built from 4 bilinear taps. External (video) textures keep the plain sample, because `textureLod` is not allowed on them. Untagged draws are unchanged.
+
+The defaults move to `sflens` 0.8 and `semradiuslens` 16.
+
+The scrim trace no longer matches "dim" inside `*ImageView` class names. That match used up its budget before the real scrims were logged.
+
+### Layered blur on lens cards (v0.7)
+
+The device at v0.6 showed a good rim, but the body was too readable through: one blur (`semradiuslens`, light so the rim has detail to bend) covered the whole card. The user wants a strong blur in the body and a light one at the rim, with a gradual step.
+
+The FillRRect fragment rewrite now adds a second blur on tagged cards, inside the same draw:
+- **Depth.** The rounded-rect distance from the outline, in px, now also inside the straight part (before, it saturated at the corner radius).
+- **Radius.** `core · smoothstep(0.25·bevel, ramp·bevel, depth)`: 0 at the rim, where the B-spline sample and the lens stay as in v0.6, the full core radius in the body.
+- **Disc.** A Vogel (golden-angle) disc of bilinear taps, Gaussian-weighted (`exp(−2ρ²)`), in screen pixels mapped to texture space by the derivatives of the texture coordinates. It is centred on the lens-shifted coordinate. Each pixel rotates its disc by interleaved gradient noise, so tap gaps show as fine grain rather than ghost copies.
+- **Blend.** Below a 6 px radius the disc fades into the B-spline sample, so the start of the ramp does not show bilinear blocks.
+
+Two nested Samsung blur regions were rejected: SurfaceFlinger draws each with a hard edge, a step and not a gradient.
+
+Parameters, read when the shader compiles (restart SurfaceFlinger with the cache cleared to change them):
+- `debug.oulg.sf.core`: body radius in px, default 48; 0 turns the second blur off.
+- `debug.oulg.sf.taps`: taps per pixel, default 24, 4–48.
+- `debug.oulg.sf.ramp`: depth where the body radius is reached, in bevels, default 1.5, 0.5–8.
+
+Host checks: the rewrite compiles and links with `glslangValidator`, and a WebGL2 render of the rewritten fragment shader (Chromium/SwiftShader, synthetic quarter-resolution blur texture) shows the gradient from a sharp refracted rim to a blurred body. With a lightly blurred source, 16 taps left visible grain at a 48 px radius; 32 were clean; 24 is the default. The device dump was not available in this session, so the check ran on synthetic FillRRect shaders modelled on Skia's, not on the 147-shader dump. Cost: `taps` extra texture reads per pixel of tagged cards only.
+
+### Lockscreen gray and flashes: blur drawn with the glass (2026-10-09, later)
+
+Three defects on the lockscreen with the compositor lens, all now fixed and confirmed on device over several lock cycles:
+
+- **Gray cards after a partial pull-down, until the next lock.** A Samsung blur with no color curve of its own takes the compositor's last one, and the panel blur leaves its dark curve behind. `semcurve=spatial` reproduced the gray permanently; the explicit curve `0,0,0,255,0,255` kept the glass normal. `debug.oulg.semcurve` now defaults to `auto`: that neutral curve on lens cards, none on shade cards.
+- **Two frames of a wrong, heavily blurred texture at the start and end of a slow pull, and the blur region lagging the card by a frame ("ghost").** With `sf.debug=1` the card stayed magenta in those frames, so the rewritten shader drew them; the input texture was wrong. Ruled out on the way: the scrims, the panel window blur (dropped, or kept alive at radius 1), `setBackgroundBlurRadius`, the `CapturedBlurContainer`, keeping the lens through the shade-locked state, SurfaceFlinger layer caching (worse when off) and `debug.renderengine.restore_blur_step` (helped for one lock cycle only).
+  - **Cause:** the Samsung blur was installed on the view with `semSetBlurInfo`, so its region followed the view's bounds and update path. The glass follows the native drawable's bounds, which track the card's actual height during the pull.
+  - **Fix:** on the lockscreen and the shade over it, lens cards take their blur from the `BackgroundBlurDrawable` that `ViewRootImpl.createBackgroundBlurDrawable()` returns, drawn inside the glass with the glass's bounds. It carries the same radius and lens tag (`BackgroundBlurBridge` lens mode). This path works although `isCrossWindowBlurEnabled()` reports false on this firmware: the listener no longer releases it, and the Samsung blur is taken off the view while managed and restored on release.
+  - **Veil and radius:** the path uses the Samsung veil (`semalpha` over the Samsung tone). `setBlurRadius` takes px; `debug.oulg.kgblurradius` sets it, -1 = `semradiuslens`.
+- **Ghost on a pull up toward the bouncer.** The cards fade through ancestor view alpha. That fades the drawn glass but not the compositor's blur region. Before each frame the region now takes the accumulated alpha of the view's ancestors.
+
+`debug.oulg.kgblurpath` (default 1) switches the lockscreen back to the Samsung path with 0. A hidden card's blur is cleared rather than set back to SystemUI's radius-180 blur, which is restored only if the card is shown without glass. The radius 1–4 panel blur ramps a touch starts on the idle lockscreen are still dropped (`debug.oulg.kgwinblur=1` lets them through). Neither was isolated as necessary; both were active in the configuration confirmed on device.
+
+The idea came from an outside review of the earlier handoff, which had concluded too early that both defects were out of the app's reach.
 
 ## Future work
 

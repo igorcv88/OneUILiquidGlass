@@ -122,12 +122,16 @@ public final class Probe {
         if (budget[0] <= 0 || depth > 14) return;
         String name = v.getClass().getName();
         String simple = v.getClass().getSimpleName().toLowerCase(java.util.Locale.ROOT);
-        if (simple.contains("scrim") || simple.contains("blur") || simple.contains("dim")) {
+        // "dim" matched every *ImageView ("animateDImageview", "precomputeDImage..."), which used up
+        // the budget before the field dump of the real scrims.
+        if (simple.contains("scrim") || simple.contains("blur")) {
             budget[0]--;
             Object viewAlpha = null, tint = null;
             try { viewAlpha = Reflect.call(v, "getViewAlpha"); } catch (ReflectiveOperationException | RuntimeException ignored) { }
             try { tint = Reflect.call(v, "getTint"); } catch (ReflectiveOperationException | RuntimeException ignored) { }
-            log("SCRIM", "reason=" + reason + " class=" + name + " shown=" + v.isShown() + " alpha=" + v.getAlpha()
+            String id = "";
+            try { if (v.getId() != View.NO_ID) id = v.getResources().getResourceEntryName(v.getId()); } catch (RuntimeException ignored) { }
+            log("SCRIM", "reason=" + reason + " class=" + name + " idName=" + id + " shown=" + v.isShown() + " alpha=" + v.getAlpha()
                     + " viewAlpha=" + viewAlpha + " tint=" + hex(tint) + " size=" + v.getWidth() + "x" + v.getHeight()
                     + " bg=" + describe(v.getBackground(), 0));
             scrimFields(v, reason);
@@ -147,7 +151,7 @@ public final class Probe {
         int[] xy = new int[2];
         v.getLocationOnScreen(xy);
         String key = v.getClass().getName() + "@" + Integer.toHexString(System.identityHashCode(v)) + "/" + reason;
-        if (SCRIM_DUMPED.size() > 64 || !SCRIM_DUMPED.add(key)) return;
+        if (SCRIM_DUMPED.size() > 256 || !SCRIM_DUMPED.add(key)) return;
         StringBuilder b = new StringBuilder();
         int n = 0;
         for (Class<?> c = v.getClass(); c != null && !c.getName().startsWith("android."); c = c.getSuperclass()) {

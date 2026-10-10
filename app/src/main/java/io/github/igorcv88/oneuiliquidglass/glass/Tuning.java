@@ -37,6 +37,17 @@ public final class Tuning {
     public final int tintAlpha;
     /** Samsung compositor blur: radius (-1 = GlassSpec.samsungRadius), color curve (spatial|dim|ultra|none|"s,c,x0,x1,y0,y1"), veil alpha. */
     public final int semRadius;
+    /**
+     * Compositor blur radius of cards that carry the lens tag (sfrefract, outside the expanded
+     * shade): a light blur leaves the backdrop detail the lens bends; at 180 px nothing visible is
+     * left to refract. -1 falls back to semradius.
+     */
+    public final int semRadiusLens;
+    /**
+     * Compositor lens strength: shift at the outline as a fraction of the bevel (0.1-1.2). It
+     * travels in the corner-radius tag, so a change shows without restarting SurfaceFlinger.
+     */
+    public final float sfLens;
     public final String semCurve;
     public final int semAlpha;
     /** Samsung blur region shape: auto|single|path|four|none (see SemBlurBridge.applyShape). */
@@ -49,6 +60,19 @@ public final class Tuning {
      * captured lens band is not drawn (debug.oulg.sfrefract).
      */
     public final boolean sfRefract;
+    /**
+     * Lockscreen blur source with the compositor lens (debug.oulg.kgblurpath): 1 (default) draws
+     * a BackgroundBlurDrawable inside the glass with the glass's own bounds; 0 installs the Samsung
+     * blur on the view, whose region lagged the card and showed a stale texture during pull-downs.
+     */
+    public final int kgBlurPath;
+    /**
+     * Panel blur on the shade window while the lockscreen sits idle (debug.oulg.kgwinblur): 0
+     * (default) drops the radius 1-4 ramps a touch starts there; 1 lets them through.
+     */
+    public final boolean kgWinBlur;
+    /** Blur radius in px for the drawable path (debug.oulg.kgblurradius); -1 = semradiuslens. */
+    public final int kgBlurRadius;
     /** Logs main-thread time spent in the module's hooks (see {@link Perf}). */
     public final boolean perf;
     /** Enables the view-tree and window diagnostic dumps (see {@link Probe#trace}). */
@@ -77,12 +101,17 @@ public final class Tuning {
         keyguardHz = Math.round(clamp(number("hzkg", 5f), 1f, 120f));
         tintAlpha = Math.round(clamp(number("tint", -1f), -1f, 255f));
         semRadius = Math.round(clamp(number("semradius", -1f), -1f, 400f));
+        semRadiusLens = Math.round(clamp(number("semradiuslens", 16f), -1f, 400f));
+        sfLens = clamp(number("sflens", 0.7f), 0.1f, 1.2f);
         // "spatial" stopped the blur rendering on S938BXXUCZZIC (sharp backdrop in screenshots): off by default.
-        semCurve = prop("semcurve", "none");
+        semCurve = prop("semcurve", "auto");
         semAlpha = Math.round(clamp(number("semalpha", -1f), -1f, 255f));
         String shape = prop("semshape", "auto");
-        shadeBlur = number("shadeblur", 0f) >= 1f;
+        shadeBlur = number("shadeblur", 1f) >= 1f;
         sfRefract = number("sfrefract", 0f) >= 1f;
+        kgBlurPath = Math.round(clamp(number("kgblurpath", 1f), 0f, 1f));
+        kgWinBlur = number("kgwinblur", 0f) >= 1f;
+        kgBlurRadius = Math.round(clamp(number("kgblurradius", -1f), -1f, 400f));
         perf = number("perf", 0f) >= 1f;
         Perf.enabled = perf;
         trace = number("trace", 0f) >= 1f;
@@ -104,7 +133,7 @@ public final class Tuning {
         return "backdrop=" + backdrop + " profile=" + profile + " lens=" + lens + " rimhz=" + rimHz + " rimblur=" + rimBlur
                 + " refract=" + refract + " ior=" + ior + " blur=" + blur + " sat=" + saturation
                 + " disp=" + dispersion + " hz=" + hz + " hzkg=" + keyguardHz + " tint=" + tintAlpha
-                + " semradius=" + semRadius + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " perf=" + perf + " trace=" + trace;
+                + " semradius=" + semRadius + " semradiuslens=" + semRadiusLens + " sflens=" + sfLens + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " kgblurpath=" + kgBlurPath + " kgblurradius=" + kgBlurRadius + " kgwinblur=" + kgWinBlur + " perf=" + perf + " trace=" + trace;
     }
 
     private static float clamp(float v, float lo, float hi) { return Float.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : lo; }
