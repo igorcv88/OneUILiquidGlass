@@ -7,8 +7,10 @@
 // Backdrop: a photographic-like gradient with a bright half (left) and a dark half (right), and
 // large high-contrast text crossing the card's rim, rendered at full resolution and turned into the
 // compositor's input the way RenderEngine does: downscaled 4x and lightly blurred.
-// Programs: fill/clip with the heads-up profile 0 and the lockscreen profile 1 (fillKg, clipKg); the
-// baseline's fill/clip with profile 0 (baseFill, baseClip).
+// Programs: fill/clip with the heads-up profile 0, the lockscreen profile 1 (fillKg, clipKg) and the
+// shade profile 2 for light text (fillShade, clipShade), the untagged card (fillPlain); the
+// baseline's fill/clip with profile 0 (baseFill, baseClip). lumaPlain/lumaShade: body luma over the
+// bright and the dark half, untagged vs profile 2.
 // Reports, per program:
 //  - grain: RMS(img - box3(img)) in the body, pixel-scale noise;
 //  - structure: RMS(box5 - box41) in the body, backdrop detail left at 5-40 px (blotches);
@@ -24,19 +26,21 @@ const { chromium } = createRequire(import.meta.url)('playwright');
 
 const [dir, base, png] = process.argv.slice(2);
 // Lens strengths as on the device: sflens 0.30 (profile 0), kglens 0.40 (profile 1).
-const W = 800, H = 520, CARD = { x: 40, y: 110, w: 720, h: 300, r: 92 }, KS = [0.30, 0.40], MOVES = 4;
+// Profile 2 (shade legibility) carries the text colour in its strength: 0.3 = light (dark-theme) text.
+const W = 800, H = 520, CARD = { x: 40, y: 110, w: 720, h: 300, r: 92 }, KS = [0.30, 0.40, 0.30], MOVES = 4;
 // SemBlurBridge.sfTag: profile 0 band starts at 0.55; profile 1 takes the largest radius <= r in [0.30, 0.45].
 const tag = (r, k, pf) => {
   const s = Math.min(1, Math.max(0, (k - 0.1) / 1.1));
   if (!pf) return Math.floor(r) - 1 + 0.55 + 0.15 * s;
-  const t = Math.floor(r) + 0.30 + 0.15 * s;
+  const t = Math.floor(r) + (pf === 1 ? 0.30 : 0.05) + 0.15 * s;
   return t <= r ? t : t - 1;
 };
 const webgl = src => src.replace(/#extension GL_NV_shader_noperspective_interpolation : require\n/, '').replace(/noperspective /g, '');
 const load = (d, n) => { const f = `${d}/mod_${n}.frag`; return fs.existsSync(f) ? webgl(fs.readFileSync(f, 'utf8')) : null; };
-// name -> [source, clip program?, profile]
+// name -> [source, clip program?, profile (-1: untagged)]
 const programs = { fill: [load(dir, '002'), false, 0], clip: [load(dir, '004'), true, 0],
-                   fillKg: [load(dir, '002'), false, 1], clipKg: [load(dir, '004'), true, 1] };
+                   fillKg: [load(dir, '002'), false, 1], clipKg: [load(dir, '004'), true, 1],
+                   fillPlain: [load(dir, '002'), false, -1], fillShade: [load(dir, '002'), false, 2], clipShade: [load(dir, '004'), true, 2] };
 // BASE_PF=1 draws the baseline with profile 1 instead (baseFillKg), e.g. to isolate one of its terms.
 const basePf = process.env.BASE_PF === '1' ? 1 : 0;
 if (base && !basePf) { programs.baseFill = [load(base, '002'), false, 0]; programs.baseClip = [load(base, '004'), true, 0]; }
@@ -98,10 +102,12 @@ void main() { vec2 dev = (p * 0.5 + 0.5) * vec2(${W}.0, ${H}.0);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
   gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
   // The plain backdrop as the compositor would show it without the card: bilinear upscale of the input.
-  const out = { plain: Array.from(plain) };
+  // Pixels travel as base64: plain arrays of every frame of every program exhaust node's heap.
+  const b64 = a => { let t = ''; for (let i = 0; i < a.length; i += 0x8000) t += String.fromCharCode.apply(null, a.subarray(i, i + 0x8000)); return btoa(t); };
+  const out = { plain: b64(new Uint8Array(plain.buffer)) };
   for (const [name, [fs, clip, pf]] of Object.entries(programs)) {
     if (!fs) continue;
-    const rTag = tags[pf];
+    const rTag = pf < 0 ? CARD.r : tags[pf];
     const pr = build(clip ? vsClip : vsFill, fs); gl.useProgram(pr);
     gl.uniform1i(gl.getUniformLocation(pr, 'uTextureSampler_0_S1'), 0);
     const draw = off => {
@@ -110,7 +116,7 @@ void main() { vec2 dev = (p * 0.5 + 0.5) * vec2(${W}.0, ${H}.0);
         gl.uniform4f(gl.getUniformLocation(pr, 'uinnerRect_S2'), CARD.x + off + rTag, CARD.y + rTag, CARD.x + off + CARD.w - rTag, CARD.y + CARD.h - rTag);
         gl.uniform2f(gl.getUniformLocation(pr, 'uradiusPlusHalf_S2'), rTag + 0.5, 1 / (rTag + 0.5));
       } else {
-        gl.uniform1f(gl.getUniformLocation(pr, 'uKp'), KS[pf] + 2 * pf); gl.uniform1f(gl.getUniformLocation(pr, 'uR'), rTag);
+        gl.uniform1f(gl.getUniformLocation(pr, 'uKp'), pf < 0 ? 0 : KS[pf] + 2 * pf); gl.uniform1f(gl.getUniformLocation(pr, 'uR'), rTag);
         gl.uniform2f(gl.getUniformLocation(pr, 'uOff'), off, 0);
       }
       gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
@@ -118,7 +124,7 @@ void main() { vec2 dev = (p * 0.5 + 0.5) * vec2(${W}.0, ${H}.0);
     const frames = [];
     for (let m = 0; m < MOVES; m++) {
       draw(m / 3);
-      const px = new Uint8Array(W * H * 4); gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, px); frames.push(Array.from(px));
+      const px = new Uint8Array(W * H * 4); gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, px); frames.push(b64(px));
       if (m === 0) out[name] = { px: frames[0], png: c.toDataURL('image/png') };
     }
     out[name].frames = frames;
@@ -134,9 +140,12 @@ void main() { vec2 dev = (p * 0.5 + 0.5) * vec2(${W}.0, ${H}.0);
 const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const p = await browser.newPage();
 await p.setContent('<canvas id=c></canvas>');
-const tags = [tag(CARD.r, KS[0], 0), tag(CARD.r, KS[1], 1)];
+const tags = [tag(CARD.r, KS[0], 0), tag(CARD.r, KS[1], 1), tag(CARD.r, KS[2], 2)];
 const res = await p.evaluate(`(${harness.toString()})(${JSON.stringify(programs)}, ${W}, ${H}, ${JSON.stringify(CARD)}, ${JSON.stringify(tags)}, ${JSON.stringify(KS)}, ${MOVES})`);
 await browser.close();
+const bytes = t => new Uint8Array(Buffer.from(t, 'base64'));
+res.plain = bytes(res.plain);
+for (const [name, r] of Object.entries(res)) if (name !== 'plain') { r.frames = r.frames.map(bytes); r.px = r.frames[0]; }
 
 // readPixels rows are bottom-up; the plain canvas rows are top-down.
 const at = (px, x, y, ch) => px[((H - 1 - y) * W + x) * 4 + ch];
@@ -188,6 +197,15 @@ function diff(a, b, within = (x, y) => inside(x, y, 2)) {
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (within(x, y)) for (let ch = 0; ch < 3; ch++) { const d = Math.abs(at(a, x, y, ch) - at(b, x, y, ch)); max = Math.max(max, d); sum += d; n++; }
   return { max, mean: +(sum / n).toFixed(3) };
 }
+// Shade legibility: body luma (0-1) over the bright and the dark half, mean and max.
+function lumaStats(px) {
+  const acc = { bright: [0, 0, 0], dark: [0, 0, 0] };
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (inside(x, y, 3)) {
+    const k = x < W / 2 ? 'bright' : 'dark', l = luma(at(px, x, y, 0), at(px, x, y, 1), at(px, x, y, 2)) / 255;
+    acc[k][0] += l; acc[k][1]++; acc[k][2] = Math.max(acc[k][2], l);
+  }
+  return Object.fromEntries(Object.entries(acc).map(([k, [a, n, m]]) => [k, { mean: +(a / n).toFixed(3), max: +m.toFixed(3) }]));
+}
 const report = {};
 for (const [name, r] of Object.entries(res)) {
   if (name === 'plain') continue;
@@ -197,6 +215,8 @@ for (const [name, r] of Object.entries(res)) {
 if (res.fill && res.fillKg) report.rimFillKgVsFill = rimLift(res.fillKg.px, res.fill.px);
 if (res.fillKg && res.baseFillKg) report.rimFillKgVsBaseFillKg = rimLift(res.fillKg.px, res.baseFillKg.px);
 if (res.fillKg && res.baseFillKg) report.fillKgVsBaseFillKg = diff(res.fillKg.px, res.baseFillKg.px);
+if (res.fillPlain && res.fillShade) { report.lumaPlain = lumaStats(res.fillPlain.px); report.lumaShade = lumaStats(res.fillShade.px); }
+if (res.fillShade && res.clipShade) report.fillShadeVsClipShade = diff(res.fillShade.px, res.clipShade.px);
 if (res.fill && res.clip) report.fillVsClip = diff(res.fill.px, res.clip.px);
 if (res.fillKg && res.clipKg) report.fillKgVsClipKg = diff(res.fillKg.px, res.clipKg.px);
 if (res.fill && res.baseFill) report.fillVsBaseFill = diff(res.fill.px, res.baseFill.px);

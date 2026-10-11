@@ -28,6 +28,7 @@ public final class SfTagTest {
         float f = tag - (float) Math.floor(tag);
         if (f > 0.54f && f < 0.71f) return decode(tag);
         if (f > 0.29f && f < 0.46f) return 2f + 0.1f + 1.1f * Math.max(0f, Math.min(1f, (f - 0.30f) / 0.15f));
+        if (f > 0.04f && f < 0.21f) return 4f + 0.1f + 1.1f * Math.max(0f, Math.min(1f, (f - 0.05f) / 0.15f));
         return 0f;
     }
     @Test public void lockscreenProfileHasItsOwnBand() {
@@ -40,6 +41,25 @@ public final class SfTagTest {
                 assertEquals(2f + k, decodeProfile(kg), 0.01f);
             }
         }
+    }
+    @Test public void shadeProfileCarriesTheTextColour() {
+        for (float r : new float[]{43f, 68f, 91.5f, 108f, 120.04f}) {
+            for (float k : new float[]{0.3f, 1.0f}) {
+                float tag = SemBlurBridge.sfTag(r, k, 2);
+                assertTrue(tag <= r && r - tag <= 1.151f);
+                float kp = decodeProfile(tag);
+                assertEquals(4f + k, kp, 0.01f);
+                // The shader splits light from dark text at 0.65.
+                assertEquals(k > 0.65f, kp - 4f > 0.65f);
+            }
+        }
+    }
+    @Test public void tagsAreReliableBetween42And127() {
+        assertFalse(SemBlurBridge.reliableTag(42f));
+        assertTrue(SemBlurBridge.reliableTag(42.5f));
+        assertTrue(SemBlurBridge.reliableTag(108f));
+        assertFalse(SemBlurBridge.reliableTag(127.5f));
+        assertFalse(SemBlurBridge.reliableTag(140f));
     }
     @Test public void smallRadiiStayUntagged() {
         assertEquals(30f, SemBlurBridge.sfTag(30f, 0.45f), 0f);

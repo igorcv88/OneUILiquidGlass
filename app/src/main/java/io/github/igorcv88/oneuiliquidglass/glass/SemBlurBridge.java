@@ -36,7 +36,7 @@ public final class SemBlurBridge implements Backdrop {
     private int lastPx, lastTint;
     private final float[] lastRadii = new float[8];
     private boolean built;
-    /** Whether the corner radius carries the compositor-lens tag (with sfrefract); see {@link #setLens}. */
+    /** Whether the corner radius carries the compositor-lens tag (with sfrefract); see {@link #setOptics}. */
     private boolean lens = true;
     /** Event-driven: a layout that resizes the view rebuilds a clip-path blur, nothing polls. */
     private final View.OnLayoutChangeListener resize = (v, l, t, r, b, ol, ot, or, ob) -> {
@@ -215,7 +215,7 @@ public final class SemBlurBridge implements Backdrop {
             case "none": return mode;
             case "single":
                 if (corner == null) break;
-                corner.invoke(b, Tuning.get().sfRefract && lens ? sfTag(radii[0], strength(profile(keyguard)), profile(keyguard)) : radii[0]);
+                corner.invoke(b, cornerTag(radii[0], tagProfile(lens, keyguard)));
                 return mode;
             case "path":
                 if (clipPath == null || host.getWidth() <= 0 || host.getHeight() <= 0) break;
@@ -244,10 +244,47 @@ public final class SemBlurBridge implements Backdrop {
     static float sfTag(float radius, float strength, int profile) {
         if (radius <= 42f) return radius;
         float s = Math.max(0f, Math.min(1f, (strength - 0.1f) / 1.1f));
-        if (profile != 1) return (float) Math.floor(radius) - 1f + 0.55f + 0.15f * s;
-        // The lockscreen band takes the largest tagged radius not above r (at most 1.15 px off).
-        float tag = (float) Math.floor(radius) + 0.30f + 0.15f * s;
+        if (profile != 1 && profile != 2) return (float) Math.floor(radius) - 1f + 0.55f + 0.15f * s;
+        // The lockscreen and shade bands take the largest tagged radius not above r (at most 1.15 px off).
+        float tag = (float) Math.floor(radius) + (profile == 1 ? 0.30f : 0.05f) + 0.15f * s;
         return tag <= radius ? tag : tag - 1f;
+    }
+    /**
+     * Whether a corner radius carries a tag the compositor reads on every program: above the 42 px
+     * floor, and below 127.5, where an fp16 radius uniform (the clip program's) can still tell the
+     * bands apart (sfhook/tools/field_check.c).
+     */
+    public static boolean reliableTag(float radius) { return radius > 42f && radius < 127.5f; }
+    /**
+     * The profile a card's tag carries, or -1 for none: lens cards take their optics profile, other
+     * cards the shade legibility profile 2 (debug.oulg.shadetone), all only with the compositor hook.
+     */
+    public static int tagProfile(boolean lens, boolean keyguard) {
+        Tuning t = Tuning.get();
+        if (!t.sfRefract) return -1;
+        if (lens) return profile(keyguard);
+        return t.shadeTone ? 2 : -1;
+    }
+    /**
+     * Profile 2's strength channel carries the text colour: light text (dark theme) 0.3, dark text
+     * (light theme) 1.0; the shader splits them at 0.65.
+     */
+    static float shadeStrength() {
+        int night = android.content.res.Resources.getSystem().getConfiguration().uiMode
+                & android.content.res.Configuration.UI_MODE_NIGHT_MASK;
+        return night == android.content.res.Configuration.UI_MODE_NIGHT_NO ? 1.0f : 0.3f;
+    }
+    /** The radius to send for a card carrying profile p (-1: the radius itself). */
+    static float cornerTag(float radius, int p) {
+        if (p < 0) return radius;
+        return sfTag(radius, p == 2 ? shadeStrength() : strength(p), p);
+    }
+    /** Whether this bridge's shape setting sends the tag (only the single-radius shape can carry it). */
+    public boolean tagsShape(float[] radii) {
+        String mode = Tuning.get().semShape;
+        boolean uniform = radii[0] == radii[2] && radii[2] == radii[4] && radii[4] == radii[6];
+        if (mode.equals("auto")) return uniform && corner != null;
+        return mode.equals("single") && corner != null;
     }
     /**
      * The optics profile of a lens card: 1 (lockscreen material) for lockscreen cards unless
@@ -264,20 +301,14 @@ public final class SemBlurBridge implements Backdrop {
     }
     /** Whether this card sits on the lockscreen (or the shade over it) rather than in a heads-up. */
     private boolean keyguard;
-    /** Sets the surface that picks the optics profile; a change rebuilds the blur with the last inputs. */
-    public void setKeyguard(boolean on) throws ReflectiveOperationException {
-        if (keyguard == on) return;
-        keyguard = on;
-        if (built && !released) update(lastPx, lastTint, lastRadii);
-    }
     /**
-     * Cards in the expanded shade stay a diffuse blur; the others carry the lens tag. A change
-     * rebuilds the blur with the last inputs.
+     * Sets the surface (picks the optics profile) and the lens together; a change rebuilds the blur
+     * once with the last inputs.
      */
-    public void setLens(boolean on) throws ReflectiveOperationException {
-        if (lens == on) return;
-        lens = on;
-        Probe.log("SEM_BLUR_LENS", "on=" + on + " view=" + Integer.toHexString(System.identityHashCode(host)));
+    public void setOptics(boolean keyguard, boolean lens) throws ReflectiveOperationException {
+        if (this.keyguard == keyguard && this.lens == lens) return;
+        if (this.lens != lens) Probe.log("SEM_BLUR_LENS", "on=" + lens + " view=" + Integer.toHexString(System.identityHashCode(host)));
+        this.keyguard = keyguard; this.lens = lens;
         if (built && !released) update(lastPx, lastTint, lastRadii);
     }
     /** "s,c,x0,x1,y0,y1" as six floats; null for anything else (presets, none, malformed). */

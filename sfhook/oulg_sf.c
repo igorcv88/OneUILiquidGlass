@@ -131,9 +131,10 @@ static float prop_float(const char *name, float fallback) {
 // established material): debug.oulg.sf.core (body blur radius in px, 0 = off), debug.oulg.sf.taps
 // (taps per pixel) and debug.oulg.sf.ramp (depth where the body radius is reached, in bevels).
 // Profile 1 (lockscreen): debug.oulg.sf.kgcore, .kgtaps, .kgramp, .kgsat (body saturation),
-// .kgtone (highlight knee), .kgrim (rim reflectance gain) and .kgspec (specular strength). Which
+// .kgtone (highlight knee), .kgrim (rim reflectance gain) and .kgspec (specular strength). Profile 2
+// (expanded-shade legibility): debug.oulg.sf.shadecap and .shadelift (luma limits). Which
 // profile a card gets travels in its tag, set live by the module.
-static void layered_blur(struct oulg_profile p[2]) {
+static void layered_blur(struct oulg_profile p[OULG_PROFILES]) {
     p[0] = OULG_PROFILES_DEFAULT[0];
     p[0].core = prop_float("debug.oulg.sf.core", OULG_CORE_DEFAULT);
     p[0].taps = (int) prop_float("debug.oulg.sf.taps", OULG_TAPS_DEFAULT);
@@ -145,6 +146,21 @@ static void layered_blur(struct oulg_profile p[2]) {
     p[1].tone = prop_float("debug.oulg.sf.kgtone", OULG_KG_TONE_DEFAULT);
     p[1].rim = prop_float("debug.oulg.sf.kgrim", OULG_KG_RIM_DEFAULT);
     p[1].spec = prop_float("debug.oulg.sf.kgspec", OULG_KG_SPEC_DEFAULT);
+    p[2] = OULG_PROFILES_DEFAULT[2];
+    p[2].cap = prop_float("debug.oulg.sf.shadecap", OULG_SHADE_CAP_DEFAULT);
+    p[2].lift = prop_float("debug.oulg.sf.shadelift", OULG_SHADE_LIFT_DEFAULT);
+}
+
+// Tells the module that this library's optics are live (debug.oulg.sf.optics = OULG_OPTICS_VERSION)
+// once a fragment rewrite compiles; the module only then lets the compositor light profile-1 cards
+// instead of its own edge shader. SELinux may refuse surfaceflinger the write; the boot script and a
+// manual setprop are the fallbacks.
+static int optics_announced;
+static void announce_optics(void) {
+    if (optics_announced) return;
+    optics_announced = 1;
+    int rc = __system_property_set("debug.oulg.sf.optics", OULG_OPTICS_VERSION);
+    __android_log_print(ANDROID_LOG_INFO, TAG, "OPTICS version=%s announced=%d", OULG_OPTICS_VERSION, rc == 0);
 }
 
 void glShaderSource(GLuint shader, GLsizei count, const GLchar *const *strings, const GLint *lengths) {
@@ -195,7 +211,7 @@ void glShaderSource(GLuint shader, GLsizei count, const GLchar *const *strings, 
         }
     } else if (joined) {
         int dbg = debug_tint();
-        struct oulg_profile profiles[2];
+        struct oulg_profile profiles[OULG_PROFILES];
         layered_blur(profiles);
         char *frag = vertex_broken ? NULL : oulg_rewrite_fragment(joined, dbg, profiles);
         if (!frag) frag = oulg_rewrite_clip(joined, dbg, profiles);
@@ -205,6 +221,7 @@ void glShaderSource(GLuint shader, GLsizei count, const GLchar *const *strings, 
             dump_text(ok ? "REWRITE_OK fragment" : "REWRITE_FAILED fragment", shader, frag);
             free(frag);
             used = ok;
+            if (ok) announce_optics();
         }
     }
     if (!used) real_shader_source(shader, count, strings, lengths);

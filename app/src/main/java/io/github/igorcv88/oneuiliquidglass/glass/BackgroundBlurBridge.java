@@ -66,15 +66,11 @@ public final class BackgroundBlurBridge implements Backdrop {
     public boolean lens() { return lens; }
     /** Lockscreen card (lens mode is only used there); a heads-up on top keeps the heads-up profile. */
     private boolean keyguard = true;
-    public void setKeyguard(boolean on) throws ReflectiveOperationException {
-        if (keyguard == on) return;
-        keyguard = on;
-        if (built) update(lastPx, lastTint, lastRadii);
-    }
-    public void setLens(boolean on) throws ReflectiveOperationException {
-        if (lens == on) return;
-        lens = on;
-        Probe.log("BLUR_DRAWABLE_LENS", "on=" + on);
+    /** Surface and lens together; a change rebuilds the drawable's state once. */
+    public void setOptics(boolean keyguard, boolean lens) throws ReflectiveOperationException {
+        if (this.keyguard == keyguard && this.lens == lens) return;
+        if (this.lens != lens) Probe.log("BLUR_DRAWABLE_LENS", "on=" + lens);
+        this.keyguard = keyguard; this.lens = lens;
         if (built) update(lastPx, lastTint, lastRadii);
     }
     @Override public void update(int px, int tint, float[] radii) throws ReflectiveOperationException {
@@ -86,12 +82,9 @@ public final class BackgroundBlurBridge implements Backdrop {
             px = lens && lensPx >= 0 ? lensPx : t.semRadius >= 0 ? t.semRadius : GlassSpec.SAMSUNG_RADIUS;
             // The same veil as the Samsung path (semalpha over the Samsung tone).
             if (t.semAlpha >= 0) tint = (tint & 0x00ffffff) | (t.semAlpha << 24);
-            if (lens && t.sfRefract) {
-                int profile = SemBlurBridge.profile(keyguard);
-                float k = SemBlurBridge.strength(profile);
-                tl = SemBlurBridge.sfTag(tl, k, profile); tr = SemBlurBridge.sfTag(tr, k, profile);
-                bl = SemBlurBridge.sfTag(bl, k, profile); br = SemBlurBridge.sfTag(br, k, profile);
-            }
+            int profile = SemBlurBridge.tagProfile(lens, keyguard);
+            tl = SemBlurBridge.cornerTag(tl, profile); tr = SemBlurBridge.cornerTag(tr, profile);
+            bl = SemBlurBridge.cornerTag(bl, profile); br = SemBlurBridge.cornerTag(br, profile);
         }
         drawable.setVisible(true, false);
         radius.invoke(drawable, px);
@@ -100,12 +93,17 @@ public final class BackgroundBlurBridge implements Backdrop {
         corners.invoke(drawable, tl, tr, bl, br);
         if (lensMode && curve != null) applyCurve();
     }
-    /** The same curve policy as SemBlurBridge (semcurve=auto: neutral on lens cards). */
+    /**
+     * The same curve policy as SemBlurBridge (semcurve=auto: neutral on lens cards). The drawable keeps
+     * a curve once set, so every other policy sends the neutral curve, which leaves colours as they
+     * are, instead of sending nothing: a lens card turned shade card must not keep an old curve.
+     */
     private void applyCurve() throws ReflectiveOperationException {
         Tuning t = Tuning.get();
-        String spec = t.semCurve.equals("auto") ? (t.sfRefract && lens ? SemBlurBridge.NEUTRAL_CURVE : null) : t.semCurve;
+        String spec = t.semCurve.equals("auto") ? SemBlurBridge.NEUTRAL_CURVE : t.semCurve;
         float[] v = SemBlurBridge.explicitCurve(spec);
-        if (v != null) curve.invoke(drawable, v[0], v[1], v[2], v[3], v[4], v[5]);
+        if (v == null) v = SemBlurBridge.explicitCurve(SemBlurBridge.NEUTRAL_CURVE);
+        curve.invoke(drawable, v[0], v[1], v[2], v[3], v[4], v[5]);
     }
     @Override public void draw(Canvas canvas, Rect bounds) { drawable.setBounds(bounds); drawable.draw(canvas); }
     private int baseAlpha = 255;

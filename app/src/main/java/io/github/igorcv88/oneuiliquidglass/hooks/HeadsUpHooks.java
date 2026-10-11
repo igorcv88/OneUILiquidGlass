@@ -734,16 +734,22 @@ public final class HeadsUpHooks {
             Boolean keyguard = Reflect.bool(r, "isOnKeyguard", "mOnKeyguard");
             boolean kgSurface = Eligibility.keyguardOptics(barState, Reflect.bool(r, "isHeadsUpState", "mIsHeadsUp"));
             boolean lens = Eligibility.lens(barState, shadeExpanded, keyguard);
-            // A card carrying profile 1 is lit by the compositor; the edge shader then steps back.
-            if (glass != null) glass.setCompositorLit((compBridge != null || semBridge != null) && lens
-                    && Tuning.get().sfRefract && SemBlurBridge.profile(kgSurface) == 1);
+            // The edge shader steps back only for a card the compositor demonstrably lights: profile
+            // 1 requested, a tag that survives every program (radius and shape), and a library whose
+            // profile-1 optics are confirmed (debug.oulg.sf.optics). Otherwise it keeps its lighting.
+            if (glass != null) {
+                float[] radii = shape();
+                boolean tagged = SemBlurBridge.tagProfile(lens, kgSurface) == 1 && SemBlurBridge.reliableTag(radii[0])
+                        && (compBridge != null || (semBridge != null && semBridge.tagsShape(radii)));
+                glass.setCompositorLit(tagged && Tuning.get().sfOptics >= 9);
+            }
             if (compBridge != null) {
-                try { compBridge.setKeyguard(kgSurface); compBridge.setLens(lens); }
+                try { compBridge.setOptics(kgSurface, lens); }
                 catch (ReflectiveOperationException | RuntimeException e) { Probe.error("BLUR_DRAWABLE_LENS_FAILED", e); }
                 return;
             }
             if (semBridge == null) return;
-            try { semBridge.setKeyguard(kgSurface); semBridge.setLens(lens); }
+            try { semBridge.setOptics(kgSurface, lens); }
             catch (ReflectiveOperationException | RuntimeException e) { Probe.error("SEM_BLUR_LENS_FAILED", e); }
         }
         void release() {

@@ -35,7 +35,9 @@
 //  - profile 0, the established material (heads-up; output bit for bit that of v0.7, checked by
 //    sfhook/tools/render_check.mjs): quadratic lens, Gaussian-weighted disc, no lighting here (the
 //    module draws its edge optics);
-//  - profile 1, the lockscreen material: one thick-slab model drives every term (below).
+//  - profile 1, the lockscreen material: one thick-slab model drives every term (below);
+//  - profile 2, shade legibility (expanded-shade cards): no lens and no extra blur, the plain sample
+//    tone-mapped against the text colour (below).
 //
 // Common to both: the blur region's texture is downscaled, so tagged cards read it through a cubic
 // B-spline (4 bilinear taps) instead of bilinear blocks. Layered blur: the blur region is a light
@@ -52,12 +54,16 @@
 // bevel in the bevel band (bevel = clamp(0.42 r, 16, 56) < r, so the band lies outside the inner
 // rect where the outward normal n is defined and continuous), it returns the inward sample shift:
 //  - profile 0: k * bevel * t^2. Radial Jacobian 1 - 2 k t, folds for k > 0.5 over t > 1 / (2 k).
-//  - profile 1: A * bevel * G(t), G = t^2 (3 - 2 t), A = min(k, 0.55). Radial Jacobian 1 - 6 A t (1 - t):
+//  - profile 1: A * bevel * G(t), G = t^2 (3 - 2 t), A = min(k, 0.5). Radial Jacobian 1 - 6 A t (1 - t):
 //    1 at the outline (text crossing the rim is offset, not stretched) and at the band's inner edge,
-//    smallest (1 - 1.5 A >= 0.175) mid-band; never folds.
+//    smallest (1 - 1.5 A >= 0.25, at most 4x magnification) mid-band; never folds.
 // Along a corner arc both multiply by 1 - shift / rho (rho = distance to the corner centre >= r -
 // bevel). Shift and derivative vanish at depth = bevel (C1). Checked by sfhook/tools/field_check.c.
-// Magnification is <= 1 in both directions, so the B-spline never minifies (no aliasing).
+// The sampling map's singular values stay <= 1 on both axes: the texture is only ever magnified,
+// never minified, so there is no aliasing, but a detail grows up to 1 / sigma_min on screen: 2.5x
+// at the rim for profile 0 at k = 0.30, 2.5x mid-band for profile 1 at its default 0.40, 4x at
+// profile 1's cap (0.5). Magnification exposes the texture's low resolution, which the B-spline only
+// smooths; field_check prints the bound per strength.
 //
 // Profile 1, the thick slab. The bevel's surface tilt follows the same G(t) that drives the
 // refraction (shift ~ thickness x slope), up to theta = 1.2 rad at the outline:
@@ -69,7 +75,7 @@
 //  - a specular crescent on the light-facing rim (light from the upper left, as the module's edge
 //    optics) and a fainter internal one opposite, tinted by the backdrop's hue and fading over
 //    bright backdrops.
-#define OULG_FS_GLOBALS "highp float oulg_on, oulg_pf, oulg_br, oulg_t;\nhighp vec2 oulg_jx, oulg_jy, oulg_n;\n"
+#define OULG_FS_GLOBALS "highp float oulg_on, oulg_pf, oulg_br, oulg_t, oulg_k;\nhighp vec2 oulg_jx, oulg_jy, oulg_n;\n"
 #define OULG_FS_BSPLINE \
     "mediump vec4 oulg_bspline(sampler2D s, highp vec2 uv) {\n" \
     "  highp vec2 ts = vec2(textureSize(s, 0));\n" \
@@ -109,6 +115,26 @@
     "  }\n" \
     "  return acc / wsum;\n" \
     "}\n"
+// Profile 2's tone map (cap, cap, lift, lift): shade cards are a strong blur under a light veil, so a
+// white app behind them turned them white under white (dark-mode) text. The strength channel of
+// the tag carries the text colour (k < 0.65: light text, > 0.65: dark text). Light text: luma above
+// cap - 0.12 is compressed exponentially toward the cap, hue kept (white 1.0 -> 0.549, mid 0.5 ->
+// 0.483). Dark text: luma below lift + 0.12 is lifted toward the lift by mixing with white (black ->
+// 0.45). C1 at the knee; backdrops between the knees pass unchanged (sfhook/tools/field_check.c).
+#define OULG_FS_TONE_FMT \
+    "mediump vec4 oulg_tone(mediump vec4 c) {\n" \
+    "  mediump float a = max(c.a, 1e-3);\n" \
+    "  mediump vec3 rgb = c.rgb / a;\n" \
+    "  mediump float y = dot(rgb, vec3(0.2126, 0.7152, 0.0722));\n" \
+    "  if (oulg_k < 0.65) {\n" \
+    "    mediump float k0 = %.3f - 0.12;\n" \
+    "    if (y > k0) rgb *= (k0 + 0.12 * (1.0 - exp((k0 - y) / 0.12))) / y;\n" \
+    "  } else {\n" \
+    "    mediump float k1 = %.3f + 0.12;\n" \
+    "    if (y < k1) rgb = mix(rgb, vec3(1.0), (k1 - 0.12 * (1.0 - exp((y - k1) / 0.12)) - y) / max(1.0 - y, 1e-3));\n" \
+    "  }\n" \
+    "  return vec4(clamp(rgb, 0.0, 1.0) * c.a, c.a);\n" \
+    "}\n"
 // Profile 1's material (sat, core, tone, rim, spec); profile 0 passes through untouched.
 #define OULG_FS_LENS_FMT \
     "mediump vec4 oulg_material(mediump vec4 c) {\n" \
@@ -136,14 +162,22 @@
     "  mediump vec4 c = oulg_bspline(s, uv);\n" \
     "  return oulg_material(oulg_br < 0.5 ? c : mix(c, oulg_body(s, uv), oulg_br / 6.0));\n" \
     "}\n" \
-    "mediump vec4 oulg_sample(sampler2D s, highp vec2 uv, float bias) { return oulg_on > 0.0 ? oulg_lens(s, uv) : texture(s, uv, bias); }\n" \
-    "mediump vec4 oulg_sample(sampler2D s, highp vec2 uv) { return oulg_on > 0.0 ? oulg_lens(s, uv) : texture(s, uv); }\n"
+    "mediump vec4 oulg_sample(sampler2D s, highp vec2 uv, float bias) {\n" \
+    "  return oulg_on > 0.0 ? (oulg_pf > 1.5 ? oulg_tone(texture(s, uv, bias)) : oulg_lens(s, uv)) : texture(s, uv, bias);\n" \
+    "}\n" \
+    "mediump vec4 oulg_sample(sampler2D s, highp vec2 uv) {\n" \
+    "  return oulg_on > 0.0 ? (oulg_pf > 1.5 ? oulg_tone(texture(s, uv)) : oulg_lens(s, uv)) : texture(s, uv);\n" \
+    "}\n"
 // The field (core1, ramp1, core0, ramp0); programs that sample an external texture get only this
 // and the globals. Profile 0's shift keeps its v0.7 expression.
 #define OULG_FS_FIELD_FMT \
     "highp vec2 oulg_field(highp vec2 q, highp vec2 hs, highp float r, highp float kp) {\n" \
-    "  oulg_pf = kp >= 2.0 ? 1.0 : 0.0;\n" \
+    "  oulg_pf = kp >= 4.0 ? 2.0 : kp >= 2.0 ? 1.0 : 0.0;\n" \
     "  highp float k = kp - 2.0 * oulg_pf;\n" \
+    "  oulg_k = k;\n" \
+    "  oulg_t = 0.0;\n" \
+    "  oulg_n = vec2(0.0);\n" \
+    "  if (oulg_pf > 1.5) { oulg_br = 0.0; return vec2(0.0); }\n" \
     "  highp vec2 w = abs(q) - (hs - vec2(r));\n" \
     "  highp vec2 v = max(w, vec2(0.0));\n" \
     "  highp float l = length(v);\n" \
@@ -151,21 +185,19 @@
     "  highp float depth = r - l - min(max(w.x, w.y), 0.0);\n" \
     "  oulg_br = oulg_pf > 0.5 ? %.2f * smoothstep(0.25 * bevel, %.3f * bevel, depth)\n" \
     "                          : %.2f * smoothstep(0.25 * bevel, %.3f * bevel, depth);\n" \
-    "  oulg_t = 0.0;\n" \
-    "  oulg_n = vec2(0.0);\n" \
     "  if (l <= 0.0 || depth <= 0.0 || depth >= bevel) return vec2(0.0);\n" \
     "  highp float t = 1.0 - depth / bevel;\n" \
     "  if (oulg_pf > 0.5) {\n" \
     "    oulg_t = t;\n" \
     "    oulg_n = (v / l) * sign(q);\n" \
-    "    return -oulg_n * (min(k, 0.55) * bevel * t * t * (3.0 - 2.0 * t));\n" \
+    "    return -oulg_n * (min(k, 0.5) * bevel * t * t * (3.0 - 2.0 * t));\n" \
     "  }\n" \
     "  return -(v / l) * sign(q) * (k * bevel * t * t);\n" \
     "}\n"
 // Per-profile parameters, read when a shader is compiled: core radius in px (0 turns the second blur
 // off), taps per pixel, the depth at which the core radius is reached (in bevels); profile 1 only:
 // body saturation (1 = none), highlight knee (0 = none), rim reflectance gain and specular strength.
-struct oulg_profile { float core; int taps; float ramp; float sat; float tone; float rim; float spec; };
+struct oulg_profile { float core; int taps; float ramp; float sat; float tone; float rim; float spec; float cap; float lift; };
 #define OULG_CORE_DEFAULT 48.0f
 #define OULG_TAPS_DEFAULT 24
 #define OULG_RAMP_DEFAULT 1.5f
@@ -178,10 +210,19 @@ struct oulg_profile { float core; int taps; float ramp; float sat; float tone; f
 #define OULG_KG_TONE_DEFAULT 0.15f
 #define OULG_KG_RIM_DEFAULT 1.0f
 #define OULG_KG_SPEC_DEFAULT 0.18f
-static const struct oulg_profile OULG_PROFILES_DEFAULT[2] = {
-    {OULG_CORE_DEFAULT, OULG_TAPS_DEFAULT, OULG_RAMP_DEFAULT, 1.0f, 0.0f, 0.0f, 0.0f},
+// Shade legibility (profile 2): the brightest luma a light-text card shows (white text keeps ~3.4:1
+// at 0.55) and the darkest a dark-text card shows.
+#define OULG_SHADE_CAP_DEFAULT 0.55f
+#define OULG_SHADE_LIFT_DEFAULT 0.45f
+// Entry 2 only uses cap and lift (the shade has no lens or layered blur); the others ignore them.
+#define OULG_PROFILES 3
+// The optics this library implements, announced to the module (debug.oulg.sf.optics).
+#define OULG_OPTICS_VERSION "9"
+static const struct oulg_profile OULG_PROFILES_DEFAULT[OULG_PROFILES] = {
+    {OULG_CORE_DEFAULT, OULG_TAPS_DEFAULT, OULG_RAMP_DEFAULT, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f},
     {OULG_KG_CORE_DEFAULT, OULG_KG_TAPS_DEFAULT, OULG_KG_RAMP_DEFAULT, OULG_KG_SAT_DEFAULT, OULG_KG_TONE_DEFAULT,
-     OULG_KG_RIM_DEFAULT, OULG_KG_SPEC_DEFAULT},
+     OULG_KG_RIM_DEFAULT, OULG_KG_SPEC_DEFAULT, 0.0f, 0.0f},
+    {0.0f, OULG_TAPS_DEFAULT, OULG_RAMP_DEFAULT, 1.0f, 0.0f, 0.0f, 0.0f, OULG_SHADE_CAP_DEFAULT, OULG_SHADE_LIFT_DEFAULT},
 };
 #define OULG_VS_RADII_AT "highp vec2 neighbor_radii = radii_and_neighbors.zw;\n"
 #define OULG_VS_POS_AT "gl_Position = vec4(devcoord, 0.0, 1.0);\n"
@@ -189,15 +230,16 @@ static const struct oulg_profile OULG_PROFILES_DEFAULT[2] = {
 #define OULG_FS_FINAL "sk_FragColor = output_S1 * outputCoverage_S0;"
 // The tag: the radius fraction lies in a 0.15-wide band and carries the lens strength k (shift at the
 // outline as a fraction of the bevel), k = 0.1 + 1.1 * (fraction - base) / 0.15. The band is the
-// profile: [0.55, 0.70] profile 0, [0.30, 0.45] profile 1. The rect must also have whole-pixel
+// profile: [0.55, 0.70] profile 0, [0.30, 0.45] profile 1, [0.05, 0.20] profile 2. The rect must also have whole-pixel
 // sides: a window whose corner radius sweeps during an app-open animation is scaled to fractional
 // sizes, so a radius passing through a band does not pass for a card.
 #define OULG_STRENGTH(f, base) "(0.1 + 1.1 * clamp((" f " - " base ") / 0.15, 0.0, 1.0))"
-// kp = k + 2 x profile from a radius fraction f: lo0/hi0 and lo1/hi1 bound the two bands (with a
-// 0.01 margin), base0/base1 are their starts.
-#define OULG_DECODE(f, lo0, hi0, base0, lo1, hi1, base1) \
+// kp = k + 2 x profile from a radius fraction f: loN/hiN bound band N (with a 0.01 margin), baseN
+// is its start.
+#define OULG_DECODE(f, lo0, hi0, base0, lo1, hi1, base1, lo2, hi2, base2) \
     "(" f " > " lo0 " && " f " < " hi0 " ? " OULG_STRENGTH(f, base0) \
-    " : " f " > " lo1 " && " f " < " hi1 " ? 2.0 + " OULG_STRENGTH(f, base1) " : 0.0)"
+    " : " f " > " lo1 " && " f " < " hi1 " ? 2.0 + " OULG_STRENGTH(f, base1) \
+    " : " f " > " lo2 " && " f " < " hi2 " ? 4.0 + " OULG_STRENGTH(f, base2) " : 0.0)"
 
 static int oulg_count(const char *src, const char *needle) {
     int n = 0;
@@ -258,7 +300,7 @@ static char *oulg_rewrite_vertex(const char *src, int full) {
             "highp float oulg_f = fract(oulg_rpx);\n"
             "highp vec2 oulg_d = abs(fract(oulg_hs * 2.0 + 0.5) - 0.5);\n"
             "bool oulg_ok = oulg_rpx > 40.0 && oulg_d.x < 0.02 && oulg_d.y < 0.02;\n"
-            "voulg_tag = vec4(oulg_ok ? " OULG_DECODE("oulg_f", "0.54", "0.71", "0.55", "0.29", "0.46", "0.30") " : 0.0, oulg_rpx, oulg_hs);\n"
+            "voulg_tag = vec4(oulg_ok ? " OULG_DECODE("oulg_f", "0.54", "0.71", "0.55", "0.29", "0.46", "0.30", "0.04", "0.21", "0.05") " : 0.0, oulg_rpx, oulg_hs);\n"
             "voulg_vp = vertexpos;\n"
             "}\n");
     } else {
@@ -268,8 +310,8 @@ static char *oulg_rewrite_vertex(const char *src, int full) {
 }
 
 // Out-of-range values fall back to the profile's defaults.
-static void oulg_fix_params(struct oulg_profile p[2]) {
-    for (int i = 0; i < 2; i++) {
+static void oulg_fix_params(struct oulg_profile p[OULG_PROFILES]) {
+    for (int i = 0; i < OULG_PROFILES; i++) {
         const struct oulg_profile *d = &OULG_PROFILES_DEFAULT[i];
         if (!(p[i].core >= 0.0f && p[i].core <= 400.0f)) p[i].core = d->core;
         if (p[i].taps < 4 || p[i].taps > 48) p[i].taps = d->taps;
@@ -278,6 +320,8 @@ static void oulg_fix_params(struct oulg_profile p[2]) {
         if (!(p[i].tone >= 0.0f && p[i].tone <= 0.6f)) p[i].tone = d->tone;
         if (!(p[i].rim >= 0.0f && p[i].rim <= 4.0f)) p[i].rim = d->rim;
         if (!(p[i].spec >= 0.0f && p[i].spec <= 1.0f)) p[i].spec = d->spec;
+        if (!(p[i].cap >= 0.3f && p[i].cap <= 1.0f)) p[i].cap = d->cap;
+        if (!(p[i].lift >= 0.0f && p[i].lift <= 0.7f)) p[i].lift = d->lift;
     }
 }
 
@@ -296,7 +340,7 @@ static int oulg_append(char *out, size_t cap, size_t *at, const char *fmt, ...) 
 
 // The shared library for one program. External (camera/video) textures allow neither textureLod nor
 // the filtered path: they get the globals and the field only, and keep their plain sample.
-static int oulg_lib(char *out, size_t cap, int external, const struct oulg_profile p[2]) {
+static int oulg_lib(char *out, size_t cap, int external, const struct oulg_profile p[OULG_PROFILES]) {
     size_t at = 0;
     if (!oulg_append(out, cap, &at, "%s", OULG_FS_GLOBALS)) return 0;
     if (!external) {
@@ -305,6 +349,7 @@ static int oulg_lib(char *out, size_t cap, int external, const struct oulg_profi
             if (!oulg_append(out, cap, &at, OULG_FS_DISC_FMT, i, p[i].taps, p[i].taps)) return 0;
     }
     if (!oulg_append(out, cap, &at, OULG_FS_FIELD_FMT, (double) p[1].core, (double) p[1].ramp, (double) p[0].core, (double) p[0].ramp)) return 0;
+    if (!external && !oulg_append(out, cap, &at, OULG_FS_TONE_FMT, (double) p[2].cap, (double) p[2].lift)) return 0;
     if (!external && !oulg_append(out, cap, &at, OULG_FS_LENS_FMT, (double) (p[1].core > 0.001f ? p[1].core : 0.001f),
                                   (double) p[1].sat, (double) p[1].tone, (double) p[1].rim, (double) p[1].spec)) return 0;
     return 1;
@@ -329,7 +374,7 @@ static char *oulg_rewrite_fragment(const char *src, int debug, const struct oulg
     if (!mainAt || call < mainAt || final < call) return NULL;
     char coords[64];
     if (!oulg_ident_after(call + strlen("texture(uTextureSampler_0_S1, "), "vTransformedCoords_", coords, sizeof coords)) return NULL;
-    struct oulg_profile p[2] = {profiles[0], profiles[1]};
+    struct oulg_profile p[OULG_PROFILES] = {profiles[0], profiles[1], profiles[2]};
     oulg_fix_params(p);
 
     char block[2048];
@@ -372,8 +417,8 @@ static char *oulg_rewrite_fragment(const char *src, int debug, const struct oulg
 }
 
 // Rounded-rect clip programs (CircularRRectEffect): the radius arrives as uradiusPlusHalf (r + 0.5)
-// and the rect inset by it as uinnerRect, in device pixels. The tag bands on r, [0.55, 0.70] and
-// [0.30, 0.45], are [0.05, 0.20] and [0.80, 0.95] on the uniform. Same size check, and the same
+// and the rect inset by it as uinnerRect, in device pixels. The tag bands on r, [0.55, 0.70],
+// [0.30, 0.45] and [0.05, 0.20], are [0.05, 0.20], [0.80, 0.95] and [0.55, 0.70] on the uniform. Same size check, and the same
 // library as the FillRRect program: the field, the B-spline and the layered blur, in device pixels
 // (the clip is axis-aligned there). Before, this path only shifted the sample, so a card drawn by it
 // lost the B-spline and the body blur. Debug mode paints these cyan.
@@ -392,7 +437,7 @@ static char *oulg_rewrite_clip(const char *src, int debug, const struct oulg_pro
     const char *fcEnd = fc ? strchr(fc, '\n') : NULL;
     const char *final = strstr(src, "sk_FragColor = output_S1");
     if (!mainAt || !fcEnd || fc < mainAt || !final || call < fcEnd || final < call || !strstr(src, "mediump vec4 output_S1 =")) return NULL;
-    struct oulg_profile p[2] = {profiles[0], profiles[1]};
+    struct oulg_profile p[OULG_PROFILES] = {profiles[0], profiles[1], profiles[2]};
     oulg_fix_params(p);
     int flip = strstr(src, "u_skRTFlip") != NULL;
     char block[2048];
@@ -409,7 +454,7 @@ static char *oulg_rewrite_clip(const char *src, int debug, const struct oulg_pro
         "highp float oulg_f = fract(oulg_rph);\n"
         "highp vec2 oulg_full = (%s.zw - %s.xy) + vec2(2.0 * (oulg_rph - 0.5));\n"
         "highp vec2 oulg_d = abs(fract(oulg_full + 0.5) - 0.5);\n"
-        "highp float oulg_kp = " OULG_DECODE("oulg_f", "0.04", "0.21", "0.05", "0.79", "0.96", "0.80") ";\n"
+        "highp float oulg_kp = " OULG_DECODE("oulg_f", "0.04", "0.21", "0.05", "0.79", "0.96", "0.80", "0.54", "0.71", "0.55") ";\n"
         "if (oulg_rph > 40.5 && oulg_kp > 0.0 && oulg_d.x < 0.02 && oulg_d.y < 0.02) {\n"
         "  oulg_on = 1.0;\n"
         "  oulg_dbg = %s;\n"

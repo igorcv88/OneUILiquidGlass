@@ -486,12 +486,12 @@ Brief: surpass both lockscreen renderers while keeping `kgblurpath=1`'s stabilit
 
 **One spatial model.** Every term derives from the bevel coordinate `t = 1 − depth/bevel`, the outward normal `n` and one profile `G(t) = t²(3 − 2t)`.
 
-- **Refraction.** The shift is `A·bevel·G(t)`, with `A = min(k, 0.55)`. The radial Jacobian is `1 − 6At(1−t)`:
+- **Refraction.** The shift is `A·bevel·G(t)`, with `A = min(k, 0.5)` (0.55 in v0.9; see v0.10). The radial Jacobian is `1 − 6At(1−t)`:
   - It is 1 at the outline, so text crossing the rim is offset, not stretched.
   - It is 1 at the inner edge, so the join to the interior is C1.
-  - Its minimum is mid-band, `1 − 1.5A ≥ 0.175`, so the map never folds.
+  - Its minimum is mid-band, `1 − 1.5A ≥ 0.25`, so the map never folds.
   - Profile 0's quadratic, by contrast, has its strongest stretch at the outline (`1 − 2k`) and folds above k = 0.5.
-  - Magnification stays ≤ 1 on both axes, so the B-spline never minifies (no aliasing).
+  - The sampling map's singular values stay ≤ 1, so the texture is only magnified, never minified (no aliasing). A detail still grows up to 1/σ_min on screen: 2.5× at 0.40, 4× at the cap.
 - **Rim transmission and reflection.** The surface tilt follows the same `G` (shift ∝ thickness × slope), reaching 1.2 rad at the outline. Schlick's excess reflectance mixes the refracted backdrop toward a bright environment. The rim therefore brightens over dark backdrops and stays nearly neutral over bright ones; no outline is drawn.
 - **Specular.** A crescent on the light-facing rim (light from the upper left, as the module's edge optics) and a fainter internal one opposite. They are tinted 30 % by the backdrop's hue and fade over bright backdrops.
 - **Interior.**
@@ -531,6 +531,38 @@ Brief: surpass both lockscreen renderers while keeping `kgblurpath=1`'s stabilit
 - **Sampling the full-resolution original under the rim.** RenderEngine mixes the original input into blur regions below a radius of 10 px (`mixFactor`). A rewrite of that two-texture program could refract sharp content at the rim while the body uses the blur, the strongest rim quality available. Its GLSL is not in any dump seen so far, and a blind rewrite would not match. Next step: the device dump with `kgblurradius` below 10.
 - **Mip-based reconstruction.** The blur texture has no mip chain (`SkMipmapMode::kNone`), so `textureLod` cannot reach coarser levels.
 - **Quad-shared samples through derivatives.** Derivatives are undefined in the non-uniform branch that samples, and coarse derivatives would raise the variance.
+
+### Shade legibility, review fixes (sfhook v0.10, 2026-10-11)
+
+**White app behind the expanded shade.**
+- **Report:** the cards turn white under white (dark-mode) text and nothing can be read. Over any other app they look right.
+- **Cause:** shade cards are an untagged Samsung blur of the app below the shade window, under a light veil (`semalpha` over a white tone). Nothing adapts to the backdrop, so a white app gives a white card.
+- **Fix: profile 2, shade legibility.** Shade cards carry a third tag band, `[0.05, 0.20]` on r (`[0.55, 0.70]` on the clip uniform). It gets no lens, no extra blur and no B-spline: the plain sample, tone-mapped per pixel against the text colour. The tag's strength channel carries that colour: 0.3 for light text (dark theme), 1.0 for dark text; the shader splits them at 0.65.
+  - **Light text:** luma above `cap − 0.12` is compressed exponentially toward `cap` (0.55), keeping hue. White becomes 0.549, mid 0.5 becomes 0.483, and anything below 0.43 is unchanged.
+  - **Dark text:** luma below `lift + 0.12` is lifted toward `lift` (0.45) by mixing with white. Black becomes 0.451.
+  - The curve is C1 at its knee (`field_check.c`).
+- **Knobs:**
+  - `debug.oulg.shadetone` (live, default 1; 0 leaves shade cards untagged).
+  - `debug.oulg.sf.shadecap` and `.shadelift` (compile time).
+- **Untouched:** heads-up cards (profile 0) and the lockscreen (profile 1).
+
+**Independent review of v0.9: what changed.**
+- **Magnification.** The `refract.h` text claimed "magnification ≤ 1". It is the sampling map's singular values that are ≤ 1, so the *texture* is magnified by up to 1/σ_min.
+  - `field_check` now prints the bound per strength:
+    - profile 0: 1.25× at 0.10, 2.50× at 0.30, 4.99× at 0.40, 9.97× at 0.45, fold from 0.5;
+    - profile 1: 1.18× / 1.82× / 2.50× / 3.08× / 4.00×.
+  - It checks that profile 1 at its 0.40 default magnifies no more than profile 0 at the user's 0.30 (both 2.5×).
+  - Profile 1's cap drops from 0.55 to 0.5, so the worst case is 4× instead of 5.7×.
+- **Edge lighting handed over only when confirmed.** v0.9 dropped the module's lit runs and shadow whenever Java chose profile 1. Now the edge shader steps back only when all of these hold:
+  - the tag will reach every program: radius above 42 and below 127.5 (the fp16 limit), and on the Samsung path the single-radius shape (a clip path carries no tag);
+  - the library has announced its optics: `debug.oulg.sf.optics ≥ 9`. The library sets it when a fragment rewrite compiles; the boot script sets it when the property is empty; with a live swap and an SELinux refusal, set it by hand.
+
+  Otherwise both lightings apply, which is brighter, rather than none.
+- **Colour curve.** The lockscreen drawable keeps a curve once set, so it now always receives one: the policy's, or the neutral curve (an identity) instead of nothing.
+- **One update per state change.** `setOptics(keyguard, lens)` replaces `setKeyguard` + `setLens`, which could rebuild the blur twice with an intermediate state.
+- **Not changed:**
+  - **The two discs in one program.** Only one runs per pixel. Register allocation is the larger of the two, not their sum; to be measured on the Adreno with the rest of the GPU cost.
+  - **Tag precision above 127.5 px.** Handled by not handing lighting over there (above), not by a new encoding: changing the encoding would change the heads-up tag.
 
 ## Future work
 

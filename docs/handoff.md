@@ -2,6 +2,19 @@
 
 Documento para continuar o trabalho em outra conversa. Leia inteiro antes de mexer em qualquer coisa. O histórico técnico detalhado está em `docs/architecture.md`, nas seções de 2026-10-07 a 2026-10-09.
 
+## 0c. Atualização (sfhook v0.10: legibilidade da central e correções da revisão)
+
+Detalhes técnicos em `docs/architecture.md`, seção "Shade legibility, review fixes".
+
+- **Central sobre app branco.**
+  - Os cards da central recebem o perfil 2: sem lente e sem blur extra, só um mapeamento de tom contra a cor do texto. Com texto claro, o brilho máximo do fundo vai a 0,55; com texto escuro, o mínimo sobe a 0,45. Abaixo de 0,43 nada muda.
+  - Liga e desliga ao vivo com `debug.oulg.shadetone`. Os limites, lidos na compilação, são `debug.oulg.sf.shadecap` e `.shadelift`.
+- **Iluminação da borda na tela de bloqueio.** O app só deixa de desenhar a própria iluminação quando o SurfaceFlinger confirma a lib (`debug.oulg.sf.optics=9`) e a marca chega intacta (raio entre 42 e 127,5).
+  - A lib define a propriedade sozinha; o SELinux pode recusar.
+  - Na troca ao vivo, confirme com `getprop debug.oulg.sf.optics`. Se vier vazio, rode `setprop debug.oulg.sf.optics 9`.
+- **Força da lente.** O teto do perfil 1 caiu de 0,55 para 0,5: ampliação máxima de 4x.
+- **Troca ao vivo da lib:** `SurfaceFlingerProp.v10.so`. Confirme com `grep -c shadecap`.
+
 ## 0b. Atualização (sfhook v0.9, material da tela de bloqueio)
 
 Detalhes em `docs/architecture.md`, seção "Lockscreen material: one thick-slab model".

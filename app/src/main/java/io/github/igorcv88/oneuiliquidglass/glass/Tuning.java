@@ -92,6 +92,18 @@ public final class Tuning {
      * follows sflens.
      */
     public final float kgLens;
+    /**
+     * Shade legibility (debug.oulg.shadetone, default 1): expanded-shade cards carry sfhook profile
+     * 2, which tone-maps their blur against the text colour (a white app behind them turned them
+     * white under white dark-mode text). 0 leaves them untagged, as before.
+     */
+    public final boolean shadeTone;
+    /**
+     * The sfhook version whose optics are confirmed live (debug.oulg.sf.optics). The library sets it
+     * when a rewrite compiles, and the module's boot script sets it; with a live swap set it by hand.
+     * Below 9 the compositor's profile-1 lighting is not assumed: the edge shader keeps its own.
+     */
+    public final int sfOptics;
     /** Logs main-thread time spent in the module's hooks (see {@link Perf}). */
     public final boolean perf;
     /** Enables the view-tree and window diagnostic dumps (see {@link Probe#trace}). */
@@ -135,6 +147,8 @@ public final class Tuning {
         huOptics = Math.round(clamp(number("huoptics", 0f), 0f, 1f));
         float kl = number("kglens", 0.40f);
         kgLens = kl < 0f ? -1f : clamp(kl, 0.1f, 1.2f);
+        shadeTone = number("shadetone", 1f) >= 1f;
+        sfOptics = Math.round(clamp(number("sf.optics", 0f), 0f, 1000f));
         perf = number("perf", 0f) >= 1f;
         Perf.enabled = perf;
         trace = number("trace", 0f) >= 1f;
@@ -156,7 +170,7 @@ public final class Tuning {
         return "backdrop=" + backdrop + " profile=" + profile + " lens=" + lens + " rimhz=" + rimHz + " rimblur=" + rimBlur
                 + " refract=" + refract + " ior=" + ior + " blur=" + blur + " sat=" + saturation
                 + " disp=" + dispersion + " hz=" + hz + " hzkg=" + keyguardHz + " tint=" + tintAlpha
-                + " semradius=" + semRadius + " semradiuslens=" + semRadiusLens + " sflens=" + sfLens + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " kgblurpath=" + kgBlurPath + " kgblurradius=" + kgBlurRadius + " kgoptics=" + kgOptics + " huoptics=" + huOptics + " kglens=" + kgLens + " kgwinblur=" + kgWinBlur + " perf=" + perf + " trace=" + trace;
+                + " semradius=" + semRadius + " semradiuslens=" + semRadiusLens + " sflens=" + sfLens + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " kgblurpath=" + kgBlurPath + " kgblurradius=" + kgBlurRadius + " kgoptics=" + kgOptics + " huoptics=" + huOptics + " kglens=" + kgLens + " shadetone=" + shadeTone + " sfoptics=" + sfOptics + " kgwinblur=" + kgWinBlur + " perf=" + perf + " trace=" + trace;
     }
 
     private static float clamp(float v, float lo, float hi) { return Float.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : lo; }
