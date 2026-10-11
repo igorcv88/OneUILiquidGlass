@@ -100,12 +100,21 @@ public final class HeaderGap {
     }
 
     /**
-     * Whether a large icon beside the content block moves with it. Both are top-gravity children
-     * of the same FrameLayout, so their tops differ by their top margins. An icon that starts at or
-     * below the block belongs to it; one that starts higher is aligned with the header and stays.
+     * Whether a large icon beside the content block moves with it. contentTop is the title's top
+     * in the same FrameLayout, or -1 when unknown. An icon that starts at or below the title is
+     * beside it; one that starts higher is aligned with the header row and stays.
      */
-    public static boolean iconMoves(int iconTopMargin, int targetTopMargin) {
-        return iconTopMargin >= targetTopMargin;
+    public static boolean iconMoves(int iconTopMargin, int contentTop) {
+        return contentTop >= 0 && iconTopMargin >= contentTop;
+    }
+
+    /**
+     * Whether a view with this visibility takes layout space: VISIBLE (0) or INVISIBLE (4), not
+     * GONE (8). The gap follows layout, not what is drawn this frame. SystemUI hides the views of
+     * the child that is not on screen with INVISIBLE.
+     */
+    public static boolean laidOut(int visibility) {
+        return visibility != 8;
     }
 
     /** Marker for {@link Ledger#update}: leave the margin as it is. */
