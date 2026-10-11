@@ -151,6 +151,7 @@ public final class HeadsUpHooks {
             }
         };
         for (String n : new String[]{"onFinishInflate", "setHeadsUp", "setPinned", "setHeadsUpAnimatingAway", "startAppearAnimation", "onAppearAnimationFinished", "setUserExpanded", "setOnKeyguard", "onAttachedToWindow"}) hook(rowClass, n, rowEvent);
+        new HeaderGapHooks(loader, rowClass, () -> enabled).install();
         installShade();
         installBarState();
         installScrimClamp();

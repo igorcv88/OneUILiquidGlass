@@ -104,6 +104,12 @@ public final class Tuning {
      * Below 9 the compositor's profile-1 lighting is not assumed: the edge shader keeps its own.
      */
     public final int sfOptics;
+    /**
+     * Extra gap in dp between the header row and the title of expanded notifications
+     * (debug.oulg.headergap, default 4, 0 turns it off, at most 8). Layout only: it does not touch
+     * the glass. A change shows at the next measure of each notification.
+     */
+    public final float headerGap;
     /** Logs main-thread time spent in the module's hooks (see {@link Perf}). */
     public final boolean perf;
     /** Enables the view-tree and window diagnostic dumps (see {@link Probe#trace}). */
@@ -149,6 +155,7 @@ public final class Tuning {
         kgLens = kl < 0f ? -1f : clamp(kl, 0.1f, 1.2f);
         shadeTone = number("shadetone", 1f) >= 1f;
         sfOptics = Math.round(clamp(number("sf.optics", 0f), 0f, 1000f));
+        headerGap = clamp(number("headergap", 4f), 0f, 8f);
         perf = number("perf", 0f) >= 1f;
         Perf.enabled = perf;
         trace = number("trace", 0f) >= 1f;
@@ -170,7 +177,7 @@ public final class Tuning {
         return "backdrop=" + backdrop + " profile=" + profile + " lens=" + lens + " rimhz=" + rimHz + " rimblur=" + rimBlur
                 + " refract=" + refract + " ior=" + ior + " blur=" + blur + " sat=" + saturation
                 + " disp=" + dispersion + " hz=" + hz + " hzkg=" + keyguardHz + " tint=" + tintAlpha
-                + " semradius=" + semRadius + " semradiuslens=" + semRadiusLens + " sflens=" + sfLens + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " kgblurpath=" + kgBlurPath + " kgblurradius=" + kgBlurRadius + " kgoptics=" + kgOptics + " huoptics=" + huOptics + " kglens=" + kgLens + " shadetone=" + shadeTone + " sfoptics=" + sfOptics + " kgwinblur=" + kgWinBlur + " perf=" + perf + " trace=" + trace;
+                + " semradius=" + semRadius + " semradiuslens=" + semRadiusLens + " sflens=" + sfLens + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " kgblurpath=" + kgBlurPath + " kgblurradius=" + kgBlurRadius + " kgoptics=" + kgOptics + " huoptics=" + huOptics + " kglens=" + kgLens + " shadetone=" + shadeTone + " sfoptics=" + sfOptics + " kgwinblur=" + kgWinBlur + " headergap=" + headerGap + " perf=" + perf + " trace=" + trace;
     }
 
     private static float clamp(float v, float lo, float hi) { return Float.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : lo; }
