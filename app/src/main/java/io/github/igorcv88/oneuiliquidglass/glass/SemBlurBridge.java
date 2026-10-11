@@ -279,6 +279,48 @@ public final class SemBlurBridge implements Backdrop {
         if (p < 0) return radius;
         return sfTag(radius, p == 2 ? shadeStrength() : strength(p), p);
     }
+    private static java.lang.reflect.Field[] foreignCorners;
+    private static java.lang.reflect.Field foreignPath;
+    /**
+     * Tags a blur SystemUI sets itself on a view the module does not draw (the notification shelf's
+     * background, under the "N more notifications" stack) with the shade legibility profile: its
+     * corner radius fields, found by name and type, are rewritten in place before the call goes
+     * through. A blur clipped to a path cannot carry the tag and is left alone. Returns what was
+     * done, for the log.
+     */
+    public static String tagForeign(Object info) {
+        if (info == null || tagProfile(false, false) != 2) return "off";
+        try {
+            if (foreignCorners == null) {
+                java.util.List<java.lang.reflect.Field> found = new java.util.ArrayList<>();
+                for (Class<?> c = info.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
+                    for (java.lang.reflect.Field f : c.getDeclaredFields()) {
+                        if (java.lang.reflect.Modifier.isStatic(f.getModifiers())) continue;
+                        String n = f.getName().toLowerCase(java.util.Locale.ROOT);
+                        if (n.contains("corner") && (f.getType() == float.class || f.getType() == float[].class)) { f.setAccessible(true); found.add(f); }
+                        if (f.getType() == android.graphics.Path.class && foreignPath == null) { f.setAccessible(true); foreignPath = f; }
+                    }
+                }
+                foreignCorners = found.toArray(new java.lang.reflect.Field[0]);
+            }
+            if (foreignCorners.length == 0) return "noCornerField";
+            if (foreignPath != null && foreignPath.get(info) != null) return "clipPath";
+            StringBuilder out = new StringBuilder();
+            for (java.lang.reflect.Field f : foreignCorners) {
+                if (f.getType() == float.class) {
+                    float r = f.getFloat(info), t = cornerTag(r, 2);
+                    f.setFloat(info, t);
+                    out.append(f.getName()).append('=').append(r).append("->").append(t).append(' ');
+                } else {
+                    float[] radii = (float[]) f.get(info);
+                    if (radii == null) continue;
+                    for (int i = 0; i < radii.length; i++) radii[i] = cornerTag(radii[i], 2);
+                    out.append(f.getName()).append("[]").append(' ');
+                }
+            }
+            return out.toString().trim();
+        } catch (ReflectiveOperationException | RuntimeException e) { return "failed:" + e.getClass().getSimpleName(); }
+    }
     /** Whether this bridge's shape setting sends the tag (only the single-radius shape can carry it). */
     public boolean tagsShape(float[] radii) {
         String mode = Tuning.get().semShape;

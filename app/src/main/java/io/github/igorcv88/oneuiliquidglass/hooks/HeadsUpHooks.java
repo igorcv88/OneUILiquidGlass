@@ -174,6 +174,7 @@ public final class HeadsUpHooks {
         if (enabled && (!drawHook || !shadeHook)) Probe.log("GLASS_UNAVAILABLE", "drawHook=" + drawHook + " shadeHook=" + shadeHook);
     }
     private final Set<String> foreignBlurLogged = new java.util.HashSet<>();
+    private final Set<String> shelfTagLogged = new java.util.HashSet<>();
     /** Stack walks are costly on a per-frame path; provenance is only gathered for the first calls. */
     private int foreignBlurTraces = 200;
     /**
@@ -213,6 +214,12 @@ public final class HeadsUpHooks {
                             // radius of 1-3 and back, each step with the panel's dark color curve. Only radii
                             // up to 4 are dropped: a pull-down or the bouncer passes that within a few frames.
                             p.args[0] = null;
+                        }
+                        if (p.args[0] != null && v.getClass().getName().endsWith("NotificationShelfBackgroundView")) {
+                            // The shelf under a collapsed stack keeps SystemUI's own blur, which a white
+                            // app behind turned white: it gets the shade legibility tag too.
+                            String done = SemBlurBridge.tagForeign(p.args[0]);
+                            if (shelfTagLogged.add(done.replaceAll("[0-9.]+", "#"))) Probe.log("SEM_BLUR_SHELF", "tag=" + done);
                         }
                         boolean managed = compositorState(v) != null;
                         String caller = Probe.trace && foreignBlurTraces > 0 && foreignBlurLogged.size() < 40 ? blurCaller() : null;
