@@ -88,11 +88,24 @@ public final class HeaderGap {
 
     /**
      * Whether the expanded child has no room for the extra gap. That is the case when its measure
-     * reported MEASURED_STATE_TOO_SMALL, or when it reached the content view's height cap.
-     * maxHeight is 0 or less when the cap is unknown.
+     * reported MEASURED_STATE_TOO_SMALL (content cut by the AT_MOST cap). A root that reports that
+     * state is trusted: reaching the cap exactly is not a truncation. Only a root that does not
+     * report it falls back to the cap, where reaching it counts as no room. maxHeight is 0 or less
+     * when the cap is unknown.
      */
-    public static boolean noRoom(boolean tooSmall, int measuredHeight, int maxHeight) {
-        return tooSmall || (maxHeight > 0 && measuredHeight >= maxHeight);
+    public static boolean noRoom(boolean tooSmall, boolean reportsState, int measuredHeight, int maxHeight) {
+        if (tooSmall) return true;
+        if (reportsState) return false;
+        return maxHeight > 0 && measuredHeight >= maxHeight;
+    }
+
+    /**
+     * Whether a large icon beside the content block moves with it. Both are top-gravity children
+     * of the same FrameLayout, so their tops differ by their top margins. An icon that starts at or
+     * below the block belongs to it; one that starts higher is aligned with the header and stays.
+     */
+    public static boolean iconMoves(int iconTopMargin, int targetTopMargin) {
+        return iconTopMargin >= targetTopMargin;
     }
 
     /** Marker for {@link Ledger#update}: leave the margin as it is. */

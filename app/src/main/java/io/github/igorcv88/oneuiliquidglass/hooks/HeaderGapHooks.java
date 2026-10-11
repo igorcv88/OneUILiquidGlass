@@ -22,8 +22,9 @@ import io.github.igorcv88.oneuiliquidglass.glass.Tuning;
 /**
  * Adds the {@link HeaderGap} spacing to the expanded child of each NotificationContentView. The
  * work happens right before the content view measures, so the new margin is part of that same
- * pass: there is no extra layout pass, no translation, and no frame drawn at the old height. A
- * pass where nothing changed costs a few field reads and one map lookup.
+ * measure: there is no translation and no frame drawn at the old height (see {@link #write} for
+ * when one more traversal is scheduled). A pass where nothing changed costs a few field reads,
+ * one map lookup and a short walk up the parents.
  * Views are resolved once per expanded-child instance. A reinflation brings a new instance,
  * which is resolved again; the old entry drops with its view.
  */
@@ -79,25 +80,47 @@ public final class HeaderGapHooks {
         if (!(expandedObj instanceof ViewGroup)) return;
         View expanded = (View) expandedObj;
         Entry e = entries.get(expanded);
+        if (e != null && e.target != null && !valid(e, expanded)) {
+            // An update moved, replaced or dropped a resolved view: hand back the margins written to
+            // the old views, then resolve this instance again.
+            restore(e);
+            e = null;
+        }
         if (e == null) { e = resolve((ViewGroup) expanded); entries.put(expanded, e); }
         e.appliedThisPass = false;
         View header = get(e.header), title = get(e.title), target = get(e.target), icon = get(e.rightIcon);
         Tuning t = Tuning.get();
         int extra = HeaderGap.px(t.headerGap, expanded.getResources().getDisplayMetrics().density);
-        // A RemoteViews reapply keeps the instance but may move or drop views: check the chain on every pass.
-        boolean structure = target != null && header != null && title != null
-                && HeaderGap.descends(title, target, HeaderGapHooks::parent) && HeaderGap.descends(target, expanded, HeaderGapHooks::parent)
-                && HeaderGap.descends(header, expanded, HeaderGapHooks::parent);
+        boolean structure = target != null;
         boolean shared = expanded == Reflect.read(content, "mContractedChild") || expanded == Reflect.read(content, "mHeadsUpChild");
         String reason = HeaderGap.skipReason(enabled.getAsBoolean(), extra, shared, headsUp(content), structure,
                 structure && header.getVisibility() == View.VISIBLE, structure && shown(title), e.noRoom);
         // Nothing was resolved, so nothing was written and there is no margin to restore.
-        if (target == null) { report(e, reason, extra); return; }
+        if (target == null) { report(e, reason, extra, expanded); return; }
         boolean apply = reason == null;
         write(target, e.targetMargin, apply, extra);
         if (icon != null) write(icon, e.iconMargin, apply && icon.getVisibility() != View.GONE, extra);
         e.appliedThisPass = apply && e.targetMargin.active();
-        report(e, reason, extra);
+        report(e, reason, extra, expanded);
+    }
+
+    /**
+     * The cached target is still the one the policy picks: the header and the title are under the
+     * expanded child, the title is inside the target, and the header is outside it. This is a walk
+     * up the parents of two views, with no search of the tree.
+     */
+    private static boolean valid(Entry e, View expanded) {
+        View header = get(e.header), title = get(e.title), target = get(e.target);
+        if (header == null || title == null || target == null) return false;
+        if (HeaderGap.target(expanded, header, title, HeaderGapHooks::parent) != target) return false;
+        View icon = get(e.rightIcon);
+        return e.rightIcon == null || (icon != null && icon.getParent() == target.getParent());
+    }
+
+    private static void restore(Entry e) {
+        View target = get(e.target), icon = get(e.rightIcon);
+        if (target != null) write(target, e.targetMargin, false, 0);
+        if (icon != null) write(icon, e.iconMargin, false, 0);
     }
 
     /** If the gap did not fit under the content view's height cap, take it back and measure again in the same pass. */
@@ -110,18 +133,29 @@ public final class HeaderGapHooks {
         if (e == null || !e.appliedThisPass) return;
         e.appliedThisPass = false;
         boolean tooSmall = (expanded.getMeasuredHeightAndState() & View.MEASURED_STATE_TOO_SMALL) != 0;
-        // Smart replies raise the cap above mNotificationMaxHeight, so the field only counts without them.
+        // FrameLayout and LinearLayout flag a truncating AT_MOST measure themselves; only other roots
+        // fall back to the height cap. AOSP raises the cap by the smart reply limit whenever that view
+        // exists, visible or not, so the field is only used without one.
+        boolean reportsState = expanded.getClass() == FrameLayout.class || expanded.getClass() == LinearLayout.class;
         Object max = Reflect.read(content, "mExpandedSmartReplyView") == null ? Reflect.read(content, "mNotificationMaxHeight") : null;
-        if (!HeaderGap.noRoom(tooSmall, expanded.getMeasuredHeight(), max instanceof Integer ? (Integer) max : 0)) return;
+        if (!HeaderGap.noRoom(tooSmall, reportsState, expanded.getMeasuredHeight(), max instanceof Integer ? (Integer) max : 0)) return;
         e.noRoom = true;
-        View target = get(e.target), icon = get(e.rightIcon);
-        if (target != null) write(target, e.targetMargin, false, 0);
-        if (icon != null) write(icon, e.iconMargin, false, 0);
-        report(e, "noRoom", 0);
+        restore(e);
+        report(e, "noRoom", 0, expanded);
         XposedBridge.invokeOriginalMethod((Member) p.method, p.thisObject, p.args);
     }
 
-    /** Writes the ledger's margin; true when the view's top margin changed. */
+    /**
+     * Writes the ledger's margin; true when the view's top margin changed. requestLayout() flags
+     * the view and climbs only until it reaches an ancestor that is already flagged. On inflation,
+     * reapply or a margin reset, every ancestor up to ViewRootImpl is flagged, so the climb stops
+     * inside the row. The new margin then goes into the measure already running, with no second
+     * traversal. Only a measure that nothing requested lets the climb reach ViewRootImpl: a parent
+     * spec change, or a measure outside a traversal. That schedules one more traversal, which
+     * measures the same values and keeps the expanded subtree's flags consistent: that traversal
+     * clears them. Marking only the subtree with forceLayout() would leave flagged views that
+     * swallow later requestLayout() calls from inside the notification when no layout follows.
+     */
     private static boolean write(View v, HeaderGap.Ledger ledger, boolean apply, int extra) {
         ViewGroup.LayoutParams lp = v.getLayoutParams();
         if (!(lp instanceof ViewGroup.MarginLayoutParams)) return false;
@@ -129,7 +163,6 @@ public final class HeaderGapHooks {
         int next = ledger.update(m.topMargin, apply, extra);
         if (next == HeaderGap.NO_CHANGE) return false;
         m.topMargin = next;
-        // Flags the subtree so the measure that follows does not reuse a cached size.
         v.requestLayout();
         return true;
     }
@@ -158,11 +191,15 @@ public final class HeaderGapHooks {
             return e;
         }
         e.target = weak(target);
-        // The large icon sits beside the title in the same FrameLayout; it moves with the text so the two stay aligned.
+        // A large icon in the same FrameLayout moves with the text only when it starts at or below the
+        // top of the moved block (top-gravity siblings: their tops differ by their margins). An icon
+        // aligned with the header row stays where it is.
         if (kind == HeaderGap.PARENT_FRAME && rightIconId != 0) {
             View icon = parent.findViewById(rightIconId);
             if (icon != null && icon.getParent() == parent && icon.getLayoutParams() instanceof ViewGroup.MarginLayoutParams
-                    && HeaderGap.shiftable(HeaderGap.PARENT_FRAME, verticalGravity(icon), false)) e.rightIcon = weak(icon);
+                    && HeaderGap.shiftable(HeaderGap.PARENT_FRAME, verticalGravity(icon), false)
+                    && HeaderGap.iconMoves(((ViewGroup.MarginLayoutParams) icon.getLayoutParams()).topMargin,
+                            ((ViewGroup.MarginLayoutParams) target.getLayoutParams()).topMargin)) e.rightIcon = weak(icon);
         }
         return e;
     }
@@ -212,7 +249,7 @@ public final class HeaderGapHooks {
      * Logs when an expanded child's outcome changes, and only once per layout and outcome, so a
      * progress notification updating every second does not flood the log.
      */
-    private void report(Entry e, String reason, int extra) {
+    private void report(Entry e, String reason, int extra, View expanded) {
         String outcome = reason == null ? "applied" : reason;
         if (outcome.equals(e.lastOutcome)) return;
         e.lastOutcome = outcome;
@@ -224,6 +261,23 @@ public final class HeaderGapHooks {
                 + " parent=" + (target == null || target.getParent() == null ? "none" : target.getParent().getClass().getSimpleName())
                 + " baselinePx=" + (target == null ? -1 : e.targetMargin.baseline())
                 + " rightIcon=" + (get(e.rightIcon) != null));
+        if (Probe.trace && header != null && title != null) gapLater(expanded, header, title, e.layout, outcome);
+    }
+
+    /**
+     * debug.oulg.trace=1: after the next layout, the real gap between the bottom of the header and
+     * the top of the title, both in window coordinates. Compare headergap=0 with headergap=4.
+     */
+    private static void gapLater(View expanded, View header, View title, String layout, String outcome) {
+        expanded.post(() -> {
+            int[] h = new int[2], t = new int[2];
+            header.getLocationInWindow(h);
+            title.getLocationInWindow(t);
+            int headerBottom = h[1] + header.getHeight();
+            Probe.log("HEADER_GAP_MEASURE", "layout=" + layout + " outcome=" + outcome + " headerBottom=" + headerBottom
+                    + " titleTop=" + t[1] + " gapPx=" + (t[1] - headerBottom) + " titleLines="
+                    + (title instanceof TextView ? ((TextView) title).getLineCount() : -1) + " expandedH=" + expanded.getHeight());
+        });
     }
 
     /**

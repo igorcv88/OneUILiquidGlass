@@ -143,11 +143,49 @@ public final class HeaderGapTest {
     }
 
     @Test public void noRoomTakesTheGapBack() {
-        // Taller content (three-line title, large font) that reaches the cap gets no gap instead of a clipped bottom.
-        assertTrue(HeaderGap.noRoom(true, 600, 0));
-        assertTrue(HeaderGap.noRoom(false, 768, 768));
-        assertFalse(HeaderGap.noRoom(false, 420, 768));
-        assertFalse(HeaderGap.noRoom(false, 420, 0));
+        // Taller content (three-line title, large font) cut by the cap gets no gap instead of a clipped bottom.
+        assertTrue(HeaderGap.noRoom(true, true, 600, 0));
+        assertTrue(HeaderGap.noRoom(true, false, 600, 768));
+        // A FrameLayout root that fits exactly at the cap was not cut: it keeps the gap.
+        assertFalse(HeaderGap.noRoom(false, true, 768, 768));
+        // A root that cannot report truncation falls back to the cap.
+        assertTrue(HeaderGap.noRoom(false, false, 768, 768));
+        assertFalse(HeaderGap.noRoom(false, false, 420, 768));
+        assertFalse(HeaderGap.noRoom(false, false, 420, 0));
         assertEquals("noRoom", HeaderGap.skipReason(true, 12, false, false, true, true, true, true));
+    }
+
+    @Test public void movedViewsInvalidateTheCachedTarget() {
+        Tree t = bigBase();
+        String cached = HeaderGap.target("root", "header", "title", t.parent());
+        assertEquals("margin_target", cached);
+        // An update moves the header into the content block: the policy no longer picks the cached
+        // target, so the hook hands its margin back and resolves again (moving the block would move
+        // the header with the title).
+        t.add("header", "main_column");
+        assertNotEquals(cached, HeaderGap.target("root", "header", "title", t.parent()));
+        // A replaced title (the old one detached) does not resolve at all.
+        Tree replaced = bigBase();
+        replaced.parents.remove("title");
+        assertNull(HeaderGap.target("root", "header", "title", replaced.parent()));
+        // A new title view in the same place resolves to the same target.
+        replaced.add("title2", "line1");
+        assertEquals("margin_target", HeaderGap.target("root", "header", "title2", replaced.parent()));
+    }
+
+    @Test public void largeIconMovesOnlyWithTheContentBlock() {
+        // Icon aligned with the title (same top as the content block, or lower) moves with it.
+        assertTrue(HeaderGap.iconMoves(126, 126));
+        assertTrue(HeaderGap.iconMoves(140, 126));
+        // Icon aligned with the header row stays.
+        assertFalse(HeaderGap.iconMoves(36, 126));
+    }
+
+    @Test public void restoreAfterInvalidationReturnsTheNativeMargin() {
+        HeaderGap.Ledger l = new HeaderGap.Ledger();
+        assertEquals(138, l.update(126, true, 12));
+        // restore() writes with apply=false before the entry is dropped.
+        assertEquals(126, l.update(138, false, 0));
+        assertFalse(l.active());
     }
 }

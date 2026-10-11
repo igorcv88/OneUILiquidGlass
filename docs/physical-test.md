@@ -49,6 +49,7 @@ Applies with glass mode on. Keep the font scale, display size and resolution fix
 
    The gap is the top of `title` minus the bottom of `notification_header`; compare it between the two dumps.
 5. **Log.** `su -c 'logcat -d -s OULG | grep HEADER_GAP'` should show `installed=true` and `HEADER_GAP_PASS ... outcome=applied` for both notifications.
+   - With `debug.oulg.trace=1`, `HEADER_GAP_MEASURE` gives `gapPx` in window coordinates without uiautomator. Between `headergap 0` and `4` it should differ by 12 px at density 3.0 and by 14 px at 3.5.
    - If you see `structure`, `noHeader`, `noTitle` or `HEADER_GAP_UNSUPPORTED`, set `debug.oulg.trace=1`, restart SystemUI, post the notification again, expand it, and send the `HEADER_GAP_TREE` lines.
 6. **Must not change.**
    - The collapsed row and the heads-up pop-up (including an expanded pop-up) look the same as with `headergap 0`.
