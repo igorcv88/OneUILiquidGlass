@@ -129,7 +129,8 @@ public final class Probe {
             Object info = viewInfoField != null ? viewInfoField.get(v) : null;
             if (info != null) found.append(" semInfo={").append(fields(info)).append('}');
             android.graphics.drawable.Drawable bg = v.getBackground();
-            if (bg != null && bg.getClass().getName().toLowerCase(java.util.Locale.ROOT).contains("blur")) found.append(" background=").append(bg.getClass().getName()).append('{').append(fields(bg)).append('}');
+            if (bg != null && bg.getClass().getName().toLowerCase(java.util.Locale.ROOT).contains("blur")) found.append(" background=").append(bg.getClass().getName())
+                    .append(" bounds=").append(bg.getBounds().toShortString()).append('{').append(fields(bg)).append('}');
             for (Class<?> c = v.getClass(); c != null && c != View.class; c = c.getSuperclass()) {
                 for (java.lang.reflect.Field f : c.getDeclaredFields()) {
                     if (java.lang.reflect.Modifier.isStatic(f.getModifiers()) || !android.graphics.drawable.Drawable.class.isAssignableFrom(f.getType())) continue;
@@ -148,12 +149,36 @@ public final class Probe {
             try { id = v.getId() == View.NO_ID ? "-" : v.getResources().getResourceEntryName(v.getId()); } catch (RuntimeException e) { id = "?"; }
             log("BLUR_CENSUS", "view=" + v.getClass().getName() + " id=" + id + " obj=" + Integer.toHexString(System.identityHashCode(v))
                     + " shown=" + v.isShown() + " xy=" + xy[0] + "," + xy[1] + " size=" + v.getWidth() + "x" + v.getHeight()
-                    + " alpha=" + v.getAlpha() + found);
+                    + " alpha=" + v.getAlpha() + transforms(v) + found);
         }
         if (v instanceof android.view.ViewGroup) {
             android.view.ViewGroup g = (android.view.ViewGroup) v;
             for (int i = 0; i < g.getChildCount(); i++) census(g.getChildAt(i), count);
         }
+    }
+    /**
+     * Scale, translation and clip state of the view and of its notification row, if any: a stacked
+     * or clipped card can draw its blur region at a size that no longer carries the corner tag.
+     */
+    private static String transforms(View v) {
+        StringBuilder out = new StringBuilder(" scale=").append(v.getScaleX()).append('x').append(v.getScaleY())
+                .append(" ty=").append(v.getTranslationY());
+        View row = null;
+        for (android.view.ViewParent p = v.getParent(); p instanceof View; p = p.getParent()) {
+            if (p.getClass().getName().endsWith("ExpandableNotificationRow")) { row = (View) p; break; }
+        }
+        if (row != null) {
+            out.append(" row{scale=").append(row.getScaleX()).append('x').append(row.getScaleY()).append(" ty=").append(row.getTranslationY())
+                    .append(" alpha=").append(row.getAlpha());
+            for (String f : new String[]{"mActualHeight", "mClipTopAmount", "mClipBottomAmount", "mClipToActualHeight", "mInShelf", "mTransformingInShelf"}) {
+                Object val = io.github.igorcv88.oneuiliquidglass.hooks.Reflect.read(row, f);
+                if (val != null) out.append(' ').append(f.substring(1)).append('=').append(val);
+            }
+            android.graphics.Rect clip = row.getClipBounds();
+            if (clip != null) out.append(" clip=").append(clip.toShortString());
+            out.append('}');
+        }
+        return out.toString();
     }
     /** Corner, radius, alpha and color fields of a blur object, by name. */
     private static String fields(Object o) {
