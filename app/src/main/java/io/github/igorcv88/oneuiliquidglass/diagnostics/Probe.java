@@ -102,6 +102,79 @@ public final class Probe {
                 + " windowType=" + Reflect.read(attrs, "type") + " flags=" + Reflect.read(attrs, "flags")
                 + " alpha=" + view.getAlpha() + " ime=" + (insets != null && insets.isVisible(WindowInsets.Type.ime())));
     }
+    /**
+     * Every view under root that carries a compositor blur: a SemBlurInfo on the view, a background
+     * or a Drawable field whose class names a blur. One BLUR_CENSUS line each, with position, size,
+     * alpha and the corner fields, so a blur no hook knows about can be found by where it sits.
+     */
+    public static void blurCensus(View root, String reason) {
+        if (!trace || root == null) return;
+        int[] count = {0};
+        log("BLUR_CENSUS_BEGIN", "reason=" + reason);
+        census(root, count);
+        log("BLUR_CENSUS_END", "views=" + count[0]);
+    }
+    private static java.lang.reflect.Field viewInfoField;
+    private static boolean viewInfoResolved;
+    private static void census(View v, int[] count) {
+        if (count[0] >= 80) return;
+        StringBuilder found = new StringBuilder();
+        try {
+            if (!viewInfoResolved) {
+                viewInfoResolved = true;
+                for (java.lang.reflect.Field f : View.class.getDeclaredFields()) {
+                    if (f.getType().getName().equals("android.view.SemBlurInfo") && !java.lang.reflect.Modifier.isStatic(f.getModifiers())) { f.setAccessible(true); viewInfoField = f; }
+                }
+            }
+            Object info = viewInfoField != null ? viewInfoField.get(v) : null;
+            if (info != null) found.append(" semInfo={").append(fields(info)).append('}');
+            android.graphics.drawable.Drawable bg = v.getBackground();
+            if (bg != null && bg.getClass().getName().toLowerCase(java.util.Locale.ROOT).contains("blur")) found.append(" background=").append(bg.getClass().getName()).append('{').append(fields(bg)).append('}');
+            for (Class<?> c = v.getClass(); c != null && c != View.class; c = c.getSuperclass()) {
+                for (java.lang.reflect.Field f : c.getDeclaredFields()) {
+                    if (java.lang.reflect.Modifier.isStatic(f.getModifiers()) || !android.graphics.drawable.Drawable.class.isAssignableFrom(f.getType())) continue;
+                    f.setAccessible(true);
+                    Object d = f.get(v);
+                    if (d != null && d != bg && d.getClass().getName().toLowerCase(java.util.Locale.ROOT).contains("blur")) {
+                        found.append(' ').append(f.getName()).append('=').append(d.getClass().getName()).append('{').append(fields(d)).append('}');
+                    }
+                }
+            }
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError e) { found.append(" error=").append(e.getClass().getSimpleName()); }
+        if (found.length() > 0) {
+            count[0]++;
+            int[] xy = new int[2]; v.getLocationOnScreen(xy);
+            String id;
+            try { id = v.getId() == View.NO_ID ? "-" : v.getResources().getResourceEntryName(v.getId()); } catch (RuntimeException e) { id = "?"; }
+            log("BLUR_CENSUS", "view=" + v.getClass().getName() + " id=" + id + " obj=" + Integer.toHexString(System.identityHashCode(v))
+                    + " shown=" + v.isShown() + " xy=" + xy[0] + "," + xy[1] + " size=" + v.getWidth() + "x" + v.getHeight()
+                    + " alpha=" + v.getAlpha() + found);
+        }
+        if (v instanceof android.view.ViewGroup) {
+            android.view.ViewGroup g = (android.view.ViewGroup) v;
+            for (int i = 0; i < g.getChildCount(); i++) census(g.getChildAt(i), count);
+        }
+    }
+    /** Corner, radius, alpha and color fields of a blur object, by name. */
+    private static String fields(Object o) {
+        StringBuilder out = new StringBuilder();
+        for (Class<?> c = o.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
+            for (java.lang.reflect.Field f : c.getDeclaredFields()) {
+                if (java.lang.reflect.Modifier.isStatic(f.getModifiers())) continue;
+                String n = f.getName().toLowerCase(java.util.Locale.ROOT);
+                if (!(n.contains("corner") || n.contains("radius") || n.contains("alpha") || n.contains("color") || n.contains("path") || n.contains("mode"))) continue;
+                try {
+                    f.setAccessible(true);
+                    Object val = f.get(o);
+                    if (val instanceof float[]) val = java.util.Arrays.toString((float[]) val);
+                    else if (val instanceof Integer && n.contains("color")) val = Integer.toHexString((Integer) val);
+                    else if (val != null && !(val instanceof Number || val instanceof Boolean)) val = val.getClass().getSimpleName();
+                    out.append(f.getName()).append('=').append(val).append(' ');
+                } catch (ReflectiveOperationException | RuntimeException e) { out.append(f.getName()).append("=? "); }
+            }
+        }
+        return out.toString().trim();
+    }
     /** What paints the native material: drawable chain, alphas and tint, logged when glass engages. */
     public static void material(View background, View row, android.graphics.drawable.Drawable original,
                                 String backdrop, int fill, int blurColor) {

@@ -405,6 +405,16 @@ public final class HeadsUpHooks {
                 ? ((Number) height).floatValue() > 0.5f : null;
         if (next != null && !next.equals(shadeExpanded)) {
             shadeExpanded = next; Probe.log("SHADE", "expanded=" + next);
+            if (Probe.trace && next) {
+                // Every blur in the shade window once it has settled: finds blurs no hook knows about.
+                for (State s : states.values()) {
+                    View v = s.background.get();
+                    if (v == null || !v.isAttachedToWindow()) continue;
+                    View root = v.getRootView();
+                    v.postDelayed(() -> Probe.blurCensus(root, "shadeOpen"), 1200);
+                    break;
+                }
+            }
             for (State state : new ArrayList<>(states.values())) {
                 // Opening the shade is when cards were seen without their blur: apply it again.
                 if (state.glass != null) state.glass.reassertBackdrop();
