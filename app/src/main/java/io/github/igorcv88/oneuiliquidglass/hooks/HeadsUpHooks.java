@@ -483,6 +483,8 @@ public final class HeadsUpHooks {
         final float[] lastRadii = new float[8];
         final int[] location = new int[2], lastLocation = {Integer.MIN_VALUE, Integer.MIN_VALUE};
         int tuningGeneration;
+        /** The row is scaled into a collapsed group's stack (see onPreDraw). */
+        boolean stacked;
         State(View background, View row) { this.background = new WeakReference<>(background); this.row = new WeakReference<>(row); }
         void invalidate() { View v = background.get(); if (v != null) v.invalidate(); }
         @Override public void onViewAttachedToWindow(View view) {
@@ -521,11 +523,21 @@ public final class HeadsUpHooks {
             long started = Perf.start();
             try {
                 View v = background.get(); if (v == null) return true;
+                // A row scaled into the stack under a collapsed group: its blur region reaches the
+                // compositor at a fractional, elliptical size that drops the corner tag (white behind
+                // groups over a white app). Such rows carry no region; the glass draws the sliver.
+                View sr = row.get();
+                boolean stacked = sr != null && (Math.abs(sr.getScaleX() - 1f) > 0.005f || Math.abs(sr.getScaleY() - 1f) > 0.005f);
+                if (stacked != this.stacked) {
+                    this.stacked = stacked;
+                    Probe.log("ROW_STACKED", "viewId=" + Integer.toHexString(System.identityHashCode(v)) + " stacked=" + stacked);
+                    if (semBridge != null) semBridge.setSuspended(stacked);
+                }
                 if (compBridge != null) {
                     // Ancestor alpha (a pull up from the lockscreen) fades the drawn glass but not
                     // the compositor's blur region, which stayed behind as a ghost of the card.
-                    float a = 1f;
-                    for (Object p = v; p instanceof View; p = ((View) p).getParent()) a *= ((View) p).getAlpha();
+                    float a = stacked ? 0f : 1f;
+                    for (Object p = v; p instanceof View && a > 0f; p = ((View) p).getParent()) a *= ((View) p).getAlpha();
                     if (compBridge.setRegionFade(a)) v.invalidate();
                 }
                 boolean eligible = eligible();
@@ -703,6 +715,7 @@ public final class HeadsUpHooks {
                         : kind == Backdrop.Kind.SAMSUNG ? (semBridge = SemBlurBridge.create(v))
                         : drawablePath() ? (compBridge = BackgroundBlurBridge.create(v, true)) : BackgroundBlurBridge.create(v);
                 if (compBridge != null) SemBlurBridge.clearNative(v);
+                if (semBridge != null) semBridge.setSuspended(stacked);
                 glass = new GlassDrawable(backdrop, v.getResources().getDisplayMetrics().density, spec);
                 glassKind = kind;
                 glassSource = source;

@@ -546,6 +546,15 @@ Brief: surpass both lockscreen renderers while keeping `kgblurpath=1`'s stabilit
   - `debug.oulg.sf.shadecap` and `.shadelift` (compile time).
 - **Untouched:** heads-up cards (profile 0) and the lockscreen (profile 1).
 
+**White strip under every collapsed group (v0.10.4).**
+- **Census.** The strip is the group's first child row drawn as a stack under the summary: `scale=0.92x1.0 ty=15 alpha=0.5 ClipTopAmount=201`, so only 15 px show.
+- **Why the tag is lost.** Its blur region keeps the full 1340×216 bounds. Scaled, it reaches the compositor 1232.8 px wide with elliptical corners, so the whole-pixel and band checks drop the tag. The region then shows the plain blur of the white app.
+- **Not done:** relaxing the shader's whole-pixel check. It would bring back false positives during app-open animations.
+- **Fix:** while a row is scaled (stack state), its blur region is off, and the glass still draws the sliver.
+  - Samsung path: `SemBlurBridge.setSuspended`.
+  - Drawable path: region fade 0.
+- The notification-shelf tag (v0.10.1) stays, harmless: the shelf carried no blur in the census.
+
 **Independent review of v0.9: what changed.**
 - **Magnification.** The `refract.h` text claimed "magnification ≤ 1". It is the sampling map's singular values that are ≤ 1, so the *texture* is magnified by up to 1/σ_min.
   - `field_check` now prints the bound per strength:

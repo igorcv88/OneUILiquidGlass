@@ -386,7 +386,15 @@ public final class SemBlurBridge implements Backdrop {
         posted = false;
         if (released || pending == null) return;
         try {
-            applying = true; applyingHost = host;
+            applying = true;
+            if (suspended) {
+                // The card is drawn as a stacked sliver: no region (see setSuspended). No applying
+                // host: the blur guard blocks a clear nested inside an apply on that host.
+                set.invoke(host, (Object) null);
+                lastInfo = pending;
+                return;
+            }
+            applyingHost = host;
             java.lang.reflect.Field f = infoField(infoClass);
             Object before = f != null ? f.get(host) : null;
             set.invoke(host, pending);
@@ -401,6 +409,20 @@ public final class SemBlurBridge implements Backdrop {
         }
         catch (ReflectiveOperationException | RuntimeException e) { Probe.error("SEM_BLUR_APPLY_FAILED", e); }
         finally { applying = false; applyingHost = null; }
+    }
+    private boolean suspended;
+    /**
+     * A row drawn as the stacked sliver under a collapsed group (scaled horizontally, mostly clipped)
+     * gets its region at a fractional, elliptical size: the corner tag does not survive, and the full
+     * untagged region showed white behind the group over a white app. While suspended the view
+     * carries no blur; the glass still draws the sliver. Resuming applies the last blur again.
+     */
+    public void setSuspended(boolean on) {
+        if (suspended == on) return;
+        suspended = on;
+        if (released || lastInfo == null) return;
+        pending = lastInfo;
+        if (!posted) { posted = true; host.post(apply); }
     }
     /**
      * Applies the last blur again. Called on events that can drop it (shade opened or closed, row
