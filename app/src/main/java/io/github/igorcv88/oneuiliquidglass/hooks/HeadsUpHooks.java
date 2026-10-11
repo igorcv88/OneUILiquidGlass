@@ -151,6 +151,7 @@ public final class HeadsUpHooks {
             }
         };
         for (String n : new String[]{"onFinishInflate", "setHeadsUp", "setPinned", "setHeadsUpAnimatingAway", "startAppearAnimation", "onAppearAnimationFinished", "setUserExpanded", "setOnKeyguard", "onAttachedToWindow"}) hook(rowClass, n, rowEvent);
+        new HeaderGapHooks(loader, rowClass, () -> enabled).install();
         installShade();
         installBarState();
         installScrimClamp();
@@ -174,6 +175,7 @@ public final class HeadsUpHooks {
         if (enabled && (!drawHook || !shadeHook)) Probe.log("GLASS_UNAVAILABLE", "drawHook=" + drawHook + " shadeHook=" + shadeHook);
     }
     private final Set<String> foreignBlurLogged = new java.util.HashSet<>();
+    private final Set<String> shelfTagLogged = new java.util.HashSet<>();
     /** Stack walks are costly on a per-frame path; provenance is only gathered for the first calls. */
     private int foreignBlurTraces = 200;
     /**
@@ -213,6 +215,12 @@ public final class HeadsUpHooks {
                             // radius of 1-3 and back, each step with the panel's dark color curve. Only radii
                             // up to 4 are dropped: a pull-down or the bouncer passes that within a few frames.
                             p.args[0] = null;
+                        }
+                        if (p.args[0] != null && v.getClass().getName().endsWith("NotificationShelfBackgroundView")) {
+                            // The shelf under a collapsed stack keeps SystemUI's own blur, which a white
+                            // app behind turned white: it gets the shade legibility tag too.
+                            String done = SemBlurBridge.tagForeign(p.args[0]);
+                            if (shelfTagLogged.add(done.replaceAll("[0-9.]+", "#"))) Probe.log("SEM_BLUR_SHELF", "tag=" + done);
                         }
                         boolean managed = compositorState(v) != null;
                         String caller = Probe.trace && foreignBlurTraces > 0 && foreignBlurLogged.size() < 40 ? blurCaller() : null;
@@ -398,6 +406,16 @@ public final class HeadsUpHooks {
                 ? ((Number) height).floatValue() > 0.5f : null;
         if (next != null && !next.equals(shadeExpanded)) {
             shadeExpanded = next; Probe.log("SHADE", "expanded=" + next);
+            if (Probe.trace && next) {
+                // Every blur in the shade window once it has settled: finds blurs no hook knows about.
+                for (State s : states.values()) {
+                    View v = s.background.get();
+                    if (v == null || !v.isAttachedToWindow()) continue;
+                    View root = v.getRootView();
+                    v.postDelayed(() -> Probe.blurCensus(root, "shadeOpen"), 1200);
+                    break;
+                }
+            }
             for (State state : new ArrayList<>(states.values())) {
                 // Opening the shade is when cards were seen without their blur: apply it again.
                 if (state.glass != null) state.glass.reassertBackdrop();
@@ -466,6 +484,8 @@ public final class HeadsUpHooks {
         final float[] lastRadii = new float[8];
         final int[] location = new int[2], lastLocation = {Integer.MIN_VALUE, Integer.MIN_VALUE};
         int tuningGeneration;
+        /** The row is scaled into a collapsed group's stack (see onPreDraw). */
+        boolean stacked;
         State(View background, View row) { this.background = new WeakReference<>(background); this.row = new WeakReference<>(row); }
         void invalidate() { View v = background.get(); if (v != null) v.invalidate(); }
         @Override public void onViewAttachedToWindow(View view) {
@@ -504,11 +524,21 @@ public final class HeadsUpHooks {
             long started = Perf.start();
             try {
                 View v = background.get(); if (v == null) return true;
+                // A row scaled into the stack under a collapsed group: its blur region reaches the
+                // compositor at a fractional, elliptical size that drops the corner tag (white behind
+                // groups over a white app). Such rows carry no region; the glass draws the sliver.
+                View sr = row.get();
+                boolean stacked = sr != null && (Math.abs(sr.getScaleX() - 1f) > 0.005f || Math.abs(sr.getScaleY() - 1f) > 0.005f);
+                if (stacked != this.stacked) {
+                    this.stacked = stacked;
+                    Probe.log("ROW_STACKED", "viewId=" + Integer.toHexString(System.identityHashCode(v)) + " stacked=" + stacked);
+                    if (semBridge != null) semBridge.setSuspended(stacked);
+                }
                 if (compBridge != null) {
                     // Ancestor alpha (a pull up from the lockscreen) fades the drawn glass but not
                     // the compositor's blur region, which stayed behind as a ghost of the card.
-                    float a = 1f;
-                    for (Object p = v; p instanceof View; p = ((View) p).getParent()) a *= ((View) p).getAlpha();
+                    float a = stacked ? 0f : 1f;
+                    for (Object p = v; p instanceof View && a > 0f; p = ((View) p).getParent()) a *= ((View) p).getAlpha();
                     if (compBridge.setRegionFade(a)) v.invalidate();
                 }
                 boolean eligible = eligible();
@@ -686,6 +716,7 @@ public final class HeadsUpHooks {
                         : kind == Backdrop.Kind.SAMSUNG ? (semBridge = SemBlurBridge.create(v))
                         : drawablePath() ? (compBridge = BackgroundBlurBridge.create(v, true)) : BackgroundBlurBridge.create(v);
                 if (compBridge != null) SemBlurBridge.clearNative(v);
+                if (semBridge != null) semBridge.setSuspended(stacked);
                 glass = new GlassDrawable(backdrop, v.getResources().getDisplayMetrics().density, spec);
                 glassKind = kind;
                 glassSource = source;
@@ -730,13 +761,26 @@ public final class HeadsUpHooks {
             return Eligibility.sharedBackdrop(shadeExpanded, Reflect.bool(r, "isOnKeyguard", "mOnKeyguard"));
         }
         void refreshLens() {
+            View r = row.get();
+            Boolean keyguard = Reflect.bool(r, "isOnKeyguard", "mOnKeyguard");
+            boolean kgSurface = Eligibility.keyguardOptics(barState, Reflect.bool(r, "isHeadsUpState", "mIsHeadsUp"));
+            boolean lens = Eligibility.lens(barState, shadeExpanded, keyguard);
+            // The edge shader steps back only for a card the compositor demonstrably lights: profile
+            // 1 requested, a tag that survives every program (radius and shape), and a library whose
+            // profile-1 optics are confirmed (debug.oulg.sf.optics). Otherwise it keeps its lighting.
+            if (glass != null) {
+                float[] radii = shape();
+                boolean tagged = SemBlurBridge.tagProfile(lens, kgSurface) == 1 && SemBlurBridge.reliableTag(radii[0])
+                        && (compBridge != null || (semBridge != null && semBridge.tagsShape(radii)));
+                glass.setCompositorLit(tagged && Tuning.get().sfOptics >= 9);
+            }
             if (compBridge != null) {
-                try { compBridge.setLens(Eligibility.lens(barState, shadeExpanded, Reflect.bool(row.get(), "isOnKeyguard", "mOnKeyguard"))); }
+                try { compBridge.setOptics(kgSurface, lens); }
                 catch (ReflectiveOperationException | RuntimeException e) { Probe.error("BLUR_DRAWABLE_LENS_FAILED", e); }
                 return;
             }
             if (semBridge == null) return;
-            try { semBridge.setLens(Eligibility.lens(barState, shadeExpanded, Reflect.bool(row.get(), "isOnKeyguard", "mOnKeyguard"))); }
+            try { semBridge.setOptics(kgSurface, lens); }
             catch (ReflectiveOperationException | RuntimeException e) { Probe.error("SEM_BLUR_LENS_FAILED", e); }
         }
         void release() {

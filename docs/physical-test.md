@@ -33,3 +33,28 @@ Compare light/dark apps with moving content. Record short screen videos plus log
 Check expanded QS, lock/unlock, keyboard, rotation, changing day/night theme and device blur availability. Native materials should return when ineligible; repeated heads-up cycles should not accumulate listeners or stale blur regions. After a rendering error, that row stays native until replaced. Disable the module in LSPosed and restart SystemUI to recover.
 
 Report firmware fingerprint, APK version, Samsung Detailed/Brief selection, test sequence, logs, visual result and any SystemUI exception. Screenshots alone cannot establish lifecycle cleanup or synchronization.
+
+## Expanded header gap
+
+Applies with glass mode on. Keep the font scale, display size and resolution fixed for every screenshot.
+
+1. **Reference.** Start a large Chrome download, pull down the shade and expand the notification. Send yourself a regular message (not a conversation bubble) and expand it too.
+2. **Before.** Run `su -c 'setprop debug.oulg.headergap 0'`. Collapse and expand each notification again, then take a screenshot.
+3. **After.** Run `su -c 'setprop debug.oulg.headergap 4'`. Collapse and expand, then take a screenshot. At density 3.0 the title starts 12 px lower; at 3.5 it starts 14 px lower. The space between the title and the progress bar is the same in both screenshots.
+4. **Measure** with the shade open on the expanded notification. The dump contains notification text, so review it before sharing.
+
+   ```sh
+   su -c 'uiautomator dump /sdcard/Download/n.xml >/dev/null; grep -oE "resource-id=\"android:id/(notification_header|title|text|progress|right_icon)\"[^>]*bounds=\"[^\"]*\"" /sdcard/Download/n.xml | sed -E "s/\" .* bounds=/\" bounds=/"'
+   ```
+
+   The gap is the top of `title` minus the bottom of `notification_header`; compare it between the two dumps.
+5. **Log.** `su -c 'logcat -d -s OULG | grep HEADER_GAP'` should show `installed=true` and `HEADER_GAP_PASS ... outcome=applied` for both notifications.
+   - With `debug.oulg.trace=1`, `HEADER_GAP_MEASURE` gives `gapPx` in window coordinates without uiautomator. Between `headergap 0` and `4` it should differ by 12 px at density 3.0 and by 14 px at 3.5.
+   - If you see `structure`, `noHeader`, `noTitle` or `HEADER_GAP_UNSUPPORTED`, set `debug.oulg.trace=1`, restart SystemUI, post the notification again, expand it, and send the `HEADER_GAP_TREE` lines.
+6. **Must not change.**
+   - The collapsed row and the heads-up pop-up (including an expanded pop-up) look the same as with `headergap 0`.
+   - With a group, expand the group and then one child.
+   - At font scale 200 %, a long title wraps without overlapping the header or clipping the bottom of the card. `outcome=noRoom` is the expected fallback when the card is at its height cap.
+   - The glass covers the taller card exactly: no gap at the bottom rim, and the refraction band is on the outline.
+   - Check RTL with the device language set to Arabic or Hebrew.
+   - The progress updates every second without the title jumping.

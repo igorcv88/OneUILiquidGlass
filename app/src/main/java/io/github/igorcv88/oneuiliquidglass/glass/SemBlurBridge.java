@@ -36,7 +36,7 @@ public final class SemBlurBridge implements Backdrop {
     private int lastPx, lastTint;
     private final float[] lastRadii = new float[8];
     private boolean built;
-    /** Whether the corner radius carries the compositor-lens tag (with sfrefract); see {@link #setLens}. */
+    /** Whether the corner radius carries the compositor-lens tag (with sfrefract); see {@link #setOptics}. */
     private boolean lens = true;
     /** Event-driven: a layout that resizes the view rebuilds a clip-path blur, nothing polls. */
     private final View.OnLayoutChangeListener resize = (v, l, t, r, b, ol, ot, or, ob) -> {
@@ -215,7 +215,7 @@ public final class SemBlurBridge implements Backdrop {
             case "none": return mode;
             case "single":
                 if (corner == null) break;
-                corner.invoke(b, Tuning.get().sfRefract && lens ? sfTag(radii[0], Tuning.get().sfLens) : radii[0]);
+                corner.invoke(b, cornerTag(radii[0], tagProfile(lens, keyguard)));
                 return mode;
             case "path":
                 if (clipPath == null || host.getWidth() <= 0 || host.getHeight() <= 0) break;
@@ -233,37 +233,144 @@ public final class SemBlurBridge implements Backdrop {
     }
     /**
      * Corner radius carrying the tag the sfhook shader rewrite looks for (sfhook/refract.h): a
-     * fraction in [0.55, 0.70] that encodes the lens strength k = 0.1 + 1.1 * (fraction - 0.55) / 0.15.
-     * floor(r) - 1 + fraction is never above r, so Skia keeps it on a pill whose radius is half its
-     * height (a larger radius is clamped and loses the tag). Off by at most 1.45 px; radii the shader
-     * ignores (40 px or less) stay untagged.
+     * fraction in a 0.15-wide band that encodes the lens strength k = 0.1 + 1.1 * (fraction - base)
+     * / 0.15. The band is the optical profile: [0.55, 0.70] the established (heads-up) material,
+     * [0.30, 0.45] the lockscreen material. floor(r) - 1 + fraction is never above r, so Skia keeps
+     * it on a pill whose radius is half its height (a larger radius is clamped and loses the tag).
+     * Off by at most 1.45 px (heads-up band, kept as it was) or 1.15 px (lockscreen band); radii the
+     * shader ignores (40 px or less) stay untagged.
      */
-    static float sfTag(float radius, float strength) {
+    static float sfTag(float radius, float strength) { return sfTag(radius, strength, 0); }
+    static float sfTag(float radius, float strength, int profile) {
         if (radius <= 42f) return radius;
         float s = Math.max(0f, Math.min(1f, (strength - 0.1f) / 1.1f));
-        return (float) Math.floor(radius) - 1f + 0.55f + 0.15f * s;
+        if (profile != 1 && profile != 2) return (float) Math.floor(radius) - 1f + 0.55f + 0.15f * s;
+        // The lockscreen and shade bands take the largest tagged radius not above r (at most 1.15 px off).
+        float tag = (float) Math.floor(radius) + (profile == 1 ? 0.30f : 0.05f) + 0.15f * s;
+        return tag <= radius ? tag : tag - 1f;
     }
     /**
-     * Cards in the expanded shade stay a diffuse blur; the others carry the lens tag. A change
-     * rebuilds the blur with the last inputs.
+     * Whether a corner radius carries a tag the compositor reads on every program: above the 42 px
+     * floor, and below 127.5, where an fp16 radius uniform (the clip program's) can still tell the
+     * bands apart (sfhook/tools/field_check.c).
      */
-    public void setLens(boolean on) throws ReflectiveOperationException {
-        if (lens == on) return;
-        lens = on;
-        Probe.log("SEM_BLUR_LENS", "on=" + on + " view=" + Integer.toHexString(System.identityHashCode(host)));
+    public static boolean reliableTag(float radius) { return radius > 42f && radius < 127.5f; }
+    /**
+     * The profile a card's tag carries, or -1 for none: lens cards take their optics profile, other
+     * cards the shade legibility profile 2 (debug.oulg.shadetone), all only with the compositor hook.
+     */
+    public static int tagProfile(boolean lens, boolean keyguard) {
+        Tuning t = Tuning.get();
+        if (!t.sfRefract) return -1;
+        if (lens) return profile(keyguard);
+        return t.shadeTone ? 2 : -1;
+    }
+    /**
+     * Profile 2's strength channel carries the text colour: light text (dark theme) 0.3, dark text
+     * (light theme) 1.0; the shader splits them at 0.65.
+     */
+    static float shadeStrength() {
+        int night = android.content.res.Resources.getSystem().getConfiguration().uiMode
+                & android.content.res.Configuration.UI_MODE_NIGHT_MASK;
+        return night == android.content.res.Configuration.UI_MODE_NIGHT_NO ? 1.0f : 0.3f;
+    }
+    /** The radius to send for a card carrying profile p (-1: the radius itself). */
+    static float cornerTag(float radius, int p) {
+        if (p < 0) return radius;
+        return sfTag(radius, p == 2 ? shadeStrength() : strength(p), p);
+    }
+    private static java.lang.reflect.Field[] foreignCorners;
+    private static java.lang.reflect.Field foreignPath;
+    /**
+     * Tags a blur SystemUI sets itself on a view the module does not draw (the notification shelf's
+     * background, under the "N more notifications" stack) with the shade legibility profile: its
+     * corner radius fields, found by name and type, are rewritten in place before the call goes
+     * through. A blur clipped to a path cannot carry the tag and is left alone. Returns what was
+     * done, for the log.
+     */
+    public static String tagForeign(Object info) {
+        if (info == null || tagProfile(false, false) != 2) return "off";
+        try {
+            if (foreignCorners == null) {
+                java.util.List<java.lang.reflect.Field> found = new java.util.ArrayList<>();
+                for (Class<?> c = info.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
+                    for (java.lang.reflect.Field f : c.getDeclaredFields()) {
+                        if (java.lang.reflect.Modifier.isStatic(f.getModifiers())) continue;
+                        String n = f.getName().toLowerCase(java.util.Locale.ROOT);
+                        if (n.contains("corner") && (f.getType() == float.class || f.getType() == float[].class)) { f.setAccessible(true); found.add(f); }
+                        if (f.getType() == android.graphics.Path.class && foreignPath == null) { f.setAccessible(true); foreignPath = f; }
+                    }
+                }
+                foreignCorners = found.toArray(new java.lang.reflect.Field[0]);
+            }
+            if (foreignCorners.length == 0) return "noCornerField";
+            if (foreignPath != null && foreignPath.get(info) != null) return "clipPath";
+            StringBuilder out = new StringBuilder();
+            for (java.lang.reflect.Field f : foreignCorners) {
+                if (f.getType() == float.class) {
+                    float r = f.getFloat(info), t = cornerTag(r, 2);
+                    f.setFloat(info, t);
+                    out.append(f.getName()).append('=').append(r).append("->").append(t).append(' ');
+                } else {
+                    float[] radii = (float[]) f.get(info);
+                    if (radii == null) continue;
+                    for (int i = 0; i < radii.length; i++) radii[i] = cornerTag(radii[i], 2);
+                    out.append(f.getName()).append("[]").append(' ');
+                }
+            }
+            return out.toString().trim();
+        } catch (ReflectiveOperationException | RuntimeException e) { return "failed:" + e.getClass().getSimpleName(); }
+    }
+    /** Whether this bridge's shape setting sends the tag (only the single-radius shape can carry it). */
+    public boolean tagsShape(float[] radii) {
+        String mode = Tuning.get().semShape;
+        boolean uniform = radii[0] == radii[2] && radii[2] == radii[4] && radii[4] == radii[6];
+        if (mode.equals("auto")) return uniform && corner != null;
+        return mode.equals("single") && corner != null;
+    }
+    /**
+     * The optics profile of a lens card: 1 (lockscreen material) for lockscreen cards unless
+     * debug.oulg.kgoptics=0, and for heads-up cards only with debug.oulg.huoptics=1.
+     */
+    public static int profile(boolean keyguard) {
+        Tuning t = Tuning.get();
+        return (keyguard ? t.kgOptics : t.huOptics) == 1 ? 1 : 0;
+    }
+    /** Lens strength carried by a profile's tag: kglens for profile 1 (unless -1), sflens otherwise. */
+    public static float strength(int profile) {
+        Tuning t = Tuning.get();
+        return profile == 1 && t.kgLens >= 0f ? t.kgLens : t.sfLens;
+    }
+    /** Whether this card sits on the lockscreen (or the shade over it) rather than in a heads-up. */
+    private boolean keyguard;
+    /**
+     * Sets the surface (picks the optics profile) and the lens together; a change rebuilds the blur
+     * once with the last inputs.
+     */
+    public void setOptics(boolean keyguard, boolean lens) throws ReflectiveOperationException {
+        if (this.keyguard == keyguard && this.lens == lens) return;
+        if (this.lens != lens) Probe.log("SEM_BLUR_LENS", "on=" + lens + " view=" + Integer.toHexString(System.identityHashCode(host)));
+        this.keyguard = keyguard; this.lens = lens;
         if (built && !released) update(lastPx, lastTint, lastRadii);
+    }
+    /** "s,c,x0,x1,y0,y1" as six floats; null for anything else (presets, none, malformed). */
+    static float[] explicitCurve(String spec) {
+        if (spec == null || spec.indexOf(',') < 0) return null;
+        String[] p = spec.split(",");
+        if (p.length != 6) return null;
+        float[] v = new float[6];
+        try { for (int i = 0; i < 6; i++) v[i] = Float.parseFloat(p[i].trim()); }
+        catch (NumberFormatException e) { return null; }
+        return v;
     }
     /** spatial|dim|ultra pick Samsung's presets for the current theme; "s,c,x0,x1,y0,y1" is explicit. */
     private void applyCurve(Object builder, String spec) {
         if (spec == null || spec.isEmpty() || spec.equals("none")) return;
         try {
             if (spec.indexOf(',') >= 0) {
-                if (curve == null) return;
-                String[] p = spec.split(",");
-                if (p.length != 6) return;
-                Object[] v = new Object[6];
-                for (int i = 0; i < 6; i++) v[i] = Float.parseFloat(p[i].trim());
-                curve.invoke(builder, v);
+                float[] f = explicitCurve(spec);
+                if (curve == null || f == null) return;
+                curve.invoke(builder, f[0], f[1], f[2], f[3], f[4], f[5]);
                 return;
             }
             if (curvePreset == null) return;
@@ -279,7 +386,15 @@ public final class SemBlurBridge implements Backdrop {
         posted = false;
         if (released || pending == null) return;
         try {
-            applying = true; applyingHost = host;
+            applying = true;
+            if (suspended) {
+                // The card is drawn as a stacked sliver: no region (see setSuspended). No applying
+                // host: the blur guard blocks a clear nested inside an apply on that host.
+                set.invoke(host, (Object) null);
+                lastInfo = pending;
+                return;
+            }
+            applyingHost = host;
             java.lang.reflect.Field f = infoField(infoClass);
             Object before = f != null ? f.get(host) : null;
             set.invoke(host, pending);
@@ -294,6 +409,20 @@ public final class SemBlurBridge implements Backdrop {
         }
         catch (ReflectiveOperationException | RuntimeException e) { Probe.error("SEM_BLUR_APPLY_FAILED", e); }
         finally { applying = false; applyingHost = null; }
+    }
+    private boolean suspended;
+    /**
+     * A row drawn as the stacked sliver under a collapsed group (scaled horizontally, mostly clipped)
+     * gets its region at a fractional, elliptical size: the corner tag does not survive, and the full
+     * untagged region showed white behind the group over a white app. While suspended the view
+     * carries no blur; the glass still draws the sliver. Resuming applies the last blur again.
+     */
+    public void setSuspended(boolean on) {
+        if (suspended == on) return;
+        suspended = on;
+        if (released || lastInfo == null) return;
+        pending = lastInfo;
+        if (!posted) { posted = true; host.post(apply); }
     }
     /**
      * Applies the last blur again. Called on events that can drop it (shade opened or closed, row

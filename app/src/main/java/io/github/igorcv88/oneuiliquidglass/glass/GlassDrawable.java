@@ -65,6 +65,14 @@ public final class GlassDrawable extends Drawable {
     }
     public boolean failed() { return failed; }
     public void setPressed(boolean on) { if (pressed != on) { pressed = on; invalidateSelf(); } }
+    /**
+     * The compositor lights this card (sfhook profile 1: rim reflectance and specular from the real
+     * backdrop): the edge shader keeps a thinner hairline for the outline and drops its own lit runs
+     * and thickness shadow.
+     */
+    private boolean compositorLit;
+    public void setCompositorLit(boolean on) { if (compositorLit != on) { compositorLit = on; invalidateSelf(); } }
+    static final float LIT_HAIR_GAIN = 0.5f;
     /** See {@link Backdrop#reassert()}. */
     public void reassertBackdrop() { if (!failed) backdrop.reassert(); }
     /** Compositor-blur body with a captured lens band (see {@link HybridBackdrop}). */
@@ -145,6 +153,8 @@ public final class GlassDrawable extends Drawable {
         s.setFloatUniform("light", spec.lightX, spec.lightY);
         s.setFloatUniform("specular", spec.specular);
         s.setFloatUniform("shadow", spec.innerShadow);
+        s.setFloatUniform("hairGain", compositorLit ? LIT_HAIR_GAIN : 1f);
+        s.setFloatUniform("decor", compositorLit ? 0f : 1f);
     }
     /**
      * False until the first frame arrives; the caller then draws veil and edge alone.

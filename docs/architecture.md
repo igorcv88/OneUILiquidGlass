@@ -427,6 +427,163 @@ Three defects on the lockscreen with the compositor lens, all now fixed and conf
 
 The idea came from an outside review of the earlier handoff, which had concluded too early that both defects were out of the app's reach.
 
+### One optical library for both programs; per-surface profiles (sfhook v0.8, 2026-10-10)
+
+Device report at v0.7 with `sfrefract=1`, `sflens=0.30`, `semradiuslens=16`, `semalpha=12`:
+- `kgblurpath=0` (Samsung blur on the view): body homogeneous and well filtered, but the region flickers and lags on the lockscreen.
+- `kgblurpath=1` (`BackgroundBlurDrawable` drawn with the glass): stable, but the body looks under-filtered and blotchy.
+- `semradiuslens` 12 → 16 helped; 16 → 20 did not fix it.
+
+**Which program draws each path.** The Samsung path is proven to be the FillRRect program: `sf.debug=1` painted it magenta. The drawable path was never tinted, so its program is not proven on device. The code shows two rewrites with different content:
+- `oulg_rewrite_fragment` (FillRRect) applies the lens, the B-spline and the layered body blur.
+- `oulg_rewrite_clip` (CircularRRectEffect, uniforms `uinnerRect`/`uradiusPlusHalf`) applied only the lens. It sampled the texture bilinearly, the v0.6 "144p" defect, and had no body blur.
+
+A card drawn through the clip program looks exactly like the report: rim refraction present, body under-filtered and blotchy, better at radius 16 than 12 but not cured by 20. A WebGL2 render of the v0.7 clip rewrite over the same synthetic quarter-resolution texture leaves 17 times the background structure in the body that the FillRRect rewrite leaves (RMS 27.1 vs 1.6). This is strong evidence, not device proof. The deciding test is the tint: with `sf.debug=1` and `kgblurpath=1`, cyan means the clip program, magenta means FillRRect. If it is magenta, the remaining difference is the compositor's blur input, which the Samsung path may build differently (it can carry a color curve); `BLUR_DRAWABLE_API` logs what the drawable can set.
+
+**Change: one shared library.** Both rewrites now inject the same GLSL: `oulg_field`, the B-spline, the Vogel discs and the sampling switch. Each program only maps its own geometry into the card's pixel frame:
+- FillRRect: `q = vp · hs`, back to the screen through the inverse Jacobian of `vp`, then to the texture through the texture Jacobian.
+- Clip: `q = sk_FragCoord − centre`, where the centre and size come from `uinnerRect` and `uradiusPlusHalf`, back through `dFdx`/`dFdy`, with the `u_skRTFlip` sign on y.
+
+The clip path also gained the full rounded-rect depth, inside the inner rect too, which the body ramp needs. Before, its depth was only defined in the rim band. On the render check, the two programs draw the same card within 1/255.
+
+**Surface isolation: optical profiles.** Heads-up rendering is the established baseline and must not move with lockscreen work. The tag now carries a profile beside the strength:
+- **Profile 0, established:** fraction band [0.55, 0.70], unchanged. Heads-up cards, and lockscreen cards with `debug.oulg.kgoptics=0`.
+- **Profile 1, lockscreen:** fraction band [0.30, 0.45], taking the largest tagged radius not above r (at most 1.15 px off).
+- The vertex shader and the clip program decode `kp = k + 2·profile`, and `oulg_field` splits it.
+- **Who gets profile 1:** `Eligibility.keyguardOptics(barState, headsUp)` decides. It is true for bar state 1 or 2 and never for a heads-up.
+- **A/B:** the module sets the profile live from `debug.oulg.kgoptics` (default 1), so switching needs no SurfaceFlinger restart.
+
+Profile 0's output is bit-identical to v0.7's: the render check shows a maximum difference of 0 against the v0.7 FillRRect rewrite. The expanded shade is untagged and samples exactly as before.
+
+**Lockscreen material (profile 1).** Parameters, read at compile time:
+- `sf.kgcore` 56 px: body blur radius.
+- `sf.kgtaps` 32: same tap density as 24 at 48 px.
+- `sf.kgramp` 1.5.
+- `sf.kgsat` 1.25: vibrancy. The body's saturation rises with the body blur, around Rec. 709 luma, and stays premultiplied-valid. It counters the gray, washed-out look of a veiled, desaturated blur.
+
+The lens is the same as profile 0: the rim matches within 2/255, the residue of the 0.25 px tag-radius difference. On the synthetic texture, profile 1 leaves less body structure (1.44 vs 1.62) at slightly more grain (3.93 vs 3.79, mostly chroma from the vibrancy).
+
+**Cost.** The B-spline is skipped once the disc fully replaces it (body radius ≥ 6 px).
+- Profile 0 drops from about 24.3 to 21.3 texture reads per card pixel on a 1340×216 card, at identical output.
+- Profile 1 reads about 26–28 per pixel in the body.
+- Cards drawn by the clip program go from 1 to about 21–28 reads per pixel. That is the price of the filtering they were missing, and equals what FillRRect-drawn cards already cost.
+- Untagged draws are unchanged.
+
+**Field validation** (`sfhook/tools/field_check.c`, 8·10⁷ grid points, 7 card shapes, 6 strengths, both profiles):
+- Shift is inward and at most `k·bevel`.
+- C1 at the band's inner edge.
+- 2-D Jacobian of `q → q + s(q)` matches `det = (1 − 2kt)(1 − k·bevel·t²/ρ)` within 2·10⁻⁹. On the straight edges the second factor is 1.
+- det > 0 for k ≤ 0.5. The map folds, as a mirrored rim band, exactly where t > 1/(2k) for k > 0.5. At the user's 0.30 the minimum radial stretch is 0.4, so there is no fold. The code default `sflens` 0.7 does fold over the outer 29 % of the bevel.
+- The body radius is monotone, 0 before a quarter bevel and the core radius past the ramp.
+- Both programs decode the same `kp`.
+- A mediump (fp16) `uradiusPlusHalf` keeps the profile below r = 127.5. From 128 the fp16 step can drop a clip-drawn card's tag (both profiles; FillRRect is highp).
+
+**Host checks:** `sfhook/tools/check.sh` runs the field check, then rewrites `tools/testdata/synthetic_dump.txt`. That dump holds Skia-style FillRRect and clip programs, sampler2D and external, flipped and not. Every rewrite must compile and link with glslangValidator. `sfhook/tools/render_check.mjs` renders both programs and both profiles in WebGL2 (headless Chromium, SwiftShader) and prints the comparisons above. The synthetic programs are modelled on Skia's output; the device's 138-shader dump was not available in this session.
+
+### Lockscreen material: one thick-slab model (sfhook v0.9, 2026-10-10)
+
+Brief: surpass both lockscreen renderers while keeping `kgblurpath=1`'s stability. The interior read as cloudy and dirty, and the rim as low-quality refraction with a decorative glowing outline. Heads-up rendering stays the reference: profile 0 is untouched (bit-identical to v0.7) and the expanded shade is untagged. All of this lives in profile 1, which lockscreen cards carry by default.
+
+**One spatial model.** Every term derives from the bevel coordinate `t = 1 − depth/bevel`, the outward normal `n` and one profile `G(t) = t²(3 − 2t)`.
+
+- **Refraction.** The shift is `A·bevel·G(t)`, with `A = min(k, 0.5)` (0.55 in v0.9; see v0.10). The radial Jacobian is `1 − 6At(1−t)`:
+  - It is 1 at the outline, so text crossing the rim is offset, not stretched.
+  - It is 1 at the inner edge, so the join to the interior is C1.
+  - Its minimum is mid-band, `1 − 1.5A ≥ 0.25`, so the map never folds.
+  - Profile 0's quadratic, by contrast, has its strongest stretch at the outline (`1 − 2k`) and folds above k = 0.5.
+  - The sampling map's singular values stay ≤ 1, so the texture is only magnified, never minified (no aliasing). A detail still grows up to 1/σ_min on screen: 2.5× at 0.40, 4× at the cap.
+- **Rim transmission and reflection.** The surface tilt follows the same `G` (shift ∝ thickness × slope), reaching 1.2 rad at the outline. Schlick's excess reflectance mixes the refracted backdrop toward a bright environment. The rim therefore brightens over dark backdrops and stays nearly neutral over bright ones; no outline is drawn.
+- **Specular.** A crescent on the light-facing rim (light from the upper left, as the module's edge optics) and a fainter internal one opposite. They are tinted 30 % by the backdrop's hue and fade over bright backdrops.
+- **Interior.**
+  - A 56 px Vogel disc with 40 taps.
+  - Vibrancy: saturation rises with the body blur, to 1.25.
+  - A soft knee on luma above 0.65, at most −15 %, against milky glare on bright wallpapers.
+- **Lighting moved to the compositor, for profile-1 cards only.** The compositor now owns the lighting, from the real backdrop. The module's edge shader steps back on those cards (`GlassDrawable.setCompositorLit`): no lit runs, no thickness shadow, and the hairline at half gain for the outline. With `kgblurpath=1` the region and the glass are drawn in the same frame, so the v0.4 problem of two misaligned rims does not apply. Heads-up and shade cards keep `decor = hairGain = 1`, which gives identical output.
+
+**Knobs.**
+- **Live:**
+  - `debug.oulg.kgoptics` (lockscreen material on or off).
+  - `debug.oulg.kglens` (profile-1 strength, default 0.40; −1 follows `sflens`).
+  - `debug.oulg.huoptics=1`: opt-in preview of the lockscreen material on heads-up cards.
+- **Compile time** (SurfaceFlinger restart with the cache cleared): `debug.oulg.sf.kgcore` 56, `.kgtaps` 40, `.kgramp` 1.5, `.kgsat` 1.25, `.kgtone` 0.15, `.kgrim` 1.0, `.kgspec` 0.18.
+
+**Measured on the host** (`render_check.mjs`). Reference backdrop: a photographic gradient with a bright half and a dark half, large high-contrast text crossing the top and bottom rims, turned into the compositor's input by a 4× downscale and a light blur. Card 720×300, corner 92.
+
+| | grain | structure (5–40 px) |
+|---|---|---|
+| v0.7 clip (the suspected `kgblurpath=1` program) | 0.33 | 12.5 |
+| profile 0 (heads-up; v0.7 FillRRect, identical) | 1.04 | 2.61 |
+| profile 1 at 24 / 32 / 40 / 48 taps | 1.27 / 0.87 / 0.67 / 0.54 | 2.25 |
+
+- **Lighting alone.** Profile 1 minus the same build without it, mean luma on the straight rims in 1/255: lit top edge +6.7 over bright and +10.0 over dark; bottom edge +1.8 and +3.0.
+- **Program equivalence.** FillRRect and clip draw the same card within 1/255 in both profiles.
+- **Cost** (SwiftShader, relative only). About 0.27 ms of CPU-rasterizer time per 1000 tap-pixels, linear in taps. Per pixel in the body, profile 1 at 40 taps reads ~1.7× profile 0, plus the lighting ALU in the band. Measured lighting cost: about +15 % of a card draw.
+- **Rejected.** Gaussian importance sampling of the disc (taps by the radial CDF, equal weights). It draws the same kernel and was expected to give ~31 % more effective samples by the i.i.d. argument. Measured: more grain (1.33 vs 1.04 at 24 taps). A stratified pattern's outer rings get too sparse.
+
+**Still device-dependent.**
+- Which program draws `kgblurpath=1` (tint test).
+- The real compositor input: its downscale factor and its blur algorithm (Kawase or Samsung's).
+- Adreno timing (`timestats renderEngineTiming`).
+- Whether 40 taps is the right point for battery.
+- Real WhatsApp notifications.
+
+**Considered, not built.**
+- **Sampling the full-resolution original under the rim.** RenderEngine mixes the original input into blur regions below a radius of 10 px (`mixFactor`). A rewrite of that two-texture program could refract sharp content at the rim while the body uses the blur, the strongest rim quality available. Its GLSL is not in any dump seen so far, and a blind rewrite would not match. Next step: the device dump with `kgblurradius` below 10.
+- **Mip-based reconstruction.** The blur texture has no mip chain (`SkMipmapMode::kNone`), so `textureLod` cannot reach coarser levels.
+- **Quad-shared samples through derivatives.** Derivatives are undefined in the non-uniform branch that samples, and coarse derivatives would raise the variance.
+
+### Shade legibility, review fixes (sfhook v0.10, 2026-10-11)
+
+**White app behind the expanded shade.**
+- **Report:** the cards turn white under white (dark-mode) text and nothing can be read. Over any other app they look right.
+- **Cause:** shade cards are an untagged Samsung blur of the app below the shade window, under a light veil (`semalpha` over a white tone). Nothing adapts to the backdrop, so a white app gives a white card.
+- **Fix: profile 2, shade legibility.** Shade cards carry a third tag band, `[0.05, 0.20]` on r (`[0.55, 0.70]` on the clip uniform). It gets no lens, no extra blur and no B-spline: the plain sample, tone-mapped per pixel against the text colour. The tag's strength channel carries that colour: 0.3 for light text (dark theme), 1.0 for dark text; the shader splits them at 0.65.
+  - **Light text:** luma above `cap − 0.12` is compressed exponentially toward `cap` (0.55), keeping hue. White becomes 0.549, mid 0.5 becomes 0.483, and anything below 0.43 is unchanged.
+  - **Dark text:** luma below `lift + 0.12` is lifted toward `lift` (0.45) by mixing with white. Black becomes 0.451.
+  - The curve is C1 at its knee (`field_check.c`).
+- **Knobs:**
+  - `debug.oulg.shadetone` (live, default 1; 0 leaves shade cards untagged).
+  - `debug.oulg.sf.shadecap` and `.shadelift` (compile time).
+- **Untouched:** heads-up cards (profile 0) and the lockscreen (profile 1).
+
+**White strip under every collapsed group (v0.10.4).**
+- **Census.** The strip is the group's first child row drawn as a stack under the summary: `scale=0.92x1.0 ty=15 alpha=0.5 ClipTopAmount=201`, so only 15 px show.
+- **Why the tag is lost.** Its blur region keeps the full 1340×216 bounds. Scaled, it reaches the compositor 1232.8 px wide with elliptical corners, so the whole-pixel and band checks drop the tag. The region then shows the plain blur of the white app.
+- **Not done:** relaxing the shader's whole-pixel check. It would bring back false positives during app-open animations.
+- **Fix:** while a row is scaled (stack state), its blur region is off, and the glass still draws the sliver.
+  - Samsung path: `SemBlurBridge.setSuspended`.
+  - Drawable path: region fade 0.
+- The notification-shelf tag (v0.10.1) stays, harmless: the shelf carried no blur in the census.
+
+**Independent review of v0.9: what changed.**
+- **Magnification.** The `refract.h` text claimed "magnification ≤ 1". It is the sampling map's singular values that are ≤ 1, so the *texture* is magnified by up to 1/σ_min.
+  - `field_check` now prints the bound per strength:
+    - profile 0: 1.25× at 0.10, 2.50× at 0.30, 4.99× at 0.40, 9.97× at 0.45, fold from 0.5;
+    - profile 1: 1.18× / 1.82× / 2.50× / 3.08× / 4.00×.
+  - It checks that profile 1 at its 0.40 default magnifies no more than profile 0 at the user's 0.30 (both 2.5×).
+  - Profile 1's cap drops from 0.55 to 0.5, so the worst case is 4× instead of 5.7×.
+- **Edge lighting handed over only when confirmed.** v0.9 dropped the module's lit runs and shadow whenever Java chose profile 1. Now the edge shader steps back only when all of these hold:
+  - the tag will reach every program: radius above 42 and below 127.5 (the fp16 limit), and on the Samsung path the single-radius shape (a clip path carries no tag);
+  - the library has announced its optics: `debug.oulg.sf.optics ≥ 9`. The library sets it when a fragment rewrite compiles; the boot script sets it when the property is empty; with a live swap and an SELinux refusal, set it by hand.
+
+  Otherwise both lightings apply, which is brighter, rather than none.
+- **Colour curve.** The lockscreen drawable keeps a curve once set, so it now always receives one: the policy's, or the neutral curve (an identity) instead of nothing.
+- **One update per state change.** `setOptics(keyguard, lens)` replaces `setKeyguard` + `setLens`, which could rebuild the blur twice with an intermediate state.
+- **Not changed:**
+  - **The two discs in one program.** Only one runs per pixel. Register allocation is the larger of the two, not their sum; to be measured on the Adreno with the rest of the GPU cost.
+  - **Tag precision above 127.5 px.** Handled by not handing lighting over there (above), not by a new encoding: changing the encoding would change the heads-up tag.
+
+## Expanded notification header gap (2026-10-11)
+
+A layout-only refinement, independent of the glass: in expanded notifications the title sat too close to the header row (`Chrome · 3 hours left · 15:52` over the file name). `HeaderGapHooks` adds `debug.oulg.headergap` dp (default 4, 0 turns it off, at most 8) between the two. The policy, which the host tests cover, lives in `HeaderGap`.
+
+- **Where.** The hook runs before `NotificationContentView.onMeasure`, on `mExpandedChild` only. Within that child it finds the header (`android:id/notification_header`) and the title (`android:id/title`). The view that moves is the highest ancestor of the title that does not contain the header. On the AOSP big templates that is `notification_action_list_margin_target`: a FrameLayout child that the header overlays, offset by its top margin. Its top margin grows by the gap. The title, text, progress bar and actions move down together, and the card measures that much taller. A `right_icon` in the same FrameLayout moves with it only when its top margin is at least the block's: it then starts at or below the block, beside the title. An icon aligned with the header row stays where it is. The target must be a top-gravity FrameLayout child, or a vertical LinearLayout child that comes after the header; any other parent is logged as `HEADER_GAP_UNSUPPORTED` and left alone. **These names are AOSP's. On S938BXXUCZZIC they are unverified until the device log shows `HEADER_GAP_PASS outcome=applied`.**
+- **Not touched.** The contracted and heads-up children are other view instances, so the hook never sees them. An expanded child that is also one of them is skipped. Rows in the heads-up state (`isHeadsUpState`, pinned, or animating away) keep the native spacing, even when the pop-up is expanded. So do rows whose state cannot be read. Templates without both views are skipped too: conversations, fully custom views, and headerless layouts.
+- **Lifecycle.** A per-view ledger keeps the native margin and the value the module wrote. Repeated measures write nothing. If a RemoteViews reapply (a progress update, say) writes the native margin back, the gap is added once more, in the same measure. Resolved views are cached weakly per expanded-child instance, and a reinflation brings a new instance. On every pass the policy picks the target again with a walk up from the header and the title, with no tree search. If an update moved, replaced or dropped a cached view, the margins written to the old views are restored and the instance is resolved again. A layout that had no header or title when it was first resolved stays cached as unsupported, which avoids a `findViewById` per measure; a RemoteViews reapply keeps the layout's views, so that state does not change for the same instance. The write uses `requestLayout()`. It stops at the first ancestor already flagged, which is the case on inflation, reapply and margin resets, so no traversal is added there. Only an unrequested measure (a parent spec change, or a measure outside a traversal) schedules one more traversal, which measures the same values. The draw path does no work.
+- **Room.** If the expanded child then measures `MEASURED_STATE_TOO_SMALL`, its content was cut by the cap, and the gap is taken back. A FrameLayout or LinearLayout root reports that state itself, so reaching the cap exactly is not counted. Only other roots fall back to `measured ≥ mNotificationMaxHeight`, and only when `mExpandedSmartReplyView` is null: AOSP adds the smart reply limit to the cap whenever that view exists, visible or not. The child is measured again in the same pass, and that instance keeps the native spacing. A card that has no room for the gap is never clipped by it.
+- **Glass.** The background view follows the row height, which comes from this measure, so the glass, its blur region and the compositor tag cover the taller card as they cover any other height. No optical code changed.
+- **Diagnostics.** With `debug.oulg.trace=1`, each newly resolved expanded child logs `HEADER_GAP_TREE`, one line per view with class, id, visibility, top, height, top margin and top padding. Use it when the outcome is `structure`, `noHeader` or `noTitle`. Each outcome change also logs `HEADER_GAP_MEASURE` after the next layout: the bottom of the header and the top of the title in window coordinates, `gapPx` between them, and the title's line count.
+
 ## Future work
 
 - **Separate blur for the notification center and the control center.** Theme Park and HomeUp set a single blur amount for both panels. The user runs 12 %: lower leaves the control center unreadable, higher over-blurs the notification list. A split needs its own investigation: find where SystemUI applies the panel blur, whether the two panels are separate blur regions or one window, and whether the module can own one of them.

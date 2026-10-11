@@ -65,6 +65,7 @@ Settings are system properties, read live by the app about once a second unless 
 | `debug.oulg.kgblurradius` | -1 (same as `semradiuslens`) | Blur radius in px on the lockscreen |
 | `debug.oulg.semradius` | 180 | Blur radius under shade cards |
 | `debug.oulg.semalpha` | spec tone | Opacity of the light veil over the blur, 0–255 |
+| `debug.oulg.headergap` | 4 | Extra gap in dp between the header and the title of expanded notifications, 0–8; 0 keeps the native spacing |
 | `debug.oulg.sf.core` | 48 | Body blur radius in px; 0 turns the layered blur off. Read when shaders compile: needs a SurfaceFlinger restart with a cleared cache |
 | `debug.oulg.sf.taps` | 24 | Samples per pixel of the body blur; raise to 32 if the body shows grain. Same restart rule |
 | `debug.oulg.sf.norewrite` | 0 | 1 leaves every SurfaceFlinger shader unchanged. Same restart rule |
