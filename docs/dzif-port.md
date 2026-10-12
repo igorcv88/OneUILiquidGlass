@@ -77,37 +77,45 @@ Casos exercitados no host, com `getprop` e `abort` stubados:
 | `ro.build.fingerprint` | resultado |
 | --- | --- |
 | ZZIC exato | aceito |
-| `...S938BXXUCDZIF_OXMCDZIF...` (forma provável de DZIF) | recusado |
-| `samsung/pa3qxxx/qssi_64:17/.../S938BXXUCDZIF:user/release-keys` | recusado |
+| DZIF exato (`...S938BXXUCDZIF_OXMCDZIF...`) | **aceito** |
+| `samsung/pa3qxxx/qssi_64:17/.../S938BXXUCDZIF:user/release-keys` (`/system`) | recusado |
+| `samsung/pa3qxxx/pa3q:15/AP3A.240905.015.A2/S938BXXUCDZIF:...` (`/vendor`) | recusado |
+| DZIF sem o sufixo do CSC | recusado |
 | ZZI4 exato | recusado |
+| `...S938BXXUCZZHL_OXMCZZHL...` | recusado — build que aparece em metadados de delta ao lado do material DZIF e cuja procedência não foi estabelecida; não alimenta nada neste port |
 | vazio | recusado |
-| ZZIC com espaço no fim | recusado |
+| DZIF com espaço no fim | recusado |
 | entrada da lista trocada por `*` | recusado (nada de glob) |
 
-### Por que DZIF ainda não está na lista
+### DZIF entrou na lista, e por que só agora
 
-**O `ro.build.fingerprint` exato de DZIF não foi lido.** Ele carrega o sufixo do
-CSC — o de ZZIC é
-`samsung/pa3qxxx/pa3q:17/CP2A.260605.016/S938BXXUCZZIC_OXMCZZIC:user/release-keys` —
-e fica em `/vendor/build.prop`. O `vendor_a.img` não foi extraído no material
-de coleta: `core_partitions.txt` lista apenas `product_a`, `system_a`,
-`system_dlkm_a`, `system_ext_a` e `vendor_dlkm_a`. Os `build.prop` disponíveis
-só trazem fingerprints de partição:
+A linha é
+
+```text
+samsung/pa3qxxx/pa3q:17/CP2A.260605.016/S938BXXUCDZIF_OXMCDZIF:user/release-keys
+```
+
+e veio de `getprop ro.build.fingerprint` rodado num aparelho em DZIF. Ela foi
+deixada de fora enquanto só havia fingerprints de partição, que **não** são
+`Build.FINGERPRINT`:
 
 ```text
 ro.system.build.fingerprint=samsung/pa3qxxx/qssi_64:17/CP2A.260605.016/S938BXXUCDZIF:user/release-keys
-ro.system_dlkm.build.fingerprint=samsung/pa3qxxx/pa3q:15/AP3A.240905.015.A2/S938BXXUCDZIF:user/release-keys
+ro.vendor.build.fingerprint=samsung/pa3qxxx/pa3q:15/AP3A.240905.015.A2/S938BXXUCDZIF:user/release-keys
 ```
 
-Nenhum dos dois é `Build.FINGERPRINT`. A forma que falta é óbvia a partir da
-linha de ZZIC, e é exatamente por isso que não foi escrita: um palpite faria
-este gate aceitar uma string que nenhum aparelho foi confirmado reportar, o que
-anula a única função que ele tem. O gate é o que impede o módulo de patchear um
-`surfaceflinger` que ninguém analisou.
+O primeiro traz `qssi_64` no lugar do device e não tem o sufixo do CSC; o
+segundo traz o device certo mas um release e um build id de outra linha
+(`15/AP3A...`, herdado da base do `/vendor`). Nenhum dos dois casa com o valor
+real, e as três formas erradas estão exercitadas na tabela acima justamente
+porque cada uma é um palpite plausível. O gate é o que impede o módulo de
+patchear um `surfaceflinger` que ninguém analisou; uma linha adivinhada o faria
+aceitar uma string que nenhum aparelho foi confirmado reportar.
 
-Para fechar: rodar `getprop ro.build.fingerprint` num aparelho em DZIF (ou ler
-`/vendor/build.prop` de um `vendor_a.img` extraído) e acrescentar a linha.
-Depois disso, nada mais no módulo precisa mudar para instalar em DZIF.
+Com a linha dentro, nada mais no módulo precisa mudar para instalar em DZIF. O
+que continua não observado é o runtime: os shaders GLSL são gerados em execução,
+então a reescrita de `FillRRect` só se confirma no aparelho, por
+`/data/misc/surfaceflinger/oulg_shaders.txt`.
 
 ## 4. SystemUI — o que a coleta já verificou
 
@@ -130,7 +138,10 @@ bloqueio — mas é a primeira coisa a conferir no log de hooks depois do update
 
 ## 5. O que falta, em ordem
 
-1. Ler `ro.build.fingerprint` em DZIF e acrescentar a linha na allowlist.
+1. ~~Ler `ro.build.fingerprint` em DZIF e acrescentar a linha na allowlist.~~
+   Feito. Pela ordem combinada com o dono, o OULG entra **depois** da validação
+   RMG/KernelSU em hardware: este módulo patcheia o `surfaceflinger`, e um
+   aparelho sem root funcional não tem como desfazer isso.
 2. Instalar e reiniciar; confirmar `logcat -s OULG_SF` e
    `getprop debug.oulg.sf.optics`.
 3. Conferir o dump de shaders em

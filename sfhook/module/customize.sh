@@ -6,18 +6,20 @@
 # and never derived from a firmware name: Build.FINGERPRINT carries the CSC suffix, which the
 # firmware's own build number does not give you.
 #
-# S938BXXUCDZIF (One UI 9 Stable) is NOT listed yet, and its absence is deliberate. The offline
-# analysis of that firmware is done - the DZIF surfaceflinger takes this exact patch (88 bytes,
-# DT_DEBUG consumed, first DT_NEEDED becomes SurfaceFlingerProp.so) and still imports
-# glShaderSource and eglGetProcAddress - but its Build.FINGERPRINT has not been read. It lives in
-# /vendor/build.prop, and vendor_a.img was not part of the firmware material that was examined;
-# the partition-level fingerprints that were available
-# (samsung/pa3qxxx/qssi_64:17/CP2A.260605.016/S938BXXUCDZIF:user/release-keys) are not
-# Build.FINGERPRINT. Guessing the missing suffix would make this gate accept a string no device
-# was ever confirmed to report, which defeats the only purpose it has. Add the real line once
-# `getprop ro.build.fingerprint` has been run on DZIF. See docs/handoff.md.
+# S938BXXUCDZIF (One UI 9 Stable) is now listed. Its line was read with
+# `getprop ro.build.fingerprint` on a DZIF device; it was deliberately left out while only
+# partition-level fingerprints were available, because
+# samsung/pa3qxxx/qssi_64:17/CP2A.260605.016/S938BXXUCDZIF:user/release-keys is /system's value,
+# not Build.FINGERPRINT - it carries neither the pa3q device nor the OXMCDZIF CSC suffix. The
+# suffix is the part a firmware name cannot give you, which is why guessing it would have made
+# this gate accept a string no device was ever confirmed to report.
+#
+# The offline analysis that justifies accepting it: the DZIF surfaceflinger takes this exact
+# patch (88 bytes, DT_DEBUG consumed, first DT_NEEDED becomes SurfaceFlingerProp.so) and still
+# imports glShaderSource and eglGetProcAddress. See docs/dzif-port.md.
 ALLOWED_FINGERPRINTS="
 samsung/pa3qxxx/pa3q:17/CP2A.260605.016/S938BXXUCZZIC_OXMCZZIC:user/release-keys
+samsung/pa3qxxx/pa3q:17/CP2A.260605.016/S938BXXUCDZIF_OXMCDZIF:user/release-keys
 "
 FP="$(getprop ro.build.fingerprint)"
 [ -n "$FP" ] || abort "! ro.build.fingerprint vazio; nao da para verificar o firmware"
