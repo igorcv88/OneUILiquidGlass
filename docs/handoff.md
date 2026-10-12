@@ -10,12 +10,13 @@ Registro completo em `docs/dzif-port.md`.
   aceitar dois firmwares. Agora é `ALLOWED_FINGERPRINTS`, uma linha por
   `ro.build.fingerprint`, com ZZIC preservado. A iteração usa `IFS` só em nova
   linha e `set -f` (sem glob), e um `ro.build.fingerprint` vazio aborta.
-- **DZIF ainda NÃO está na allowlist, de propósito.** O
-  `ro.build.fingerprint` exato não foi lido: ele carrega o sufixo do CSC e fica
-  em `/vendor/build.prop`, e o `vendor_a.img` não foi extraído no material de
-  coleta. Os `build.prop` disponíveis só têm fingerprints de partição, que não
-  são `Build.FINGERPRINT`. Um palpite faria o gate aceitar uma string que
-  nenhum aparelho foi confirmado reportar.
+- **DZIF está na allowlist**, com a linha
+  `samsung/pa3qxxx/pa3q:17/CP2A.260605.016/S938BXXUCDZIF_OXMCDZIF:user/release-keys`
+  lida por `getprop ro.build.fingerprint` no aparelho. Ela ficou de fora
+  enquanto só havia fingerprints de partição: a de `/system` traz `qssi_64` no
+  lugar do device e nenhum sufixo de CSC, e a de `/vendor` traz um release e um
+  build id de outra linha (`15/AP3A...`). As três formas erradas estão
+  exercitadas como casos negativos, porque cada uma é um palpite plausível.
 - **O patch do SurfaceFlinger foi reproduzido contra o binário DZIF exato**, não
   assumido: exit 0, biblioteca `SurfaceFlingerProp.so`, **88 bytes** alterados,
   tamanho inalterado, `DT_DEBUG` 1→0, `DT_NEEDED` 55→56, segunda execução dá 2.
