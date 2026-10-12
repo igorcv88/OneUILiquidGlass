@@ -1,7 +1,16 @@
 # Port para One UI 9 Stable (S938BXXUCDZIF) — análise offline
 
 Data: 2026-10-12. Tudo abaixo foi verificado contra os arquivos exatos do
-firmware `S938BXXUCDZIF`; nada foi observado no aparelho.
+firmware `S938BXXUCDZIF`, com **uma** exceção, nomeada aqui porque a fronteira
+de evidência é o ponto deste documento: a linha de `ro.build.fingerprint` da
+allowlist (§3) foi lida com `getprop` num aparelho em DZIF. Ela tinha de ser
+lida — nenhum arquivo de firmware contém `Build.FINGERPRINT`, só fingerprints
+de partição.
+
+Nada mais foi observado no aparelho. Em particular o runtime continua inteiro
+sem observação: os programas GLSL são gerados em execução, então a reescrita de
+`FillRRect` só se confirma pelo dump de shaders, e os hooks do SystemUI, o
+`SurfaceFlingerProp` e o blur da Samsung também não foram exercitados em DZIF.
 
 O módulo foi desenvolvido e validado em `S938BXXUCZZIC` (One UI 9 Beta 3). A
 Stable exige um port de firmware pequeno, não uma arquitetura nova.
