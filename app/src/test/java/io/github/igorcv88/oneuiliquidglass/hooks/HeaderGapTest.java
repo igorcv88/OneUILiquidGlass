@@ -174,11 +174,21 @@ public final class HeaderGapTest {
     }
 
     @Test public void largeIconMovesOnlyWithTheContentBlock() {
-        // Icon aligned with the title (same top as the content block, or lower) moves with it.
-        assertTrue(HeaderGap.iconMoves(126, 126));
-        assertTrue(HeaderGap.iconMoves(140, 126));
-        // Icon aligned with the header row stays.
-        assertFalse(HeaderGap.iconMoves(36, 126));
+        // An icon aligned with the title, or lower, moves with it.
+        assertTrue(HeaderGap.iconMoves(58, 58));
+        assertTrue(HeaderGap.iconMoves(70, 58));
+        // One UI 9 (device dump): block at 0, title at 58, right_icon at 24, level with the header row: it stays.
+        assertFalse(HeaderGap.iconMoves(24, 58));
+        // Unknown title position: the icon stays.
+        assertFalse(HeaderGap.iconMoves(24, -1));
+    }
+
+    @Test public void invisibleTitleKeepsTheGap() {
+        // The collapsed state hides the expanded child's title with INVISIBLE; the gap must stay,
+        // or expanding shows the native spacing until the next layout request (device log 2026-10-11).
+        assertTrue(HeaderGap.laidOut(0));
+        assertTrue(HeaderGap.laidOut(4));
+        assertFalse(HeaderGap.laidOut(8));
     }
 
     @Test public void restoreAfterInvalidationReturnsTheNativeMargin() {

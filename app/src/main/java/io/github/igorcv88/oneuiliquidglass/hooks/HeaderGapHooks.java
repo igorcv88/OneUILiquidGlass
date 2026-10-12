@@ -35,7 +35,7 @@ public final class HeaderGapHooks {
     private final Class<?> rowClass;
     private final WeakHashMap<View, Entry> entries = new WeakHashMap<>();
     private final Set<String> logged = new HashSet<>();
-    private int headerId, rightIconId;
+    private int headerId, rightIconId, topLineId;
 
     /**
      * Resolved views of one expanded child; {@code target == null} marks an unsupported layout. The
@@ -62,6 +62,7 @@ public final class HeaderGapHooks {
         Resources system = Resources.getSystem();
         headerId = system.getIdentifier("notification_header", "id", "android");
         rightIconId = system.getIdentifier("right_icon", "id", "android");
+        topLineId = system.getIdentifier("notification_top_line", "id", "android");
         try {
             Set<XC_MethodHook.Unhook> hooks = XposedBridge.hookAllMethods(content, "onMeasure", new XC_MethodHook() {
                 @Override protected void beforeHookedMethod(MethodHookParam p) {
@@ -94,7 +95,7 @@ public final class HeaderGapHooks {
         boolean structure = target != null;
         boolean shared = expanded == Reflect.read(content, "mContractedChild") || expanded == Reflect.read(content, "mHeadsUpChild");
         String reason = HeaderGap.skipReason(enabled.getAsBoolean(), extra, shared, headsUp(content), structure,
-                structure && header.getVisibility() == View.VISIBLE, structure && shown(title), e.noRoom);
+                structure && HeaderGap.laidOut(header.getVisibility()), structure && shown(title), e.noRoom);
         // Nothing was resolved, so nothing was written and there is no margin to restore.
         if (target == null) { report(e, reason, extra, expanded); return; }
         boolean apply = reason == null;
@@ -192,16 +193,37 @@ public final class HeaderGapHooks {
         }
         e.target = weak(target);
         // A large icon in the same FrameLayout moves with the text only when it starts at or below the
-        // top of the moved block (top-gravity siblings: their tops differ by their margins). An icon
-        // aligned with the header row stays where it is.
+        // title. Both are measured from the top of that FrameLayout. On One UI 9 the moved block
+        // starts at 0 and the title 58 px lower, so the block's own top says nothing about where the
+        // icon sits; an icon aligned with the header row stays.
         if (kind == HeaderGap.PARENT_FRAME && rightIconId != 0) {
             View icon = parent.findViewById(rightIconId);
             if (icon != null && icon.getParent() == parent && icon.getLayoutParams() instanceof ViewGroup.MarginLayoutParams
                     && HeaderGap.shiftable(HeaderGap.PARENT_FRAME, verticalGravity(icon), false)
-                    && HeaderGap.iconMoves(((ViewGroup.MarginLayoutParams) icon.getLayoutParams()).topMargin,
-                            ((ViewGroup.MarginLayoutParams) target.getLayoutParams()).topMargin)) e.rightIcon = weak(icon);
+                    && HeaderGap.iconMoves(((ViewGroup.MarginLayoutParams) icon.getLayoutParams()).topMargin, contentTop(target, title))) e.rightIcon = weak(icon);
         }
         return e;
+    }
+
+    /**
+     * The title's top below the top of the target's parent, from the margins and paddings on the
+     * way down, so it is known before the first layout. Returns -1 when a laid-out sibling above
+     * the title in a vertical LinearLayout makes the static sum wrong.
+     */
+    private static int contentTop(View target, View title) {
+        int top = 0;
+        for (View v = title; v != null; v = parent(v)) {
+            ViewGroup.LayoutParams lp = v.getLayoutParams();
+            if (lp instanceof ViewGroup.MarginLayoutParams) top += ((ViewGroup.MarginLayoutParams) lp).topMargin;
+            if (v == target) return top;
+            ViewGroup p = (ViewGroup) v.getParent();
+            if (p == null) return -1;
+            top += p.getPaddingTop();
+            if (p instanceof LinearLayout && ((LinearLayout) p).getOrientation() == LinearLayout.VERTICAL) {
+                for (int i = 0, n = p.indexOfChild(v); i < n; i++) if (HeaderGap.laidOut(p.getChildAt(i).getVisibility())) return -1;
+            }
+        }
+        return -1;
     }
 
     /** Vertical gravity of a FrameLayout child, or -1 when it is not set. */
@@ -229,8 +251,14 @@ public final class HeaderGapHooks {
         return null;
     }
 
+    /**
+     * The title takes layout space and has text. INVISIBLE counts: while the expanded child is not
+     * the one on screen, SystemUI's transform hides its title with INVISIBLE, and going back to
+     * VISIBLE does not request a layout. Requiring VISIBLE turned the gap off on collapse and never
+     * on again (device log, 2026-10-11).
+     */
     private static boolean shown(View title) {
-        return title.getVisibility() == View.VISIBLE && (!(title instanceof TextView) || ((TextView) title).length() > 0);
+        return HeaderGap.laidOut(title.getVisibility()) && (!(title instanceof TextView) || ((TextView) title).length() > 0);
     }
 
     private static View parent(View v) {
@@ -261,12 +289,17 @@ public final class HeaderGapHooks {
                 + " parent=" + (target == null || target.getParent() == null ? "none" : target.getParent().getClass().getSimpleName())
                 + " baselinePx=" + (target == null ? -1 : e.targetMargin.baseline())
                 + " rightIcon=" + (get(e.rightIcon) != null));
-        if (Probe.trace && header != null && title != null) gapLater(expanded, header, title, e.layout, outcome);
+        if (Probe.trace && header != null && title != null) {
+            View line = topLineId != 0 ? header.findViewById(topLineId) : null;
+            gapLater(expanded, line != null ? line : header, title, e.layout, outcome);
+        }
     }
 
     /**
-     * debug.oulg.trace=1: after the next layout, the real gap between the bottom of the header and
-     * the top of the title, both in window coordinates. Compare headergap=0 with headergap=4.
+     * debug.oulg.trace=1: after the next layout, the gap between the bottom of the header's text
+     * line (notification_top_line) and the top of the title, both in window coordinates. Compare
+     * headergap=0 with headergap=4. The header view itself spans the app icon (180 px on One UI 9),
+     * so its own bottom sits below the title and gave a negative gap.
      */
     private static void gapLater(View expanded, View header, View title, String layout, String outcome) {
         expanded.post(() -> {
@@ -274,7 +307,7 @@ public final class HeaderGapHooks {
             header.getLocationInWindow(h);
             title.getLocationInWindow(t);
             int headerBottom = h[1] + header.getHeight();
-            Probe.log("HEADER_GAP_MEASURE", "layout=" + layout + " outcome=" + outcome + " headerBottom=" + headerBottom
+            Probe.log("HEADER_GAP_MEASURE", "layout=" + layout + " outcome=" + outcome + " line=" + idName(header) + " lineBottom=" + headerBottom
                     + " titleTop=" + t[1] + " gapPx=" + (t[1] - headerBottom) + " titleLines="
                     + (title instanceof TextView ? ((TextView) title).getLineCount() : -1) + " expandedH=" + expanded.getHeight());
         });
