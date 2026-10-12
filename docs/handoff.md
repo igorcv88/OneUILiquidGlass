@@ -2,6 +2,31 @@
 
 Documento para continuar o trabalho em outra conversa. Leia inteiro antes de mexer em qualquer coisa. O histórico técnico detalhado está em `docs/architecture.md`, nas seções de 2026-10-07 a 2026-10-09.
 
+## 0d. Atualização (port offline para One UI 9 Stable, S938BXXUCDZIF)
+
+Registro completo em `docs/dzif-port.md`.
+
+- **`customize.sh` virou allowlist.** Era um `EXPECTED` único, que não consegue
+  aceitar dois firmwares. Agora é `ALLOWED_FINGERPRINTS`, uma linha por
+  `ro.build.fingerprint`, com ZZIC preservado. A iteração usa `IFS` só em nova
+  linha e `set -f` (sem glob), e um `ro.build.fingerprint` vazio aborta.
+- **DZIF ainda NÃO está na allowlist, de propósito.** O
+  `ro.build.fingerprint` exato não foi lido: ele carrega o sufixo do CSC e fica
+  em `/vendor/build.prop`, e o `vendor_a.img` não foi extraído no material de
+  coleta. Os `build.prop` disponíveis só têm fingerprints de partição, que não
+  são `Build.FINGERPRINT`. Um palpite faria o gate aceitar uma string que
+  nenhum aparelho foi confirmado reportar.
+- **O patch do SurfaceFlinger foi reproduzido contra o binário DZIF exato**, não
+  assumido: exit 0, biblioteca `SurfaceFlingerProp.so`, **88 bytes** alterados,
+  tamanho inalterado, `DT_DEBUG` 1→0, `DT_NEEDED` 55→56, segunda execução dá 2.
+  O binário DZIF continua importando `glShaderSource`, `eglGetProcAddress`,
+  `glCreateShader`, `glCompileShader` e `glGetUniformLocation`.
+- **`framework.jar` e `app_process64` são byte-identical a ZZIC**, então as APIs
+  de blur da Samsung e a cadeia LSPosed não mudaram.
+- **Os shaders continuam não validados.** Os programas GLSL são gerados em tempo
+  de execução; só o dump em `/data/misc/surfaceflinger/oulg_shaders.txt` no
+  aparelho responde isso.
+
 ## 0c. Atualização (sfhook v0.10: legibilidade da central e correções da revisão)
 
 Detalhes técnicos em `docs/architecture.md`, seção "Shade legibility, review fixes".

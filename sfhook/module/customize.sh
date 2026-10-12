@@ -1,8 +1,40 @@
 # KernelSU install script. The surfaceflinger binary is copied and patched on this device; no
-# Samsung binary ships in the module. Only the firmware this was analyzed on is accepted.
-EXPECTED="samsung/pa3qxxx/pa3q:17/CP2A.260605.016/S938BXXUCZZIC_OXMCZZIC:user/release-keys"
+# Samsung binary ships in the module. Only firmware this was analyzed on is accepted.
+#
+# One line per accepted ro.build.fingerprint. The value must be read off a device with
+#   getprop ro.build.fingerprint
+# and never derived from a firmware name: Build.FINGERPRINT carries the CSC suffix, which the
+# firmware's own build number does not give you.
+#
+# S938BXXUCDZIF (One UI 9 Stable) is NOT listed yet, and its absence is deliberate. The offline
+# analysis of that firmware is done - the DZIF surfaceflinger takes this exact patch (88 bytes,
+# DT_DEBUG consumed, first DT_NEEDED becomes SurfaceFlingerProp.so) and still imports
+# glShaderSource and eglGetProcAddress - but its Build.FINGERPRINT has not been read. It lives in
+# /vendor/build.prop, and vendor_a.img was not part of the firmware material that was examined;
+# the partition-level fingerprints that were available
+# (samsung/pa3qxxx/qssi_64:17/CP2A.260605.016/S938BXXUCDZIF:user/release-keys) are not
+# Build.FINGERPRINT. Guessing the missing suffix would make this gate accept a string no device
+# was ever confirmed to report, which defeats the only purpose it has. Add the real line once
+# `getprop ro.build.fingerprint` has been run on DZIF. See docs/handoff.md.
+ALLOWED_FINGERPRINTS="
+samsung/pa3qxxx/pa3q:17/CP2A.260605.016/S938BXXUCZZIC_OXMCZZIC:user/release-keys
+"
 FP="$(getprop ro.build.fingerprint)"
-[ "$FP" = "$EXPECTED" ] || abort "! Firmware diferente: $FP"
+[ -n "$FP" ] || abort "! ro.build.fingerprint vazio; nao da para verificar o firmware"
+MATCHED=0
+# Split on newlines only and with globbing off: an unquoted expansion would
+# otherwise glob a fingerprint containing a shell wildcard against the current
+# directory, and silently compare against whatever that matched.
+OULG_OLD_IFS="$IFS"
+IFS='
+'
+set -f
+for ALLOWED in $ALLOWED_FINGERPRINTS; do
+  if [ "$FP" = "$ALLOWED" ]; then MATCHED=1; break; fi
+done
+set +f
+IFS="$OULG_OLD_IFS"
+[ "$MATCHED" = 1 ] || abort "! Firmware diferente: $FP"
 # Files under $MODPATH/system only take effect through a metamodule that mounts them.
 [ -e /data/adb/metamodule ] || abort "! Nenhum metamodulo de montagem do /system (ex.: meta-overlayfs) instalado"
 mkdir -p "$MODPATH/system/bin" "$MODPATH/system/lib64"
