@@ -136,9 +136,15 @@ public final class BackgroundBlurBridge implements Backdrop {
         curveSent = true;
     }
     @Override public void draw(Canvas canvas, Rect bounds) { drawable.setBounds(bounds); drawable.draw(canvas); }
+    /**
+     * The native drawable's alpha is Samsung's translucency (204 on lockscreen cards), not a fade:
+     * passed to the region it left it at 80 %, and a partly transparent region mixes the sharp
+     * backdrop into the blur (the blotchy, smeared lockscreen body). The region takes only the fade;
+     * the glass still honours the native alpha.
+     */
     private int baseAlpha = 255;
     private float regionFade = 1f;
-    @Override public void setAlpha(int alpha) { baseAlpha = alpha; drawable.setAlpha(Math.round(alpha * regionFade)); }
+    @Override public void setAlpha(int alpha) { drawable.setAlpha(Math.round(baseAlpha * regionFade)); }
     /**
      * Ancestor view alpha fades what the view draws, the glass included, but not the compositor's
      * blur region: on a pull up from the lockscreen the cards faded and their blur stayed (a ghost).

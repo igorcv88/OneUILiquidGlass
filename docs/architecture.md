@@ -630,6 +630,11 @@ Not verified on device yet. The flash diagnosis comes from the recording and the
 - **Device result:** steady, and the user found it better than before, at rest too. The capture runs once per opening (`SHADE_TONE luma=0.11 veil=0` over a dark app, `luma=0.95 veil=50000000` over a white one).
 - **Remaining defect, fixed:** a white flash where each card appeared, the plain blur shown for the frame or two the capture takes. A shade card's region now stays off until its veil is known, or for at most 250 ms (`TONE_TIMEOUT_MS`).
 
+**Lockscreen body: the cause of "blotchy" (2026-10-16).**
+- **Trace:** on the lockscreen the native background drawable has alpha 204 (`native=204`). `GlassDrawable` passes the native alpha to its backdrop, and `BackgroundBlurBridge` applied it to the region (`drawableA=204`).
+- **Effect:** a region at 80 % mixes the sharp wallpaper into the blur. This is the blotchy, under-filtered body that the drawable path showed on the lockscreen since it was introduced. The Samsung path ignores the native alpha.
+- **Fix:** the region now takes only the fade; the glass still honours the native alpha.
+
 ## Expanded notification header gap (2026-10-11)
 
 A layout-only refinement, independent of the glass: in expanded notifications the title sat too close to the header row (`Chrome · 3 hours left · 15:52` over the file name). `HeaderGapHooks` adds `debug.oulg.headergap` dp (default 4, 0 turns it off, at most 8) between the two. The policy, which the host tests cover, lives in `HeaderGap`.
