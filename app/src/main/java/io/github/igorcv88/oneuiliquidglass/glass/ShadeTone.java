@@ -29,7 +29,7 @@ public final class ShadeTone implements CaptureHub.Client {
     @Override public View view() { return done ? null : view.get(); }
     @Override public int hz() { return 30; }
     @Override public void onUnavailable() { finish(); }
-    /** Ends this measurement; the software copy is dropped a second after the last one. */
+    /** Ends this measurement; the worker's software copy is dropped a second after the last one. */
     private void finish() {
         if (done) return;
         done = true;
@@ -38,36 +38,55 @@ public final class ShadeTone implements CaptureHub.Client {
         MAIN.postDelayed(DROP, 1000);
     }
     private static final android.os.Handler MAIN = new android.os.Handler(android.os.Looper.getMainLooper());
-    private static final Runnable DROP = ShadeTone::drop;
+    private static android.os.Handler worker;
+    private static final Runnable DROP = () -> { if (worker != null) worker.post(ShadeTone::drop); };
     private static void drop() { if (soft != null) { soft.recycle(); soft = null; softOf = null; } }
+    /**
+     * The GPU readback and the sampling run on a worker thread: on the main thread they stalled the
+     * shade's opening animation for a few frames (a bump as the cards slid in).
+     */
     @Override public void onFrame(CaptureHub.Frame frame) {
         if (done) return;
         View v = view.get();
         if (v == null) { finish(); return; }
         if (!v.isShown()) return;
-        float luma = meanLuma(frame, v);
         finish();
-        if (luma < 0f) return;
-        int veil = veilFor(luma);
-        Probe.log("SHADE_TONE", "viewId=" + Integer.toHexString(System.identityHashCode(v)) + " luma=" + String.format(java.util.Locale.ROOT, "%.2f", luma)
-                + " veil=" + Integer.toHexString(veil));
-        result.accept(veil);
+        int[] xy = new int[2];
+        v.getLocationOnScreen(xy);
+        Rect r = new Rect(xy[0], xy[1], xy[0] + v.getWidth(), xy[1] + v.getHeight());
+        String id = Integer.toHexString(System.identityHashCode(v));
+        frame.retain();
+        if (worker == null) {
+            android.os.HandlerThread t = new android.os.HandlerThread("oulg-shadetone");
+            t.start();
+            worker = new android.os.Handler(t.getLooper());
+        }
+        worker.post(() -> {
+            float luma = meanLuma(frame, r);
+            MAIN.post(() -> {
+                frame.release();
+                if (luma < 0f) return;
+                int veil = veilFor(luma);
+                Probe.log("SHADE_TONE", "viewId=" + id + " luma=" + String.format(java.util.Locale.ROOT, "%.2f", luma)
+                        + " veil=" + Integer.toHexString(veil));
+                result.accept(veil);
+            });
+        });
     }
 
+    /** Worker thread only. */
     private static Bitmap soft;
     private static CaptureHub.Frame softOf;
-    /** Mean luminance (0-1) of the frame under the view, or -1 if the view lies outside it. */
-    private static float meanLuma(CaptureHub.Frame frame, View v) {
+    /** Mean luminance (0-1) of the frame under the screen rect r, or -1 if r lies outside it. Worker thread. */
+    private static float meanLuma(CaptureHub.Frame frame, Rect r) {
         try {
             if (softOf != frame) {
                 if (soft != null) soft.recycle();
-                soft = frame.bitmap.copy(Bitmap.Config.ARGB_8888, false);
+                soft = frame.bitmap.isRecycled() ? null : frame.bitmap.copy(Bitmap.Config.ARGB_8888, false);
                 softOf = frame;
             }
             if (soft == null) return -1f;
-            int[] xy = new int[2];
-            v.getLocationOnScreen(xy);
-            Rect r = new Rect(xy[0], xy[1], xy[0] + v.getWidth(), xy[1] + v.getHeight());
+            r = new Rect(r);
             if (!r.intersect(frame.crop)) return -1f;
             int x0 = Math.round((r.left - frame.crop.left) * frame.scale), y0 = Math.round((r.top - frame.crop.top) * frame.scale);
             int x1 = Math.min(soft.getWidth(), Math.round((r.right - frame.crop.left) * frame.scale));
