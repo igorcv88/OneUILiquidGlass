@@ -630,6 +630,16 @@ Not verified on device yet. The flash diagnosis comes from the recording and the
 - **Device result:** steady, and the user found it better than before, at rest too. The capture runs once per opening (`SHADE_TONE luma=0.11 veil=0` over a dark app, `luma=0.95 veil=50000000` over a white one).
 - **Remaining defect, fixed:** a white flash where each card appeared, the plain blur shown for the frame or two the capture takes. A shade card's region now stays off until its veil is known, or for at most 250 ms (`TONE_TIMEOUT_MS`).
 
+**Seventh device pass: no step at the cut (2026-10-16).**
+- **Remaining defect:** the region still popped in and out at the fade cut.
+- **What the trace showed:**
+  - `PANEL_BLUR`: the shade window's own blur is a Samsung blur on `NotificationShadeWindowView` with only a radius, ramping 1 → 50 as the shade opens. It has no colour and no curve.
+  - The per-card capture arrived 1.9 s into a slow pull, because it waited for the card to show.
+- **Fixes:**
+  - **Backdrop map:** when the shade starts opening, `ShadeTone` captures the backdrop once into a luminance map (8 px cells). A card reads its veil from the map the moment it needs one, so its region no longer waits for its own capture.
+  - **No step at the cut:** between full alpha and the cut (`shadefadecut`), a drawable-path card blends toward the shade's own blur: the radius goes from its own to the panel's current radius, and the veil goes to none. Removing the region at the cut then changes nothing on screen.
+  - **Units:** `debug.oulg.panelradiusscale` (default 1) maps the panel's Samsung radius to the drawable's radius, in case the units differ.
+
 ## Expanded notification header gap (2026-10-11)
 
 A layout-only refinement, independent of the glass: in expanded notifications the title sat too close to the header row (`Chrome · 3 hours left · 15:52` over the file name). `HeaderGapHooks` adds `debug.oulg.headergap` dp (default 4, 0 turns it off, at most 8) between the two. The policy, which the host tests cover, lives in `HeaderGap`.

@@ -178,6 +178,8 @@ public final class HeadsUpHooks {
         if (enabled && (!drawHook || !shadeHook)) Probe.log("GLASS_UNAVAILABLE", "drawHook=" + drawHook + " shadeHook=" + shadeHook);
     }
     private String lastPanelBlur;
+    /** The shade window's own Samsung blur radius, as SystemUI last set it (0: none). */
+    private int panelRadius;
     private final Set<String> foreignBlurLogged = new java.util.HashSet<>();
     private final Set<String> shelfTagLogged = new java.util.HashSet<>();
     /** Stack walks are costly on a per-frame path; provenance is only gathered for the first calls. */
@@ -219,6 +221,10 @@ public final class HeadsUpHooks {
                             // radius of 1-3 and back, each step with the panel's dark color curve. Only radii
                             // up to 4 are dropped: a pull-down or the bouncer passes that within a few frames.
                             p.args[0] = null;
+                        }
+                        if (v.getRootView() == v && v.getClass().getName().endsWith("NotificationShadeWindowView")) {
+                            Object r = p.args[0] == null ? null : Reflect.read(p.args[0], "mBlurRadius");
+                            panelRadius = r instanceof Integer ? (Integer) r : 0;
                         }
                         if (Probe.trace && v.getRootView() == v) {
                             // The shade window's own blur, to match a card region to it before removal.
@@ -450,7 +456,19 @@ public final class HeadsUpHooks {
                 ? ((Number) height).floatValue() > 0.5f : null;
         if (next != null && !next.equals(shadeExpanded)) {
             shadeExpanded = next; Probe.log("SHADE", "expanded=" + next);
-            if (next) shadeOpens++;
+            if (next) {
+                shadeOpens++;
+                if (Tuning.get().shadeAdaptive) {
+                    Object pv = Reflect.read(controller, "mView");
+                    View root = pv instanceof View && ((View) pv).isAttachedToWindow() ? ((View) pv).getRootView() : null;
+                    for (State st : states.values()) {
+                        if (root != null) break;
+                        View bv = st.background.get();
+                        if (bv != null && bv.isAttachedToWindow()) root = bv.getRootView();
+                    }
+                    if (root != null) ShadeTone.prepare(root, shadeOpens);
+                }
+            }
             if (Probe.trace && next) {
                 // Every blur in the shade window once it has settled: finds blurs no hook knows about.
                 for (State s : states.values()) {
@@ -502,8 +520,6 @@ public final class HeadsUpHooks {
         if (bg.isAttachedToWindow()) s.onViewAttachedToWindow(bg);
         return s;
     }
-    /** Longest a shade card waits for its measured veil before its region shows anyway. */
-    private static final long TONE_TIMEOUT_MS = 250;
     /** How long a card stays untagged after it last scaled or faded. */
     private static final long SETTLE_MS = 300;
     private final class State implements View.OnAttachStateChangeListener, ViewTreeObserver.OnPreDrawListener {
@@ -545,9 +561,7 @@ public final class HeadsUpHooks {
                 if (semBridge != null) semBridge.setToneVeil(measuredVeil);
             } catch (ReflectiveOperationException | RuntimeException e) { Probe.error("SHADE_TONE_APPLY_FAILED", e); }
         }
-        /** False from the start of a measurement until its veil (or the timeout) arrives. */
-        boolean toneReady = true;
-        final Runnable toneTimeout = () -> { if (!toneReady) { toneReady = true; invalidate(); } };
+
         /** Last frame the card was scaled or faded (uptime ms); see onPreDraw. */
         long lastMotion = Long.MIN_VALUE / 2;
         /** Redraws once the card has been still for SETTLE_MS, so the tag comes back. */
@@ -620,7 +634,7 @@ public final class HeadsUpHooks {
                     float fade = cut > 0f ? (a >= cut ? 1f : 0f) : a;
                     // Also before the measurement starts: that check runs later in this pre-draw.
                     boolean waiting = Tuning.get().shadeAdaptive && Boolean.TRUE.equals(shadeExpanded) && barState != null
-                            && barState == Eligibility.BAR_SHADE && (!toneReady || toneOpen != shadeOpens);
+                            && barState == Eligibility.BAR_SHADE && toneOpen != shadeOpens;
                     if (waiting) fade = 0f;
                     // The tag cannot survive a scaled region; with the finger nearly still the scale
                     // wobbled between 1 and 0.999 and the tag switched every frame. Once the card
@@ -635,6 +649,11 @@ public final class HeadsUpHooks {
                     if (compBridge != null) {
                         try { compBridge.setScaled(untag); }
                         catch (ReflectiveOperationException e) { Probe.error("BLUR_DRAWABLE_SCALE_FAILED", e); }
+                        // Between full alpha and the cut the region turns into the shade's own blur
+                        // (its radius, no veil), so removing it at the cut changes nothing on screen.
+                        float blend = cut > 0f && cut < 1f ? Math.max(0f, Math.min(1f, (a - cut) / (1f - cut))) : 1f;
+                        try { compBridge.setBlend(blend, Math.round(panelRadius * Tuning.get().panelRadiusScale)); }
+                        catch (ReflectiveOperationException e) { Probe.error("BLUR_DRAWABLE_BLEND_FAILED", e); }
                         if (compBridge.setRegionFade(stacked ? 0f : fade)) v.invalidate();
                     }
                     if (semBridge != null) {
@@ -655,23 +674,11 @@ public final class HeadsUpHooks {
                             + (compBridge != null ? " drawableA=" + compBridge.drawable.getAlpha() : "");
                     if (!line.equals(lastTrace)) { lastTrace = line; FrameTrace.log("ROW_FRAME", v, line); }
                 }
-                // Measured as soon as the shade starts opening, before the card has a bridge or is
-                // visible, so the veil is usually known by the time its region would show.
-                if (toneOpen != shadeOpens && Tuning.get().shadeAdaptive
-                        && Boolean.TRUE.equals(shadeExpanded) && barState != null && barState == Eligibility.BAR_SHADE && v.isShown()) {
-                    // Once per shade opening: the veil is measured from the backdrop and kept.
-                    toneOpen = shadeOpens;
-                    // No region until the veil is known: without it the card showed the plain blur
-                    // for the frame or two the capture takes (a white flash over a white app).
-                    toneReady = false;
-                    v.removeCallbacks(toneTimeout);
-                    v.postDelayed(toneTimeout, TONE_TIMEOUT_MS);
-                    ShadeTone.measure(v, veil -> {
-                        measuredVeil = veil;
-                        pushToneVeil();
-                        toneReady = true;
-                        invalidate();
-                    });
+                // The veil comes from the backdrop map captured when this opening started
+                // (ShadeTone); it is read once, so the card keeps it until the shade closes.
+                if (toneOpen != shadeOpens && Tuning.get().shadeAdaptive) {
+                    if (ShadeTone.ready(shadeOpens)) { measuredVeil = ShadeTone.veilAt(v); toneOpen = shadeOpens; pushToneVeil(); invalidate(); }
+                    else if (ShadeTone.failed(shadeOpens)) { measuredVeil = 0; toneOpen = shadeOpens; pushToneVeil(); invalidate(); }
                 }
                 boolean eligible = eligible();
                 View r = row.get();
