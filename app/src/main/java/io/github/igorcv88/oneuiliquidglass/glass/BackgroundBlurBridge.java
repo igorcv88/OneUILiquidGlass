@@ -66,6 +66,16 @@ public final class BackgroundBlurBridge implements Backdrop {
     public boolean lens() { return lens; }
     /** Lockscreen card (lens mode is only used there); a heads-up on top keeps the heads-up profile. */
     private boolean keyguard = true;
+    /**
+     * The lockscreen's overflow pill: a plain blur of debug.oulg.pillblur px, never tagged (no lens,
+     * no compositor material) and no shade veil; the region colour stays the glass tone.
+     */
+    private boolean pill;
+    public void setPill(boolean on) throws ReflectiveOperationException {
+        if (pill == on) return;
+        pill = on;
+        if (built) update(lastPx, lastTint, lastRadii);
+    }
     /** Surface and lens together; a change rebuilds the drawable's state once. */
     public void setOptics(boolean keyguard, boolean lens) throws ReflectiveOperationException {
         if (this.keyguard == keyguard && this.lens == lens) return;
@@ -82,12 +92,15 @@ public final class BackgroundBlurBridge implements Backdrop {
             px = lens && lensPx >= 0 ? lensPx : t.semRadius >= 0 ? t.semRadius : GlassSpec.SAMSUNG_RADIUS;
             // The same veil as the Samsung path (semalpha over the Samsung tone).
             if (t.semAlpha >= 0) tint = (tint & 0x00ffffff) | (t.semAlpha << 24);
-            int profile = scaled && !lens ? -1 : SemBlurBridge.tagProfile(lens, keyguard);
+            if (pill) px = t.pillBlur;
+            int profile = pill || (scaled && !lens) ? -1 : SemBlurBridge.tagProfile(lens, keyguard);
             tagSent = profile;
-            int veil = SemBlurBridge.shadeVeil(lens, keyguard, scaled, toneVeil);
+            int veil = pill ? 0 : SemBlurBridge.shadeVeil(lens, keyguard, scaled, toneVeil);
             if (veil != 0) tint = veil;
             tl = SemBlurBridge.cornerTag(tl, profile); tr = SemBlurBridge.cornerTag(tr, profile);
             bl = SemBlurBridge.cornerTag(bl, profile); br = SemBlurBridge.cornerTag(br, profile);
+            // A whole-pixel radius cannot fall in a tag band by accident.
+            if (pill) { tl = (float) Math.floor(tl); tr = (float) Math.floor(tr); bl = (float) Math.floor(bl); br = (float) Math.floor(br); }
         }
         drawable.setVisible(true, false);
         radius.invoke(drawable, px);

@@ -2,6 +2,35 @@
 
 Documento para continuar o trabalho em outra conversa. Leia inteiro antes de mexer em qualquer coisa. O histórico técnico detalhado está em `docs/architecture.md`; as seções de 2026-10-16 cobrem a central de notificações.
 
+## 0f. Atualização (2026-10-16, sfhook v0.11): material da tela de bloqueio e pílula de excedentes
+
+Nada disto foi validado no aparelho. A validação foi no host (render WebGL do shader real sobre recortes das capturas do usuário).
+
+### Tarefa 1: material do perfil 1 (só `sfhook/refract.h`; pop-up e central intocados)
+
+- **Causa do contorno cinza, achada no código:** o reflexo de Fresnel usava inclinação máxima de 1,2 rad, o que limita `F` a 0,10 na borda. Por isso `kgoptics` 0 contra 1 mudava só 1 a 6 de RGB.
+- **Mudanças:**
+  - inclinação na borda 1,42 rad (`sf.kgtilt`), ambiente frio e mais claro em cima;
+  - contorno fino (gaussiana de 1,6 px a partir da borda, `sf.kgline` 0,55);
+  - faixa especular separada do contorno, no meio do bisel (`sf.kgspec` 0,30);
+  - transmissão adaptativa no miolo: a luma vai metade do caminho até 0,40 (`sf.kgflat` 0,50, `sf.kglevel` 0,40). Escurecer é ganho; clarear soma luz fria espalhada, não ganho;
+  - tom frio neutro em luma (`sf.kgcool` 0,5);
+  - miolo de 80 px com 48 leituras (era 56/40).
+- **Medido no host** (`sfhook/tools/kg_preview.mjs`, recorte da jaqueta escura de `lockscreen-target.jpg`): desvio da luma do miolo 0,151 → 0,072; p95 0,64 → 0,54; contorno superior +0,02 → +0,18 sobre o miolo; contraste de texto branco no pior caso 2,5 → 3,5. `render_check`: perfil 0 bit a bit igual (max 0); estrutura do miolo 1,61 → 0,90; grão 0,45 → 0,54.
+- Comparação visual (em cima v0.10, embaixo v0.11): `docs/img/lockscreen-v11-preview.jpg`.
+- **Limite do host:** a entrada real do compositor (fator de redução e filtro da Samsung) não é conhecida, e o aparelho escurece os cards mais do que o modelo. Os números são relativos.
+- Troca ao vivo: `SurfaceFlingerProp.v11.so`; confirme com `grep -c kgflat`. `sf.optics` continua 9.
+
+### Tarefa 2: pílula de excedentes
+
+- **Hipótese:** a pílula é o `NotificationBackgroundView` da `NotificationShelf` (no AOSP a shelf é uma `ActivatableNotificationView`). O hook de desenho ignorava fundos fora de uma linha.
+- **Mudança:** na tela de bloqueio (estado 1, caminho drawable), o fundo da shelf recebe vidro leve: blur simples sem marca (`debug.oulg.pillblur`, 40 px), o véu e a borda do módulo. Fora disso fica nativo. `debug.oulg.pillglass=0` desliga.
+- **Logs de identificação:**
+  - `PILL_GLASS`: o vidro engatou (classe, tamanho, raios, drawable nativo);
+  - `BACKGROUND_HOSTLESS`: um fundo de notificação fora de linha e de shelf;
+  - `OVERFLOW` (com `debug.oulg.trace=1`, 1,2 s após entrar na tela de bloqueio): todas as views com shelf, icon container, overflow ou footer no nome, com fundo e campos `Drawable`.
+- Se a pílula continuar cinza e não houver `PILL_GLASS`, ela é outra view; o `OVERFLOW` diz qual.
+
 ## 0e. Atualização (2026-10-16): central resolvida; faltam a tela de bloqueio e a pílula de excedentes
 
 ### Estado do repositório

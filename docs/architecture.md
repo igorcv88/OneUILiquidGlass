@@ -635,6 +635,19 @@ Not verified on device yet. The flash diagnosis comes from the recording and the
 - **Effect:** a region at 80 % mixes the sharp wallpaper into the blur. This is the blotchy, under-filtered body that the drawable path showed on the lockscreen since it was introduced. The Samsung path ignores the native alpha.
 - **Fix:** the region now takes only the fade; the glass still honours the native alpha.
 
+### Lockscreen material v0.11: rim that reaches grazing, adaptive transmission (2026-10-16)
+
+Device report: grey rim, a body that dark backdrop objects dominate, no visible contour or thickness. Measured `kgoptics` 0 vs 1 differed by 1-6 RGB. **Cause in the code:** the rim tilt peaked at 1.2 rad, where Schlick's `(1 − cos θ)^5` is 0.105; the reflection could never exceed 10 %.
+
+Profile 1 only (profile 0 stays bit-identical, `render_check` max 0; profile 2 untouched):
+- **Rim:** tilt `G(t)·kgtilt` (1.42 rad). The environment is cool and brighter on the sky-facing rim. A 1.6 px Gaussian contour from the outline is the grazing edge of the same surface (`kgline` 0.55). The specular band now sits inside the contour, mid-bevel (`smoothstep(0.30, 0.62, t)·(1 − smoothstep(0.80, 0.95, t))`), light-facing lobe `facing³` plus 0.45 of the opposite one (`kgspec` 0.30).
+- **Body:** after vibrancy and the highlight knee, luma moves `kgflat·body` (0.50) of the way to `kglevel` (0.40). Darkening is a gain; lifting adds cool scattered light, so near-black does not turn into amplified noise. Then a luma-neutral cool tint (`kgcool` 0.5). Disc 80 px with 48 taps.
+- **Host preview:** `sfhook/tools/kg_preview.mjs` renders the real FillRRect rewrite over a photographic crop of the user's lockscreen and composites region colour, glass fill and hairline as on the device. Over the dark jacket crop: body luma SD 0.151 → 0.072, p95 0.64 → 0.54, top contour +0.02 → +0.18 over the body, worst-case white-text contrast 2.5 → 3.5. Not device-validated; the real compositor input and Samsung filter are unknown.
+
+### Overflow pill on the lockscreen (2026-10-16)
+
+The pill with the icons of notifications that do not fit is assumed to be the notification shelf's `NotificationBackgroundView`. The draw hook now accepts a background under a `NotificationShelf` as well as under a row. On the keyguard state with the drawable path it gets light glass: an untagged blur of `debug.oulg.pillblur` px (40), whole-pixel corners so no tag band is hit by accident, the module's veil and edge, no lens and no compositor material; elsewhere it stays native. `PILL_GLASS`, `BACKGROUND_HOSTLESS` and the trace-only `OVERFLOW` census confirm or refute the assumption on the device.
+
 ## Expanded notification header gap (2026-10-11)
 
 A layout-only refinement, independent of the glass: in expanded notifications the title sat too close to the header row (`Chrome · 3 hours left · 15:52` over the file name). `HeaderGapHooks` adds `debug.oulg.headergap` dp (default 4, 0 turns it off, at most 8) between the two. The policy, which the host tests cover, lives in `HeaderGap`.

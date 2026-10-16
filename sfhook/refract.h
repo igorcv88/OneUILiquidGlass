@@ -65,17 +65,18 @@
 // profile 1's cap (0.5). Magnification exposes the texture's low resolution, which the B-spline only
 // smooths; field_check prints the bound per strength.
 //
-// Profile 1, the thick slab. The bevel's surface tilt follows the same G(t) that drives the
-// refraction (shift ~ thickness x slope), up to theta = 1.2 rad at the outline:
-//  - interior: a wider disc with proportionally more taps; vibrancy (saturation rising with the body
-//    blur); a soft knee on bright backdrops (milky glare);
-//  - rim transmission and reflection: Schlick's excess reflectance F(theta) mixes the refracted
-//    backdrop toward a bright environment, so the rim brightens over dark backdrops and stays nearly
-//    neutral over bright ones, without a drawn outline;
-//  - a specular crescent on the light-facing rim (light from the upper left, as the module's edge
-//    optics) and a fainter internal one opposite, tinted by the backdrop's hue and fading over
-//    bright backdrops.
-#define OULG_FS_GLOBALS "highp float oulg_on, oulg_pf, oulg_br, oulg_t, oulg_k;\nhighp vec2 oulg_jx, oulg_jy, oulg_n;\n"
+// Profile 1, the thick slab (v0.11). The bevel's surface tilt follows the same G(t) that drives the
+// refraction (shift ~ thickness x slope), up to `tilt` (1.42 rad) at the outline:
+//  - interior: an 80 px disc with 48 taps; vibrancy; a soft knee on bright backdrops; adaptive
+//    transmission (luma drawn halfway toward 0.40, dark areas lifted by scattered cool light rather
+//    than a gain); a luma-neutral cool tint;
+//  - rim reflection: Schlick's excess reflectance F(theta) mixes the refracted backdrop toward a
+//    cool environment, brighter on the upper (sky-facing) rim; v0.9's 1.2 rad tilt capped F at
+//    0.10, which left the rim grey (the device report);
+//  - a thin contour, the grazing edge of the same surface, 1.6 px from the outline;
+//  - a specular band inside the contour, peaked mid-bevel on the light-facing side (light from the
+//    upper left, as the module's edge optics), a fainter one opposite, fading over bright backdrops.
+#define OULG_FS_GLOBALS "highp float oulg_on, oulg_pf, oulg_br, oulg_t, oulg_k, oulg_bv;\nhighp vec2 oulg_jx, oulg_jy, oulg_n;\n"
 #define OULG_FS_BSPLINE \
     "mediump vec4 oulg_bspline(sampler2D s, highp vec2 uv) {\n" \
     "  highp vec2 ts = vec2(textureSize(s, 0));\n" \
@@ -135,26 +136,50 @@
     "  }\n" \
     "  return vec4(clamp(rgb, 0.0, 1.0) * c.a, c.a);\n" \
     "}\n"
-// Profile 1's material (sat, core, tone, rim, spec); profile 0 passes through untouched.
+// Profile 1's material (core, sat, tone, flat, level, cool x3, tilt, rim, line, spec); profile 0
+// passes through untouched. Colour is handled unpremultiplied (the region is opaque; a = 1 in
+// practice). Body, scaled by the body-blur weight:
+//  - vibrancy and the highlight knee as in v0.9;
+//  - adaptive transmission: luma is drawn toward a level by `flat` (a share of its distance), so a
+//    dark object behind the card no longer dominates it. Darkening is a gain (hue kept); lifting
+//    adds the cool light a frosted slab scatters, not a gain, so a near-black backdrop turns into
+//    a lit, cool body instead of amplified noise and chroma;
+//  - a luma-neutral cool tint over the whole card.
+// Rim, one thickness model: the tilt follows G(t) up to `tilt` rad at the outline. Schlick's
+// excess reflectance mixes toward a cool environment brighter above than below; a thin contour
+// (Gaussian, 1.6 px, from the outline in px) is the grazing edge of that same surface; the specular
+// band sits inside it, peaked mid-bevel and separated from the contour, which reads as thickness.
 #define OULG_FS_LENS_FMT \
     "mediump vec4 oulg_material(mediump vec4 c) {\n" \
     "  if (oulg_pf < 0.5) return c;\n" \
     "  mediump float body = clamp(oulg_br / %.2f, 0.0, 1.0);\n" \
-    "  mediump float y = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));\n" \
-    "  c.rgb = mix(vec3(y), c.rgb, 1.0 + (%.3f - 1.0) * body);\n" \
-    "  c.rgb *= 1.0 - %.3f * body * smoothstep(0.65, 1.0, y);\n" \
+    "  mediump float a = max(c.a, 1e-3);\n" \
+    "  mediump vec3 rgb = c.rgb / a;\n" \
+    "  const mediump vec3 w709 = vec3(0.2126, 0.7152, 0.0722);\n" \
+    "  mediump float y = dot(rgb, w709);\n" \
+    "  rgb = mix(vec3(y), rgb, 1.0 + (%.3f - 1.0) * body);\n" \
+    "  rgb *= 1.0 - %.3f * body * smoothstep(0.65, 1.0, y);\n" \
+    "  y = max(dot(rgb, w709), 0.0);\n" \
+    "  mediump float yt = y + %.3f * body * (%.3f - y);\n" \
+    "  const mediump vec3 scatter = vec3(0.86, 0.94, 1.06) / 0.92744;\n" \
+    "  rgb = yt > y ? rgb + (yt - y) * scatter : rgb * (yt / max(y, 1e-3));\n" \
+    "  rgb *= vec3(%.4f, %.4f, %.4f);\n" \
     "  if (oulg_t > 0.0) {\n" \
     "    highp float g = oulg_t * oulg_t * (3.0 - 2.0 * oulg_t);\n" \
-    "    mediump float f = clamp(%.3f * 0.96 * pow(1.0 - cos(1.2 * g), 5.0), 0.0, 1.0);\n" \
-    "    c.rgb = mix(c.rgb, vec3(0.9) * c.a, f);\n" \
     "    mediump float facing = dot(oulg_n, vec2(-0.4512, -0.8924));\n" \
-    "    mediump float sp = pow(max(facing, 0.0), 6.0) * smoothstep(0.6, 1.0, oulg_t)\n" \
-    "                     + 0.35 * pow(max(-facing, 0.0), 6.0) * smoothstep(0.75, 1.0, oulg_t);\n" \
-    "    mediump float m = max(max(c.r, c.g), max(c.b, 1e-3));\n" \
-    "    mediump vec3 hue = mix(vec3(1.0), c.rgb / m, 0.3);\n" \
-    "    c.rgb += %.3f * sp * (1.0 - 0.6 * y) * hue * c.a;\n" \
+    "    mediump vec3 env = vec3(0.90, 0.94, 1.0) * mix(0.62, 1.0, 0.5 + 0.5 * facing);\n" \
+    "    mediump float f = clamp(%.3f * pow(1.0 - cos(%.3f * g), 5.0), 0.0, 1.0);\n" \
+    "    rgb = mix(rgb, env, f);\n" \
+    "    highp float px = (1.0 - oulg_t) * oulg_bv;\n" \
+    "    mediump float line = %.3f * exp(-px * px / 2.56) * (0.7 + 0.3 * max(facing, 0.0));\n" \
+    "    rgb = mix(rgb, vec3(0.97, 0.985, 1.0), clamp(line, 0.0, 1.0));\n" \
+    "    mediump float band = smoothstep(0.30, 0.62, oulg_t) * (1.0 - smoothstep(0.80, 0.95, oulg_t));\n" \
+    "    mediump float lobe = pow(max(facing, 0.0), 3.0) + 0.45 * pow(max(-facing, 0.0), 3.0);\n" \
+    "    mediump float m = max(max(rgb.r, rgb.g), max(rgb.b, 1e-3));\n" \
+    "    mediump vec3 hue = mix(vec3(1.0), rgb / m, 0.3);\n" \
+    "    rgb += %.3f * band * lobe * (1.0 - 0.6 * y) * hue;\n" \
     "  }\n" \
-    "  return vec4(clamp(c.rgb, 0.0, c.a), c.a);\n" \
+    "  return vec4(clamp(rgb, 0.0, 1.0) * c.a, c.a);\n" \
     "}\n" \
     "mediump vec4 oulg_body(sampler2D s, highp vec2 uv) { return oulg_pf > 0.5 ? oulg_disc1(s, uv) : oulg_disc0(s, uv); }\n" \
     "mediump vec4 oulg_lens(sampler2D s, highp vec2 uv) {\n" \
@@ -189,6 +214,7 @@
     "  highp float t = 1.0 - depth / bevel;\n" \
     "  if (oulg_pf > 0.5) {\n" \
     "    oulg_t = t;\n" \
+    "    oulg_bv = bevel;\n" \
     "    oulg_n = (v / l) * sign(q);\n" \
     "    return -oulg_n * (min(k, 0.5) * bevel * t * t * (3.0 - 2.0 * t));\n" \
     "  }\n" \
@@ -196,20 +222,28 @@
     "}\n"
 // Per-profile parameters, read when a shader is compiled: core radius in px (0 turns the second blur
 // off), taps per pixel, the depth at which the core radius is reached (in bevels); profile 1 only:
-// body saturation (1 = none), highlight knee (0 = none), rim reflectance gain and specular strength.
-struct oulg_profile { float core; int taps; float ramp; float sat; float tone; float rim; float spec; float cap; float lift; };
+// body saturation (1 = none), highlight knee (0 = none), rim reflectance gain and specular strength,
+// transmission flattening (0 = none) toward a luma level, cool tint (0 = none), rim tilt at the
+// outline (rad) and contour strength (0 = none).
+struct oulg_profile { float core; int taps; float ramp; float sat; float tone; float rim; float spec; float cap; float lift;
+                      float flat; float level; float cool; float tilt; float line; };
 #define OULG_CORE_DEFAULT 48.0f
 #define OULG_TAPS_DEFAULT 24
 #define OULG_RAMP_DEFAULT 1.5f
-// Lockscreen: a wider body blur and more taps than its area alone asks (24 at 48 px has the density
-// of 33 at 56 px): render_check grain 1.27 / 0.87 / 0.67 / 0.54 at 24 / 32 / 40 / 48 taps.
-#define OULG_KG_CORE_DEFAULT 56.0f
-#define OULG_KG_TAPS_DEFAULT 40
+// Lockscreen: a wide body blur, so a large dark object behind the card no longer shows as a blotch
+// (render_check structure 1.61 at 56 px / 40 taps, 0.90 at 80 px / 48 taps; grain 0.45 -> 0.54).
+#define OULG_KG_CORE_DEFAULT 80.0f
+#define OULG_KG_TAPS_DEFAULT 48
 #define OULG_KG_RAMP_DEFAULT 1.5f
 #define OULG_KG_SAT_DEFAULT 1.25f
 #define OULG_KG_TONE_DEFAULT 0.15f
 #define OULG_KG_RIM_DEFAULT 1.0f
-#define OULG_KG_SPEC_DEFAULT 0.18f
+#define OULG_KG_SPEC_DEFAULT 0.30f
+#define OULG_KG_FLAT_DEFAULT 0.50f
+#define OULG_KG_LEVEL_DEFAULT 0.40f
+#define OULG_KG_COOL_DEFAULT 0.5f
+#define OULG_KG_TILT_DEFAULT 1.42f
+#define OULG_KG_LINE_DEFAULT 0.55f
 // Shade legibility (profile 2): the brightest luma a light-text card shows (white text keeps ~3.4:1
 // at 0.55) and the darkest a dark-text card shows.
 #define OULG_SHADE_CAP_DEFAULT 0.55f
@@ -219,10 +253,12 @@ struct oulg_profile { float core; int taps; float ramp; float sat; float tone; f
 // The optics this library implements, announced to the module (debug.oulg.sf.optics).
 #define OULG_OPTICS_VERSION "9"
 static const struct oulg_profile OULG_PROFILES_DEFAULT[OULG_PROFILES] = {
-    {OULG_CORE_DEFAULT, OULG_TAPS_DEFAULT, OULG_RAMP_DEFAULT, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f},
+    {OULG_CORE_DEFAULT, OULG_TAPS_DEFAULT, OULG_RAMP_DEFAULT, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f},
     {OULG_KG_CORE_DEFAULT, OULG_KG_TAPS_DEFAULT, OULG_KG_RAMP_DEFAULT, OULG_KG_SAT_DEFAULT, OULG_KG_TONE_DEFAULT,
-     OULG_KG_RIM_DEFAULT, OULG_KG_SPEC_DEFAULT, 0.0f, 0.0f},
-    {0.0f, OULG_TAPS_DEFAULT, OULG_RAMP_DEFAULT, 1.0f, 0.0f, 0.0f, 0.0f, OULG_SHADE_CAP_DEFAULT, OULG_SHADE_LIFT_DEFAULT},
+     OULG_KG_RIM_DEFAULT, OULG_KG_SPEC_DEFAULT, 0.0f, 0.0f,
+     OULG_KG_FLAT_DEFAULT, OULG_KG_LEVEL_DEFAULT, OULG_KG_COOL_DEFAULT, OULG_KG_TILT_DEFAULT, OULG_KG_LINE_DEFAULT},
+    {0.0f, OULG_TAPS_DEFAULT, OULG_RAMP_DEFAULT, 1.0f, 0.0f, 0.0f, 0.0f, OULG_SHADE_CAP_DEFAULT, OULG_SHADE_LIFT_DEFAULT,
+     0.0f, 0.0f, 0.0f, 0.0f, 0.0f},
 };
 #define OULG_VS_RADII_AT "highp vec2 neighbor_radii = radii_and_neighbors.zw;\n"
 #define OULG_VS_POS_AT "gl_Position = vec4(devcoord, 0.0, 1.0);\n"
@@ -322,6 +358,11 @@ static void oulg_fix_params(struct oulg_profile p[OULG_PROFILES]) {
         if (!(p[i].spec >= 0.0f && p[i].spec <= 1.0f)) p[i].spec = d->spec;
         if (!(p[i].cap >= 0.3f && p[i].cap <= 1.0f)) p[i].cap = d->cap;
         if (!(p[i].lift >= 0.0f && p[i].lift <= 0.7f)) p[i].lift = d->lift;
+        if (!(p[i].flat >= 0.0f && p[i].flat <= 0.9f)) p[i].flat = d->flat;
+        if (!(p[i].level >= 0.1f && p[i].level <= 0.8f)) p[i].level = d->level;
+        if (!(p[i].cool >= 0.0f && p[i].cool <= 2.0f)) p[i].cool = d->cool;
+        if (!(p[i].tilt >= 0.5f && p[i].tilt <= 1.55f)) p[i].tilt = d->tilt;
+        if (!(p[i].line >= 0.0f && p[i].line <= 1.0f)) p[i].line = d->line;
     }
 }
 
@@ -350,8 +391,13 @@ static int oulg_lib(char *out, size_t cap, int external, const struct oulg_profi
     }
     if (!oulg_append(out, cap, &at, OULG_FS_FIELD_FMT, (double) p[1].core, (double) p[1].ramp, (double) p[0].core, (double) p[0].ramp)) return 0;
     if (!external && !oulg_append(out, cap, &at, OULG_FS_TONE_FMT, (double) p[2].cap, (double) p[2].lift)) return 0;
+    // The cool tint, normalised to unit luma so it shifts hue only.
+    double cr = 1.0 - 0.06 * p[1].cool, cg = 1.0 - 0.01 * p[1].cool, cb = 1.0 + 0.08 * p[1].cool;
+    double cl = 0.2126 * cr + 0.7152 * cg + 0.0722 * cb;
     if (!external && !oulg_append(out, cap, &at, OULG_FS_LENS_FMT, (double) (p[1].core > 0.001f ? p[1].core : 0.001f),
-                                  (double) p[1].sat, (double) p[1].tone, (double) p[1].rim, (double) p[1].spec)) return 0;
+                                  (double) p[1].sat, (double) p[1].tone, (double) p[1].flat, (double) p[1].level,
+                                  cr / cl, cg / cl, cb / cl, (double) p[1].rim, (double) p[1].tilt, (double) p[1].line,
+                                  (double) p[1].spec)) return 0;
     return 1;
 }
 
