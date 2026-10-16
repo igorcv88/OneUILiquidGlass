@@ -20,7 +20,8 @@
 //  - body: mean, standard deviation and 5th/95th percentiles past 1.5 compositor bevels (68 px)
 //    (homogeneity: a smaller spread is a more even body), share of pixels darker than 0.08;
 //  - rim: mean luma in the outer 4 px band minus the body mean (contour brightness), top and bottom;
-//  - contrast: WCAG ratio of white text against the body's 95th percentile (worst case).
+//  - contrast: WCAG ratio of white text against the body's 95th percentile (worst case);
+//  - warm: mean (R - B) in the body (positive: amber cast); chroma: mean (max - min) channel spread.
 import { createRequire } from 'module';
 import fs from 'fs';
 const { chromium } = createRequire(import.meta.url)('playwright');
@@ -115,9 +116,13 @@ void main() { vec2 dev = vec2(${CARD.x + hs[0]}.0, ${CARD.y + hs[1]}.0) + p * ve
   // Metrics before the text.
   const lum = (k) => (0.2126 * out[k] + 0.7152 * out[k + 1] + 0.0722 * out[k + 2]) / 255;
   const body = [], rimTop = [], rimBottom = [], sfBevel = clamp(0.42 * CARD.r, 16, 56);
+  let warm = 0, chroma = 0;
   for (let y = CARD.y; y < CARD.y + CARD.h; y++) for (let x = CARD.x; x < CARD.x + CARD.w; x++) {
     const d = -sdf(x + 0.5 - CARD.x - hs[0], y + 0.5 - CARD.y - hs[1]), k = (y * W + x) * 4;
-    if (d > 1.5 * sfBevel) body.push(lum(k));
+    if (d > 1.5 * sfBevel) {
+      body.push(lum(k)); warm += (out[k] - out[k + 2]) / 255;
+      chroma += (Math.max(out[k], out[k + 1], out[k + 2]) - Math.min(out[k], out[k + 1], out[k + 2])) / 255;
+    }
     else if (d > 0.5 && d < 4.5 && Math.abs(x + 0.5 - CARD.x - hs[0]) < hs[0] - CARD.r) (y < CARD.y + hs[1] ? rimTop : rimBottom).push(lum(k));
   }
   const mean = a => a.reduce((s, v) => s + v, 0) / a.length;
@@ -127,7 +132,8 @@ void main() { vec2 dev = vec2(${CARD.x + hs[0]}.0, ${CARD.y + hs[1]}.0) + p * ve
   const metrics = { bodyMean: +m.toFixed(3), bodySd: +sd.toFixed(3), p05: +pct(0.05).toFixed(3), p95: +pct(0.95).toFixed(3),
     dark: +(body.filter(v => v < 0.08).length / body.length).toFixed(3),
     rimTop: +(mean(rimTop) - m).toFixed(3), rimBottom: +(mean(rimBottom) - m).toFixed(3),
-    contrast: +(1.05 / (lin(pct(0.95)) + 0.05)).toFixed(2) };
+    contrast: +(1.05 / (lin(pct(0.95)) + 0.05)).toFixed(2),
+    warm: +(warm / body.length).toFixed(3), chroma: +(chroma / body.length).toFixed(3) };
   // 5: the text.
   const o = document.createElement('canvas'); o.width = W; o.height = H;
   const og = o.getContext('2d'); og.putImageData(new ImageData(out, W, H), 0, 0);

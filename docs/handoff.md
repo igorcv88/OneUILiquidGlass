@@ -2,6 +2,38 @@
 
 Documento para continuar o trabalho em outra conversa. Leia inteiro antes de mexer em qualquer coisa. O histórico técnico detalhado está em `docs/architecture.md`; as seções de 2026-10-16 cobrem a central de notificações.
 
+## 0j. Atualização (2026-10-16, sfhook v0.15): miolo quente, "blur em vez de vidro"
+
+**Print da v0.14 no aparelho:**
+- gota dupla resolvida: um contorno único (0,52) e miolo liso (0,29–0,32);
+- miolo quente: na região do rosto, R−B fica em 0,10 na mediana e 0,27 no p95 (borrão âmbar);
+- a faixa de cima puxa o azul da camisa (croma 0,18).
+
+**Origem do tom quente:**
+- o disco de 80 px espalha pele, couro e mãos em manchas largas;
+- a vibração (1,12) e o ganho de transmissão da v0.14 (até 1,8×) aumentavam esse croma. No host, o croma do miolo subiu 58% da v0.13 para a v0.14.
+
+**"Blur em vez de vidro":** o miolo era só fundo filtrado; faltava o reflexo da própria face do vidro.
+
+**v0.15, só perfil 1 (a borda não mudou):**
+- vibração 1,0;
+- ganho de transmissão limitado a 1,35×;
+- neutralização do croma quente (`sf.kgwarm` 0,6): onde R > B, o croma cai 60%; tons frios mantêm o croma;
+- tom frio 0,5 → 0,7 (neutro em luma);
+- reflexo de superfície (`sf.kgsheen` 0,05): ambiente frio refletido pela face do vidro, 5% em cima caindo a 0,5% embaixo, mais fraco sobre fundo claro.
+
+**Host** (fundo recortado do print do aparelho, logo abaixo do card):
+
+| | v0.14 | v0.15 |
+|---|---|---|
+| R−B p99 | 0,12 | 0,02 |
+| croma p95 | 0,19 | 0,16 |
+
+- Pop-up bit a bit igual; central e app intocados.
+- Prévia: `docs/img/lockscreen-v15-preview.jpg` (em cima v0.14, embaixo v0.15).
+
+**Teste:** lib `SurfaceFlingerProp.v15.so` (seção 4; o APK da v0.14 continua); confirme com `grep -c kgsheen`; reinicie o SurfaceFlinger com o cache limpo; mande um print na mesma posição.
+
 ## 0i. Atualização (2026-10-16, sfhook v0.14 + app): "duas gotas" e miolo leitoso
 
 **Medido no print da v0.13**, na vertical do card: contorno 0,59, vale 0,33, **segundo anel 0,49 a ~19 px para dentro**, miolo 0,32–0,34. Embaixo, anel interno 0,42 e contorno 0,41.

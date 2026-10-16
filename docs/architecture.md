@@ -644,6 +644,21 @@ Profile 1 only (profile 0 stays bit-identical, `render_check` max 0; profile 2 u
 - **Body:** after vibrancy and the highlight knee, luma moves `kgflat·body` (0.50) of the way to `kglevel` (0.40). Darkening is a gain; lifting adds cool scattered light, so near-black does not turn into amplified noise. Then a luma-neutral cool tint (`kgcool` 0.5). Disc 80 px with 48 taps.
 - **Host preview:** `sfhook/tools/kg_preview.mjs` renders the real FillRRect rewrite over a photographic crop of the user's lockscreen and composites region colour, glass fill and hairline as on the device. Over the dark jacket crop: body luma SD 0.151 → 0.072, p95 0.64 → 0.54, top contour +0.02 → +0.18 over the body, worst-case white-text contrast 2.5 → 3.5. Not device-validated; the real compositor input and Samsung filter are unknown.
 
+### Lockscreen v0.15: neutral body, surface sheen (2026-10-16)
+
+**v0.14 device screenshot.** The rim is single (0.52 contour, a smooth 0.29–0.32 core). The face area of the body reads amber: R − B is 0.10 at the median and 0.27 at p95.
+
+**Cause.** The 80 px disc spreads skin and leather into wide patches. Saturation 1.12 and v0.14's transmission gain (up to 1.8×) raised their chroma; on the host, body chroma was up 58 % from v0.13.
+
+**v0.15, profile 1 only:**
+- saturation 1.0;
+- gain capped at 1.35×;
+- chroma cut by `kgwarm` (0.6) where red exceeds blue, while cool hues keep theirs;
+- cool tint 0.7;
+- a surface sheen `kgsheen` (5 % at the top, 0.5 % at the bottom, fading over bright backdrops): the environment reflected by the glass face, which a pure blur lacks.
+
+**Host,** over a crop of the device's own wallpaper under the card: R − B p99 goes 0.12 → 0.02 and chroma p95 0.19 → 0.16. Profile 0 is bit-identical.
+
 ### Lockscreen v0.14: one rim, no app edge, no veil (2026-10-16)
 
 The v0.13 device screenshot, measured down the card: contour 0.59, trough 0.33, **a second ring of 0.49 about 19 px in**, then a 0.32–0.34 core; at the bottom an inner ring of 0.42 and a contour of 0.41. That reads as two drops.

@@ -73,7 +73,7 @@
 //    1.2 rad tilt capped Schlick's F at 0.10, which left the rim grey (the device report);
 //  - one rim: grazing reflectance and a 1.6 px contour as a single weight, and a glint decaying
 //    from the outline on the light-facing side (light from the upper left); no inner ring.
-#define OULG_FS_GLOBALS "highp float oulg_on, oulg_pf, oulg_br, oulg_t, oulg_k, oulg_bv;\nhighp vec2 oulg_jx, oulg_jy, oulg_n;\n"
+#define OULG_FS_GLOBALS "highp float oulg_on, oulg_pf, oulg_br, oulg_t, oulg_k, oulg_bv, oulg_v;\nhighp vec2 oulg_jx, oulg_jy, oulg_n;\n"
 #define OULG_FS_BSPLINE \
     "mediump vec4 oulg_bspline(sampler2D s, highp vec2 uv) {\n" \
     "  highp vec2 ts = vec2(textureSize(s, 0));\n" \
@@ -133,7 +133,7 @@
     "  }\n" \
     "  return vec4(clamp(rgb, 0.0, 1.0) * c.a, c.a);\n" \
     "}\n"
-// Profile 1's material (core, sat, tone, flat, level, cool x3, rim, tilt, line, spec); profile 0
+// Profile 1's material (core, sat, tone, flat, level, warm, cool x3, sheen, rim, tilt, line, spec); profile 0
 // passes through untouched. Colour is handled unpremultiplied (the region is opaque; a = 1 in
 // practice). Body, scaled by the body-blur weight:
 //  - vibrancy and the highlight knee as in v0.9;
@@ -142,7 +142,14 @@
 //    cannot reach (near-black) is added as scattered light. v0.13 lifted shadows by adding that
 //    light everywhere, which greyed the core (milky); v0.12 weighted it by depth (a dark trough
 //    next to a flat plateau);
-//  - a luma-neutral cool tint over the whole card.
+//  - warm-chroma neutralisation (v0.15): where red exceeds blue (skin, brown leather, wood), chroma
+//    is cut by `warm` (0.6). The 80 px disc averages those into wide amber patches, and the
+//    transmission gain had raised their chroma further (gain capped at 1.35, was 1.8). Cool hues
+//    keep their chroma, so the body is not a dead grey;
+//  - a luma-neutral cool tint over the whole card (`cool` 0.7);
+//  - a surface sheen: the environment reflected by the glass face itself, `sheen` (5 %) at the top
+//    falling to a tenth of that at the bottom and fading over bright backdrops. A slab of glass
+//    reflects a few percent at normal incidence; a body with none reads as a blur, not a material.
 // Rim, one term (v0.14): grazing reflectance over the outer pixels (tilt x t^2, Schlick) and the
 // contour (a 1.6 px Gaussian at the outline) are one weight toward a cool environment, slightly
 // stronger on the light-facing side; a glint decays from the outline (5 px) on that side. v0.13
@@ -162,9 +169,13 @@
     "  y = max(dot(rgb, w709), 0.0);\n" \
     "  mediump float fl = %.3f, lv = %.3f;\n" \
     "  mediump float yt = y + fl * (y < lv ? 1.0 : 0.5) * (lv - y);\n" \
-    "  mediump float gn = clamp(yt / max(y, 1e-3), 0.6, 1.8);\n" \
+    "  mediump float gn = clamp(yt / max(y, 1e-3), 0.6, 1.35);\n" \
     "  rgb = rgb * gn + max(yt - y * gn, 0.0) * vec3(0.94, 0.97, 1.02);\n" \
+    "  y = max(dot(rgb, w709), 0.0);\n" \
+    "  mediump float warm = smoothstep(0.0, 0.16, rgb.r - rgb.b) * (0.5 + 0.5 * body);\n" \
+    "  rgb = vec3(y) + (rgb - vec3(y)) * (1.0 - %.3f * warm);\n" \
     "  rgb *= vec3(%.4f, %.4f, %.4f);\n" \
+    "  rgb = mix(rgb, vec3(0.90, 0.94, 1.0), %.3f * (0.55 - 0.45 * oulg_v) * (1.0 - 0.7 * y));\n" \
     "  if (oulg_t > 0.0) {\n" \
     "    mediump float facing = dot(oulg_n, vec2(-0.4512, -0.8924));\n" \
     "    mediump float lit = max(facing, 0.0);\n" \
@@ -214,6 +225,7 @@
     "  if (oulg_pf > 0.5) {\n" \
     "    highp float b = 0.5 * r;\n" \
     "    oulg_bv = b;\n" \
+    "    oulg_v = clamp(q.y / hs.y, -1.0, 1.0);\n" \
     "    oulg_br = %.2f * smoothstep(0.02, %.3f, clamp(depth / r, 0.0, 1.0));\n" \
     "    if (l <= 0.0 || depth <= 0.0 || depth >= b) return vec2(0.0);\n" \
     "    highp float t = 1.0 - depth / b;\n" \
@@ -231,9 +243,10 @@
 // off), taps per pixel, the depth at which the core radius is reached (in bevels); profile 1 only:
 // body saturation (1 = none), highlight knee (0 = none), rim reflectance gain and specular strength,
 // transmission flattening (0 = none) toward a luma level, cool tint (0 = none), rim tilt at the
-// outline (rad) and contour strength (0 = none).
+// outline (rad), contour strength (0 = none), warm-chroma neutralisation (0 = none) and the surface
+// sheen (0 = none).
 struct oulg_profile { float core; int taps; float ramp; float sat; float tone; float rim; float spec; float cap; float lift;
-                      float flat; float level; float cool; float tilt; float line; };
+                      float flat; float level; float cool; float tilt; float line; float warm; float sheen; };
 #define OULG_CORE_DEFAULT 48.0f
 #define OULG_TAPS_DEFAULT 24
 #define OULG_RAMP_DEFAULT 1.5f
@@ -243,13 +256,15 @@ struct oulg_profile { float core; int taps; float ramp; float sat; float tone; f
 #define OULG_KG_TAPS_DEFAULT 48
 // Profile 1: the depth where the core radius is reached, as a fraction of the corner radius.
 #define OULG_KG_RAMP_DEFAULT 0.38f
-#define OULG_KG_SAT_DEFAULT 1.12f
+#define OULG_KG_SAT_DEFAULT 1.0f
 #define OULG_KG_TONE_DEFAULT 0.15f
 #define OULG_KG_RIM_DEFAULT 1.0f
 #define OULG_KG_SPEC_DEFAULT 0.22f
 #define OULG_KG_FLAT_DEFAULT 0.55f
 #define OULG_KG_LEVEL_DEFAULT 0.48f
-#define OULG_KG_COOL_DEFAULT 0.5f
+#define OULG_KG_COOL_DEFAULT 0.7f
+#define OULG_KG_WARM_DEFAULT 0.6f
+#define OULG_KG_SHEEN_DEFAULT 0.05f
 #define OULG_KG_TILT_DEFAULT 1.42f
 #define OULG_KG_LINE_DEFAULT 0.55f
 // Shade legibility (profile 2): the brightest luma a light-text card shows (white text keeps ~3.4:1
@@ -261,12 +276,13 @@ struct oulg_profile { float core; int taps; float ramp; float sat; float tone; f
 // The optics this library implements, announced to the module (debug.oulg.sf.optics).
 #define OULG_OPTICS_VERSION "9"
 static const struct oulg_profile OULG_PROFILES_DEFAULT[OULG_PROFILES] = {
-    {OULG_CORE_DEFAULT, OULG_TAPS_DEFAULT, OULG_RAMP_DEFAULT, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f},
+    {OULG_CORE_DEFAULT, OULG_TAPS_DEFAULT, OULG_RAMP_DEFAULT, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f},
     {OULG_KG_CORE_DEFAULT, OULG_KG_TAPS_DEFAULT, OULG_KG_RAMP_DEFAULT, OULG_KG_SAT_DEFAULT, OULG_KG_TONE_DEFAULT,
      OULG_KG_RIM_DEFAULT, OULG_KG_SPEC_DEFAULT, 0.0f, 0.0f,
-     OULG_KG_FLAT_DEFAULT, OULG_KG_LEVEL_DEFAULT, OULG_KG_COOL_DEFAULT, OULG_KG_TILT_DEFAULT, OULG_KG_LINE_DEFAULT},
+     OULG_KG_FLAT_DEFAULT, OULG_KG_LEVEL_DEFAULT, OULG_KG_COOL_DEFAULT, OULG_KG_TILT_DEFAULT, OULG_KG_LINE_DEFAULT,
+     OULG_KG_WARM_DEFAULT, OULG_KG_SHEEN_DEFAULT},
     {0.0f, OULG_TAPS_DEFAULT, OULG_RAMP_DEFAULT, 1.0f, 0.0f, 0.0f, 0.0f, OULG_SHADE_CAP_DEFAULT, OULG_SHADE_LIFT_DEFAULT,
-     0.0f, 0.0f, 0.0f, 0.0f, 0.0f},
+     0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f},
 };
 #define OULG_VS_RADII_AT "highp vec2 neighbor_radii = radii_and_neighbors.zw;\n"
 #define OULG_VS_POS_AT "gl_Position = vec4(devcoord, 0.0, 1.0);\n"
@@ -372,6 +388,8 @@ static void oulg_fix_params(struct oulg_profile p[OULG_PROFILES]) {
         if (!(p[i].cool >= 0.0f && p[i].cool <= 2.0f)) p[i].cool = d->cool;
         if (!(p[i].tilt >= 0.5f && p[i].tilt <= 1.55f)) p[i].tilt = d->tilt;
         if (!(p[i].line >= 0.0f && p[i].line <= 1.0f)) p[i].line = d->line;
+        if (!(p[i].warm >= 0.0f && p[i].warm <= 1.0f)) p[i].warm = d->warm;
+        if (!(p[i].sheen >= 0.0f && p[i].sheen <= 0.3f)) p[i].sheen = d->sheen;
     }
 }
 
@@ -405,7 +423,8 @@ static int oulg_lib(char *out, size_t cap, int external, const struct oulg_profi
     double cl = 0.2126 * cr + 0.7152 * cg + 0.0722 * cb;
     if (!external && !oulg_append(out, cap, &at, OULG_FS_LENS_FMT, (double) (p[1].core > 0.001f ? p[1].core : 0.001f),
                                   (double) p[1].sat, (double) p[1].tone, (double) p[1].flat, (double) p[1].level,
-                                  cr / cl, cg / cl, cb / cl, (double) p[1].rim, (double) p[1].tilt, (double) p[1].line,
+                                  (double) p[1].warm, cr / cl, cg / cl, cb / cl, (double) p[1].sheen,
+                                  (double) p[1].rim, (double) p[1].tilt, (double) p[1].line,
                                   (double) p[1].spec)) return 0;
     return 1;
 }
