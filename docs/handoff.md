@@ -6,7 +6,11 @@ Documento para continuar o trabalho em outra conversa. Leia inteiro antes de mex
 
 ### Estado do repositório
 
-- `main` em `82423d9`, com os PRs #27 e #28 mergeados. O merge do #28 dispara a release.
+- `main` em `82423d9`, com os PRs #27 e #28 mergeados.
+- **Nenhuma release foi gerada por esses merges.**
+  - `release.yml` só roda por `workflow_dispatch`.
+  - `trigger-release.yml` só roda quando `.github/release-trigger` é enviado ao `main`.
+  - Para publicar, dispare o workflow ou envie esse arquivo.
 - Propriedades setadas à mão no aparelho devem ser apagadas: os padrões do código já são os valores bons. `debug.oulg.sf.optics` fica em 9.
 
 ### Central de notificações (desbloqueada): resolvida e confirmada pelo usuário
@@ -79,7 +83,8 @@ Pontos de partida no código:
 - Ela está cinza, opaca e sem vidro, destoando dos cards.
 - **Pedido:** vidro leve, com transparência e blur suave. Não precisa do material completo dos cards.
 - **Primeiro passo:** identificar a view. Provavelmente é a shelf da tela de bloqueio ou um contêiner de ícones. Um `BLUR_CENSUS` ou um `Probe.hierarchy` com trace ligado deve achar.
-- A shelf da central já tem a marca de legibilidade via `tagForeign`. Esta pílula é outra coisa, a confirmar.
+- Com `shadetone=3`, que é o padrão, nada recebe a marca de perfil 2: `tagForeign` devolve `off`, e a shelf da central fica sem marca.
+- A pílula pode ser essa mesma shelf. Confirme no trace antes de supor.
 
 
 
