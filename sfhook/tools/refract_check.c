@@ -2,7 +2,7 @@
 // each rewrite as mod_NNN.{vert,frag} (vertex shaders also as min_NNN.vert, the zero-output
 // fallback), for glslangValidator, including a link of each fragment rewrite against the vertex
 // rewrites. A third argument "0" builds them without the debug tint; a fourth overrides profile 1
-// parameters, e.g. "core=48,taps=24,rim=0,spec=0" (core taps ramp sat tone rim spec flat level cool tilt line ccap). Build:
+// parameters, e.g. "core=48,taps=24,rim=0,spec=0" (core taps ramp sat tone rim spec flat level cool tilt line ccap fcap). Build:
 // gcc -I.. -o rc refract_check.c
 #include "refract.h"
 static void put(const char *dir, const char *kind, int idx, const char *ext, const char *text) {
@@ -25,6 +25,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(kv, "cool")) prof[1].cool = v; else if (!strcmp(kv, "tilt")) prof[1].tilt = v;
         else if (!strcmp(kv, "line")) prof[1].line = v;
         else if (!strcmp(kv, "ccap")) prof[1].ccap = v;
+        else if (!strcmp(kv, "fcap")) prof[1].fcap = v;
     }
     FILE *f = fopen(argv[1], "rb"); fseek(f, 0, SEEK_END); long n = ftell(f); fseek(f, 0, SEEK_SET);
     char *t = malloc(n + 1); if (fread(t, 1, n, f) != (size_t) n) return 1; t[n] = 0; fclose(f);

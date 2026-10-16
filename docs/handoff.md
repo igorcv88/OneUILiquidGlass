@@ -2,6 +2,35 @@
 
 Documento para continuar o trabalho em outra conversa. Leia inteiro antes de mexer em qualquer coisa. O histórico técnico detalhado está em `docs/architecture.md`; as seções de 2026-10-16 cobrem a central de notificações.
 
+## 0l. Atualização (2026-10-16, sfhook v0.17): miolo dinâmico, sem branco fixo
+
+**Relato do usuário (v0.16):** contorno claro, borda escurecendo (bonita) e o miolo claro de novo, branco e sem acompanhar o papel de parede. Pedido: só o contorno deve ser fixo e iluminado; o resto, dinâmico. Reduzir o clareamento em uns 50%.
+
+**Medido no host** (luma do card menos a do papel de parede borrado; inclinação = quanto acompanha o fundo):
+
+| | Borda | Miolo |
+|---|---|---|
+| v0.11 / v0.16 | +0,14 / 81% | +0,20 / 40–46% |
+
+**Causa:** o achatamento de transmissão da v0.11 (`kgflat` 0,5 em direção a 0,40) tem peso pela rampa do miolo. A borda recebe pouco, o miolo recebe tudo, e por isso o miolo fica claro e quase fixo.
+
+**Correção:** o peso do achatamento é limitado a 0,5 (`OULG_KG_FCAP_DEFAULT`, propriedade `debug.oulg.sf.kgflatcap`).
+- Na faixa da borda o peso já fica abaixo de 0,5 até ~38 px, então ela não muda (média 0,04–0,28/255, máx 8 na ponta interna).
+- O miolo recebe metade do achatamento: +0,13 e 68% (sobre pele/jaqueta), no mesmo nível da borda.
+
+**Mantido:** o limite de 62 px do raio do miolo (v0.16) e todo o resto da v0.11.
+
+**Rollback exato:** `kgflatcap=1` e `kgcorecap=80` dão saída bit a bit igual à v0.11.
+
+**Contraste:** o do texto branco no pior caso, sobre o fundo escuro, cai de 3,5 para 2,9 no host. É a consequência de o miolo acompanhar o fundo claro.
+
+Prévia: `docs/img/lockscreen-v17-preview.jpg` (v0.11 e v0.17 alternados).
+
+**Teste:**
+1. O APK da v0.16 continua.
+2. Lib `SurfaceFlingerProp.v17.so` (seção 4); confirme com `grep -c kgflatcap`.
+3. Reinicie o SurfaceFlinger com o cache limpo.
+
 ## 0k. Atualização (2026-10-16, sfhook v0.16): volta à estética da v0.11, miolo menos borrado
 
 **Decisão do usuário:** a referência visual é a estética da **lib v0.11** com a correção de primeiro quadro e flicker do **APK v0.12**.

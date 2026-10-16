@@ -160,7 +160,7 @@
     "  rgb = mix(vec3(y), rgb, 1.0 + (%.3f - 1.0) * body);\n" \
     "  rgb *= 1.0 - %.3f * body * smoothstep(0.65, 1.0, y);\n" \
     "  y = max(dot(rgb, w709), 0.0);\n" \
-    "  mediump float yt = y + %.3f * body * (%.3f - y);\n" \
+    "  mediump float yt = y + %.3f * min(body, %.3f) * (%.3f - y);\n" \
     "  const mediump vec3 scatter = vec3(0.86, 0.94, 1.06) / 0.92744;\n" \
     "  rgb = yt > y ? rgb + (yt - y) * scatter : rgb * (yt / max(y, 1e-3));\n" \
     "  rgb *= vec3(%.4f, %.4f, %.4f);\n" \
@@ -231,9 +231,10 @@
 // off), taps per pixel, the depth at which the core radius is reached (in bevels); profile 1 only:
 // body saturation (1 = none), highlight knee (0 = none), rim reflectance gain and specular strength,
 // transmission flattening (0 = none) toward a luma level, cool tint (0 = none), rim tilt at the
-// outline (rad), contour strength (0 = none) and the body radius cap in px (>= core: none).
+// outline (rad), contour strength (0 = none), the body radius cap in px (>= core: none) and the cap on
+// the flattening weight (1: none).
 struct oulg_profile { float core; int taps; float ramp; float sat; float tone; float rim; float spec; float cap; float lift;
-                      float flat; float level; float cool; float tilt; float line; float ccap; };
+                      float flat; float level; float cool; float tilt; float line; float ccap; float fcap; };
 #define OULG_CORE_DEFAULT 48.0f
 #define OULG_TAPS_DEFAULT 24
 #define OULG_RAMP_DEFAULT 1.5f
@@ -245,6 +246,12 @@ struct oulg_profile { float core; int taps; float ramp; float sat; float tone; f
 // Lockscreen body radius cap (v0.16): the v0.11 core of 80 px hid too much of the wallpaper. Capped
 // at 62 px, the core is clearer while the rim and its transition (radius below 62 px) are unchanged.
 #define OULG_KG_CCAP_DEFAULT 62.0f
+// Cap on the transmission flattening weight (v0.17). In v0.11 the core took the full `flat` (0.5)
+// toward 0.40 and the rim far less: on the host the core sat +0.20 above the wallpaper and followed
+// it at 46 %, the rim +0.14 at 81 % (bright contour, darker rim, light core again: a whitish core
+// that ignored the wallpaper). Capped at weight 0.5, the rim band (weight <= 0.5 up to ~38 px) is
+// as in v0.11 and the core takes half the flattening: +0.13 and 68 %, level with the rim.
+#define OULG_KG_FCAP_DEFAULT 0.5f
 #define OULG_KG_SAT_DEFAULT 1.25f
 #define OULG_KG_TONE_DEFAULT 0.15f
 #define OULG_KG_RIM_DEFAULT 1.0f
@@ -263,13 +270,13 @@ struct oulg_profile { float core; int taps; float ramp; float sat; float tone; f
 // The optics this library implements, announced to the module (debug.oulg.sf.optics).
 #define OULG_OPTICS_VERSION "9"
 static const struct oulg_profile OULG_PROFILES_DEFAULT[OULG_PROFILES] = {
-    {OULG_CORE_DEFAULT, OULG_TAPS_DEFAULT, OULG_RAMP_DEFAULT, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 400.0f},
+    {OULG_CORE_DEFAULT, OULG_TAPS_DEFAULT, OULG_RAMP_DEFAULT, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 400.0f, 1.0f},
     {OULG_KG_CORE_DEFAULT, OULG_KG_TAPS_DEFAULT, OULG_KG_RAMP_DEFAULT, OULG_KG_SAT_DEFAULT, OULG_KG_TONE_DEFAULT,
      OULG_KG_RIM_DEFAULT, OULG_KG_SPEC_DEFAULT, 0.0f, 0.0f,
      OULG_KG_FLAT_DEFAULT, OULG_KG_LEVEL_DEFAULT, OULG_KG_COOL_DEFAULT, OULG_KG_TILT_DEFAULT, OULG_KG_LINE_DEFAULT,
-     OULG_KG_CCAP_DEFAULT},
+     OULG_KG_CCAP_DEFAULT, OULG_KG_FCAP_DEFAULT},
     {0.0f, OULG_TAPS_DEFAULT, OULG_RAMP_DEFAULT, 1.0f, 0.0f, 0.0f, 0.0f, OULG_SHADE_CAP_DEFAULT, OULG_SHADE_LIFT_DEFAULT,
-     0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 400.0f},
+     0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 400.0f, 1.0f},
 };
 #define OULG_VS_RADII_AT "highp vec2 neighbor_radii = radii_and_neighbors.zw;\n"
 #define OULG_VS_POS_AT "gl_Position = vec4(devcoord, 0.0, 1.0);\n"
@@ -375,6 +382,7 @@ static void oulg_fix_params(struct oulg_profile p[OULG_PROFILES]) {
         if (!(p[i].tilt >= 0.5f && p[i].tilt <= 1.55f)) p[i].tilt = d->tilt;
         if (!(p[i].line >= 0.0f && p[i].line <= 1.0f)) p[i].line = d->line;
         if (!(p[i].ccap >= 0.0f && p[i].ccap <= 400.0f)) p[i].ccap = d->ccap;
+        if (!(p[i].fcap >= 0.0f && p[i].fcap <= 1.0f)) p[i].fcap = d->fcap;
     }
 }
 
@@ -408,7 +416,7 @@ static int oulg_lib(char *out, size_t cap, int external, const struct oulg_profi
     double cr = 1.0 - 0.06 * p[1].cool, cg = 1.0 - 0.01 * p[1].cool, cb = 1.0 + 0.08 * p[1].cool;
     double cl = 0.2126 * cr + 0.7152 * cg + 0.0722 * cb;
     if (!external && !oulg_append(out, cap, &at, OULG_FS_LENS_FMT, (double) (p[1].core > 0.001f ? 1.0f : 0.0f),
-                                  (double) p[1].sat, (double) p[1].tone, (double) p[1].flat, (double) p[1].level,
+                                  (double) p[1].sat, (double) p[1].tone, (double) p[1].flat, (double) p[1].fcap, (double) p[1].level,
                                   cr / cl, cg / cl, cb / cl, (double) p[1].rim, (double) p[1].tilt, (double) p[1].line,
                                   (double) p[1].spec)) return 0;
     return 1;

@@ -644,6 +644,17 @@ Profile 1 only (profile 0 stays bit-identical, `render_check` max 0; profile 2 u
 - **Body:** after vibrancy and the highlight knee, luma moves `kgflat·body` (0.50) of the way to `kglevel` (0.40). Darkening is a gain; lifting adds cool scattered light, so near-black does not turn into amplified noise. Then a luma-neutral cool tint (`kgcool` 0.5). Disc 80 px with 48 taps.
 - **Host preview:** `sfhook/tools/kg_preview.mjs` renders the real FillRRect rewrite over a photographic crop of the user's lockscreen and composites region colour, glass fill and hairline as on the device. Over the dark jacket crop: body luma SD 0.151 → 0.072, p95 0.64 → 0.54, top contour +0.02 → +0.18 over the body, worst-case white-text contrast 2.5 → 3.5. Not device-validated; the real compositor input and Samsung filter are unknown.
 
+### Lockscreen v0.17: a dynamic core (2026-10-16)
+
+The v0.11 flattening (`kgflat` 0.5 toward 0.40) is weighted by the body ramp. Measured on the host against the wallpaper under the card:
+- the rim sits +0.14 above it and follows it at 81 %;
+- the core sits +0.20 above it and follows it at only 40–46 %.
+
+That is the light, fixed core the user reported. The weight is now `min(body, kgflatcap)`, with a cap of 0.5:
+- **Rim:** weight below 0.5 up to ~38 px, so effectively unchanged (mean 0.04–0.28/255).
+- **Core:** +0.13 and 68 %, level with the rim.
+- **Rollback:** `kgflatcap = 1` with `kgcorecap ≥ 80` is bit-identical to v0.11. Profile 0 is bit-identical.
+
 ### Lockscreen v0.16: the v0.11 material with a capped core blur (2026-10-16)
 
 **Decision.** The user approved the look of lib v0.11 with the v0.12 app; v0.13–v0.15 are withdrawn. The lib v0.12 dome never ran on the device.
