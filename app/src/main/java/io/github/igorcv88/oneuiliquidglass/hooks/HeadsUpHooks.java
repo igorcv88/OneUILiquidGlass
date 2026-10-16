@@ -242,15 +242,30 @@ public final class HeadsUpHooks {
     /** Per-frame state of the shelf's own blur, as ROW_FRAME does for rows (debug.oulg.trace only). */
     private void traceShelf(View shelf) {
         if (!tracedShelves.add(shelf)) return;
-        String[] last = {null};
-        shelf.getViewTreeObserver().addOnPreDrawListener(() -> {
+        // Registered while attached only: the window's observer outlives a shelf that is replaced.
+        shelf.addOnAttachStateChangeListener(new ShelfTrace(shelf));
+    }
+    private static final class ShelfTrace implements View.OnAttachStateChangeListener, ViewTreeObserver.OnPreDrawListener {
+        private final View shelf;
+        private ViewTreeObserver observer;
+        private String last;
+        ShelfTrace(View shelf) { this.shelf = shelf; if (shelf.isAttachedToWindow()) onViewAttachedToWindow(shelf); }
+        @Override public void onViewAttachedToWindow(View v) {
+            if (observer != null) return;
+            observer = v.getViewTreeObserver(); observer.addOnPreDrawListener(this);
+        }
+        @Override public void onViewDetachedFromWindow(View v) {
+            if (observer != null && observer.isAlive()) observer.removeOnPreDrawListener(this);
+            observer = null;
+        }
+        @Override public boolean onPreDraw() {
             if (!Probe.trace) return true;
             try {
                 String line = FrameTrace.describe(shelf, null, null);
-                if (!line.equals(last[0])) { last[0] = line; FrameTrace.log("SHELF_FRAME", shelf, line); }
+                if (!line.equals(last)) { last = line; FrameTrace.log("SHELF_FRAME", shelf, line); }
             } catch (RuntimeException | LinkageError e) { Probe.error("SHELF_TRACE_FAILED", e); }
             return true;
-        });
+        }
     }
     /** The row state whose material drives this view's Samsung blur (Samsung or hybrid), if any. */
     private State compositorState(View v) {
