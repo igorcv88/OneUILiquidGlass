@@ -582,6 +582,12 @@ Device report (screen recording, unlocked shade over the launcher, `shadeblur=1`
 
 Not verified on device yet. The flash diagnosis comes from the recording and the tag rules, not from a log.
 
+**Device trace after that fix (`ROW_FRAME`, 2026-10-16).** The upper cards were fixed. The last row and the rows above the shelf still flashed, worse the brighter the app behind and not at all over black. The trace shows the cause:
+- While the shade closes, One UI scales every top-level row itself (`s=0.99x0.99` and below, parent `NotificationStackScrollLayout`), not only an ancestor.
+- The stacked-group rule suspended the blur region of any scaled row. It was written for a group's first child drawn as a sliver (`0.92x1.0`). Applied to these rows, it switched their region on and off 21 to 23 times per pull, each time the scale crossed 0.995. With no region, the card showed the shade's dark backdrop.
+- **Fix:** the rule now applies only to a row whose parent is a `NotificationChildrenContainer`.
+- **Untagged while scaled:** the card dropped from the tone-mapped look to the plain blur, which is white over a white app. While a shade card is untagged by scale, its veil stands in for the tone map. It is black under light text, white under dark text, at `debug.oulg.shadescaleveil` alpha (default 115, about 45 %, live; 0 keeps the normal tint). Over white this lands near the tone map's 0.55 cap. Mid-tones come out darker than the tone map would make them.
+
 ## Expanded notification header gap (2026-10-11)
 
 A layout-only refinement, independent of the glass: in expanded notifications the title sat too close to the header row (`Chrome · 3 hours left · 15:52` over the file name). `HeaderGapHooks` adds `debug.oulg.headergap` dp (default 4, 0 turns it off, at most 8) between the two. The policy, which the host tests cover, lives in `HeaderGap`.

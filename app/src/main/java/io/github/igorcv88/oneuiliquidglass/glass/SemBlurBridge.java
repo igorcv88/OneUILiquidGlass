@@ -190,7 +190,12 @@ public final class SemBlurBridge implements Backdrop {
         String shape = applyShape(b, t.semShape, radii);
         lastPx = px; lastTint = tint; System.arraycopy(radii, 0, lastRadii, 0, 8); built = true;
         if (!shape.equals(lastShape)) { lastShape = shape; Probe.log("SEM_BLUR_SHAPE", "mode=" + shape + " radius=" + radii[0] + " size=" + host.getWidth() + "x" + host.getHeight()); }
-        if (color != null) color.invoke(b, t.semAlpha >= 0 ? (tint & 0x00ffffff) | (t.semAlpha << 24) : tint);
+        int veil = t.semAlpha >= 0 ? (tint & 0x00ffffff) | (t.semAlpha << 24) : tint;
+        if (scaled && !lens && tagProfile(false, keyguard) == 2 && t.shadeScaleVeil > 0) {
+            // Untagged while scaled (see setScaled): a veil stands in for the tone map.
+            veil = (shadeStrength() < 0.65f ? 0x000000 : 0xffffff) | (t.shadeScaleVeil << 24);
+        }
+        if (color != null) color.invoke(b, veil);
         // "auto": lens cards carry an explicit neutral curve. A blur without one takes whatever curve
         // the compositor last had, and the panel blur leaves its dark one behind after a pull-down
         // (the lockscreen cards turned gray until the next lock). Shade cards keep the inherited look.
@@ -435,7 +440,8 @@ public final class SemBlurBridge implements Backdrop {
      * compositor with a fractional size and radius: the shade tag matched on some frames and not on
      * others, so the legibility tone map switched on and off frame by frame (the card flashed light
      * and dark on a slow pull up). While scaled, a non-lens card carries no tag; one rebuild at each
-     * edge. Lens cards are left as they are.
+     * edge. A shade card's veil then stands in for the tone map (debug.oulg.shadescaleveil), so it
+     * does not jump to the plain blur, white over a white app. Lens cards are left as they are.
      */
     public void setScaled(boolean on) throws ReflectiveOperationException {
         if (scaled == on) return;

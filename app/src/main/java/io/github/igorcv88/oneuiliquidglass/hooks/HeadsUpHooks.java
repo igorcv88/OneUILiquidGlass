@@ -268,6 +268,11 @@ public final class HeadsUpHooks {
         }
     }
     /** The row state whose material drives this view's Samsung blur (Samsung or hybrid), if any. */
+    /** A row inside a group's children container (drawn as a stacked sliver while the group is collapsed). */
+    private static boolean groupChild(View row) {
+        ViewParent p = row.getParent();
+        return p != null && p.getClass().getName().endsWith("NotificationChildrenContainer");
+    }
     private State compositorState(View v) {
         State s = states.get(v);
         if (s == null && rowClass != null && rowClass.isInstance(v)) {
@@ -560,7 +565,10 @@ public final class HeadsUpHooks {
                 // compositor at a fractional, elliptical size that drops the corner tag (white behind
                 // groups over a white app). Such rows carry no region; the glass draws the sliver.
                 View sr = row.get();
-                boolean stacked = sr != null && (Math.abs(sr.getScaleX() - 1f) > 0.005f || Math.abs(sr.getScaleY() - 1f) > 0.005f);
+                // Only a child of a group: the shade scales every top-level row while it closes, and
+                // suspending those turned their region on and off frame by frame (device trace).
+                boolean stacked = sr != null && groupChild(sr)
+                        && (Math.abs(sr.getScaleX() - 1f) > 0.005f || Math.abs(sr.getScaleY() - 1f) > 0.005f);
                 if (stacked != this.stacked) {
                     this.stacked = stacked;
                     Probe.log("ROW_STACKED", "viewId=" + Integer.toHexString(System.identityHashCode(v)) + " stacked=" + stacked);
