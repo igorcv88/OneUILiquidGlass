@@ -610,6 +610,11 @@ Not verified on device yet. The flash diagnosis comes from the recording and the
 - So on this firmware a partly transparent region in the unlocked shade turns whiter, not fainter. This is inferred from the recording, not measured in the compositor.
 - **Fix:** in the unlocked shade the region is now whole or gone. It is removed once the accumulated alpha drops below `debug.oulg.shadefadecut` (default 0.5, live; 0 restores the alpha fade). Both paths do this; the Samsung path suspends its region.
 
+**Fifth device pass (2026-10-16).**
+- `shadetone=0` was steady but too bright over a white app: without the tag the card does not respond to its backdrop.
+- With the Samsung path, the tag and the fade cut together, the cards were steady at rest and still flashed during the pull.
+- **Fix:** a card now stays untagged from the frame it scales or fades until it has been still for 300 ms (`SETTLE_MS`). Before this, the tag followed the scale frame by frame, and with the finger nearly still the scale wobbled around 1.
+
 ## Expanded notification header gap (2026-10-11)
 
 A layout-only refinement, independent of the glass: in expanded notifications the title sat too close to the header row (`Chrome · 3 hours left · 15:52` over the file name). `HeaderGapHooks` adds `debug.oulg.headergap` dp (default 4, 0 turns it off, at most 8) between the two. The policy, which the host tests cover, lives in `HeaderGap`.

@@ -492,6 +492,8 @@ public final class HeadsUpHooks {
         if (bg.isAttachedToWindow()) s.onViewAttachedToWindow(bg);
         return s;
     }
+    /** How long a card stays untagged after it last scaled or faded. */
+    private static final long SETTLE_MS = 300;
     private final class State implements View.OnAttachStateChangeListener, ViewTreeObserver.OnPreDrawListener {
         final WeakReference<View> background;
         final WeakReference<View> row;
@@ -521,6 +523,10 @@ public final class HeadsUpHooks {
         int tuningGeneration;
         /** The row is scaled into a collapsed group's stack (see onPreDraw). */
         boolean stacked;
+        /** Last frame the card was scaled or faded (uptime ms); see onPreDraw. */
+        long lastMotion = Long.MIN_VALUE / 2;
+        /** Redraws once the card has been still for SETTLE_MS, so the tag comes back. */
+        final Runnable settle = this::invalidate;
         /** Last ROW_FRAME line (debug.oulg.trace); logged again only when it changes. */
         String lastTrace;
         State(View background, View row) { this.background = new WeakReference<>(background); this.row = new WeakReference<>(row); }
@@ -587,13 +593,23 @@ public final class HeadsUpHooks {
                     // white pill as the card faded): there it is whole or gone (shadefadecut).
                     float cut = barState != null && barState == Eligibility.BAR_SHADE ? Tuning.get().shadeFadeCut : 0f;
                     float fade = cut > 0f ? (a >= cut ? 1f : 0f) : a;
+                    // The tag cannot survive a scaled region; with the finger nearly still the scale
+                    // wobbled between 1 and 0.999 and the tag switched every frame. Once the card
+                    // scales or fades it stays untagged until it has been still for SETTLE_MS.
+                    long now = android.os.SystemClock.uptimeMillis();
+                    if (Math.abs(sx - 1f) > 0.001f || Math.abs(sy - 1f) > 0.001f || a < 0.999f) {
+                        lastMotion = now;
+                        v.removeCallbacks(settle);
+                        v.postDelayed(settle, SETTLE_MS + 20);
+                    }
+                    boolean untag = now - lastMotion < SETTLE_MS;
                     if (compBridge != null) {
-                        try { compBridge.setScaled(Math.abs(sx - 1f) > 0.001f || Math.abs(sy - 1f) > 0.001f); }
+                        try { compBridge.setScaled(untag); }
                         catch (ReflectiveOperationException e) { Probe.error("BLUR_DRAWABLE_SCALE_FAILED", e); }
                         if (compBridge.setRegionFade(stacked ? 0f : fade)) v.invalidate();
                     }
                     if (semBridge != null) {
-                        try { semBridge.setScaled(Math.abs(sx - 1f) > 0.001f || Math.abs(sy - 1f) > 0.001f); }
+                        try { semBridge.setScaled(untag); }
                         catch (ReflectiveOperationException e) { Probe.error("SEM_BLUR_SCALE_FAILED", e); }
                         semBridge.setFadeCut(cut > 0f && a < cut);
                         if (semBridge.setRegionFade(cut > 0f ? 1f : a)) v.invalidate();
