@@ -1,6 +1,87 @@
-# Handoff — OneUILiquidGlass (2026-10-09)
+# Handoff — OneUILiquidGlass (2026-10-16)
 
-Documento para continuar o trabalho em outra conversa. Leia inteiro antes de mexer em qualquer coisa. O histórico técnico detalhado está em `docs/architecture.md`, nas seções de 2026-10-07 a 2026-10-09.
+Documento para continuar o trabalho em outra conversa. Leia inteiro antes de mexer em qualquer coisa. O histórico técnico detalhado está em `docs/architecture.md`; as seções de 2026-10-16 cobrem a central de notificações.
+
+## 0e. Atualização (2026-10-16): central resolvida; faltam a tela de bloqueio e a pílula de excedentes
+
+### Estado do repositório
+
+- `main` em `82423d9`, com os PRs #27 e #28 mergeados. O merge do #28 dispara a release.
+- Propriedades setadas à mão no aparelho devem ser apagadas: os padrões do código já são os valores bons. `debug.oulg.sf.optics` fica em 9.
+
+### Central de notificações (desbloqueada): resolvida e confirmada pelo usuário
+
+O usuário aprovou o resultado. Ela fica estável, sem pisca, sem fantasma, sem clarão e sem travada na abertura. Resta só um "buf" leve ao abrir ou fechar muito devagar, que o usuário classificou como detalhe.
+
+**Não mexer sem trace.** As tentativas de suavizar o "buf" pioraram tudo e foram revertidas (commit `b643c60`).
+
+Como a central funciona agora, com as causas provadas por trace:
+
+- **Sem a marca do sfhook.** Com `shadetone=3`, que é o padrão, os cards da central nunca levam a marca de perfil 2.
+  - A marca só era reconhecida pelo compositor em alguns quadros. Isso acontecia em escala fracionária, ao trocar de programa e até parado no caminho drawable. Esse era o pisca.
+  - O tom vem de `ShadeTone`: uma captura por card quando a central abre, que mede a luma média atrás do card e define um véu fixo até a central fechar.
+  - O véu é preto até `shadecap` (0,55) para texto claro e branco até `shadelift` (0,45) para texto escuro.
+  - A leitura da GPU roda numa thread separada. Na thread principal, ela travava a animação de abertura.
+  - Enquanto a medição nova não chega, o card usa o véu medido na abertura anterior.
+- **Caminho drawable na central.** Com `shadeblurpath=1`, os cards usam `BackgroundBlurBridge`.
+  - O alpha da região `semSetBlurInfo` da Samsung não acompanha o esmaecimento do card. Era o fantasma.
+- **Região inteira ou nenhuma.** Com `shadefadecut=0.5`, a região fica opaca e some quando o alpha acumulado do card cai abaixo de 0,5.
+  - Uma região parcialmente transparente neste firmware mistura o fundo nítido no blur (a pílula branca). Isso é dedução, não medição no compositor.
+- **Linhas encolhidas.** Na central desbloqueada, o One UI escala todas as linhas ao fechar.
+  - A regra que suspendia a região de qualquer linha encolhida (0fd9e01) agora só vale para filhos de grupo nessa superfície.
+  - Fora dela, por exemplo na tela de bloqueio, a regra antiga continua.
+- **Região de blur sempre opaca.** O alpha nativo do card (204 na tela de bloqueio) não é mais repassado à região de blur.
+  - Esse era o "borrão sujo" da tela de bloqueio.
+- **Traces disponíveis** com `debug.oulg.trace=1`:
+  - `ROW_FRAME`: por card, com alpha, escala, clip, caminho, marca enviada e alpha da região;
+  - `SHELF_FRAME`;
+  - `PANEL_BLUR`: o blur da própria central, que é uma `SemBlurInfo` só com raio, de 1 a ~50, sem cor e sem curva;
+  - `SHADE_TONE`.
+
+### Tarefa 1: estética da tela de bloqueio
+
+Estado atual:
+- Caminho drawable (`kgblurpath=1`) e perfil 1.
+- `kgblurpath=0` está **proibido**: o usuário confirmou que volta o pisca na tela de bloqueio.
+- Desde `9c17579`, o miolo está bem desfocado e a borda tem efeito de vidro. O usuário diz que melhorou, mas ainda não está como deveria.
+
+Expectativa do usuário, ilustrada em `docs/img/lockscreen-target.jpg`, que é uma imagem gerada como referência e não uma captura. Compare com `docs/img/lockscreen-current.jpg`.
+- Miolo com blur forte e homogêneo, sem deixar áreas escuras do fundo dominarem o card.
+- Transição gradual do miolo para uma faixa de lente suave na borda.
+- Contorno fino e brilhante.
+- Reflexo especular entre o contorno e o miolo, que dá espessura e elevação.
+- Leve tom frio e azulado.
+
+Laudo técnico do usuário, resumido:
+- O problema está na composição do material, não em valores de `kgoptics`, `sflens` ou raio.
+- `kgoptics` 0 contra 1 deu diferença média RGB de apenas 1 a 6 entre os prints.
+- Hoje três camadas montam o material sem um modelo óptico comum:
+  - `BackgroundBlurDrawable`: região e marca;
+  - `sfhook/refract.h`: reamostragem, blur do miolo, lente, saturação e reflexos do perfil 1;
+  - `GlassDrawable`/`LiquidGlassShader`: preenchimento, contorno, realces e sombra.
+- Proposta do laudo:
+  1. Transmissão adaptativa no miolo. Recuperar regiões escuras de forma suave, como hoje se comprimem as altas luzes.
+  2. Refração e filtragem coordenadas: detalhe na borda, reconstrução uniforme no miolo, transição contínua. Reavaliar o disco Vogel com rotação por pixel.
+  3. Iluminação da borda calculada a partir do mesmo modelo de espessura, transmissão e luminância do miolo.
+- **Não pedir ao usuário mais testes de propriedade às cegas.** Ele explicitou isso. Investigar no código e validar com prints ou traces.
+- **Preservar** o pop-up (perfil 0) e a central.
+
+Pontos de partida no código:
+- `sfhook/refract.h`, perfil 1: `OULG_FS_LENS_FMT`, tom, reflexos e parâmetros por perfil em `oulg_profile`.
+- `GlassDrawable` e `LiquidGlassShader`: com `setCompositorLit(true)`, o app reduz o próprio contorno quando o compositor ilumina a borda.
+  - No teste, `sf.optics` 0 contra 9 não mudou nada visível.
+- Mudanças no sfhook exigem trocar a biblioteca ao vivo e reiniciar o SurfaceFlinger com o cache limpo (seção 4). O usuário **não pode** fazer reboot completo.
+- Teste decisivo ainda não feito: `debug.oulg.sf.debug=1`. Ele mostra qual programa desenha o card da tela de bloqueio: magenta é FillRRect, ciano é o programa de recorte.
+
+### Tarefa 2: pílula de excedentes na tela de bloqueio
+
+- Com várias notificações na tela de bloqueio, aparece embaixo uma pílula com ícones das notificações que não cabem, para expandir a lista. Exemplo: dois ícones do GitHub em `docs/img/lockscreen-current.jpg`.
+- Ela está cinza, opaca e sem vidro, destoando dos cards.
+- **Pedido:** vidro leve, com transparência e blur suave. Não precisa do material completo dos cards.
+- **Primeiro passo:** identificar a view. Provavelmente é a shelf da tela de bloqueio ou um contêiner de ícones. Um `BLUR_CENSUS` ou um `Probe.hierarchy` com trace ligado deve achar.
+- A shelf da central já tem a marca de legibilidade via `tagForeign`. Esta pílula é outra coisa, a confirmar.
+
+
 
 ## 0d. Atualização (port offline para One UI 9 Stable, S938BXXUCDZIF)
 
