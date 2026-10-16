@@ -89,11 +89,6 @@ public final class BackgroundBlurBridge implements Backdrop {
             tl = SemBlurBridge.cornerTag(tl, profile); tr = SemBlurBridge.cornerTag(tr, profile);
             bl = SemBlurBridge.cornerTag(bl, profile); br = SemBlurBridge.cornerTag(br, profile);
         }
-        if (lensMode && !lens && blend < 1f) {
-            // Fading toward the shade's own blur (see setBlend): its radius, no veil.
-            px = Math.round(panelPx + (px - panelPx) * blend);
-            tint = (tint & 0x00ffffff) | (Math.round((tint >>> 24) * blend) << 24);
-        }
         drawable.setVisible(true, false);
         radius.invoke(drawable, px);
         color.invoke(drawable, tint);
@@ -106,19 +101,6 @@ public final class BackgroundBlurBridge implements Backdrop {
     private boolean scaled;
     /** The tag profile the last build sent (-1: none), for the trace. */
     public int tagSent = -1;
-    private float blend = 1f;
-    private int panelPx;
-    /**
-     * 1: the card's own blur; 0: the shade window's own blur (radius panelPx, no veil). A card fading
-     * out of (or into) the shade passes through it, so removing its region at the fade cut is not
-     * visible. Rebuilds when the blend moves by a step.
-     */
-    public void setBlend(float t, int panel) throws ReflectiveOperationException {
-        t = Math.max(0f, Math.min(1f, t));
-        if (Math.abs(t - blend) < 0.02f && panel == panelPx && (t == 1f) == (blend == 1f)) return;
-        blend = t; panelPx = panel;
-        if (built) update(lastPx, lastTint, lastRadii);
-    }
     /** The veil ShadeTone measured for this card (0: none yet). */
     private int toneVeil;
     public void setToneVeil(int veil) throws ReflectiveOperationException {

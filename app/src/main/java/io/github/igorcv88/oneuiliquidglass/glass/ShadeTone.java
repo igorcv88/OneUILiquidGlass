@@ -4,107 +4,84 @@ import android.graphics.Bitmap;
 import android.graphics.Rect;
 import android.view.View;
 import java.lang.ref.WeakReference;
+import java.util.function.IntConsumer;
 import io.github.igorcv88.oneuiliquidglass.diagnostics.Probe;
 
 /**
- * Shade legibility measured once (debug.oulg.shadetone=3): when the shade starts opening, one
- * capture of what is behind the shade window becomes a coarse luminance map; each card reads the
- * mean under it from the map and keeps the resulting veil until the shade closes. The compositor tag
- * recomputed this every frame and was recognised on some frames only, which flashed the cards in
- * motion. A capture per card arrived only once the card showed (1.9 s into a slow pull on device),
- * so its region popped in late.
+ * Shade legibility measured once (debug.oulg.shadetone=3): one capture of what is behind the shade
+ * window, the mean luminance under the card, and from it the veil the card keeps until the shade
+ * closes. The compositor tag recomputed this every frame and was recognised on some frames only,
+ * which flashed the cards in motion; a value measured once cannot.
  */
 public final class ShadeTone implements CaptureHub.Client {
-    /** Map cell size in captured pixels. */
-    private static final int CELL = 8;
-    private static ShadeTone pending;
-    private static float[] map;
-    private static int mapW, mapH;
-    private static Rect mapCrop;
-    private static float mapScale;
-    private static int mapOpening = -1;
-
     private final WeakReference<View> view;
-    private final int opening;
+    private final IntConsumer result;
     private boolean done;
 
-    private ShadeTone(View view, int opening) { this.view = new WeakReference<>(view); this.opening = opening; }
+    private ShadeTone(View view, IntConsumer result) { this.view = new WeakReference<>(view); this.result = result; }
 
-    /** Starts the capture for shade opening {@code opening}; {@code root} is the shade window's root view. */
-    public static void prepare(View root, int opening) {
-        if (mapOpening == opening || (pending != null && pending.opening == opening)) return;
-        if (pending != null) pending.finish();
-        map = null;
-        mapOpening = -1;
+    /** Measures the backdrop under {@code card} once; {@code result} gets the veil colour on the main thread. */
+    public static void measure(View card, IntConsumer result) {
         if (!CaptureHub.available()) { Probe.log("SHADE_TONE", "capture=unavailable"); return; }
-        pending = new ShadeTone(root, opening);
-        CaptureHub.register(pending);
+        CaptureHub.register(new ShadeTone(card, result));
     }
-
-    /** Whether the map for this opening is ready. */
-    public static boolean ready(int opening) { return mapOpening == opening && map != null; }
-
-    /** Whether no map is coming for this opening (capture unavailable or failed): cards stop waiting. */
-    public static boolean failed(int opening) { return !ready(opening) && (pending == null || pending.opening != opening); }
-
-    /** The veil for the card at its current screen position, from the map (0 when none is needed). */
-    public static int veilAt(View card) {
-        if (map == null) return 0;
-        int[] xy = new int[2];
-        card.getLocationOnScreen(xy);
-        int x0 = cell(xy[0] - mapCrop.left), x1 = cell(xy[0] + card.getWidth() - mapCrop.left);
-        int y0 = cell(xy[1] - mapCrop.top), y1 = cell(xy[1] + card.getHeight() - mapCrop.top);
-        double sum = 0;
-        int n = 0;
-        for (int y = Math.max(0, y0); y <= Math.min(mapH - 1, y1); y++) {
-            for (int x = Math.max(0, x0); x <= Math.min(mapW - 1, x1); x++) { sum += map[y * mapW + x]; n++; }
-        }
-        return n == 0 ? 0 : veilFor((float) (sum / n));
-    }
-    private static int cell(int px) { return (int) Math.floor(px * mapScale / CELL); }
 
     @Override public View view() { return done ? null : view.get(); }
-    @Override public int hz() { return 60; }
+    @Override public int hz() { return 30; }
     @Override public void onUnavailable() { finish(); }
+    /** Ends this measurement; the software copy is dropped a second after the last one. */
     private void finish() {
         if (done) return;
         done = true;
         CaptureHub.unregister(this);
-        if (pending == this) pending = null;
+        MAIN.removeCallbacks(DROP);
+        MAIN.postDelayed(DROP, 1000);
     }
+    private static final android.os.Handler MAIN = new android.os.Handler(android.os.Looper.getMainLooper());
+    private static final Runnable DROP = ShadeTone::drop;
+    private static void drop() { if (soft != null) { soft.recycle(); soft = null; softOf = null; } }
     @Override public void onFrame(CaptureHub.Frame frame) {
         if (done) return;
+        View v = view.get();
+        if (v == null) { finish(); return; }
+        if (!v.isShown()) return;
+        float luma = meanLuma(frame, v);
         finish();
-        Bitmap soft = null;
+        if (luma < 0f) return;
+        int veil = veilFor(luma);
+        Probe.log("SHADE_TONE", "viewId=" + Integer.toHexString(System.identityHashCode(v)) + " luma=" + String.format(java.util.Locale.ROOT, "%.2f", luma)
+                + " veil=" + Integer.toHexString(veil));
+        result.accept(veil);
+    }
+
+    private static Bitmap soft;
+    private static CaptureHub.Frame softOf;
+    /** Mean luminance (0-1) of the frame under the view, or -1 if the view lies outside it. */
+    private static float meanLuma(CaptureHub.Frame frame, View v) {
         try {
-            soft = frame.bitmap.copy(Bitmap.Config.ARGB_8888, false);
-            if (soft == null) return;
-            int sw = soft.getWidth(), sh = soft.getHeight();
-            int w = Math.max(1, sw / CELL), h = Math.max(1, sh / CELL);
-            float[] m = new float[w * h];
-            int[] row = new int[sw];
-            double[] acc = new double[w];
-            int[] cnt = new int[w];
-            for (int cy = 0; cy < h; cy++) {
-                java.util.Arrays.fill(acc, 0);
-                java.util.Arrays.fill(cnt, 0);
-                for (int y = cy * CELL; y < Math.min(sh, (cy + 1) * CELL); y += 2) {
-                    soft.getPixels(row, 0, sw, 0, y, sw, 1);
-                    for (int x = 0; x < w * CELL; x += 2) {
-                        int c = row[x];
-                        acc[x / CELL] += 0.2126 * ((c >> 16) & 255) + 0.7152 * ((c >> 8) & 255) + 0.0722 * (c & 255);
-                        cnt[x / CELL]++;
-                    }
-                }
-                for (int cx = 0; cx < w; cx++) m[cy * w + cx] = cnt[cx] == 0 ? 0f : (float) (acc[cx] / cnt[cx] / 255.0);
+            if (softOf != frame) {
+                if (soft != null) soft.recycle();
+                soft = frame.bitmap.copy(Bitmap.Config.ARGB_8888, false);
+                softOf = frame;
             }
-            map = m; mapW = w; mapH = h; mapCrop = new Rect(frame.crop); mapScale = frame.scale; mapOpening = opening;
-            Probe.log("SHADE_TONE", "map=" + w + "x" + h + " crop=" + frame.crop.toShortString() + " opening=" + opening);
-            // Cards waiting for the map read it on their next pre-draw.
-            View root = view.get();
-            if (root != null) root.invalidate();
-        } catch (RuntimeException e) { Probe.error("SHADE_TONE_FAILED", e); }
-        finally { if (soft != null) soft.recycle(); }
+            if (soft == null) return -1f;
+            int[] xy = new int[2];
+            v.getLocationOnScreen(xy);
+            Rect r = new Rect(xy[0], xy[1], xy[0] + v.getWidth(), xy[1] + v.getHeight());
+            if (!r.intersect(frame.crop)) return -1f;
+            int x0 = Math.round((r.left - frame.crop.left) * frame.scale), y0 = Math.round((r.top - frame.crop.top) * frame.scale);
+            int x1 = Math.min(soft.getWidth(), Math.round((r.right - frame.crop.left) * frame.scale));
+            int y1 = Math.min(soft.getHeight(), Math.round((r.bottom - frame.crop.top) * frame.scale));
+            double sum = 0; int n = 0;
+            for (int y = Math.max(0, y0); y < y1; y += 3) {
+                for (int x = Math.max(0, x0); x < x1; x += 3) {
+                    int c = soft.getPixel(x, y);
+                    sum += 0.2126 * ((c >> 16) & 255) + 0.7152 * ((c >> 8) & 255) + 0.0722 * (c & 255);
+                    n++;
+                }
+            }
+            return n == 0 ? -1f : (float) (sum / n / 255.0);
+        } catch (RuntimeException e) { Probe.error("SHADE_TONE_FAILED", e); return -1f; }
     }
 
     /**
