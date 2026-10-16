@@ -2,6 +2,38 @@
 
 Documento para continuar o trabalho em outra conversa. Leia inteiro antes de mexer em qualquer coisa. O histórico técnico detalhado está em `docs/architecture.md`; as seções de 2026-10-16 cobrem a central de notificações.
 
+## 0m. Atualização (2026-10-16, sfhook v0.18): miolo no nível da borda interna
+
+**Regra do usuário:** o miolo tem a mesma luminosidade da borda interna (no máximo ~1% acima) e mais blur. Um miolo mais claro parece elevado e destrói a profundidade.
+
+**Medido no host:** quanto cada região clareia acima do papel de parede borrado.
+
+| | borda interna 30–45 px | miolo > 68 px |
+|---|---|---|
+| v0.11, pele | +0,107 | +0,202 |
+| v0.11, escuro | +0,024 | +0,102 |
+| v0.17, pele | +0,103 | +0,132 |
+| v0.17, escuro | +0,025 | +0,072 |
+| **v0.18, pele** | +0,079 | **+0,090** |
+| **v0.18, escuro** | +0,028 | **+0,047** |
+| **v0.18, claro** | +0,024 | **+0,014** |
+
+Na v0.18 a diferença média entre miolo e borda interna é de cerca de +0,007.
+
+**Mudança, só no perfil 1:**
+- teto do peso do achatamento 0,5 → 0,22 (`kgflatcap`);
+- ganho de 4% só no miolo profundo (`kgcoredim`, a partir de body 0,5, depois da faixa da borda). É um ganho, então o miolo continua acompanhando o fundo.
+
+**Borda:**
+- 0–30 px igual (0,290 contra 0,291);
+- a faixa de 30–45 px escureceu um pouco sobre fundos escuros (−0,028 sobre pele), porque o teto agora é menor que o peso dela.
+
+**Contraste do texto branco no pior caso:** pele 9,1, escuro 2,9, claro 4,3.
+
+**Rollback:** `kgcorecap=80`, `kgflatcap=1` e `kgcoredim=0` dão saída bit a bit igual à v0.11.
+
+**Teste:** lib `SurfaceFlingerProp.v18.so` (seção 4; APK v16); confirme com `grep -c kgcoredim`.
+
 ## 0l. Atualização (2026-10-16, sfhook v0.17): miolo dinâmico, sem branco fixo
 
 **Relato do usuário (v0.16):** contorno claro, borda escurecendo (bonita) e o miolo claro de novo, branco e sem acompanhar o papel de parede. Pedido: só o contorno deve ser fixo e iluminado; o resto, dinâmico. Reduzir o clareamento em uns 50%.
