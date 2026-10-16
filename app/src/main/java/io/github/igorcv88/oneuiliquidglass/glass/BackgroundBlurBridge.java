@@ -84,7 +84,7 @@ public final class BackgroundBlurBridge implements Backdrop {
             if (t.semAlpha >= 0) tint = (tint & 0x00ffffff) | (t.semAlpha << 24);
             int profile = scaled && !lens ? -1 : SemBlurBridge.tagProfile(lens, keyguard);
             tagSent = profile;
-            int veil = SemBlurBridge.shadeVeil(lens, keyguard, scaled);
+            int veil = SemBlurBridge.shadeVeil(lens, keyguard, scaled, toneVeil);
             if (veil != 0) tint = veil;
             tl = SemBlurBridge.cornerTag(tl, profile); tr = SemBlurBridge.cornerTag(tr, profile);
             bl = SemBlurBridge.cornerTag(bl, profile); br = SemBlurBridge.cornerTag(br, profile);
@@ -101,6 +101,13 @@ public final class BackgroundBlurBridge implements Backdrop {
     private boolean scaled;
     /** The tag profile the last build sent (-1: none), for the trace. */
     public int tagSent = -1;
+    /** The veil ShadeTone measured for this card (0: none yet). */
+    private int toneVeil;
+    public void setToneVeil(int veil) throws ReflectiveOperationException {
+        if (toneVeil == veil) return;
+        toneVeil = veil;
+        if (built) update(lastPx, lastTint, lastRadii);
+    }
     public boolean scaled() { return scaled; }
     /**
      * An ancestor scales the card (the shade closing): its region reaches the compositor at a

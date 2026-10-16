@@ -190,7 +190,7 @@ public final class SemBlurBridge implements Backdrop {
         String shape = applyShape(b, t.semShape, radii);
         lastPx = px; lastTint = tint; System.arraycopy(radii, 0, lastRadii, 0, 8); built = true;
         if (!shape.equals(lastShape)) { lastShape = shape; Probe.log("SEM_BLUR_SHAPE", "mode=" + shape + " radius=" + radii[0] + " size=" + host.getWidth() + "x" + host.getHeight()); }
-        int veil = shadeVeil(lens, keyguard, scaled);
+        int veil = shadeVeil(lens, keyguard, scaled, toneVeil);
         if (veil == 0) veil = t.semAlpha >= 0 ? (tint & 0x00ffffff) | (t.semAlpha << 24) : tint;
         if (color != null) color.invoke(b, veil);
         // "auto": lens cards carry an explicit neutral curve. A blur without one takes whatever curve
@@ -433,15 +433,25 @@ public final class SemBlurBridge implements Backdrop {
     }
     /** The tag profile the last build sent (-1: none), for the trace. */
     public int tagSent = -1;
+    /** The veil ShadeTone measured for this card (0: none yet); see {@link #shadeVeil}. */
+    private int toneVeil;
+    public void setToneVeil(int veil) throws ReflectiveOperationException {
+        if (toneVeil == veil) return;
+        toneVeil = veil;
+        if (built && !released) update(lastPx, lastTint, lastRadii);
+    }
     public boolean scaled() { return scaled; }
     /**
      * The veil a shade (non-lens) card carries instead of its tint, or 0: always with
      * debug.oulg.shadetone=2, otherwise while it is untagged because it is scaled. Black under light
      * text, white under dark text, at debug.oulg.shadescaleveil alpha; it stands in for the tone map.
      */
-    static int shadeVeil(boolean lens, boolean keyguard, boolean scaled) {
+    static int shadeVeil(boolean lens, boolean keyguard, boolean scaled, int toneVeil) {
         Tuning t = Tuning.get();
-        if (lens || t.shadeScaleVeil <= 0) return 0;
+        if (lens) return 0;
+        // Measured once when the shade opened (shadetone=3); no veil needed keeps the normal tint.
+        if (t.shadeAdaptive) return (toneVeil >>> 24) > 0 ? toneVeil : 0;
+        if (t.shadeScaleVeil <= 0) return 0;
         boolean on = t.shadeVeil || (scaled && tagProfile(false, keyguard) == 2);
         return on ? (shadeStrength() < 0.65f ? 0x000000 : 0xffffff) | (t.shadeScaleVeil << 24) : 0;
     }

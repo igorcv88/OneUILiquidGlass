@@ -31,6 +31,7 @@ import io.github.igorcv88.oneuiliquidglass.glass.Tuning;
 import io.github.igorcv88.oneuiliquidglass.glass.WallpaperBackdrop;
 import io.github.igorcv88.oneuiliquidglass.glass.SemBlurBridge;
 import io.github.igorcv88.oneuiliquidglass.glass.SharedBackdrop;
+import io.github.igorcv88.oneuiliquidglass.glass.ShadeTone;
 import io.github.igorcv88.oneuiliquidglass.glass.GlassDrawable;
 import io.github.igorcv88.oneuiliquidglass.glass.GlassSpec;
 import io.github.igorcv88.oneuiliquidglass.glass.CornerGeometry;
@@ -52,6 +53,8 @@ public final class HeadsUpHooks {
     private final boolean samsungBlur = SemBlurBridge.available();
     private final GlassSpec spec = new GlassSpec();
     private Boolean shadeExpanded;
+    /** Counts shade openings; a card measures its veil once per opening (shadetone=3). */
+    private int shadeOpens;
     /** SystemUI's StatusBarState (0 shade, 1 keyguard, 2 shade over keyguard); null until first set. */
     private Integer barState;
     /** Set once HybridBackdrop could not be built; heads-up rows then keep the plain compositor blur. */
@@ -441,6 +444,7 @@ public final class HeadsUpHooks {
                 ? ((Number) height).floatValue() > 0.5f : null;
         if (next != null && !next.equals(shadeExpanded)) {
             shadeExpanded = next; Probe.log("SHADE", "expanded=" + next);
+            if (next) shadeOpens++;
             if (Probe.trace && next) {
                 // Every blur in the shade window once it has settled: finds blurs no hook knows about.
                 for (State s : states.values()) {
@@ -523,6 +527,8 @@ public final class HeadsUpHooks {
         int tuningGeneration;
         /** The row is scaled into a collapsed group's stack (see onPreDraw). */
         boolean stacked;
+        /** The shade opening whose backdrop this card's veil was measured from (shadetone=3). */
+        int toneOpen = -1;
         /** Last frame the card was scaled or faded (uptime ms); see onPreDraw. */
         long lastMotion = Long.MIN_VALUE / 2;
         /** Redraws once the card has been still for SETTLE_MS, so the tag comes back. */
@@ -625,6 +631,18 @@ public final class HeadsUpHooks {
                             + " scaled=" + (compBridge != null ? compBridge.scaled() : semBridge != null && semBridge.scaled())
                             + (compBridge != null ? " drawableA=" + compBridge.drawable.getAlpha() : "");
                     if (!line.equals(lastTrace)) { lastTrace = line; FrameTrace.log("ROW_FRAME", v, line); }
+                }
+                if ((compBridge != null || semBridge != null) && toneOpen != shadeOpens && Tuning.get().shadeAdaptive
+                        && Boolean.TRUE.equals(shadeExpanded) && barState != null && barState == Eligibility.BAR_SHADE && v.isShown()) {
+                    // Once per shade opening: the veil is measured from the backdrop and kept.
+                    toneOpen = shadeOpens;
+                    ShadeTone.measure(v, veil -> {
+                        try {
+                            if (compBridge != null) compBridge.setToneVeil(veil);
+                            if (semBridge != null) semBridge.setToneVeil(veil);
+                            invalidate();
+                        } catch (ReflectiveOperationException | RuntimeException e) { Probe.error("SHADE_TONE_APPLY_FAILED", e); }
+                    });
                 }
                 boolean eligible = eligible();
                 View r = row.get();
@@ -806,6 +824,8 @@ public final class HeadsUpHooks {
                         : kind == Backdrop.Kind.SAMSUNG ? (semBridge = SemBlurBridge.create(v))
                         : drawablePath() ? (compBridge = BackgroundBlurBridge.create(v, true)) : BackgroundBlurBridge.create(v);
                 if (compBridge != null) SemBlurBridge.clearNative(v);
+                // A new bridge has no measured veil: measure again (shadetone=3).
+                toneOpen = -1;
                 if (semBridge != null) semBridge.setSuspended(stacked);
                 glass = new GlassDrawable(backdrop, v.getResources().getDisplayMetrics().density, spec);
                 glassKind = kind;

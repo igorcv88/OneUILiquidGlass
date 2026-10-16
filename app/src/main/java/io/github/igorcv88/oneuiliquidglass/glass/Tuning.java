@@ -116,6 +116,15 @@ public final class Tuning {
     /** debug.oulg.shadetone=2: shade cards carry the veil, never the tag. */
     public final boolean shadeVeil;
     /**
+     * debug.oulg.shadetone=3 (default): shade cards never carry the tag; their veil is measured once
+     * from a capture of the backdrop when the shade opens and kept until it closes (ShadeTone).
+     */
+    public final boolean shadeAdaptive;
+    /** Brightest mean backdrop luminance a light-text shade card shows (debug.oulg.shadecap, 0.55). */
+    public final float shadeCap;
+    /** Darkest mean backdrop luminance a dark-text shade card shows (debug.oulg.shadelift, 0.45). */
+    public final float shadeLift;
+    /**
      * Veil alpha (0-255) a shade card carries while scaled, when its tag cannot survive
      * (debug.oulg.shadescaleveil, default 115): black under light text, white under dark text,
      * standing in for the tone map so the card does not jump to the plain blur. 0 keeps the tint.
@@ -178,9 +187,12 @@ public final class Tuning {
         huOptics = Math.round(clamp(number("huoptics", 0f), 0f, 1f));
         float kl = number("kglens", 0.40f);
         kgLens = kl < 0f ? -1f : clamp(kl, 0.1f, 1.2f);
-        float tone = number("shadetone", 1f);
-        shadeTone = tone >= 1f && tone < 2f;
-        shadeVeil = tone >= 2f;
+        int tone = Math.round(number("shadetone", 3f));
+        shadeTone = tone == 1;
+        shadeVeil = tone == 2;
+        shadeAdaptive = tone == 3;
+        shadeCap = clamp(number("shadecap", 0.55f), 0.2f, 1f);
+        shadeLift = clamp(number("shadelift", 0.45f), 0f, 0.8f);
         shadeScaleVeil = Math.round(Math.max(0f, Math.min(255f, number("shadescaleveil", 115f))));
         sfOptics = Math.round(clamp(number("sf.optics", 0f), 0f, 1000f));
         headerGap = clamp(number("headergap", 4f), 0f, 8f);
@@ -205,7 +217,7 @@ public final class Tuning {
         return "backdrop=" + backdrop + " profile=" + profile + " lens=" + lens + " rimhz=" + rimHz + " rimblur=" + rimBlur
                 + " refract=" + refract + " ior=" + ior + " blur=" + blur + " sat=" + saturation
                 + " disp=" + dispersion + " hz=" + hz + " hzkg=" + keyguardHz + " tint=" + tintAlpha
-                + " semradius=" + semRadius + " semradiuslens=" + semRadiusLens + " sflens=" + sfLens + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " kgblurpath=" + kgBlurPath + " shadeblurpath=" + shadeBlurPath + " shadefadecut=" + shadeFadeCut + " kgblurradius=" + kgBlurRadius + " kgoptics=" + kgOptics + " huoptics=" + huOptics + " kglens=" + kgLens + " shadetone=" + shadeTone + " shadeveil=" + shadeVeil + " shadescaleveil=" + shadeScaleVeil + " sfoptics=" + sfOptics + " kgwinblur=" + kgWinBlur + " headergap=" + headerGap + " perf=" + perf + " trace=" + trace;
+                + " semradius=" + semRadius + " semradiuslens=" + semRadiusLens + " sflens=" + sfLens + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " kgblurpath=" + kgBlurPath + " shadeblurpath=" + shadeBlurPath + " shadefadecut=" + shadeFadeCut + " kgblurradius=" + kgBlurRadius + " kgoptics=" + kgOptics + " huoptics=" + huOptics + " kglens=" + kgLens + " shadetone=" + shadeTone + " shadeveil=" + shadeVeil + " shadeadaptive=" + shadeAdaptive + " shadecap=" + shadeCap + " shadelift=" + shadeLift + " shadescaleveil=" + shadeScaleVeil + " sfoptics=" + sfOptics + " kgwinblur=" + kgWinBlur + " headergap=" + headerGap + " perf=" + perf + " trace=" + trace;
     }
 
     private static float clamp(float v, float lo, float hi) { return Float.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : lo; }

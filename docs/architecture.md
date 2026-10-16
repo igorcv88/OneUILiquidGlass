@@ -615,6 +615,19 @@ Not verified on device yet. The flash diagnosis comes from the recording and the
 - With the Samsung path, the tag and the fade cut together, the cards were steady at rest and still flashed during the pull.
 - **Fix:** a card now stays untagged from the frame it scales or fades until it has been still for 300 ms (`SETTLE_MS`). Before this, the tag followed the scale frame by frame, and with the finger nearly still the scale wobbled around 1.
 
+**Sixth device pass and the fix that follows (2026-10-16).**
+- **What the device showed:** with the 300 ms hold, the cards opened gray for about a second, then turned tone-mapped. In motion each card flashed at its own moment, apparently as it crossed brighter parts of the backdrop.
+- **Conclusion:** a tone recomputed by the compositor every frame cannot stay steady while cards move on this firmware.
+- **`debug.oulg.shadetone=3`, now the default:**
+  - Shade cards never carry the tag.
+  - When the shade opens, one capture of what is behind the shade window (`CaptureHub`) gives each card the mean luminance under it (`ShadeTone`).
+  - From that luminance the card gets a veil that it keeps until the shade closes:
+    - **light text:** black, bringing the mean down to `debug.oulg.shadecap` (0.55);
+    - **dark text:** white, lifting it to `debug.oulg.shadelift` (0.45).
+  - A backdrop already on the legible side of the knee keeps the normal tint.
+  - The tone is per card, not per pixel, and it does not follow a backdrop that changes while the shade is open.
+- **The shelf** (SystemUI's own blur) is not covered: it stays untagged.
+
 ## Expanded notification header gap (2026-10-11)
 
 A layout-only refinement, independent of the glass: in expanded notifications the title sat too close to the header row (`Chrome · 3 hours left · 15:52` over the file name). `HeaderGapHooks` adds `debug.oulg.headergap` dp (default 4, 0 turns it off, at most 8) between the two. The policy, which the host tests cover, lives in `HeaderGap`.
