@@ -496,6 +496,8 @@ public final class HeadsUpHooks {
         if (bg.isAttachedToWindow()) s.onViewAttachedToWindow(bg);
         return s;
     }
+    /** Longest a shade card waits for its measured veil before its region shows anyway. */
+    private static final long TONE_TIMEOUT_MS = 250;
     /** How long a card stays untagged after it last scaled or faded. */
     private static final long SETTLE_MS = 300;
     private final class State implements View.OnAttachStateChangeListener, ViewTreeObserver.OnPreDrawListener {
@@ -529,6 +531,9 @@ public final class HeadsUpHooks {
         boolean stacked;
         /** The shade opening whose backdrop this card's veil was measured from (shadetone=3). */
         int toneOpen = -1;
+        /** False from the start of a measurement until its veil (or the timeout) arrives. */
+        boolean toneReady = true;
+        final Runnable toneTimeout = () -> { if (!toneReady) { toneReady = true; invalidate(); } };
         /** Last frame the card was scaled or faded (uptime ms); see onPreDraw. */
         long lastMotion = Long.MIN_VALUE / 2;
         /** Redraws once the card has been still for SETTLE_MS, so the tag comes back. */
@@ -599,6 +604,10 @@ public final class HeadsUpHooks {
                     // white pill as the card faded): there it is whole or gone (shadefadecut).
                     float cut = barState != null && barState == Eligibility.BAR_SHADE ? Tuning.get().shadeFadeCut : 0f;
                     float fade = cut > 0f ? (a >= cut ? 1f : 0f) : a;
+                    // Also before the measurement starts: that check runs later in this pre-draw.
+                    boolean waiting = Tuning.get().shadeAdaptive && Boolean.TRUE.equals(shadeExpanded) && barState != null
+                            && barState == Eligibility.BAR_SHADE && (!toneReady || toneOpen != shadeOpens);
+                    if (waiting) fade = 0f;
                     // The tag cannot survive a scaled region; with the finger nearly still the scale
                     // wobbled between 1 and 0.999 and the tag switched every frame. Once the card
                     // scales or fades it stays untagged until it has been still for SETTLE_MS.
@@ -617,7 +626,7 @@ public final class HeadsUpHooks {
                     if (semBridge != null) {
                         try { semBridge.setScaled(untag); }
                         catch (ReflectiveOperationException e) { Probe.error("SEM_BLUR_SCALE_FAILED", e); }
-                        semBridge.setFadeCut(cut > 0f && a < cut);
+                        semBridge.setFadeCut(waiting || (cut > 0f && a < cut));
                         if (semBridge.setRegionFade(cut > 0f ? 1f : a)) v.invalidate();
                     }
                 }
@@ -636,12 +645,18 @@ public final class HeadsUpHooks {
                         && Boolean.TRUE.equals(shadeExpanded) && barState != null && barState == Eligibility.BAR_SHADE && v.isShown()) {
                     // Once per shade opening: the veil is measured from the backdrop and kept.
                     toneOpen = shadeOpens;
+                    // No region until the veil is known: without it the card showed the plain blur
+                    // for the frame or two the capture takes (a white flash over a white app).
+                    toneReady = false;
+                    v.removeCallbacks(toneTimeout);
+                    v.postDelayed(toneTimeout, TONE_TIMEOUT_MS);
                     ShadeTone.measure(v, veil -> {
                         try {
                             if (compBridge != null) compBridge.setToneVeil(veil);
                             if (semBridge != null) semBridge.setToneVeil(veil);
-                            invalidate();
                         } catch (ReflectiveOperationException | RuntimeException e) { Probe.error("SHADE_TONE_APPLY_FAILED", e); }
+                        toneReady = true;
+                        invalidate();
                     });
                 }
                 boolean eligible = eligible();

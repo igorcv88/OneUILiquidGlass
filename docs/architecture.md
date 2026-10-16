@@ -627,6 +627,8 @@ Not verified on device yet. The flash diagnosis comes from the recording and the
   - A backdrop already on the legible side of the knee keeps the normal tint.
   - The tone is per card, not per pixel, and it does not follow a backdrop that changes while the shade is open.
 - **The shelf** (SystemUI's own blur) is not covered: it stays untagged.
+- **Device result:** steady, and the user found it better than before, at rest too. The capture runs once per opening (`SHADE_TONE luma=0.11 veil=0` over a dark app, `luma=0.95 veil=50000000` over a white one).
+- **Remaining defect, fixed:** a white flash where each card appeared, the plain blur shown for the frame or two the capture takes. A shade card's region now stays off until its veil is known, or for at most 250 ms (`TONE_TIMEOUT_MS`).
 
 ## Expanded notification header gap (2026-10-11)
 
