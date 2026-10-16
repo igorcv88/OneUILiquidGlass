@@ -476,6 +476,8 @@ public final class SemBlurBridge implements Backdrop {
         if (applied && drawableFade == null) {
             drawableFade = blur;
             Probe.log("SEM_BLUR_FADE", "drawable=" + (d == null ? "null" : d.getClass().getName()) + " fade=" + (blur ? "alpha" : "suspend"));
+            // A fade already under way when the fallback is chosen applies at once.
+            if (!blur) { fadeSuspended = regionFade < 0.5f; refreshSuspended(); }
         }
         if (!blur) return false;
         d.setAlpha(Math.round(255 * regionFade));
