@@ -2,6 +2,39 @@
 
 Documento para continuar o trabalho em outra conversa. Leia inteiro antes de mexer em qualquer coisa. O histórico técnico detalhado está em `docs/architecture.md`; as seções de 2026-10-16 cobrem a central de notificações.
 
+## 0i. Atualização (2026-10-16, sfhook v0.14 + app): "duas gotas" e miolo leitoso
+
+**Medido no print da v0.13**, na vertical do card: contorno 0,59, vale 0,33, **segundo anel 0,49 a ~19 px para dentro**, miolo 0,32–0,34. Embaixo, anel interno 0,42 e contorno 0,41.
+
+**Contribuições de borda que competiam** num card da tela de bloqueio:
+1. Fresnel do compositor (~8 px externos).
+2. Contorno do compositor (gaussiana de 1,6 px).
+3. **Crescente especular do compositor a ~20 px para dentro**, mais um oposto embaixo: era o segundo anel.
+4. **Hairline do app** (`LiquidGlassShader`, meio ganho): três linhas com franja cromática centradas a ~6 px para dentro, ou seja, um segundo contorno.
+5. Faixa de refração mostrando o conteúdo escuro comprimido entre os anéis (o vale).
+
+**Miolo leitoso:**
+- o véu branco de 8% da região (`semalpha` sobre o tom Samsung);
+- o clareamento por luz aditiva, que acinzenta.
+
+**Correção:**
+- **Compositor (só perfil 1):** um único termo de borda (Fresnel e contorno somados num só peso, um pouco mais forte do lado da luz) e um brilho que decai da borda (5 px) no lado iluminado. Sem anel interno.
+- **Transmissão por ganho** (0,6× a 1,8×, preserva o croma) em direção a 0,48. Só o que o ganho não alcança (quase preto) recebe luz espalhada.
+- **App, só nos cards em que o compositor ilumina o perfil 1:**
+  - não desenha o shader de borda (`GlassDrawable`);
+  - a região vai sem cor (`BackgroundBlurBridge`, quando o perfil 1 é enviado e `sf.optics ≥ 9`).
+
+**Host:** o perfil vertical, que na v0.13 tinha contorno, vale e anel, agora é um contorno único decaindo de forma monotônica (0,81 → 0,44 → 0,37 → miolo 0,32–0,44). Contraste do texto branco no pior caso 2,9 → 3,1. Prévia: `docs/img/lockscreen-v14-preview.jpg` (v0.13 e v0.14 alternados).
+
+**Pop-up:** perfil 0 bit a bit igual; o shader de borda e o véu continuam (`compositorLit` só vale para o perfil 1). **Central:** intocada.
+
+**Teste:**
+1. Instale o APK novo.
+2. Troque a lib com o nome `SurfaceFlingerProp.v14.so` (seção 4). **Nunca reuse um nome montado.**
+3. Confirme com `grep -c "exp(-px / 5.0)"`.
+4. Reinicie o SurfaceFlinger com o cache limpo.
+5. Mande um print na mesma posição.
+
 ## 0h. Atualização (2026-10-16, sfhook v0.13): "fumê" e "almofada" na tela de bloqueio
 
 **Confirmado no aparelho (v0.12):**

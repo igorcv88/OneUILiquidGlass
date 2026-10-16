@@ -9,10 +9,10 @@
 //  1. the region's input: the backdrop at quarter resolution with a light blur (RenderEngine's
 //     downscaled blur pass for a small radius; the exact Samsung filter is not known on the host);
 //  2. the rewritten FillRRect program over that input (refraction, body blur, profile-1 material);
-//  3. the region's colour, drawn by RenderEngine over the blur (semalpha 20 over the dark-theme
-//     Samsung tone: 0x14ffffff);
+//  3. the region's colour, drawn by RenderEngine over the blur (KG_VEIL alpha of white; 0 since
+//     v0.14 for compositor-lit cards, 0x14 before);
 //  4. the module's glass at the native alpha 204: the dark fill (0x0a000000) and the edge shader's
-//     hairline at the compositor-lit gain (LiquidGlassShader, decor 0, hairGain 0.5);
+//     hairline (KG_HAIR gain; 0 since v0.14, the shader is not drawn on compositor-lit cards);
 //  5. white notification text, for legibility.
 // Card: 1340 x 216, corner 108, as SystemUI lays out a two-line lockscreen card; lens 0.40.
 //
@@ -27,12 +27,15 @@ const { chromium } = createRequire(import.meta.url)('playwright');
 
 const [dir, bgPath, outPath, cardYArg] = process.argv.slice(2);
 const K = 0.40;
+// The module's layers as of v0.14 for a compositor-lit card: no region colour and no edge shader.
+// KG_VEIL=20 KG_HAIR=0.5 reproduce v0.13's stack (8 % white region colour, half-gain hairline).
+const VEIL = +(process.env.KG_VEIL ?? 0), HAIR = +(process.env.KG_HAIR ?? 0);
 const tag = r => { const s = Math.min(1, Math.max(0, (K - 0.1) / 1.1)); const t = Math.floor(r) + 0.30 + 0.15 * s; return t <= r ? t : t - 1; };
 const frag = fs.readFileSync(`${dir}/mod_002.frag`, 'utf8')
   .replace(/#extension GL_NV_shader_noperspective_interpolation : require\n/, '').replace(/noperspective /g, '');
 const bg = 'data:image/png;base64,' + fs.readFileSync(bgPath).toString('base64');
 
-async function harness(frag, bg, cardY, rTag, kp) {
+async function harness(frag, bg, cardY, rTag, kp, veilAlpha, hairGain) {
   const img = new Image(); img.src = bg; await img.decode();
   const W = img.width, H = img.height, CARD = { x: 50, y: cardY, w: 1340, h: 216, r: 108 };
   const src = document.createElement('canvas'); src.width = W; src.height = H;
@@ -76,7 +79,7 @@ void main() { vec2 dev = vec2(${CARD.x + hs[0]}.0, ${CARD.y + hs[1]}.0) + p * ve
   // Composite on the CPU, top-down rows.
   const out = new Uint8ClampedArray(plain);
   const density = 3.5, bevel = Math.max(1, Math.min(20 * density, Math.min(CARD.w, CARD.h) * 0.32));
-  const hair = Math.max(1.5, Math.min(0.95 * density, 5)), fringe = 0.55, specular = 0.60, hairGain = 0.5;
+  const hair = Math.max(1.5, Math.min(0.95 * density, 5)), fringe = 0.55, specular = 0.60;
   const sdf = (x, y) => {
     const qx = Math.abs(x) - hs[0] + CARD.r, qy = Math.abs(y) - hs[1] + CARD.r;
     return Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0) - CARD.r;
@@ -90,7 +93,7 @@ void main() { vec2 dev = vec2(${CARD.x + hs[0]}.0, ${CARD.y + hs[1]}.0) + p * ve
     const i = (y * W + x) * 4, j = ((H - 1 - y) * W + x) * 4;
     // 2: the compositor's region (premultiplied, opaque over the card), then its colour.
     let r = px[j] / 255, gg = px[j + 1] / 255, b = px[j + 2] / 255;
-    const va = 0x14 / 255; r = r * (1 - va) + va; gg = gg * (1 - va) + va; b = b * (1 - va) + va;
+    const va = veilAlpha / 255; r = r * (1 - va) + va; gg = gg * (1 - va) + va; b = b * (1 - va) + va;
     // 4: the glass at the native alpha (fill, then the hairline, which is additive light).
     const ga = 204 / 255, fa = 0x0a / 255 * ga;
     r *= 1 - fa; gg *= 1 - fa; b *= 1 - fa;
@@ -139,7 +142,7 @@ const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--ena
 const p = await browser.newPage();
 await p.setContent('<body></body>');
 const cardY = cardYArg ? +cardYArg : 150;
-const res = await p.evaluate(`(${harness.toString()})(${JSON.stringify(frag)}, ${JSON.stringify(bg)}, ${cardY}, ${tag(108)}, ${2 + K})`);
+const res = await p.evaluate(`(${harness.toString()})(${JSON.stringify(frag)}, ${JSON.stringify(bg)}, ${cardY}, ${tag(108)}, ${2 + K}, ${VEIL}, ${HAIR})`);
 await browser.close();
 fs.writeFileSync(outPath, Buffer.from(res.png.split(',')[1], 'base64'));
 console.log(JSON.stringify(res.metrics));

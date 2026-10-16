@@ -644,6 +644,23 @@ Profile 1 only (profile 0 stays bit-identical, `render_check` max 0; profile 2 u
 - **Body:** after vibrancy and the highlight knee, luma moves `kgflat·body` (0.50) of the way to `kglevel` (0.40). Darkening is a gain; lifting adds cool scattered light, so near-black does not turn into amplified noise. Then a luma-neutral cool tint (`kgcool` 0.5). Disc 80 px with 48 taps.
 - **Host preview:** `sfhook/tools/kg_preview.mjs` renders the real FillRRect rewrite over a photographic crop of the user's lockscreen and composites region colour, glass fill and hairline as on the device. Over the dark jacket crop: body luma SD 0.151 → 0.072, p95 0.64 → 0.54, top contour +0.02 → +0.18 over the body, worst-case white-text contrast 2.5 → 3.5. Not device-validated; the real compositor input and Samsung filter are unknown.
 
+### Lockscreen v0.14: one rim, no app edge, no veil (2026-10-16)
+
+The v0.13 device screenshot, measured down the card: contour 0.59, trough 0.33, **a second ring of 0.49 about 19 px in**, then a 0.32–0.34 core; at the bottom an inner ring of 0.42 and a contour of 0.41. That reads as two drops.
+
+The ring is the compositor's specular crescent (t = 0.62 ≈ 20 px). Stacked with it at the edge were:
+- the compositor's Fresnel and contour;
+- the module's hairline (half gain, three-line colour fringe centred ~6 px inside, a second contour);
+- the refracted band between them.
+
+The core was milky from the region's 8 % white colour and from additive shadow lift.
+
+**Fix:**
+- **Compositor, profile 1 only:** grazing reflectance and contour form one weight toward the environment, plus a glint decaying 5 px from the outline on the lit side. No inner ring.
+- **Transmission:** a gain (0.6×–1.8×) toward 0.48, with scattered light only for what a gain cannot reach.
+- **Module:** on compositor-lit cards (profile 1 tagged, `sf.optics ≥ 9`), `GlassDrawable` skips the edge shader and `BackgroundBlurBridge` sends no region colour.
+- Heads-up keeps both, and profile 0 is bit-identical. The shade is untouched.
+
 ### Lockscreen v0.13: edge lens on a clean core (2026-10-16)
 
 The device screenshot of v0.12 has this luma profile across the card: contour 0.51, a trough of 0.17 about 28 px in, a flat 0.29 plateau, then 0.24 and contour 0.40. The eye reads that shading as relief, i.e. a padded slab. It has three causes:

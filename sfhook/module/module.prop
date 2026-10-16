@@ -1,6 +1,6 @@
 id=oulg_sf
 name=OneUI Liquid Glass - SurfaceFlinger refraction
-version=v0.13.0
-versionCode=14
+version=v0.14.0
+versionCode=15
 author=igorcv88
 description=Rewrites RenderEngine rounded-rect (FillRRect) programs so cards tagged by the LSPosed module (debug.oulg.sfrefract, set to 1 at boot) refract at the rim, live. Shader dump: /data/misc/surfaceflinger/oulg_shaders.txt.

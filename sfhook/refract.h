@@ -67,14 +67,12 @@
 // monotone profile, a core blur that reaches full radius close to the rim, and the surface tilt
 // `tilt` (1.42 rad) x t^2, the slope of the band's t^3 profile:
 //  - interior: an 80 px disc with 48 taps; mild vibrancy; a soft knee on bright backdrops;
-//    transmission, the same over the whole card: shadows lifted toward 0.44 by scattered light,
-//    highlights pulled half as hard; a luma-neutral cool tint;
-//  - rim reflection: Schlick's excess reflectance F(theta) mixes the refracted backdrop toward a
-//    cool environment, brighter on the upper (sky-facing) rim; v0.9's 1.2 rad tilt capped F at
-//    0.10, which left the rim grey (the device report);
-//  - a thin contour, the grazing edge of the same surface, 1.6 px from the outline;
-//  - a specular band inside the contour, peaked mid-bevel on the light-facing side (light from the
-//    upper left, as the module's edge optics), a fainter one opposite, fading over bright backdrops.
+//    transmission, the same over the whole card, as a gain toward 0.48 (highlights pulled half as
+//    hard); a luma-neutral cool tint;
+//  - rim reflection toward a cool environment, brighter on the upper (sky-facing) rim; v0.9's
+//    1.2 rad tilt capped Schlick's F at 0.10, which left the rim grey (the device report);
+//  - one rim: grazing reflectance and a 1.6 px contour as a single weight, and a glint decaying
+//    from the outline on the light-facing side (light from the upper left); no inner ring.
 #define OULG_FS_GLOBALS "highp float oulg_on, oulg_pf, oulg_br, oulg_t, oulg_k, oulg_bv;\nhighp vec2 oulg_jx, oulg_jy, oulg_n;\n"
 #define OULG_FS_BSPLINE \
     "mediump vec4 oulg_bspline(sampler2D s, highp vec2 uv) {\n" \
@@ -139,16 +137,18 @@
 // passes through untouched. Colour is handled unpremultiplied (the region is opaque; a = 1 in
 // practice). Body, scaled by the body-blur weight:
 //  - vibrancy and the highlight knee as in v0.9;
-//  - transmission, uniform over the card: luma moves `flat` of the way to `level` when darker
-//    (shadows lifted by added scattered light, not a gain, so near-black does not become amplified
-//    noise) and half that when brighter (a gain, hue kept). v0.12 weighted it by depth and pulled
-//    highlights as hard as shadows: the rim kept the raw dark backdrop next to a uniform, darkened
-//    core, a dark trough between a bright contour and a flat plateau that read as a padded slab;
+//  - transmission, uniform over the card: luma moves `flat` of the way to `level` when darker and
+//    half that when brighter, as a gain (0.6x to 1.8x, hue and chroma kept); only what a gain
+//    cannot reach (near-black) is added as scattered light. v0.13 lifted shadows by adding that
+//    light everywhere, which greyed the core (milky); v0.12 weighted it by depth (a dark trough
+//    next to a flat plateau);
 //  - a luma-neutral cool tint over the whole card.
-// Rim, from the band's own slope: the tilt is `tilt` x t^2, so Schlick's excess reflectance stays
-// within the outer pixels. It mixes toward a cool environment brighter above than below; a thin
-// contour (Gaussian, 1.6 px from the outline) is the grazing edge of the same surface; the specular
-// is a narrow Gaussian crescent at t = 0.62 on the light-facing side, a fainter one opposite.
+// Rim, one term (v0.14): grazing reflectance over the outer pixels (tilt x t^2, Schlick) and the
+// contour (a 1.6 px Gaussian at the outline) are one weight toward a cool environment, slightly
+// stronger on the light-facing side; a glint decays from the outline (5 px) on that side. v0.13
+// added a specular crescent ~20 px inside the outline (and a fainter one opposite): a second
+// concentric ring, which with the contour read as two drops of water. The module draws no edge of
+// its own over these cards (GlassDrawable.setCompositorLit) and the region carries no colour.
 #define OULG_FS_LENS_FMT \
     "mediump vec4 oulg_material(mediump vec4 c) {\n" \
     "  if (oulg_pf < 0.5) return c;\n" \
@@ -160,24 +160,19 @@
     "  rgb = mix(vec3(y), rgb, 1.0 + (%.3f - 1.0) * body);\n" \
     "  rgb *= 1.0 - %.3f * body * smoothstep(0.65, 1.0, y);\n" \
     "  y = max(dot(rgb, w709), 0.0);\n" \
-    "  const mediump vec3 scatter = vec3(0.90, 0.96, 1.04) / 0.95280;\n" \
     "  mediump float fl = %.3f, lv = %.3f;\n" \
     "  mediump float yt = y + fl * (y < lv ? 1.0 : 0.5) * (lv - y);\n" \
-    "  rgb = yt > y ? rgb + (yt - y) * scatter : rgb * (yt / max(y, 1e-3));\n" \
+    "  mediump float gn = clamp(yt / max(y, 1e-3), 0.6, 1.8);\n" \
+    "  rgb = rgb * gn + max(yt - y * gn, 0.0) * vec3(0.94, 0.97, 1.02);\n" \
     "  rgb *= vec3(%.4f, %.4f, %.4f);\n" \
     "  if (oulg_t > 0.0) {\n" \
     "    mediump float facing = dot(oulg_n, vec2(-0.4512, -0.8924));\n" \
-    "    mediump vec3 env = vec3(0.90, 0.94, 1.0) * mix(0.62, 1.0, 0.5 + 0.5 * facing);\n" \
-    "    mediump float f = clamp(%.3f * pow(1.0 - cos(%.3f * oulg_t * oulg_t), 5.0), 0.0, 1.0);\n" \
-    "    rgb = mix(rgb, env, f);\n" \
+    "    mediump float lit = max(facing, 0.0);\n" \
+    "    mediump vec3 env = vec3(0.90, 0.94, 1.0) * mix(0.70, 1.0, 0.5 + 0.5 * facing);\n" \
     "    highp float px = (1.0 - oulg_t) * oulg_bv;\n" \
-    "    mediump float line = %.3f * exp(-px * px / 2.56) * (0.7 + 0.3 * max(facing, 0.0));\n" \
-    "    rgb = mix(rgb, vec3(0.97, 0.985, 1.0), clamp(line, 0.0, 1.0));\n" \
-    "    mediump float band = exp(-(oulg_t - 0.62) * (oulg_t - 0.62) / 0.0128);\n" \
-    "    mediump float lobe = pow(max(facing, 0.0), 3.0) + 0.45 * pow(max(-facing, 0.0), 3.0);\n" \
-    "    mediump float m = max(max(rgb.r, rgb.g), max(rgb.b, 1e-3));\n" \
-    "    mediump vec3 hue = mix(vec3(1.0), rgb / m, 0.3);\n" \
-    "    rgb += %.3f * band * lobe * (1.0 - 0.6 * y) * hue;\n" \
+    "    mediump float rim = %.3f * pow(1.0 - cos(%.3f * oulg_t * oulg_t), 5.0) + %.3f * exp(-px * px / 2.56);\n" \
+    "    rgb = mix(rgb, env, clamp(rim * (0.75 + 0.25 * lit), 0.0, 1.0));\n" \
+    "    rgb += %.3f * lit * lit * lit * exp(-px / 5.0) * (1.0 - 0.6 * y) * vec3(1.0, 0.99, 0.97);\n" \
     "  }\n" \
     "  return vec4(clamp(rgb, 0.0, 1.0) * c.a, c.a);\n" \
     "}\n" \
@@ -251,9 +246,9 @@ struct oulg_profile { float core; int taps; float ramp; float sat; float tone; f
 #define OULG_KG_SAT_DEFAULT 1.12f
 #define OULG_KG_TONE_DEFAULT 0.15f
 #define OULG_KG_RIM_DEFAULT 1.0f
-#define OULG_KG_SPEC_DEFAULT 0.30f
+#define OULG_KG_SPEC_DEFAULT 0.22f
 #define OULG_KG_FLAT_DEFAULT 0.55f
-#define OULG_KG_LEVEL_DEFAULT 0.44f
+#define OULG_KG_LEVEL_DEFAULT 0.48f
 #define OULG_KG_COOL_DEFAULT 0.5f
 #define OULG_KG_TILT_DEFAULT 1.42f
 #define OULG_KG_LINE_DEFAULT 0.55f
