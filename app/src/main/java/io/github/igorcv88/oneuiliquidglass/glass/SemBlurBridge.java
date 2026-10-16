@@ -215,7 +215,7 @@ public final class SemBlurBridge implements Backdrop {
             case "none": return mode;
             case "single":
                 if (corner == null) break;
-                corner.invoke(b, cornerTag(radii[0], tagProfile(lens, keyguard)));
+                corner.invoke(b, cornerTag(radii[0], scaled && !lens ? -1 : tagProfile(lens, keyguard)));
                 return mode;
             case "path":
                 if (clipPath == null || host.getWidth() <= 0 || host.getHeight() <= 0) break;
@@ -399,6 +399,8 @@ public final class SemBlurBridge implements Backdrop {
             Object before = f != null ? f.get(host) : null;
             set.invoke(host, pending);
             lastInfo = pending;
+            // Each apply installs a fresh blur drawable at full alpha.
+            fadeRegion(true);
             // The view holds our info or a fresh copy of it. If another hook swallowed the call, the
             // field keeps the old or foreign value; that is logged, and the next row event retries.
             Object after = f != null ? f.get(host) : pending;
@@ -410,19 +412,74 @@ public final class SemBlurBridge implements Backdrop {
         catch (ReflectiveOperationException | RuntimeException e) { Probe.error("SEM_BLUR_APPLY_FAILED", e); }
         finally { applying = false; applyingHost = null; }
     }
-    private boolean suspended;
+    private boolean suspended, stackSuspended, fadeSuspended;
     /**
      * A row drawn as the stacked sliver under a collapsed group (scaled horizontally, mostly clipped)
      * gets its region at a fractional, elliptical size: the corner tag does not survive, and the full
      * untagged region showed white behind the group over a white app. While suspended the view
      * carries no blur; the glass still draws the sliver. Resuming applies the last blur again.
      */
-    public void setSuspended(boolean on) {
+    public void setSuspended(boolean on) { stackSuspended = on; refreshSuspended(); }
+    private void refreshSuspended() {
+        boolean on = stackSuspended || fadeSuspended;
         if (suspended == on) return;
         suspended = on;
         if (released || lastInfo == null) return;
         pending = lastInfo;
         if (!posted) { posted = true; host.post(apply); }
+    }
+    /** Whether an ancestor scales the card on screen (see {@link #setScaled}). */
+    private boolean scaled;
+    /**
+     * A shade card scaled by an ancestor (the stack shrinks while the shade collapses) reaches the
+     * compositor with a fractional size and radius: the shade tag matched on some frames and not on
+     * others, so the legibility tone map switched on and off frame by frame (the card flashed light
+     * and dark on a slow pull up). While scaled, a non-lens card carries no tag; one rebuild at each
+     * edge. Lens cards are left as they are.
+     */
+    public void setScaled(boolean on) throws ReflectiveOperationException {
+        if (scaled == on) return;
+        scaled = on;
+        if (lens || tagProfile(false, keyguard) < 0) return;
+        Probe.log("SEM_BLUR_SCALED", "on=" + on + " view=" + Integer.toHexString(System.identityHashCode(host)));
+        if (built && !released) update(lastPx, lastTint, lastRadii);
+    }
+    private float regionFade = 1f;
+    /** Whether the view's blur region can be faded through its BackgroundBlurDrawable; null until known. */
+    private Boolean drawableFade;
+    /**
+     * Ancestor view alpha fades what the view draws, the glass included, but not the compositor's
+     * blur region: on a pull up that closes the shade the cards faded and their blur stayed (a
+     * ghost). In window mode semSetBlurInfo installs a BackgroundBlurDrawable as the view's
+     * background; its alpha is the region's alpha, so it takes the accumulated ancestor alpha. If
+     * the firmware does not expose one, the region is dropped below half alpha instead. Returns
+     * whether the view must be redrawn.
+     */
+    public boolean setRegionFade(float f) {
+        f = Math.max(0f, Math.min(1f, f));
+        if (Math.abs(f - regionFade) < 0.004f) return false;
+        regionFade = f;
+        if (Boolean.FALSE.equals(drawableFade)) {
+            fadeSuspended = f < 0.5f;
+            refreshSuspended();
+            return false;
+        }
+        return fadeRegion(false);
+    }
+    /**
+     * Applies the region fade to the view's blur drawable; true if one took it. Right after an
+     * apply (applied) the drawable found decides how this bridge fades from then on.
+     */
+    private boolean fadeRegion(boolean applied) {
+        android.graphics.drawable.Drawable d = host.getBackground();
+        boolean blur = d != null && d.getClass().getName().contains("BlurDrawable");
+        if (applied && drawableFade == null) {
+            drawableFade = blur;
+            Probe.log("SEM_BLUR_FADE", "drawable=" + (d == null ? "null" : d.getClass().getName()) + " fade=" + (blur ? "alpha" : "suspend"));
+        }
+        if (!blur) return false;
+        d.setAlpha(Math.round(255 * regionFade));
+        return true;
     }
     /**
      * Applies the last blur again. Called on events that can drop it (shade opened or closed, row

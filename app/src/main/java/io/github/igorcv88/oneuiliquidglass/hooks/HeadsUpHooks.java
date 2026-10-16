@@ -534,12 +534,21 @@ public final class HeadsUpHooks {
                     Probe.log("ROW_STACKED", "viewId=" + Integer.toHexString(System.identityHashCode(v)) + " stacked=" + stacked);
                     if (semBridge != null) semBridge.setSuspended(stacked);
                 }
-                if (compBridge != null) {
-                    // Ancestor alpha (a pull up from the lockscreen) fades the drawn glass but not
-                    // the compositor's blur region, which stayed behind as a ghost of the card.
-                    float a = stacked ? 0f : 1f;
-                    for (Object p = v; p instanceof View && a > 0f; p = ((View) p).getParent()) a *= ((View) p).getAlpha();
-                    if (compBridge.setRegionFade(a)) v.invalidate();
+                if (compBridge != null || semBridge != null) {
+                    // Ancestor alpha (a pull up from the lockscreen, or one that closes the shade)
+                    // fades the drawn glass but not the compositor's blur region, which stayed
+                    // behind as a ghost of the card. Ancestor scale (the stack shrinks as the shade
+                    // closes) makes the region's size and radius fractional.
+                    float a = 1f, sx = 1f, sy = 1f;
+                    for (Object p = v; p instanceof View; p = ((View) p).getParent()) {
+                        View pv = (View) p; a *= pv.getAlpha(); sx *= pv.getScaleX(); sy *= pv.getScaleY();
+                    }
+                    if (compBridge != null && compBridge.setRegionFade(stacked ? 0f : a)) v.invalidate();
+                    if (semBridge != null) {
+                        try { semBridge.setScaled(Math.abs(sx - 1f) > 0.001f || Math.abs(sy - 1f) > 0.001f); }
+                        catch (ReflectiveOperationException e) { Probe.error("SEM_BLUR_SCALE_FAILED", e); }
+                        if (semBridge.setRegionFade(a)) v.invalidate();
+                    }
                 }
                 boolean eligible = eligible();
                 View r = row.get();
