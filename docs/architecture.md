@@ -603,6 +603,13 @@ Not verified on device yet. The flash diagnosis comes from the recording and the
 - **New mode:** `debug.oulg.shadetone=2` leaves shade cards untagged and gives them the stand-in veil permanently, so there is nothing for the compositor to recognise.
 - **Trace:** `ROW_FRAME` now also logs the blur path, the tag profile sent, the scaled flag and the drawable's alpha.
 
+**Fourth device pass (trace and recording, `shadetone=2`, 2026-10-16).**
+- The flicker stopped once the tag was gone, which confirms that the tag caused it.
+- The cards turned too dark, and the white pill was still left at the end of a pull.
+- The trace shows the drawable path active (`path=drawable`) and its alpha following the card (0.85 → 217, 0.27 → 70).
+- So on this firmware a partly transparent region in the unlocked shade turns whiter, not fainter. This is inferred from the recording, not measured in the compositor.
+- **Fix:** in the unlocked shade the region is now whole or gone. It is removed once the accumulated alpha drops below `debug.oulg.shadefadecut` (default 0.5, live; 0 restores the alpha fade). Both paths do this; the Samsung path suspends its region.
+
 ## Expanded notification header gap (2026-10-11)
 
 A layout-only refinement, independent of the glass: in expanded notifications the title sat too close to the header row (`Chrome · 3 hours left · 15:52` over the file name). `HeaderGapHooks` adds `debug.oulg.headergap` dp (default 4, 0 turns it off, at most 8) between the two. The policy, which the host tests cover, lives in `HeaderGap`.

@@ -583,15 +583,20 @@ public final class HeadsUpHooks {
                     for (Object p = v; p instanceof View; p = ((View) p).getParent()) {
                         View pv = (View) p; a *= pv.getAlpha(); sx *= pv.getScaleX(); sy *= pv.getScaleY();
                     }
+                    // In the unlocked shade a partly transparent region turned whiter, not fainter (a
+                    // white pill as the card faded): there it is whole or gone (shadefadecut).
+                    float cut = barState != null && barState == Eligibility.BAR_SHADE ? Tuning.get().shadeFadeCut : 0f;
+                    float fade = cut > 0f ? (a >= cut ? 1f : 0f) : a;
                     if (compBridge != null) {
                         try { compBridge.setScaled(Math.abs(sx - 1f) > 0.001f || Math.abs(sy - 1f) > 0.001f); }
                         catch (ReflectiveOperationException e) { Probe.error("BLUR_DRAWABLE_SCALE_FAILED", e); }
-                        if (compBridge.setRegionFade(stacked ? 0f : a)) v.invalidate();
+                        if (compBridge.setRegionFade(stacked ? 0f : fade)) v.invalidate();
                     }
                     if (semBridge != null) {
                         try { semBridge.setScaled(Math.abs(sx - 1f) > 0.001f || Math.abs(sy - 1f) > 0.001f); }
                         catch (ReflectiveOperationException e) { Probe.error("SEM_BLUR_SCALE_FAILED", e); }
-                        if (semBridge.setRegionFade(a)) v.invalidate();
+                        semBridge.setFadeCut(cut > 0f && a < cut);
+                        if (semBridge.setRegionFade(cut > 0f ? 1f : a)) v.invalidate();
                     }
                 }
                 if (Probe.trace) {

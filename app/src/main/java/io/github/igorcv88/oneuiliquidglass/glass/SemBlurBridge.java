@@ -424,7 +424,7 @@ public final class SemBlurBridge implements Backdrop {
      */
     public void setSuspended(boolean on) { stackSuspended = on; refreshSuspended(); }
     private void refreshSuspended() {
-        boolean on = stackSuspended || fadeSuspended;
+        boolean on = stackSuspended || fadeSuspended || cutSuspended;
         if (suspended == on) return;
         suspended = on;
         if (released || lastInfo == null) return;
@@ -444,6 +444,13 @@ public final class SemBlurBridge implements Backdrop {
         if (lens || t.shadeScaleVeil <= 0) return 0;
         boolean on = t.shadeVeil || (scaled && tagProfile(false, keyguard) == 2);
         return on ? (shadeStrength() < 0.65f ? 0x000000 : 0xffffff) | (t.shadeScaleVeil << 24) : 0;
+    }
+    /** The card has faded below debug.oulg.shadefadecut: no region (the Samsung region ignores alpha). */
+    private boolean cutSuspended;
+    public void setFadeCut(boolean on) {
+        if (cutSuspended == on) return;
+        cutSuspended = on;
+        refreshSuspended();
     }
     /** Whether an ancestor scales the card on screen (see {@link #setScaled}). */
     private boolean scaled;
