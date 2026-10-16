@@ -177,6 +177,7 @@ public final class HeadsUpHooks {
         Probe.log("READY", "mode=" + (enabled ? "glass" : "probe") + " drawHook=" + drawHook + " shadeHook=" + shadeHook + " samsungBlur=" + samsungBlur);
         if (enabled && (!drawHook || !shadeHook)) Probe.log("GLASS_UNAVAILABLE", "drawHook=" + drawHook + " shadeHook=" + shadeHook);
     }
+    private String lastPanelBlur;
     private final Set<String> foreignBlurLogged = new java.util.HashSet<>();
     private final Set<String> shelfTagLogged = new java.util.HashSet<>();
     /** Stack walks are costly on a per-frame path; provenance is only gathered for the first calls. */
@@ -218,6 +219,11 @@ public final class HeadsUpHooks {
                             // radius of 1-3 and back, each step with the panel's dark color curve. Only radii
                             // up to 4 are dropped: a pull-down or the bouncer passes that within a few frames.
                             p.args[0] = null;
+                        }
+                        if (Probe.trace && v.getRootView() == v) {
+                            // The shade window's own blur, to match a card region to it before removal.
+                            String panel = p.args[0] == null ? "null" : Probe.blurFields(p.args[0]);
+                            if (!panel.equals(lastPanelBlur)) { lastPanelBlur = panel; Probe.log("PANEL_BLUR", "view=" + v.getClass().getSimpleName() + " " + panel); }
                         }
                         if (p.args[0] != null && v.getClass().getName().endsWith("NotificationShelfBackgroundView")) {
                             // The shelf under a collapsed stack keeps SystemUI's own blur, which a white
@@ -531,6 +537,14 @@ public final class HeadsUpHooks {
         boolean stacked;
         /** The shade opening whose backdrop this card's veil was measured from (shadetone=3). */
         int toneOpen = -1;
+        /** The veil measured for this card at the current shade opening (0: none needed). */
+        int measuredVeil;
+        void pushToneVeil() {
+            try {
+                if (compBridge != null) compBridge.setToneVeil(measuredVeil);
+                if (semBridge != null) semBridge.setToneVeil(measuredVeil);
+            } catch (ReflectiveOperationException | RuntimeException e) { Probe.error("SHADE_TONE_APPLY_FAILED", e); }
+        }
         /** False from the start of a measurement until its veil (or the timeout) arrives. */
         boolean toneReady = true;
         final Runnable toneTimeout = () -> { if (!toneReady) { toneReady = true; invalidate(); } };
@@ -641,7 +655,9 @@ public final class HeadsUpHooks {
                             + (compBridge != null ? " drawableA=" + compBridge.drawable.getAlpha() : "");
                     if (!line.equals(lastTrace)) { lastTrace = line; FrameTrace.log("ROW_FRAME", v, line); }
                 }
-                if ((compBridge != null || semBridge != null) && toneOpen != shadeOpens && Tuning.get().shadeAdaptive
+                // Measured as soon as the shade starts opening, before the card has a bridge or is
+                // visible, so the veil is usually known by the time its region would show.
+                if (toneOpen != shadeOpens && Tuning.get().shadeAdaptive
                         && Boolean.TRUE.equals(shadeExpanded) && barState != null && barState == Eligibility.BAR_SHADE && v.isShown()) {
                     // Once per shade opening: the veil is measured from the backdrop and kept.
                     toneOpen = shadeOpens;
@@ -651,10 +667,8 @@ public final class HeadsUpHooks {
                     v.removeCallbacks(toneTimeout);
                     v.postDelayed(toneTimeout, TONE_TIMEOUT_MS);
                     ShadeTone.measure(v, veil -> {
-                        try {
-                            if (compBridge != null) compBridge.setToneVeil(veil);
-                            if (semBridge != null) semBridge.setToneVeil(veil);
-                        } catch (ReflectiveOperationException | RuntimeException e) { Probe.error("SHADE_TONE_APPLY_FAILED", e); }
+                        measuredVeil = veil;
+                        pushToneVeil();
                         toneReady = true;
                         invalidate();
                     });
@@ -839,8 +853,8 @@ public final class HeadsUpHooks {
                         : kind == Backdrop.Kind.SAMSUNG ? (semBridge = SemBlurBridge.create(v))
                         : drawablePath() ? (compBridge = BackgroundBlurBridge.create(v, true)) : BackgroundBlurBridge.create(v);
                 if (compBridge != null) SemBlurBridge.clearNative(v);
-                // A new bridge has no measured veil: measure again (shadetone=3).
-                toneOpen = -1;
+                // A new bridge takes the veil measured for this opening.
+                pushToneVeil();
                 if (semBridge != null) semBridge.setSuspended(stacked);
                 glass = new GlassDrawable(backdrop, v.getResources().getDisplayMetrics().density, spec);
                 glassKind = kind;

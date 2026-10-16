@@ -181,6 +181,31 @@ public final class Probe {
         return out.toString();
     }
     /** Corner, radius, alpha and color fields of a blur object, by name. */
+    /** Radius, colour, curve and shape fields of a blur info or drawable, for the trace. */
+    public static String blurFields(Object o) {
+        StringBuilder out = new StringBuilder(fields(o));
+        // Nested Samsung blur parts (colour curve, colour adjustment, gradient): every field.
+        for (Class<?> c = o.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
+            for (java.lang.reflect.Field f : c.getDeclaredFields()) {
+                if (java.lang.reflect.Modifier.isStatic(f.getModifiers()) || !f.getType().getName().startsWith("android.view.SemBlurInfo$")) continue;
+                try {
+                    f.setAccessible(true);
+                    Object nested = f.get(o);
+                    if (nested == null) continue;
+                    out.append(' ').append(f.getName()).append("={");
+                    for (java.lang.reflect.Field g : nested.getClass().getDeclaredFields()) {
+                        if (java.lang.reflect.Modifier.isStatic(g.getModifiers())) continue;
+                        g.setAccessible(true);
+                        Object val = g.get(nested);
+                        if (val instanceof float[]) val = java.util.Arrays.toString((float[]) val);
+                        out.append(g.getName()).append('=').append(val).append(' ');
+                    }
+                    out.append('}');
+                } catch (ReflectiveOperationException | RuntimeException e) { out.append(' ').append(f.getName()).append("=?"); }
+            }
+        }
+        return out.toString();
+    }
     private static String fields(Object o) {
         StringBuilder out = new StringBuilder();
         for (Class<?> c = o.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
