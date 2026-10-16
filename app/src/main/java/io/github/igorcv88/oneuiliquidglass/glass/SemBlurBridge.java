@@ -190,7 +190,9 @@ public final class SemBlurBridge implements Backdrop {
         String shape = applyShape(b, t.semShape, radii);
         lastPx = px; lastTint = tint; System.arraycopy(radii, 0, lastRadii, 0, 8); built = true;
         if (!shape.equals(lastShape)) { lastShape = shape; Probe.log("SEM_BLUR_SHAPE", "mode=" + shape + " radius=" + radii[0] + " size=" + host.getWidth() + "x" + host.getHeight()); }
-        if (color != null) color.invoke(b, t.semAlpha >= 0 ? (tint & 0x00ffffff) | (t.semAlpha << 24) : tint);
+        int veil = shadeVeil(lens, keyguard, scaled, toneVeil);
+        if (veil == 0) veil = t.semAlpha >= 0 ? (tint & 0x00ffffff) | (t.semAlpha << 24) : tint;
+        if (color != null) color.invoke(b, veil);
         // "auto": lens cards carry an explicit neutral curve. A blur without one takes whatever curve
         // the compositor last had, and the panel blur leaves its dark one behind after a pull-down
         // (the lockscreen cards turned gray until the next lock). Shade cards keep the inherited look.
@@ -215,7 +217,8 @@ public final class SemBlurBridge implements Backdrop {
             case "none": return mode;
             case "single":
                 if (corner == null) break;
-                corner.invoke(b, cornerTag(radii[0], scaled && !lens ? -1 : tagProfile(lens, keyguard)));
+                tagSent = scaled && !lens ? -1 : tagProfile(lens, keyguard);
+                corner.invoke(b, cornerTag(radii[0], tagSent));
                 return mode;
             case "path":
                 if (clipPath == null || host.getWidth() <= 0 || host.getHeight() <= 0) break;
@@ -421,12 +424,43 @@ public final class SemBlurBridge implements Backdrop {
      */
     public void setSuspended(boolean on) { stackSuspended = on; refreshSuspended(); }
     private void refreshSuspended() {
-        boolean on = stackSuspended || fadeSuspended;
+        boolean on = stackSuspended || fadeSuspended || cutSuspended;
         if (suspended == on) return;
         suspended = on;
         if (released || lastInfo == null) return;
         pending = lastInfo;
         if (!posted) { posted = true; host.post(apply); }
+    }
+    /** The tag profile the last build sent (-1: none), for the trace. */
+    public int tagSent = -1;
+    /** The veil ShadeTone measured for this card (0: none yet); see {@link #shadeVeil}. */
+    private int toneVeil;
+    public void setToneVeil(int veil) throws ReflectiveOperationException {
+        if (toneVeil == veil) return;
+        toneVeil = veil;
+        if (built && !released) update(lastPx, lastTint, lastRadii);
+    }
+    public boolean scaled() { return scaled; }
+    /**
+     * The veil a shade (non-lens) card carries instead of its tint, or 0: always with
+     * debug.oulg.shadetone=2, otherwise while it is untagged because it is scaled. Black under light
+     * text, white under dark text, at debug.oulg.shadescaleveil alpha; it stands in for the tone map.
+     */
+    static int shadeVeil(boolean lens, boolean keyguard, boolean scaled, int toneVeil) {
+        Tuning t = Tuning.get();
+        if (lens) return 0;
+        // Measured once when the shade opened (shadetone=3); no veil needed keeps the normal tint.
+        if (t.shadeAdaptive) return (toneVeil >>> 24) > 0 ? toneVeil : 0;
+        if (t.shadeScaleVeil <= 0) return 0;
+        boolean on = t.shadeVeil || (scaled && tagProfile(false, keyguard) == 2);
+        return on ? (shadeStrength() < 0.65f ? 0x000000 : 0xffffff) | (t.shadeScaleVeil << 24) : 0;
+    }
+    /** The card has faded below debug.oulg.shadefadecut: no region (the Samsung region ignores alpha). */
+    private boolean cutSuspended;
+    public void setFadeCut(boolean on) {
+        if (cutSuspended == on) return;
+        cutSuspended = on;
+        refreshSuspended();
     }
     /** Whether an ancestor scales the card on screen (see {@link #setScaled}). */
     private boolean scaled;
@@ -435,7 +469,8 @@ public final class SemBlurBridge implements Backdrop {
      * compositor with a fractional size and radius: the shade tag matched on some frames and not on
      * others, so the legibility tone map switched on and off frame by frame (the card flashed light
      * and dark on a slow pull up). While scaled, a non-lens card carries no tag; one rebuild at each
-     * edge. Lens cards are left as they are.
+     * edge. A shade card's veil then stands in for the tone map (debug.oulg.shadescaleveil), so it
+     * does not jump to the plain blur, white over a white app. Lens cards are left as they are.
      */
     public void setScaled(boolean on) throws ReflectiveOperationException {
         if (scaled == on) return;

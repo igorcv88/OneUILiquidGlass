@@ -82,7 +82,10 @@ public final class BackgroundBlurBridge implements Backdrop {
             px = lens && lensPx >= 0 ? lensPx : t.semRadius >= 0 ? t.semRadius : GlassSpec.SAMSUNG_RADIUS;
             // The same veil as the Samsung path (semalpha over the Samsung tone).
             if (t.semAlpha >= 0) tint = (tint & 0x00ffffff) | (t.semAlpha << 24);
-            int profile = SemBlurBridge.tagProfile(lens, keyguard);
+            int profile = scaled && !lens ? -1 : SemBlurBridge.tagProfile(lens, keyguard);
+            tagSent = profile;
+            int veil = SemBlurBridge.shadeVeil(lens, keyguard, scaled, toneVeil);
+            if (veil != 0) tint = veil;
             tl = SemBlurBridge.cornerTag(tl, profile); tr = SemBlurBridge.cornerTag(tr, profile);
             bl = SemBlurBridge.cornerTag(bl, profile); br = SemBlurBridge.cornerTag(br, profile);
         }
@@ -91,12 +94,38 @@ public final class BackgroundBlurBridge implements Backdrop {
         color.invoke(drawable, tint);
         // API order: top-left, top-right, bottom-left, bottom-right.
         corners.invoke(drawable, tl, tr, bl, br);
-        if (lensMode && curve != null) applyCurve();
+        if (lensMode && curve != null && (lens || keyguard || curveSent)) applyCurve();
+    }
+    /** Whether a curve was ever sent: the drawable keeps it, so from then on one is always sent. */
+    private boolean curveSent;
+    private boolean scaled;
+    /** The tag profile the last build sent (-1: none), for the trace. */
+    public int tagSent = -1;
+    /** The veil ShadeTone measured for this card (0: none yet). */
+    private int toneVeil;
+    public void setToneVeil(int veil) throws ReflectiveOperationException {
+        if (toneVeil == veil) return;
+        toneVeil = veil;
+        if (built) update(lastPx, lastTint, lastRadii);
+    }
+    public boolean scaled() { return scaled; }
+    /**
+     * An ancestor scales the card (the shade closing): its region reaches the compositor at a
+     * fractional size and radius, where the tag matched on some frames only. While scaled a
+     * non-lens card carries no tag, and a shade card's veil stands in for the tone map
+     * (SemBlurBridge.setScaled). One rebuild at each edge.
+     */
+    public void setScaled(boolean on) throws ReflectiveOperationException {
+        if (scaled == on) return;
+        scaled = on;
+        if (lens || !lensMode || SemBlurBridge.tagProfile(false, keyguard) < 0) return;
+        if (built) update(lastPx, lastTint, lastRadii);
     }
     /**
      * The same curve policy as SemBlurBridge (semcurve=auto: neutral on lens cards). The drawable keeps
      * a curve once set, so every other policy sends the neutral curve, which leaves colours as they
      * are, instead of sending nothing: a lens card turned shade card must not keep an old curve.
+     * An unlocked shade card that never carried one sends none, as on the Samsung path.
      */
     private void applyCurve() throws ReflectiveOperationException {
         Tuning t = Tuning.get();
@@ -104,11 +133,18 @@ public final class BackgroundBlurBridge implements Backdrop {
         float[] v = SemBlurBridge.explicitCurve(spec);
         if (v == null) v = SemBlurBridge.explicitCurve(SemBlurBridge.NEUTRAL_CURVE);
         curve.invoke(drawable, v[0], v[1], v[2], v[3], v[4], v[5]);
+        curveSent = true;
     }
     @Override public void draw(Canvas canvas, Rect bounds) { drawable.setBounds(bounds); drawable.draw(canvas); }
+    /**
+     * The native drawable's alpha is Samsung's translucency (204 on lockscreen cards), not a fade:
+     * passed to the region it left it at 80 %, and a partly transparent region mixes the sharp
+     * backdrop into the blur (the blotchy, smeared lockscreen body). The region takes only the fade;
+     * the glass still honours the native alpha.
+     */
     private int baseAlpha = 255;
     private float regionFade = 1f;
-    @Override public void setAlpha(int alpha) { baseAlpha = alpha; drawable.setAlpha(Math.round(alpha * regionFade)); }
+    @Override public void setAlpha(int alpha) { drawable.setAlpha(Math.round(baseAlpha * regionFade)); }
     /**
      * Ancestor view alpha fades what the view draws, the glass included, but not the compositor's
      * blur region: on a pull up from the lockscreen the cards faded and their blur stayed (a ghost).

@@ -18,6 +18,8 @@ public final class Eligibility {
         if (!hardware) return "software";
         return null;
     }
+    /** StatusBarState.SHADE: unlocked, the shade over an app or the home screen. */
+    public static final int BAR_SHADE = 0;
     /** StatusBarState.KEYGUARD: the lockscreen, shade not pulled down. */
     public static final int BAR_KEYGUARD = 1;
     /** StatusBarState.SHADE_LOCKED: the shade pulled down over the keyguard. */

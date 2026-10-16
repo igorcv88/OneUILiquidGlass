@@ -67,6 +67,19 @@ public final class Tuning {
      */
     public final int kgBlurPath;
     /**
+     * Expanded-shade blur source (debug.oulg.shadeblurpath): 1 (default) draws a BackgroundBlurDrawable
+     * inside the glass, as kgblurpath does on the lockscreen; 0 installs the Samsung blur on the
+     * view. The Samsung region ignored the card's fade: closing the shade left a ghost of each card.
+     */
+    public final int shadeBlurPath;
+    /**
+     * Expanded-shade cards: below this accumulated alpha the blur region is removed, above it it
+     * stays whole (debug.oulg.shadefadecut, default 0.5, live; 0 fades the region alpha instead).
+     * A partly transparent region in the shade turned whiter, not fainter: a white pill was left as
+     * the card faded out.
+     */
+    public final float shadeFadeCut;
+    /**
      * Panel blur on the shade window while the lockscreen sits idle (debug.oulg.kgwinblur): 0
      * (default) drops the radius 1-4 ramps a touch starts there; 1 lets them through.
      */
@@ -95,9 +108,28 @@ public final class Tuning {
     /**
      * Shade legibility (debug.oulg.shadetone, default 1): expanded-shade cards carry sfhook profile
      * 2, which tone-maps their blur against the text colour (a white app behind them turned them
-     * white under white dark-mode text). 0 leaves them untagged, as before.
+     * white under white dark-mode text). 0 leaves them untagged, as before. 2 leaves them untagged
+     * and gives them the shadescaleveil veil instead: nothing for the compositor to recognise, so
+     * nothing that a fractional size or a program change can switch on and off.
      */
     public final boolean shadeTone;
+    /** debug.oulg.shadetone=2: shade cards carry the veil, never the tag. */
+    public final boolean shadeVeil;
+    /**
+     * debug.oulg.shadetone=3 (default): shade cards never carry the tag; their veil is measured once
+     * from a capture of the backdrop when the shade opens and kept until it closes (ShadeTone).
+     */
+    public final boolean shadeAdaptive;
+    /** Brightest mean backdrop luminance a light-text shade card shows (debug.oulg.shadecap, 0.55). */
+    public final float shadeCap;
+    /** Darkest mean backdrop luminance a dark-text shade card shows (debug.oulg.shadelift, 0.45). */
+    public final float shadeLift;
+    /**
+     * Veil alpha (0-255) a shade card carries while scaled, when its tag cannot survive
+     * (debug.oulg.shadescaleveil, default 115): black under light text, white under dark text,
+     * standing in for the tone map so the card does not jump to the plain blur. 0 keeps the tint.
+     */
+    public final int shadeScaleVeil;
     /**
      * The sfhook version whose optics are confirmed live (debug.oulg.sf.optics). The library sets it
      * when a rewrite compiles, and the module's boot script sets it; with a live swap set it by hand.
@@ -147,13 +179,21 @@ public final class Tuning {
         shadeBlur = number("shadeblur", 1f) >= 1f;
         sfRefract = number("sfrefract", 0f) >= 1f;
         kgBlurPath = Math.round(clamp(number("kgblurpath", 1f), 0f, 1f));
+        shadeBlurPath = Math.round(clamp(number("shadeblurpath", 1f), 0f, 1f));
+        shadeFadeCut = clamp(number("shadefadecut", 0.5f), 0f, 1f);
         kgWinBlur = number("kgwinblur", 0f) >= 1f;
         kgBlurRadius = Math.round(clamp(number("kgblurradius", -1f), -1f, 400f));
         kgOptics = Math.round(clamp(number("kgoptics", 1f), 0f, 1f));
         huOptics = Math.round(clamp(number("huoptics", 0f), 0f, 1f));
         float kl = number("kglens", 0.40f);
         kgLens = kl < 0f ? -1f : clamp(kl, 0.1f, 1.2f);
-        shadeTone = number("shadetone", 1f) >= 1f;
+        int tone = Math.round(number("shadetone", 3f));
+        shadeTone = tone == 1;
+        shadeVeil = tone == 2;
+        shadeAdaptive = tone == 3;
+        shadeCap = clamp(number("shadecap", 0.55f), 0.2f, 1f);
+        shadeLift = clamp(number("shadelift", 0.45f), 0f, 0.8f);
+        shadeScaleVeil = Math.round(Math.max(0f, Math.min(255f, number("shadescaleveil", 115f))));
         sfOptics = Math.round(clamp(number("sf.optics", 0f), 0f, 1000f));
         headerGap = clamp(number("headergap", 4f), 0f, 8f);
         perf = number("perf", 0f) >= 1f;
@@ -177,7 +217,7 @@ public final class Tuning {
         return "backdrop=" + backdrop + " profile=" + profile + " lens=" + lens + " rimhz=" + rimHz + " rimblur=" + rimBlur
                 + " refract=" + refract + " ior=" + ior + " blur=" + blur + " sat=" + saturation
                 + " disp=" + dispersion + " hz=" + hz + " hzkg=" + keyguardHz + " tint=" + tintAlpha
-                + " semradius=" + semRadius + " semradiuslens=" + semRadiusLens + " sflens=" + sfLens + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " kgblurpath=" + kgBlurPath + " kgblurradius=" + kgBlurRadius + " kgoptics=" + kgOptics + " huoptics=" + huOptics + " kglens=" + kgLens + " shadetone=" + shadeTone + " sfoptics=" + sfOptics + " kgwinblur=" + kgWinBlur + " headergap=" + headerGap + " perf=" + perf + " trace=" + trace;
+                + " semradius=" + semRadius + " semradiuslens=" + semRadiusLens + " sflens=" + sfLens + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " kgblurpath=" + kgBlurPath + " shadeblurpath=" + shadeBlurPath + " shadefadecut=" + shadeFadeCut + " kgblurradius=" + kgBlurRadius + " kgoptics=" + kgOptics + " huoptics=" + huOptics + " kglens=" + kgLens + " shadetone=" + shadeTone + " shadeveil=" + shadeVeil + " shadeadaptive=" + shadeAdaptive + " shadecap=" + shadeCap + " shadelift=" + shadeLift + " shadescaleveil=" + shadeScaleVeil + " sfoptics=" + sfOptics + " kgwinblur=" + kgWinBlur + " headergap=" + headerGap + " perf=" + perf + " trace=" + trace;
     }
 
     private static float clamp(float v, float lo, float hi) { return Float.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : lo; }

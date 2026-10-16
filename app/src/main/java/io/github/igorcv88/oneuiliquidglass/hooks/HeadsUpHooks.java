@@ -31,6 +31,7 @@ import io.github.igorcv88.oneuiliquidglass.glass.Tuning;
 import io.github.igorcv88.oneuiliquidglass.glass.WallpaperBackdrop;
 import io.github.igorcv88.oneuiliquidglass.glass.SemBlurBridge;
 import io.github.igorcv88.oneuiliquidglass.glass.SharedBackdrop;
+import io.github.igorcv88.oneuiliquidglass.glass.ShadeTone;
 import io.github.igorcv88.oneuiliquidglass.glass.GlassDrawable;
 import io.github.igorcv88.oneuiliquidglass.glass.GlassSpec;
 import io.github.igorcv88.oneuiliquidglass.glass.CornerGeometry;
@@ -52,6 +53,8 @@ public final class HeadsUpHooks {
     private final boolean samsungBlur = SemBlurBridge.available();
     private final GlassSpec spec = new GlassSpec();
     private Boolean shadeExpanded;
+    /** Counts shade openings; a card measures its veil once per opening (shadetone=3). */
+    private int shadeOpens;
     /** SystemUI's StatusBarState (0 shade, 1 keyguard, 2 shade over keyguard); null until first set. */
     private Integer barState;
     /** Set once HybridBackdrop could not be built; heads-up rows then keep the plain compositor blur. */
@@ -174,6 +177,7 @@ public final class HeadsUpHooks {
         Probe.log("READY", "mode=" + (enabled ? "glass" : "probe") + " drawHook=" + drawHook + " shadeHook=" + shadeHook + " samsungBlur=" + samsungBlur);
         if (enabled && (!drawHook || !shadeHook)) Probe.log("GLASS_UNAVAILABLE", "drawHook=" + drawHook + " shadeHook=" + shadeHook);
     }
+    private String lastPanelBlur;
     private final Set<String> foreignBlurLogged = new java.util.HashSet<>();
     private final Set<String> shelfTagLogged = new java.util.HashSet<>();
     /** Stack walks are costly on a per-frame path; provenance is only gathered for the first calls. */
@@ -216,11 +220,17 @@ public final class HeadsUpHooks {
                             // up to 4 are dropped: a pull-down or the bouncer passes that within a few frames.
                             p.args[0] = null;
                         }
+                        if (Probe.trace && v.getRootView() == v) {
+                            // The shade window's own blur, to match a card region to it before removal.
+                            String panel = p.args[0] == null ? "null" : Probe.blurFields(p.args[0]);
+                            if (!panel.equals(lastPanelBlur)) { lastPanelBlur = panel; Probe.log("PANEL_BLUR", "view=" + v.getClass().getSimpleName() + " " + panel); }
+                        }
                         if (p.args[0] != null && v.getClass().getName().endsWith("NotificationShelfBackgroundView")) {
                             // The shelf under a collapsed stack keeps SystemUI's own blur, which a white
                             // app behind turned white: it gets the shade legibility tag too.
                             String done = SemBlurBridge.tagForeign(p.args[0]);
                             if (shelfTagLogged.add(done.replaceAll("[0-9.]+", "#"))) Probe.log("SEM_BLUR_SHELF", "tag=" + done);
+                            traceShelf(v);
                         }
                         boolean managed = compositorState(v) != null;
                         String caller = Probe.trace && foreignBlurTraces > 0 && foreignBlurLogged.size() < 40 ? blurCaller() : null;
@@ -237,7 +247,41 @@ public final class HeadsUpHooks {
         } catch (RuntimeException | LinkageError e) { Probe.error("BLUR_GUARD_INSTALL_FAILED", e); }
         installBlurMutators();
     }
+    private final Set<View> tracedShelves = Collections.newSetFromMap(new WeakHashMap<>());
+    /** Per-frame state of the shelf's own blur, as ROW_FRAME does for rows (debug.oulg.trace only). */
+    private void traceShelf(View shelf) {
+        if (!tracedShelves.add(shelf)) return;
+        // Registered while attached only: the window's observer outlives a shelf that is replaced.
+        shelf.addOnAttachStateChangeListener(new ShelfTrace(shelf));
+    }
+    private static final class ShelfTrace implements View.OnAttachStateChangeListener, ViewTreeObserver.OnPreDrawListener {
+        private final View shelf;
+        private ViewTreeObserver observer;
+        private String last;
+        ShelfTrace(View shelf) { this.shelf = shelf; if (shelf.isAttachedToWindow()) onViewAttachedToWindow(shelf); }
+        @Override public void onViewAttachedToWindow(View v) {
+            if (observer != null) return;
+            observer = v.getViewTreeObserver(); observer.addOnPreDrawListener(this);
+        }
+        @Override public void onViewDetachedFromWindow(View v) {
+            if (observer != null && observer.isAlive()) observer.removeOnPreDrawListener(this);
+            observer = null;
+        }
+        @Override public boolean onPreDraw() {
+            if (!Probe.trace) return true;
+            try {
+                String line = FrameTrace.describe(shelf, null, null);
+                if (!line.equals(last)) { last = line; FrameTrace.log("SHELF_FRAME", shelf, line); }
+            } catch (RuntimeException | LinkageError e) { Probe.error("SHELF_TRACE_FAILED", e); }
+            return true;
+        }
+    }
     /** The row state whose material drives this view's Samsung blur (Samsung or hybrid), if any. */
+    /** A row inside a group's children container (drawn as a stacked sliver while the group is collapsed). */
+    private static boolean groupChild(View row) {
+        ViewParent p = row.getParent();
+        return p != null && p.getClass().getName().endsWith("NotificationChildrenContainer");
+    }
     private State compositorState(View v) {
         State s = states.get(v);
         if (s == null && rowClass != null && rowClass.isInstance(v)) {
@@ -406,6 +450,7 @@ public final class HeadsUpHooks {
                 ? ((Number) height).floatValue() > 0.5f : null;
         if (next != null && !next.equals(shadeExpanded)) {
             shadeExpanded = next; Probe.log("SHADE", "expanded=" + next);
+            if (next) shadeOpens++;
             if (Probe.trace && next) {
                 // Every blur in the shade window once it has settled: finds blurs no hook knows about.
                 for (State s : states.values()) {
@@ -457,6 +502,8 @@ public final class HeadsUpHooks {
         if (bg.isAttachedToWindow()) s.onViewAttachedToWindow(bg);
         return s;
     }
+    /** How long a card stays untagged after it last scaled or faded. */
+    private static final long SETTLE_MS = 300;
     private final class State implements View.OnAttachStateChangeListener, ViewTreeObserver.OnPreDrawListener {
         final WeakReference<View> background;
         final WeakReference<View> row;
@@ -486,6 +533,25 @@ public final class HeadsUpHooks {
         int tuningGeneration;
         /** The row is scaled into a collapsed group's stack (see onPreDraw). */
         boolean stacked;
+        /** The shade opening whose backdrop this card's veil was measured from (shadetone=3). */
+        int toneOpen = -1;
+        /** The veil measured for this card at the current shade opening (0: none needed). */
+        int measuredVeil;
+        void pushToneVeil() {
+            try {
+                if (compBridge != null) compBridge.setToneVeil(measuredVeil);
+                if (semBridge != null) semBridge.setToneVeil(measuredVeil);
+            } catch (ReflectiveOperationException | RuntimeException e) { Probe.error("SHADE_TONE_APPLY_FAILED", e); }
+        }
+        // Hiding the region until the new measurement arrived made every opening pop in late; the
+        // card keeps the veil of the previous opening meanwhile (measuredVeil persists), which is
+        // already right when the backdrop has not changed.
+        /** Last frame the card was scaled or faded (uptime ms); see onPreDraw. */
+        long lastMotion = Long.MIN_VALUE / 2;
+        /** Redraws once the card has been still for SETTLE_MS, so the tag comes back. */
+        final Runnable settle = this::invalidate;
+        /** Last ROW_FRAME line (debug.oulg.trace); logged again only when it changes. */
+        String lastTrace;
         State(View background, View row) { this.background = new WeakReference<>(background); this.row = new WeakReference<>(row); }
         void invalidate() { View v = background.get(); if (v != null) v.invalidate(); }
         @Override public void onViewAttachedToWindow(View view) {
@@ -528,7 +594,11 @@ public final class HeadsUpHooks {
                 // compositor at a fractional, elliptical size that drops the corner tag (white behind
                 // groups over a white app). Such rows carry no region; the glass draws the sliver.
                 View sr = row.get();
-                boolean stacked = sr != null && (Math.abs(sr.getScaleX() - 1f) > 0.005f || Math.abs(sr.getScaleY() - 1f) > 0.005f);
+                // Only a child of a group: the shade scales every top-level row while it closes, and
+                // suspending those turned their region on and off frame by frame (device trace).
+                // Outside the unlocked shade (the lockscreen) the earlier rule stands: any scaled row.
+                boolean stacked = sr != null && (groupChild(sr) || barState == null || barState != Eligibility.BAR_SHADE)
+                        && (Math.abs(sr.getScaleX() - 1f) > 0.005f || Math.abs(sr.getScaleY() - 1f) > 0.005f);
                 if (stacked != this.stacked) {
                     this.stacked = stacked;
                     Probe.log("ROW_STACKED", "viewId=" + Integer.toHexString(System.identityHashCode(v)) + " stacked=" + stacked);
@@ -543,12 +613,54 @@ public final class HeadsUpHooks {
                     for (Object p = v; p instanceof View; p = ((View) p).getParent()) {
                         View pv = (View) p; a *= pv.getAlpha(); sx *= pv.getScaleX(); sy *= pv.getScaleY();
                     }
-                    if (compBridge != null && compBridge.setRegionFade(stacked ? 0f : a)) v.invalidate();
-                    if (semBridge != null) {
-                        try { semBridge.setScaled(Math.abs(sx - 1f) > 0.001f || Math.abs(sy - 1f) > 0.001f); }
-                        catch (ReflectiveOperationException e) { Probe.error("SEM_BLUR_SCALE_FAILED", e); }
-                        if (semBridge.setRegionFade(a)) v.invalidate();
+                    // In the unlocked shade a partly transparent region turned whiter, not fainter (a
+                    // white pill as the card faded): there it is whole or gone (shadefadecut).
+                    float cut = barState != null && barState == Eligibility.BAR_SHADE ? Tuning.get().shadeFadeCut : 0f;
+                    float fade = cut > 0f ? (a >= cut ? 1f : 0f) : a;
+                    // The tag cannot survive a scaled region; with the finger nearly still the scale
+                    // wobbled between 1 and 0.999 and the tag switched every frame. Once the card
+                    // scales or fades it stays untagged until it has been still for SETTLE_MS.
+                    long now = android.os.SystemClock.uptimeMillis();
+                    if (Math.abs(sx - 1f) > 0.001f || Math.abs(sy - 1f) > 0.001f || a < 0.999f) {
+                        lastMotion = now;
+                        v.removeCallbacks(settle);
+                        v.postDelayed(settle, SETTLE_MS + 20);
                     }
+                    boolean untag = now - lastMotion < SETTLE_MS;
+                    if (compBridge != null) {
+                        try { compBridge.setScaled(untag); }
+                        catch (ReflectiveOperationException e) { Probe.error("BLUR_DRAWABLE_SCALE_FAILED", e); }
+                        if (compBridge.setRegionFade(stacked ? 0f : fade)) v.invalidate();
+                    }
+                    if (semBridge != null) {
+                        try { semBridge.setScaled(untag); }
+                        catch (ReflectiveOperationException e) { Probe.error("SEM_BLUR_SCALE_FAILED", e); }
+                        semBridge.setFadeCut(cut > 0f && a < cut);
+                        if (semBridge.setRegionFade(cut > 0f ? 1f : a)) v.invalidate();
+                    }
+                }
+                if (Probe.trace) {
+                    Object nd = null;
+                    try { nd = backgroundField != null ? backgroundField.get(v) : null; } catch (IllegalAccessException ignored) { }
+                    String line = FrameTrace.describe(v, sr, nd instanceof Drawable ? (Drawable) nd : null)
+                            + " glass=" + (glass != null) + " suspended=" + stacked
+                            + " path=" + (compBridge != null ? "drawable" : semBridge != null ? "samsung" : "-")
+                            + " tag=" + (compBridge != null ? compBridge.tagSent : semBridge != null ? semBridge.tagSent : -1)
+                            + " scaled=" + (compBridge != null ? compBridge.scaled() : semBridge != null && semBridge.scaled())
+                            + (compBridge != null ? " drawableA=" + compBridge.drawable.getAlpha() : "");
+                    if (!line.equals(lastTrace)) { lastTrace = line; FrameTrace.log("ROW_FRAME", v, line); }
+                }
+                // Measured as soon as the shade starts opening, before the card has a bridge or is
+                // visible, so the veil is usually known by the time its region would show.
+                if (toneOpen != shadeOpens && Tuning.get().shadeAdaptive
+                        && Boolean.TRUE.equals(shadeExpanded) && barState != null && barState == Eligibility.BAR_SHADE && v.isShown()) {
+                    // Once per shade opening: the veil is measured from the backdrop and kept.
+                    toneOpen = shadeOpens;
+                    ShadeTone.measure(v, veil -> {
+                        measuredVeil = veil;
+                        pushToneVeil();
+                        invalidate();
+                    });
                 }
                 boolean eligible = eligible();
                 View r = row.get();
@@ -621,8 +733,13 @@ public final class HeadsUpHooks {
          */
         boolean drawablePath() {
             Tuning t = Tuning.get();
-            return t.kgBlurPath == 1 && t.sfRefract && barState != null
-                    && (barState == Eligibility.BAR_KEYGUARD || barState == Eligibility.BAR_SHADE_LOCKED);
+            if (t.kgBlurPath == 1 && t.sfRefract && barState != null
+                    && (barState == Eligibility.BAR_KEYGUARD || barState == Eligibility.BAR_SHADE_LOCKED)) return true;
+            // Expanded shade, unlocked: the Samsung region ignored the card's fade (a ghost of every
+            // card on a pull up); the drawable's region takes it. Heads-up cards keep the Samsung path.
+            View r = row.get();
+            return t.shadeBlurPath == 1 && barState != null && barState == Eligibility.BAR_SHADE && Boolean.TRUE.equals(shadeExpanded)
+                    && r != null && !Boolean.TRUE.equals(Reflect.bool(r, "isHeadsUpState", "mIsHeadsUp"));
         }
         /**
          * Rows whose background can be sampled and refracted. By default only lockscreen rows: the
@@ -725,6 +842,8 @@ public final class HeadsUpHooks {
                         : kind == Backdrop.Kind.SAMSUNG ? (semBridge = SemBlurBridge.create(v))
                         : drawablePath() ? (compBridge = BackgroundBlurBridge.create(v, true)) : BackgroundBlurBridge.create(v);
                 if (compBridge != null) SemBlurBridge.clearNative(v);
+                // A new bridge takes the veil measured for this opening.
+                pushToneVeil();
                 if (semBridge != null) semBridge.setSuspended(stacked);
                 glass = new GlassDrawable(backdrop, v.getResources().getDisplayMetrics().density, spec);
                 glassKind = kind;

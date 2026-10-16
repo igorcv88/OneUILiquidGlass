@@ -582,6 +582,59 @@ Device report (screen recording, unlocked shade over the launcher, `shadeblur=1`
 
 Not verified on device yet. The flash diagnosis comes from the recording and the tag rules, not from a log.
 
+**Device trace after that fix (`ROW_FRAME`, 2026-10-16).** The upper cards were fixed. The last row and the rows above the shelf still flashed, worse the brighter the app behind and not at all over black. The trace shows the cause:
+- While the shade closes, One UI scales every top-level row itself (`s=0.99x0.99` and below, parent `NotificationStackScrollLayout`), not only an ancestor.
+- The stacked-group rule suspended the blur region of any scaled row. It was written for a group's first child drawn as a sliver (`0.92x1.0`). Applied to these rows, it switched their region on and off 21 to 23 times per pull, each time the scale crossed 0.995. With no region, the card showed the shade's dark backdrop.
+- **Fix:** the rule now applies only to a row whose parent is a `NotificationChildrenContainer`.
+- **Untagged while scaled:** the card dropped from the tone-mapped look to the plain blur, which is white over a white app. While a shade card is untagged by scale, its veil stands in for the tone map. It is black under light text, white under dark text, at `debug.oulg.shadescaleveil` alpha (default 115, about 45 %, live; 0 keeps the normal tint). Over white this lands near the tone map's 0.55 cap. Mid-tones come out darker than the tone map would make them.
+
+**Second device pass (screenshots frame by frame, 2026-10-16).**
+- Once the scaled top-level rows kept their region, every card left the ghost. The drawable alpha set on the Samsung path changes, as the trace shows, but the region on screen does not follow it.
+- The cards had looked right earlier only because their region was being removed.
+- **Conclusion (from that, not measured in the compositor):** the `semSetBlurInfo` region does not take the alpha of the `BackgroundBlurDrawable` it installs.
+- **Fix:** expanded-shade cards (unlocked, not heads-up) now take their blur from the drawable path the lockscreen uses (`BackgroundBlurBridge` lens mode, drawn inside the glass). Its region alpha is proven to follow the card on the lockscreen pull up.
+- **Tags and veil:** the drawable path untags and veils scaled cards like the Samsung path.
+- **Curve:** a shade card that never carried a curve sends none, as before. Heads-up cards keep the Samsung path.
+- **Switch:** `debug.oulg.shadeblurpath` (live, default 1); 0 restores the Samsung path.
+
+**Third device pass (screen recording, 2026-10-16).** The recording catches the flash at rest, with the cards not moving:
+- Over a white app the top cards sat at luma about 237, the plain blur. Every 4 to 6 frames they dropped to about 211 for a single frame, then went back.
+- Inferred cause: the profile-2 tag recognised on some frames only. Not yet confirmed by a trace.
+- **New mode:** `debug.oulg.shadetone=2` leaves shade cards untagged and gives them the stand-in veil permanently, so there is nothing for the compositor to recognise.
+- **Trace:** `ROW_FRAME` now also logs the blur path, the tag profile sent, the scaled flag and the drawable's alpha.
+
+**Fourth device pass (trace and recording, `shadetone=2`, 2026-10-16).**
+- The flicker stopped once the tag was gone, which confirms that the tag caused it.
+- The cards turned too dark, and the white pill was still left at the end of a pull.
+- The trace shows the drawable path active (`path=drawable`) and its alpha following the card (0.85 → 217, 0.27 → 70).
+- So on this firmware a partly transparent region in the unlocked shade turns whiter, not fainter. This is inferred from the recording, not measured in the compositor.
+- **Fix:** in the unlocked shade the region is now whole or gone. It is removed once the accumulated alpha drops below `debug.oulg.shadefadecut` (default 0.5, live; 0 restores the alpha fade). Both paths do this; the Samsung path suspends its region.
+
+**Fifth device pass (2026-10-16).**
+- `shadetone=0` was steady but too bright over a white app: without the tag the card does not respond to its backdrop.
+- With the Samsung path, the tag and the fade cut together, the cards were steady at rest and still flashed during the pull.
+- **Fix:** a card now stays untagged from the frame it scales or fades until it has been still for 300 ms (`SETTLE_MS`). Before this, the tag followed the scale frame by frame, and with the finger nearly still the scale wobbled around 1.
+
+**Sixth device pass and the fix that follows (2026-10-16).**
+- **What the device showed:** with the 300 ms hold, the cards opened gray for about a second, then turned tone-mapped. In motion each card flashed at its own moment, apparently as it crossed brighter parts of the backdrop.
+- **Conclusion:** a tone recomputed by the compositor every frame cannot stay steady while cards move on this firmware.
+- **`debug.oulg.shadetone=3`, now the default:**
+  - Shade cards never carry the tag.
+  - When the shade opens, one capture of what is behind the shade window (`CaptureHub`) gives each card the mean luminance under it (`ShadeTone`).
+  - From that luminance the card gets a veil that it keeps until the shade closes:
+    - **light text:** black, bringing the mean down to `debug.oulg.shadecap` (0.55);
+    - **dark text:** white, lifting it to `debug.oulg.shadelift` (0.45).
+  - A backdrop already on the legible side of the knee keeps the normal tint.
+  - The tone is per card, not per pixel, and it does not follow a backdrop that changes while the shade is open.
+- **The shelf** (SystemUI's own blur) is not covered: it stays untagged.
+- **Device result:** steady, and the user found it better than before, at rest too. The capture runs once per opening (`SHADE_TONE luma=0.11 veil=0` over a dark app, `luma=0.95 veil=50000000` over a white one).
+- **Remaining defect, fixed:** a white flash where each card appeared, the plain blur shown for the frame or two the capture takes. A shade card's region now stays off until its veil is known, or for at most 250 ms (`TONE_TIMEOUT_MS`).
+
+**Lockscreen body: the cause of "blotchy" (2026-10-16).**
+- **Trace:** on the lockscreen the native background drawable has alpha 204 (`native=204`). `GlassDrawable` passes the native alpha to its backdrop, and `BackgroundBlurBridge` applied it to the region (`drawableA=204`).
+- **Effect:** a region at 80 % mixes the sharp wallpaper into the blur. This is the blotchy, under-filtered body that the drawable path showed on the lockscreen since it was introduced. The Samsung path ignores the native alpha.
+- **Fix:** the region now takes only the fade; the glass still honours the native alpha.
+
 ## Expanded notification header gap (2026-10-11)
 
 A layout-only refinement, independent of the glass: in expanded notifications the title sat too close to the header row (`Chrome · 3 hours left · 15:52` over the file name). `HeaderGapHooks` adds `debug.oulg.headergap` dp (default 4, 0 turns it off, at most 8) between the two. The policy, which the host tests cover, lives in `HeaderGap`.
