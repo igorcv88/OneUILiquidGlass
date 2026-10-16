@@ -644,6 +644,21 @@ Profile 1 only (profile 0 stays bit-identical, `render_check` max 0; profile 2 u
 - **Body:** after vibrancy and the highlight knee, luma moves `kgflat·body` (0.50) of the way to `kglevel` (0.40). Darkening is a gain; lifting adds cool scattered light, so near-black does not turn into amplified noise. Then a luma-neutral cool tint (`kgcool` 0.5). Disc 80 px with 48 taps.
 - **Host preview:** `sfhook/tools/kg_preview.mjs` renders the real FillRRect rewrite over a photographic crop of the user's lockscreen and composites region colour, glass fill and hairline as on the device. Over the dark jacket crop: body luma SD 0.151 → 0.072, p95 0.64 → 0.54, top contour +0.02 → +0.18 over the body, worst-case white-text contrast 2.5 → 3.5. Not device-validated; the real compositor input and Samsung filter are unknown.
 
+### Lockscreen v0.13: edge lens on a clean core (2026-10-16)
+
+The device screenshot of v0.12 has this luma profile across the card: contour 0.51, a trough of 0.17 about 28 px in, a flat 0.29 plateau, then 0.24 and contour 0.40. The eye reads that shading as relief, i.e. a padded slab. It has three causes:
+- **Late core blur.** The core blur reached full radius only at 0.85·r, so it was 14 px at 28 px depth and the dark backdrop showed almost raw.
+- **Depth-weighted transmission.** Flattening was weighted by depth, and highlights were pulled as hard as shadows. The core came out uniform and darkened (smoked) next to a raw rim.
+- **Whole-card lens.** The v0.12 dome made the whole card a magnifier, which reads as inflated.
+
+**v0.13, profile 1 only:**
+- Edge lens over `b = r/2`, shift `A·b·t³`, `A = min(0.5k, 0.25)`. Jacobian `1 − 3At²`: monotone, 2.5× at the outline at k = 0.40, C2 at the band end.
+- Body blur `80·smoothstep(0.02, 0.38, depth/r)`.
+- Transmission uniform over the card: shadows move 0.55 of the way to 0.44 by added scattered light; highlights move half that, as a gain.
+- Saturation 1.12.
+- Fresnel tilt `kgtilt·t²`; specular a narrow Gaussian at t = 0.62.
+- Profile 0 is bit-identical (`render_check` max 0); profile 2 is untouched.
+
 ### Lockscreen v0.12: a dome instead of a bevelled slab; born in the final profile (2026-10-16)
 
 Device report on v0.11: the card read as a speed bump (abrupt rise, flat top, abrupt fall), and a notification arrived in one look and switched to the right one about 2 s later.

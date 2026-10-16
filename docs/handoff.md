@@ -2,6 +2,51 @@
 
 Documento para continuar o trabalho em outra conversa. Leia inteiro antes de mexer em qualquer coisa. O histórico técnico detalhado está em `docs/architecture.md`; as seções de 2026-10-16 cobrem a central de notificações.
 
+## 0h. Atualização (2026-10-16, sfhook v0.13): "fumê" e "almofada" na tela de bloqueio
+
+**Confirmado no aparelho (v0.12):**
+- a notificação nasce no estado final (`OPTICS_FINAL ... frames=1 firstFrame=true`, com `headsUp=true` no estado 1);
+- no estado 2 o card fica sem marca (`tag=-1`), como previsto.
+
+**Diagnóstico pelo print da v0.12.** Perfil de luma na vertical do card, medido no print:
+
+| Posição | Luma |
+|---|---|
+| contorno | 0,51 |
+| vale a ~28 px para dentro | 0,17 |
+| platô uniforme | 0,29 |
+| vale | 0,24 |
+| contorno | 0,40 |
+
+- O olho lê esse sombreado como relevo: borda clara, sulco escuro e miolo plano elevado é a almofada.
+- **Causas no código:**
+  - o blur do miolo só chegava ao raio total a 0,85·r. A ~28 px ele era 14 px, e o fundo escuro passava quase cru;
+  - o achatamento de tom tinha peso pela profundidade (0,35 na borda) e escurecia as altas luzes tanto quanto clareava as sombras. Resultado: miolo uniforme e escurecido (fumê) ao lado de uma borda com o fundo escuro original;
+  - o domo da v0.12 espalhava a lente pelo raio inteiro, e o card todo virava uma lupa (inflado).
+
+**Correção (só perfil 1):**
+- lente de borda numa faixa de `r/2` (54 px), deslocamento `A·b·t³`, `A = min(0,5·k; 0,25)`. Ampliação 2,5× na borda (igual à do pop-up), caindo de forma monotônica, sem pico interno e C2 no fim da faixa;
+- blur do miolo `80·smoothstep(0,02; 0,38; depth/r)`: raio total a 41 px, logo atrás da lente;
+- transmissão uniforme no card inteiro: sombras sobem 55% do caminho até 0,44 (luz espalhada); altas luzes descem metade disso (ganho);
+- vibração 1,25 → 1,12;
+- Fresnel `tilt·t²`, restrito aos pixels externos; especular estreito em `t = 0,62`.
+
+**Host** (`kg_preview`, mesmo recorte):
+
+| | v0.12 | v0.13 |
+|---|---|---|
+| miolo médio | 0,43 | 0,46 |
+| p05 | 0,32 | 0,35 |
+| p95 | 0,54 | 0,59 |
+| contraste do texto branco no pior caso | 3,5 | 2,9 |
+
+- O contraste caiu no host. No aparelho os cards saem ~0,14 de luma mais escuros que no modelo, então o contraste real deve ficar acima disso. Confirmar com print.
+- Prévia: `docs/img/lockscreen-v13-preview.jpg`, v0.12 e v0.13 alternados, sobre a jaqueta e sobre a grade.
+
+**Pop-up:** bit a bit igual (`render_check` max 0). **Central:** intocada. **App:** sem mudança nesta rodada.
+
+**Teste:** lib `SurfaceFlingerProp.v13.so` (seção 4); confirme com `grep -c 0.0128`; reinicie o SurfaceFlinger com o cache limpo. Mande um print na mesma posição do anterior.
+
 ## 0g. Atualização (2026-10-16, sfhook v0.12): "lombada" e chegada tardia na tela de bloqueio
 
 Estado de partida confirmado pelo usuário: `VS_OK=24 FS_OK=36 FAIL=0`, `sf.optics=9`. Nada abaixo foi validado no aparelho.

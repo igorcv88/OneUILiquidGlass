@@ -43,7 +43,7 @@
 // B-spline (4 bilinear taps) instead of bilinear blocks. Layered blur: the blur region is a light
 // blur (the rim needs detail to refract); tagged cards add a second blur on top, a Vogel disc whose
 // radius grows with the depth from the outline, from 0 at the rim to the core radius past the ramp.
-// oulg_on (tagged), oulg_pf (profile), oulg_br (radius px), oulg_t/oulg_n (dome coordinate and
+// oulg_on (tagged), oulg_pf (profile), oulg_br (radius px), oulg_t/oulg_n (lens-band coordinate and
 // outward normal, profile 1) and oulg_jx/oulg_jy (texture coords per screen pixel) are set in main()
 // before the sample. Each disc is rotated per pixel (interleaved gradient noise, screen-anchored so
 // a moving card does not re-draw its grain): residual tap gaps become fine grain instead of ghost
@@ -54,20 +54,21 @@
 // measured from the outline and n the outward normal (defined and continuous outside the inner rect):
 //  - profile 0: in the bevel band (bevel = clamp(0.42 r, 16, 56) < r), t = 1 - depth / bevel,
 //    shift k * bevel * t^2. Radial Jacobian 1 - 2 k t, folds for k > 0.5 over t > 1 / (2 k).
-//  - profile 1 (dome): over the whole corner radius, t = 1 - depth / r, shift A * r * t^2 with
-//    A = min(0.6 k, 0.35). Radial Jacobian 1 - 2 A t >= 0.3: monotone, strongest at the outline,
-//    never folds (1.92x at the default k = 0.40, 3.3x at the cap).
+//  - profile 1 (edge lens): over b = r / 2, t = 1 - depth / b, shift A * b * t^3 with
+//    A = min(0.5 k, 0.25). Radial Jacobian 1 - 3 A t^2 >= 0.25: monotone, strongest at the outline,
+//    never folds (2.5x at the default k = 0.40, 4x at the cap), C2 where it ends.
 // Along a corner arc both multiply by 1 - shift / rho (rho = distance to the corner centre). Shift
-// and derivative vanish where the band (profile 0) or the dome (profile 1) ends (C1). Checked by
+// and derivative vanish where the band ends (C1). Checked by
 // sfhook/tools/field_check.c. The sampling map's singular values stay <= 1: the texture is only ever
 // magnified, never minified, so there is no aliasing, but a detail grows up to 1 / sigma_min on
 // screen (2.5x at the rim for profile 0 at k = 0.30); field_check prints the bound per strength.
 //
-// Profile 1, a dome (v0.12; see the field): refraction, body blur and lighting share one coordinate
-// t = 1 - depth / r over the whole corner radius, and the surface tilt is `tilt` (1.42 rad) x t:
-//  - interior: an 80 px disc with 48 taps; vibrancy; a soft knee on bright backdrops; adaptive
-//    transmission (luma drawn halfway toward 0.40, dark areas lifted by scattered cool light rather
-//    than a gain); a luma-neutral cool tint;
+// Profile 1, an edge lens on a clean core (v0.13; see the field): a thin, precise lens band with a
+// monotone profile, a core blur that reaches full radius close to the rim, and the surface tilt
+// `tilt` (1.42 rad) x t^2, the slope of the band's t^3 profile:
+//  - interior: an 80 px disc with 48 taps; mild vibrancy; a soft knee on bright backdrops;
+//    transmission, the same over the whole card: shadows lifted toward 0.44 by scattered light,
+//    highlights pulled half as hard; a luma-neutral cool tint;
 //  - rim reflection: Schlick's excess reflectance F(theta) mixes the refracted backdrop toward a
 //    cool environment, brighter on the upper (sky-facing) rim; v0.9's 1.2 rad tilt capped F at
 //    0.10, which left the rim grey (the device report);
@@ -136,19 +137,18 @@
     "}\n"
 // Profile 1's material (core, sat, tone, flat, level, cool x3, rim, tilt, line, spec); profile 0
 // passes through untouched. Colour is handled unpremultiplied (the region is opaque; a = 1 in
-// practice). Body, scaled by the body-blur weight (which follows the dome, see the field):
+// practice). Body, scaled by the body-blur weight:
 //  - vibrancy and the highlight knee as in v0.9;
-//  - adaptive transmission: luma is drawn toward a level by `flat` (a share of its distance), so a
-//    dark object behind the card no longer dominates it. Its weight runs from 0.35 at the outline
-//    to 1 in the core, not from 0: a full-strength core next to an untouched rim was a luminance
-//    step that read as a raised plateau. Darkening is a gain (hue kept); lifting adds the cool light
-//    a frosted slab scatters, not a gain, so a near-black backdrop does not become amplified noise;
+//  - transmission, uniform over the card: luma moves `flat` of the way to `level` when darker
+//    (shadows lifted by added scattered light, not a gain, so near-black does not become amplified
+//    noise) and half that when brighter (a gain, hue kept). v0.12 weighted it by depth and pulled
+//    highlights as hard as shadows: the rim kept the raw dark backdrop next to a uniform, darkened
+//    core, a dark trough between a bright contour and a flat plateau that read as a padded slab;
 //  - a luma-neutral cool tint over the whole card.
-// Rim, from the dome's own slope: the surface tilt is `tilt` x t (the slope of a t^2 height
-// profile), so Schlick's excess reflectance rises continuously toward the outline instead of within
-// a band. It mixes toward a cool environment brighter above than below; a thin contour (Gaussian,
-// 1.6 px from the outline) is the grazing edge of the same surface; the specular is a Gaussian
-// crescent at t = 0.74 on the light-facing side, a fainter one opposite.
+// Rim, from the band's own slope: the tilt is `tilt` x t^2, so Schlick's excess reflectance stays
+// within the outer pixels. It mixes toward a cool environment brighter above than below; a thin
+// contour (Gaussian, 1.6 px from the outline) is the grazing edge of the same surface; the specular
+// is a narrow Gaussian crescent at t = 0.62 on the light-facing side, a fainter one opposite.
 #define OULG_FS_LENS_FMT \
     "mediump vec4 oulg_material(mediump vec4 c) {\n" \
     "  if (oulg_pf < 0.5) return c;\n" \
@@ -160,19 +160,20 @@
     "  rgb = mix(vec3(y), rgb, 1.0 + (%.3f - 1.0) * body);\n" \
     "  rgb *= 1.0 - %.3f * body * smoothstep(0.65, 1.0, y);\n" \
     "  y = max(dot(rgb, w709), 0.0);\n" \
-    "  mediump float yt = y + %.3f * (0.35 + 0.65 * body) * (%.3f - y);\n" \
-    "  const mediump vec3 scatter = vec3(0.86, 0.94, 1.06) / 0.92744;\n" \
+    "  const mediump vec3 scatter = vec3(0.90, 0.96, 1.04) / 0.95280;\n" \
+    "  mediump float fl = %.3f, lv = %.3f;\n" \
+    "  mediump float yt = y + fl * (y < lv ? 1.0 : 0.5) * (lv - y);\n" \
     "  rgb = yt > y ? rgb + (yt - y) * scatter : rgb * (yt / max(y, 1e-3));\n" \
     "  rgb *= vec3(%.4f, %.4f, %.4f);\n" \
     "  if (oulg_t > 0.0) {\n" \
     "    mediump float facing = dot(oulg_n, vec2(-0.4512, -0.8924));\n" \
     "    mediump vec3 env = vec3(0.90, 0.94, 1.0) * mix(0.62, 1.0, 0.5 + 0.5 * facing);\n" \
-    "    mediump float f = clamp(%.3f * pow(1.0 - cos(%.3f * oulg_t), 5.0), 0.0, 1.0);\n" \
+    "    mediump float f = clamp(%.3f * pow(1.0 - cos(%.3f * oulg_t * oulg_t), 5.0), 0.0, 1.0);\n" \
     "    rgb = mix(rgb, env, f);\n" \
     "    highp float px = (1.0 - oulg_t) * oulg_bv;\n" \
     "    mediump float line = %.3f * exp(-px * px / 2.56) * (0.7 + 0.3 * max(facing, 0.0));\n" \
     "    rgb = mix(rgb, vec3(0.97, 0.985, 1.0), clamp(line, 0.0, 1.0));\n" \
-    "    mediump float band = exp(-(oulg_t - 0.74) * (oulg_t - 0.74) / 0.0242);\n" \
+    "    mediump float band = exp(-(oulg_t - 0.62) * (oulg_t - 0.62) / 0.0128);\n" \
     "    mediump float lobe = pow(max(facing, 0.0), 3.0) + 0.45 * pow(max(-facing, 0.0), 3.0);\n" \
     "    mediump float m = max(max(rgb.r, rgb.g), max(rgb.b, 1e-3));\n" \
     "    mediump vec3 hue = mix(vec3(1.0), rgb / m, 0.3);\n" \
@@ -195,14 +196,14 @@
 // The field (core1, ramp1, core0, ramp0); programs that sample an external texture get only this
 // and the globals. Profile 0's shift keeps its v0.7 expression.
 //
-// Profile 1 (v0.12) is a dome, not a bevelled slab: the lens spans the whole corner radius D = r
-// (on a pill, half its height: the lens reaches the centre line), with u = depth / D, t = 1 - u and
-// shift A * D * t^2, A = min(0.6 k, 0.35). Its radial Jacobian 1 - 2 A t falls monotonically from 1
-// at the inner end to 1 - 2 A at the outline: the strongest refraction is at the periphery and the
-// magnification never peaks inside the card. The v0.9-v0.11 S-curve over a 0.42 r band peaked
-// mid-band (a ring of maximum magnification ~22 px inside the outline) and stopped dead, with a flat
-// interior after it: the "speed bump". The body blur grows with the same coordinate,
-// smoothstep(0.04, ramp1, u) (ramp1 a fraction of D), so filtering and refraction share one shape.
+// Profile 1 (v0.13): an edge lens over b = r / 2, t = 1 - depth / b, shift A * b * t^3,
+// A = min(0.5 k, 0.25). Its radial Jacobian 1 - 3 A t^2 rises monotonically from 1 - 3 A at the
+// outline to 1 where the band ends, with zero slope there (C2): refraction is strongest at the very
+// edge and fades without a seam. History: v0.9-v0.11 used an S-curve over a 0.42 r band, whose
+// magnification peaked mid-band (a ring ~22 px inside the outline, the "speed bump"); v0.12 spread
+// a t^2 lens over the whole corner radius, which made the whole card one magnifier (inflated,
+// pillowy). The body blur is smoothstep(0.02, ramp1, depth / r): it reaches the core radius at
+// 0.38 r (41 px on a 216 px pill), so the zone behind the lens band is already filtered.
 #define OULG_FS_FIELD_FMT \
     "highp vec2 oulg_field(highp vec2 q, highp vec2 hs, highp float r, highp float kp) {\n" \
     "  oulg_pf = kp >= 4.0 ? 2.0 : kp >= 2.0 ? 1.0 : 0.0;\n" \
@@ -216,14 +217,14 @@
     "  highp float l = length(v);\n" \
     "  highp float depth = r - l - min(max(w.x, w.y), 0.0);\n" \
     "  if (oulg_pf > 0.5) {\n" \
-    "    oulg_bv = r;\n" \
-    "    highp float u = clamp(depth / r, 0.0, 1.0);\n" \
-    "    oulg_br = %.2f * smoothstep(0.04, %.3f, u);\n" \
-    "    if (l <= 0.0 || depth <= 0.0 || depth >= r) return vec2(0.0);\n" \
-    "    highp float t = 1.0 - u;\n" \
+    "    highp float b = 0.5 * r;\n" \
+    "    oulg_bv = b;\n" \
+    "    oulg_br = %.2f * smoothstep(0.02, %.3f, clamp(depth / r, 0.0, 1.0));\n" \
+    "    if (l <= 0.0 || depth <= 0.0 || depth >= b) return vec2(0.0);\n" \
+    "    highp float t = 1.0 - depth / b;\n" \
     "    oulg_t = t;\n" \
     "    oulg_n = (v / l) * sign(q);\n" \
-    "    return -oulg_n * (min(0.6 * k, 0.35) * r * t * t);\n" \
+    "    return -oulg_n * (min(0.5 * k, 0.25) * b * t * t * t);\n" \
     "  }\n" \
     "  highp float bevel = clamp(r * 0.42, 16.0, 56.0);\n" \
     "  oulg_br = %.2f * smoothstep(0.25 * bevel, %.3f * bevel, depth);\n" \
@@ -245,14 +246,14 @@ struct oulg_profile { float core; int taps; float ramp; float sat; float tone; f
 // (render_check structure 1.61 at 56 px / 40 taps, 0.90 at 80 px / 48 taps; grain 0.45 -> 0.54).
 #define OULG_KG_CORE_DEFAULT 80.0f
 #define OULG_KG_TAPS_DEFAULT 48
-// Profile 1: the depth where the core radius is reached, as a fraction of the dome (the corner radius).
-#define OULG_KG_RAMP_DEFAULT 0.85f
-#define OULG_KG_SAT_DEFAULT 1.25f
+// Profile 1: the depth where the core radius is reached, as a fraction of the corner radius.
+#define OULG_KG_RAMP_DEFAULT 0.38f
+#define OULG_KG_SAT_DEFAULT 1.12f
 #define OULG_KG_TONE_DEFAULT 0.15f
 #define OULG_KG_RIM_DEFAULT 1.0f
 #define OULG_KG_SPEC_DEFAULT 0.30f
-#define OULG_KG_FLAT_DEFAULT 0.50f
-#define OULG_KG_LEVEL_DEFAULT 0.40f
+#define OULG_KG_FLAT_DEFAULT 0.55f
+#define OULG_KG_LEVEL_DEFAULT 0.44f
 #define OULG_KG_COOL_DEFAULT 0.5f
 #define OULG_KG_TILT_DEFAULT 1.42f
 #define OULG_KG_LINE_DEFAULT 0.55f
@@ -363,8 +364,8 @@ static void oulg_fix_params(struct oulg_profile p[OULG_PROFILES]) {
         const struct oulg_profile *d = &OULG_PROFILES_DEFAULT[i];
         if (!(p[i].core >= 0.0f && p[i].core <= 400.0f)) p[i].core = d->core;
         if (p[i].taps < 4 || p[i].taps > 48) p[i].taps = d->taps;
-        // Above the ramp start (0.25 bevel; 0.04 of the dome for profile 1): smoothstep needs edge0 < edge1.
-        if (i == 1 ? !(p[i].ramp >= 0.3f && p[i].ramp <= 1.0f) : !(p[i].ramp >= 0.5f && p[i].ramp <= 8.0f)) p[i].ramp = d->ramp;
+        // Above the ramp start (0.25 bevel; 0.02 r for profile 1): smoothstep needs edge0 < edge1.
+        if (i == 1 ? !(p[i].ramp >= 0.15f && p[i].ramp <= 1.0f) : !(p[i].ramp >= 0.5f && p[i].ramp <= 8.0f)) p[i].ramp = d->ramp;
         if (!(p[i].sat >= 0.0f && p[i].sat <= 3.0f)) p[i].sat = d->sat;
         if (!(p[i].tone >= 0.0f && p[i].tone <= 0.6f)) p[i].tone = d->tone;
         if (!(p[i].rim >= 0.0f && p[i].rim <= 4.0f)) p[i].rim = d->rim;
