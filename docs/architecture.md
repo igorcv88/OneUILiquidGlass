@@ -573,6 +573,15 @@ Brief: surpass both lockscreen renderers while keeping `kgblurpath=1`'s stabilit
   - **The two discs in one program.** Only one runs per pixel. Register allocation is the larger of the two, not their sum; to be measured on the Adreno with the rest of the GPU cost.
   - **Tag precision above 127.5 px.** Handled by not handing lighting over there (above), not by a new encoding: changing the encoding would change the heads-up tag.
 
+## Shade cards on a pull up: ghost and flashes (2026-10-16)
+
+Device report (screen recording, unlocked shade over the launcher, `shadeblur=1`, `sfrefract=1`): on a slow pull up that closes the shade, the cards flashed light and dark from frame to frame. Further up, only a blurred, veiled card-shaped region remained after the content had faded (a ghost). A fast pull did not show it.
+
+- **Ghost.** This is the same mechanism as the lockscreen ghost. The stack fades through ancestor view alpha, which fades the drawn glass but not the Samsung blur region installed with `semSetBlurInfo`. In window mode that call installs a `BackgroundBlurDrawable` as the view's background (read from `framework.jar`, see *Nested clear blocked*). Before each frame its alpha now takes the accumulated alpha of the view's ancestors, as the drawable path already does on the lockscreen. If the firmware leaves no blur drawable on the view, the region is dropped below half alpha instead. `SEM_BLUR_FADE` logs which of the two applies.
+- **Flashes.** The recording shows the cards narrowing while they fade: an ancestor scales the stack. A scaled region reaches the compositor with a fractional size and radius. The shade tag (profile 2, `[0.05, 0.20]` on the radius fraction, whole-pixel sides) therefore matched on some frames and not on others, and the legibility tone map switched on and off. While any ancestor scales the card, a non-lens card now carries no tag. The blur is rebuilt once at each edge, not per frame, and `SEM_BLUR_SCALED` logs the switch. Lens cards are unchanged.
+
+Not verified on device yet. The flash diagnosis comes from the recording and the tag rules, not from a log.
+
 ## Expanded notification header gap (2026-10-11)
 
 A layout-only refinement, independent of the glass: in expanded notifications the title sat too close to the header row (`Chrome · 3 hours left · 15:52` over the file name). `HeaderGapHooks` adds `debug.oulg.headergap` dp (default 4, 0 turns it off, at most 8) between the two. The policy, which the host tests cover, lives in `HeaderGap`.
