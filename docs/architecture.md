@@ -588,6 +588,15 @@ Not verified on device yet. The flash diagnosis comes from the recording and the
 - **Fix:** the rule now applies only to a row whose parent is a `NotificationChildrenContainer`.
 - **Untagged while scaled:** the card dropped from the tone-mapped look to the plain blur, which is white over a white app. While a shade card is untagged by scale, its veil stands in for the tone map. It is black under light text, white under dark text, at `debug.oulg.shadescaleveil` alpha (default 115, about 45 %, live; 0 keeps the normal tint). Over white this lands near the tone map's 0.55 cap. Mid-tones come out darker than the tone map would make them.
 
+**Second device pass (screenshots frame by frame, 2026-10-16).**
+- Once the scaled top-level rows kept their region, every card left the ghost. The drawable alpha set on the Samsung path changes, as the trace shows, but the region on screen does not follow it.
+- The cards had looked right earlier only because their region was being removed.
+- **Conclusion (from that, not measured in the compositor):** the `semSetBlurInfo` region does not take the alpha of the `BackgroundBlurDrawable` it installs.
+- **Fix:** expanded-shade cards (unlocked, not heads-up) now take their blur from the drawable path the lockscreen uses (`BackgroundBlurBridge` lens mode, drawn inside the glass). Its region alpha is proven to follow the card on the lockscreen pull up.
+- **Tags and veil:** the drawable path untags and veils scaled cards like the Samsung path.
+- **Curve:** a shade card that never carried a curve sends none, as before. Heads-up cards keep the Samsung path.
+- **Switch:** `debug.oulg.shadeblurpath` (live, default 1); 0 restores the Samsung path.
+
 ## Expanded notification header gap (2026-10-11)
 
 A layout-only refinement, independent of the glass: in expanded notifications the title sat too close to the header row (`Chrome · 3 hours left · 15:52` over the file name). `HeaderGapHooks` adds `debug.oulg.headergap` dp (default 4, 0 turns it off, at most 8) between the two. The policy, which the host tests cover, lives in `HeaderGap`.

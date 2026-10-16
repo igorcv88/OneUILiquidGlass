@@ -82,7 +82,11 @@ public final class BackgroundBlurBridge implements Backdrop {
             px = lens && lensPx >= 0 ? lensPx : t.semRadius >= 0 ? t.semRadius : GlassSpec.SAMSUNG_RADIUS;
             // The same veil as the Samsung path (semalpha over the Samsung tone).
             if (t.semAlpha >= 0) tint = (tint & 0x00ffffff) | (t.semAlpha << 24);
-            int profile = SemBlurBridge.tagProfile(lens, keyguard);
+            int profile = scaled && !lens ? -1 : SemBlurBridge.tagProfile(lens, keyguard);
+            if (scaled && !lens && SemBlurBridge.tagProfile(false, keyguard) == 2 && t.shadeScaleVeil > 0) {
+                // Untagged while scaled (see setScaled): a veil stands in for the tone map.
+                tint = (SemBlurBridge.shadeStrength() < 0.65f ? 0x000000 : 0xffffff) | (t.shadeScaleVeil << 24);
+            }
             tl = SemBlurBridge.cornerTag(tl, profile); tr = SemBlurBridge.cornerTag(tr, profile);
             bl = SemBlurBridge.cornerTag(bl, profile); br = SemBlurBridge.cornerTag(br, profile);
         }
@@ -91,12 +95,28 @@ public final class BackgroundBlurBridge implements Backdrop {
         color.invoke(drawable, tint);
         // API order: top-left, top-right, bottom-left, bottom-right.
         corners.invoke(drawable, tl, tr, bl, br);
-        if (lensMode && curve != null) applyCurve();
+        if (lensMode && curve != null && (lens || keyguard || curveSent)) applyCurve();
+    }
+    /** Whether a curve was ever sent: the drawable keeps it, so from then on one is always sent. */
+    private boolean curveSent;
+    private boolean scaled;
+    /**
+     * An ancestor scales the card (the shade closing): its region reaches the compositor at a
+     * fractional size and radius, where the tag matched on some frames only. While scaled a
+     * non-lens card carries no tag, and a shade card's veil stands in for the tone map
+     * (SemBlurBridge.setScaled). One rebuild at each edge.
+     */
+    public void setScaled(boolean on) throws ReflectiveOperationException {
+        if (scaled == on) return;
+        scaled = on;
+        if (lens || !lensMode || SemBlurBridge.tagProfile(false, keyguard) < 0) return;
+        if (built) update(lastPx, lastTint, lastRadii);
     }
     /**
      * The same curve policy as SemBlurBridge (semcurve=auto: neutral on lens cards). The drawable keeps
      * a curve once set, so every other policy sends the neutral curve, which leaves colours as they
      * are, instead of sending nothing: a lens card turned shade card must not keep an old curve.
+     * An unlocked shade card that never carried one sends none, as on the Samsung path.
      */
     private void applyCurve() throws ReflectiveOperationException {
         Tuning t = Tuning.get();
@@ -104,6 +124,7 @@ public final class BackgroundBlurBridge implements Backdrop {
         float[] v = SemBlurBridge.explicitCurve(spec);
         if (v == null) v = SemBlurBridge.explicitCurve(SemBlurBridge.NEUTRAL_CURVE);
         curve.invoke(drawable, v[0], v[1], v[2], v[3], v[4], v[5]);
+        curveSent = true;
     }
     @Override public void draw(Canvas canvas, Rect bounds) { drawable.setBounds(bounds); drawable.draw(canvas); }
     private int baseAlpha = 255;

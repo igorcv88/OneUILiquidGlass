@@ -67,6 +67,12 @@ public final class Tuning {
      */
     public final int kgBlurPath;
     /**
+     * Expanded-shade blur source (debug.oulg.shadeblurpath): 1 (default) draws a BackgroundBlurDrawable
+     * inside the glass, as kgblurpath does on the lockscreen; 0 installs the Samsung blur on the
+     * view. The Samsung region ignored the card's fade: closing the shade left a ghost of each card.
+     */
+    public final int shadeBlurPath;
+    /**
      * Panel blur on the shade window while the lockscreen sits idle (debug.oulg.kgwinblur): 0
      * (default) drops the radius 1-4 ramps a touch starts there; 1 lets them through.
      */
@@ -153,6 +159,7 @@ public final class Tuning {
         shadeBlur = number("shadeblur", 1f) >= 1f;
         sfRefract = number("sfrefract", 0f) >= 1f;
         kgBlurPath = Math.round(clamp(number("kgblurpath", 1f), 0f, 1f));
+        shadeBlurPath = Math.round(clamp(number("shadeblurpath", 1f), 0f, 1f));
         kgWinBlur = number("kgwinblur", 0f) >= 1f;
         kgBlurRadius = Math.round(clamp(number("kgblurradius", -1f), -1f, 400f));
         kgOptics = Math.round(clamp(number("kgoptics", 1f), 0f, 1f));
@@ -184,7 +191,7 @@ public final class Tuning {
         return "backdrop=" + backdrop + " profile=" + profile + " lens=" + lens + " rimhz=" + rimHz + " rimblur=" + rimBlur
                 + " refract=" + refract + " ior=" + ior + " blur=" + blur + " sat=" + saturation
                 + " disp=" + dispersion + " hz=" + hz + " hzkg=" + keyguardHz + " tint=" + tintAlpha
-                + " semradius=" + semRadius + " semradiuslens=" + semRadiusLens + " sflens=" + sfLens + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " kgblurpath=" + kgBlurPath + " kgblurradius=" + kgBlurRadius + " kgoptics=" + kgOptics + " huoptics=" + huOptics + " kglens=" + kgLens + " shadetone=" + shadeTone + " shadescaleveil=" + shadeScaleVeil + " sfoptics=" + sfOptics + " kgwinblur=" + kgWinBlur + " headergap=" + headerGap + " perf=" + perf + " trace=" + trace;
+                + " semradius=" + semRadius + " semradiuslens=" + semRadiusLens + " sflens=" + sfLens + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " kgblurpath=" + kgBlurPath + " shadeblurpath=" + shadeBlurPath + " kgblurradius=" + kgBlurRadius + " kgoptics=" + kgOptics + " huoptics=" + huOptics + " kglens=" + kgLens + " shadetone=" + shadeTone + " shadescaleveil=" + shadeScaleVeil + " sfoptics=" + sfOptics + " kgwinblur=" + kgWinBlur + " headergap=" + headerGap + " perf=" + perf + " trace=" + trace;
     }
 
     private static float clamp(float v, float lo, float hi) { return Float.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : lo; }

@@ -583,7 +583,11 @@ public final class HeadsUpHooks {
                     for (Object p = v; p instanceof View; p = ((View) p).getParent()) {
                         View pv = (View) p; a *= pv.getAlpha(); sx *= pv.getScaleX(); sy *= pv.getScaleY();
                     }
-                    if (compBridge != null && compBridge.setRegionFade(stacked ? 0f : a)) v.invalidate();
+                    if (compBridge != null) {
+                        try { compBridge.setScaled(Math.abs(sx - 1f) > 0.001f || Math.abs(sy - 1f) > 0.001f); }
+                        catch (ReflectiveOperationException e) { Probe.error("BLUR_DRAWABLE_SCALE_FAILED", e); }
+                        if (compBridge.setRegionFade(stacked ? 0f : a)) v.invalidate();
+                    }
                     if (semBridge != null) {
                         try { semBridge.setScaled(Math.abs(sx - 1f) > 0.001f || Math.abs(sy - 1f) > 0.001f); }
                         catch (ReflectiveOperationException e) { Probe.error("SEM_BLUR_SCALE_FAILED", e); }
@@ -668,8 +672,13 @@ public final class HeadsUpHooks {
          */
         boolean drawablePath() {
             Tuning t = Tuning.get();
-            return t.kgBlurPath == 1 && t.sfRefract && barState != null
-                    && (barState == Eligibility.BAR_KEYGUARD || barState == Eligibility.BAR_SHADE_LOCKED);
+            if (t.kgBlurPath == 1 && t.sfRefract && barState != null
+                    && (barState == Eligibility.BAR_KEYGUARD || barState == Eligibility.BAR_SHADE_LOCKED)) return true;
+            // Expanded shade, unlocked: the Samsung region ignored the card's fade (a ghost of every
+            // card on a pull up); the drawable's region takes it. Heads-up cards keep the Samsung path.
+            View r = row.get();
+            return t.shadeBlurPath == 1 && barState != null && barState == Eligibility.BAR_SHADE && Boolean.TRUE.equals(shadeExpanded)
+                    && r != null && !Boolean.TRUE.equals(Reflect.bool(r, "isHeadsUpState", "mIsHeadsUp"));
         }
         /**
          * Rows whose background can be sampled and refracted. By default only lockscreen rows: the
