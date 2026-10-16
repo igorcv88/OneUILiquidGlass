@@ -598,7 +598,8 @@ public final class HeadsUpHooks {
                 View sr = row.get();
                 // Only a child of a group: the shade scales every top-level row while it closes, and
                 // suspending those turned their region on and off frame by frame (device trace).
-                boolean stacked = sr != null && groupChild(sr)
+                // Outside the unlocked shade (the lockscreen) the earlier rule stands: any scaled row.
+                boolean stacked = sr != null && (groupChild(sr) || barState == null || barState != Eligibility.BAR_SHADE)
                         && (Math.abs(sr.getScaleX() - 1f) > 0.005f || Math.abs(sr.getScaleY() - 1f) > 0.005f);
                 if (stacked != this.stacked) {
                     this.stacked = stacked;
