@@ -221,6 +221,7 @@ public final class HeadsUpHooks {
                             // app behind turned white: it gets the shade legibility tag too.
                             String done = SemBlurBridge.tagForeign(p.args[0]);
                             if (shelfTagLogged.add(done.replaceAll("[0-9.]+", "#"))) Probe.log("SEM_BLUR_SHELF", "tag=" + done);
+                            traceShelf(v);
                         }
                         boolean managed = compositorState(v) != null;
                         String caller = Probe.trace && foreignBlurTraces > 0 && foreignBlurLogged.size() < 40 ? blurCaller() : null;
@@ -236,6 +237,20 @@ public final class HeadsUpHooks {
             Probe.log("BLUR_GUARD", "installed=true");
         } catch (RuntimeException | LinkageError e) { Probe.error("BLUR_GUARD_INSTALL_FAILED", e); }
         installBlurMutators();
+    }
+    private final Set<View> tracedShelves = Collections.newSetFromMap(new WeakHashMap<>());
+    /** Per-frame state of the shelf's own blur, as ROW_FRAME does for rows (debug.oulg.trace only). */
+    private void traceShelf(View shelf) {
+        if (!tracedShelves.add(shelf)) return;
+        String[] last = {null};
+        shelf.getViewTreeObserver().addOnPreDrawListener(() -> {
+            if (!Probe.trace) return true;
+            try {
+                String line = FrameTrace.describe(shelf, null, null);
+                if (!line.equals(last[0])) { last[0] = line; FrameTrace.log("SHELF_FRAME", shelf, line); }
+            } catch (RuntimeException | LinkageError e) { Probe.error("SHELF_TRACE_FAILED", e); }
+            return true;
+        });
     }
     /** The row state whose material drives this view's Samsung blur (Samsung or hybrid), if any. */
     private State compositorState(View v) {
@@ -486,6 +501,8 @@ public final class HeadsUpHooks {
         int tuningGeneration;
         /** The row is scaled into a collapsed group's stack (see onPreDraw). */
         boolean stacked;
+        /** Last ROW_FRAME line (debug.oulg.trace); logged again only when it changes. */
+        String lastTrace;
         State(View background, View row) { this.background = new WeakReference<>(background); this.row = new WeakReference<>(row); }
         void invalidate() { View v = background.get(); if (v != null) v.invalidate(); }
         @Override public void onViewAttachedToWindow(View view) {
@@ -549,6 +566,13 @@ public final class HeadsUpHooks {
                         catch (ReflectiveOperationException e) { Probe.error("SEM_BLUR_SCALE_FAILED", e); }
                         if (semBridge.setRegionFade(a)) v.invalidate();
                     }
+                }
+                if (Probe.trace) {
+                    Object nd = null;
+                    try { nd = backgroundField != null ? backgroundField.get(v) : null; } catch (IllegalAccessException ignored) { }
+                    String line = FrameTrace.describe(v, sr, nd instanceof Drawable ? (Drawable) nd : null)
+                            + " glass=" + (glass != null) + " suspended=" + stacked;
+                    if (!line.equals(lastTrace)) { lastTrace = line; FrameTrace.log("ROW_FRAME", v, line); }
                 }
                 boolean eligible = eligible();
                 View r = row.get();
