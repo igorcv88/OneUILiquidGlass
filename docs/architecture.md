@@ -644,6 +644,21 @@ Profile 1 only (profile 0 stays bit-identical, `render_check` max 0; profile 2 u
 - **Body:** after vibrancy and the highlight knee, luma moves `kgflat·body` (0.50) of the way to `kglevel` (0.40). Darkening is a gain; lifting adds cool scattered light, so near-black does not turn into amplified noise. Then a luma-neutral cool tint (`kgcool` 0.5). Disc 80 px with 48 taps.
 - **Host preview:** `sfhook/tools/kg_preview.mjs` renders the real FillRRect rewrite over a photographic crop of the user's lockscreen and composites region colour, glass fill and hairline as on the device. Over the dark jacket crop: body luma SD 0.151 → 0.072, p95 0.64 → 0.54, top contour +0.02 → +0.18 over the body, worst-case white-text contrast 2.5 → 3.5. Not device-validated; the real compositor input and Samsung filter are unknown.
 
+### Lockscreen v0.16: the v0.11 material with a capped core blur (2026-10-16)
+
+**Decision.** The user approved the look of lib v0.11 with the v0.12 app; v0.13–v0.15 are withdrawn. The lib v0.12 dome never ran on the device.
+
+**Restored from `aa6fd27`:**
+- `sfhook/refract.h`, `oulg_sf.c`, `field_check.c` and `refract_check.c`;
+- `GlassDrawable` and `BackgroundBlurBridge`.
+
+The app is now identical to `431cf07`: the first-frame fix (profile 1 on bar state 1), the `OPTICS` logs and the overflow pill.
+
+**Only visual change.** Profile 1's body radius is `min(80·bw, kgcorecap)`, where `bw` is the v0.11 ramp and the cap defaults to 62 px. The material weights its colour terms by `bw` instead of radius/core.
+- Every pixel whose v0.11 radius is below the cap samples identically.
+- Host masks against v0.11: the rim (0–45 px) has a maximum difference of 0 on three backdrops. `kgcorecap ≥ 80` is bit-identical overall.
+- `render_check`: core structure 0.87 → 1.36, grain 0.51 → 0.40, same cost. Profile 0 is bit-identical.
+
 ### Lockscreen v0.15: neutral body, surface sheen (2026-10-16)
 
 **v0.14 device screenshot.** The rim is single (0.52 contour, a smooth 0.29–0.32 core). The face area of the body reads amber: R − B is 0.10 at the median and 0.27 at p95.

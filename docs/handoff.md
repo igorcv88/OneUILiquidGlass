@@ -2,6 +2,52 @@
 
 Documento para continuar o trabalho em outra conversa. Leia inteiro antes de mexer em qualquer coisa. O histórico técnico detalhado está em `docs/architecture.md`; as seções de 2026-10-16 cobrem a central de notificações.
 
+## 0k. Atualização (2026-10-16, sfhook v0.16): volta à estética da v0.11, miolo menos borrado
+
+**Decisão do usuário:** a referência visual é a estética da **lib v0.11** com a correção de primeiro quadro e flicker do **APK v0.12**.
+- A lib v0.12 nunca rodou no aparelho: o `oulg_live` não tem `v12.so`, e o print das 13:22 era lib v0.11 + APK v12.
+- As v0.13–v0.15 mudaram a estética e foram descartadas.
+
+**Restaurado:**
+- `sfhook/refract.h`, `oulg_sf.c`, `tools/field_check.c` e `tools/refract_check.c` saem de `aa6fd27` (v0.11): bisel em curva S, Fresnel de 1,42 rad, contorno, especular, transmissão, tom frio e vibração 1,25;
+- `GlassDrawable` e `BackgroundBlurBridge` saem de `aa6fd27`: hairline a meio ganho e véu da região. O app inteiro ficou idêntico ao de `431cf07` (diff vazio).
+
+**Preservado da v0.12:**
+- perfil 1 para toda linha no estado 1, inclusive em heads-up (correção do primeiro quadro);
+- logs `OPTICS` e `OPTICS_FINAL`;
+- pílula de excedentes;
+- ferramentas de host (`kg_preview.mjs`).
+
+**A única mudança visual:**
+- o raio do blur extra do miolo continua `80·smoothstep(0,25·bisel; 1,5·bisel; depth)`, mas agora limitado a **62 px** (`OULG_KG_CCAP_DEFAULT`, propriedade `debug.oulg.sf.kgcorecap`);
+- abaixo do limite, cada pixel amostra exatamente como na v0.11. Num canto de 108 px, o raio só passa de 62 px depois da faixa do bisel;
+- as cores do material são ponderadas pela rampa (`oulg_bw`), não por raio/núcleo, então limitar o raio não muda a cor do miolo;
+- as leituras ficam em 48, o que deixa o disco mais denso.
+
+**Validação no host**, com máscaras por região (borda 0–45 px, transição 45–68 px, miolo > 68 px), contra a v0.11 nos fundos pele/jaqueta, escuro e claro:
+
+| Região | Diferença contra v0.11 |
+|---|---|
+| borda | máx **0** em todos os fundos |
+| transição | máx 3–9/255 |
+| miolo | média 0,5–1,0/255, máx 3–4 |
+
+- Com `kgcorecap=80` a saída é bit a bit igual à v0.11 em todas as regiões (rollback).
+- `render_check`, perfil 1: estrutura do fundo visível no miolo 0,87 → 1,36 (mais fundo aparece), grão 0,51 → 0,40, custo igual.
+- Perfil 0 bit a bit igual à v0.11.
+- **Limite do host:** a entrada simulada do compositor já vem muito borrada, então 80, 62 e 48 px ficam quase iguais no render. A intensidade real só se vê no aparelho.
+- Prévia: `docs/img/lockscreen-v16-preview.jpg`. De cima para baixo: v0.11, v0.16 (62), 48 px, v0.15.
+
+**Teste:**
+1. Instale o APK v0.16, que é igual ao v12.
+2. Lib `SurfaceFlingerProp.v16.so` (seção 4; nome novo); confirme com `grep -c kgcorecap`.
+3. Reinicie o SurfaceFlinger com o cache limpo.
+
+Comparar o raio no aparelho (lido na compilação; reinicie o SurfaceFlinger com o cache limpo a cada troca):
+- `setprop debug.oulg.sf.kgcorecap 80`: v0.11 exata;
+- `setprop debug.oulg.sf.kgcorecap 48`: miolo ainda mais claro;
+- vazio: 62.
+
 ## 0j. Atualização (2026-10-16, sfhook v0.15): miolo quente, "blur em vez de vidro"
 
 **Print da v0.14 no aparelho:**

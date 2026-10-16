@@ -9,10 +9,10 @@
 //  1. the region's input: the backdrop at quarter resolution with a light blur (RenderEngine's
 //     downscaled blur pass for a small radius; the exact Samsung filter is not known on the host);
 //  2. the rewritten FillRRect program over that input (refraction, body blur, profile-1 material);
-//  3. the region's colour, drawn by RenderEngine over the blur (KG_VEIL alpha of white; 0 since
-//     v0.14 for compositor-lit cards, 0x14 before);
+//  3. the region's colour, drawn by RenderEngine over the blur (KG_VEIL alpha of white, default 20:
+//     0x14ffffff; v0.14-v0.15 sent none, KG_VEIL=0);
 //  4. the module's glass at the native alpha 204: the dark fill (0x0a000000) and the edge shader's
-//     hairline (KG_HAIR gain; 0 since v0.14, the shader is not drawn on compositor-lit cards);
+//     hairline (KG_HAIR gain, default 0.5 for compositor-lit cards; v0.14-v0.15 drew none, KG_HAIR=0);
 //  5. white notification text, for legibility.
 // Card: 1340 x 216, corner 108, as SystemUI lays out a two-line lockscreen card; lens 0.40.
 //
@@ -28,9 +28,9 @@ const { chromium } = createRequire(import.meta.url)('playwright');
 
 const [dir, bgPath, outPath, cardYArg] = process.argv.slice(2);
 const K = 0.40;
-// The module's layers as of v0.14 for a compositor-lit card: no region colour and no edge shader.
-// KG_VEIL=20 KG_HAIR=0.5 reproduce v0.13's stack (8 % white region colour, half-gain hairline).
-const VEIL = +(process.env.KG_VEIL ?? 0), HAIR = +(process.env.KG_HAIR ?? 0);
+// The module's layers for a compositor-lit card: by default the v0.11-v0.13 and v0.16 stack (8 %
+// white region colour, half-gain hairline); KG_VEIL=0 KG_HAIR=0 reproduce v0.14-v0.15.
+const VEIL = +(process.env.KG_VEIL ?? 20), HAIR = +(process.env.KG_HAIR ?? 0.5);
 const tag = r => { const s = Math.min(1, Math.max(0, (K - 0.1) / 1.1)); const t = Math.floor(r) + 0.30 + 0.15 * s; return t <= r ? t : t - 1; };
 const frag = fs.readFileSync(`${dir}/mod_002.frag`, 'utf8')
   .replace(/#extension GL_NV_shader_noperspective_interpolation : require\n/, '').replace(/noperspective /g, '');

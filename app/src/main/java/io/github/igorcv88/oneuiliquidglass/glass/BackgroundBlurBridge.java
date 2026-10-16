@@ -97,10 +97,6 @@ public final class BackgroundBlurBridge implements Backdrop {
             tagSent = profile;
             int veil = pill ? 0 : SemBlurBridge.shadeVeil(lens, keyguard, scaled, toneVeil);
             if (veil != 0) tint = veil;
-            // A card the compositor renders with the lockscreen material (profile 1, library
-            // confirmed) takes no region colour: the material sets its own transmission, and the
-            // white veil on top was a milky haze over the core.
-            if (profile == 1 && t.sfOptics >= 9) tint &= 0x00ffffff;
             tl = SemBlurBridge.cornerTag(tl, profile); tr = SemBlurBridge.cornerTag(tr, profile);
             bl = SemBlurBridge.cornerTag(bl, profile); br = SemBlurBridge.cornerTag(br, profile);
             // A whole-pixel radius cannot fall in a tag band by accident.
