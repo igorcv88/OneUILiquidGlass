@@ -131,7 +131,9 @@ static float prop_float(const char *name, float fallback) {
 // established material): debug.oulg.sf.core (body blur radius in px, 0 = off), debug.oulg.sf.taps
 // (taps per pixel) and debug.oulg.sf.ramp (depth where the body radius is reached, in bevels).
 // Profile 1 (lockscreen): debug.oulg.sf.kgcore, .kgtaps, .kgramp, .kgsat (body saturation),
-// .kgtone (highlight knee), .kgrim (rim reflectance gain) and .kgspec (specular strength). Profile 2
+// .kgtone (highlight knee), .kgrim (rim reflectance gain), .kgspec (specular strength), .kgflat and
+// .kglevel (transmission flattening toward a luma level), .kgcool (cool tint), .kgtilt (rim tilt at
+// the outline, rad) and .kgline (contour strength). Profile 2
 // (expanded-shade legibility): debug.oulg.sf.shadecap and .shadelift (luma limits). Which
 // profile a card gets travels in its tag, set live by the module.
 static void layered_blur(struct oulg_profile p[OULG_PROFILES]) {
@@ -146,6 +148,11 @@ static void layered_blur(struct oulg_profile p[OULG_PROFILES]) {
     p[1].tone = prop_float("debug.oulg.sf.kgtone", OULG_KG_TONE_DEFAULT);
     p[1].rim = prop_float("debug.oulg.sf.kgrim", OULG_KG_RIM_DEFAULT);
     p[1].spec = prop_float("debug.oulg.sf.kgspec", OULG_KG_SPEC_DEFAULT);
+    p[1].flat = prop_float("debug.oulg.sf.kgflat", OULG_KG_FLAT_DEFAULT);
+    p[1].level = prop_float("debug.oulg.sf.kglevel", OULG_KG_LEVEL_DEFAULT);
+    p[1].cool = prop_float("debug.oulg.sf.kgcool", OULG_KG_COOL_DEFAULT);
+    p[1].tilt = prop_float("debug.oulg.sf.kgtilt", OULG_KG_TILT_DEFAULT);
+    p[1].line = prop_float("debug.oulg.sf.kgline", OULG_KG_LINE_DEFAULT);
     p[2] = OULG_PROFILES_DEFAULT[2];
     p[2].cap = prop_float("debug.oulg.sf.shadecap", OULG_SHADE_CAP_DEFAULT);
     p[2].lift = prop_float("debug.oulg.sf.shadelift", OULG_SHADE_LIFT_DEFAULT);

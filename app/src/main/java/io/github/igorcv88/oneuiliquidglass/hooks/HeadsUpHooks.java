@@ -418,6 +418,16 @@ public final class HeadsUpHooks {
                 barState = (Integer) state;
                 Probe.log("BAR_STATE", "state=" + barState);
                 if (barState == Eligibility.BAR_KEYGUARD) clampNotificationScrims();
+                if (Probe.trace && barState == Eligibility.BAR_KEYGUARD) {
+                    // The overflow pill: every shelf, icon container or footer in the window once settled.
+                    for (State s : states.values()) {
+                        View v = s.background.get();
+                        if (v == null || !v.isAttachedToWindow()) continue;
+                        View root = v.getRootView();
+                        v.postDelayed(() -> Probe.overflow(root), 1200);
+                        break;
+                    }
+                }
                 // The blur is a view property: a card SystemUI does not redraw (the shade springing
                 // back to the lockscreen) would keep the expanded-shade blur. Re-decide now.
                 for (State s : new ArrayList<>(states.values())) { s.refreshLens(); s.invalidate(); }
@@ -495,6 +505,26 @@ public final class HeadsUpHooks {
         }
         return null;
     }
+    private static boolean shelf(View v) { return v.getClass().getName().endsWith("NotificationShelf"); }
+    private final Set<String> hostless = new java.util.HashSet<>();
+    /**
+     * The view whose material a notification background draws: its row, or the notification shelf
+     * (on the lockscreen, the pill with the icons of notifications that do not fit). A background
+     * under neither is logged once per class and chain and stays native.
+     */
+    private View findHost(View bg) {
+        View row = findRow(bg);
+        if (row != null) return row;
+        StringBuilder chain = new StringBuilder();
+        for (ViewParent p = bg.getParent(); p instanceof View; p = p.getParent()) {
+            if (shelf((View) p)) return (View) p;
+            if (chain.length() < 300) chain.append('<').append(p.getClass().getSimpleName());
+        }
+        if (hostless.size() < 20 && hostless.add(bg.getClass().getName() + chain)) {
+            Probe.log("BACKGROUND_HOSTLESS", "view=" + bg.getClass().getName() + " chain=" + chain);
+        }
+        return null;
+    }
     private State state(View bg, View row) {
         State existing = states.get(bg);
         if (existing != null) return existing;
@@ -552,7 +582,13 @@ public final class HeadsUpHooks {
         final Runnable settle = this::invalidate;
         /** Last ROW_FRAME line (debug.oulg.trace); logged again only when it changes. */
         String lastTrace;
-        State(View background, View row) { this.background = new WeakReference<>(background); this.row = new WeakReference<>(row); }
+        /** The background of the notification shelf, not of a row: the lockscreen's overflow pill. */
+        final boolean pill;
+        boolean pillReported;
+        State(View background, View row) {
+            this.background = new WeakReference<>(background); this.row = new WeakReference<>(row);
+            pill = rowClass == null || !rowClass.isInstance(row);
+        }
         void invalidate() { View v = background.get(); if (v != null) v.invalidate(); }
         @Override public void onViewAttachedToWindow(View view) {
             if (observer != null) return;
@@ -597,7 +633,7 @@ public final class HeadsUpHooks {
                 // Only a child of a group: the shade scales every top-level row while it closes, and
                 // suspending those turned their region on and off frame by frame (device trace).
                 // Outside the unlocked shade (the lockscreen) the earlier rule stands: any scaled row.
-                boolean stacked = sr != null && (groupChild(sr) || barState == null || barState != Eligibility.BAR_SHADE)
+                boolean stacked = !pill && sr != null && (groupChild(sr) || barState == null || barState != Eligibility.BAR_SHADE)
                         && (Math.abs(sr.getScaleX() - 1f) > 0.005f || Math.abs(sr.getScaleY() - 1f) > 0.005f);
                 if (stacked != this.stacked) {
                     this.stacked = stacked;
@@ -652,7 +688,7 @@ public final class HeadsUpHooks {
                 }
                 // Measured as soon as the shade starts opening, before the card has a bridge or is
                 // visible, so the veil is usually known by the time its region would show.
-                if (toneOpen != shadeOpens && Tuning.get().shadeAdaptive
+                if (!pill && toneOpen != shadeOpens && Tuning.get().shadeAdaptive
                         && Boolean.TRUE.equals(shadeExpanded) && barState != null && barState == Eligibility.BAR_SHADE && v.isShown()) {
                     // Once per shade opening: the veil is measured from the backdrop and kept.
                     toneOpen = shadeOpens;
@@ -707,6 +743,7 @@ public final class HeadsUpHooks {
         boolean eligible() {
             View v = background.get(), r = row.get();
             if (v == null || r == null || failed || !drawHook || !v.isShown() || v.getWidth() <= 0 || v.getHeight() <= 0) return false;
+            if (pill && !pillSurface()) return false;
             return Eligibility.glass(enabled, v.isAttachedToWindow(), v.isHardwareAccelerated());
         }
         /** Diagnostic mirror of eligible() plus the compositor capability checked in material(). */
@@ -717,6 +754,7 @@ public final class HeadsUpHooks {
             if (!drawHook) return "drawHook=false";
             if (!v.isShown()) return "hidden";
             if (v.getWidth() <= 0 || v.getHeight() <= 0) return "empty";
+            if (pill && !pillSurface()) return "pill=off";
             String policy = Eligibility.reason(enabled, v.isAttachedToWindow(), v.isHardwareAccelerated());
             if (policy != null) return policy;
             return kind() != null ? null : "blur=unavailable";
@@ -765,6 +803,14 @@ public final class HeadsUpHooks {
                     // Heads-up: live compositor body plus a captured lens band; needs both halves.
                     return samsungBlur && !hybridFailed && CaptureHub.available() && SemBlurBridge.supports(Reflect.read(v, "mCornerRadii"));
             }
+        }
+        /**
+         * The shelf takes glass only as the lockscreen's overflow pill, through the drawable path
+         * (its region follows the pill's fade like the cards'); in the shade it keeps SystemUI's own.
+         */
+        boolean pillSurface() {
+            Tuning t = Tuning.get();
+            return t.pillGlass && barState != null && barState == Eligibility.BAR_KEYGUARD && drawablePath();
         }
         boolean onKeyguard() { View r = row.get(); return r != null && Boolean.TRUE.equals(Reflect.bool(r, "isOnKeyguard", "mOnKeyguard")); }
         /** Which sampled source this row wants now; a change replaces the material. */
@@ -842,6 +888,7 @@ public final class HeadsUpHooks {
                         : kind == Backdrop.Kind.SAMSUNG ? (semBridge = SemBlurBridge.create(v))
                         : drawablePath() ? (compBridge = BackgroundBlurBridge.create(v, true)) : BackgroundBlurBridge.create(v);
                 if (compBridge != null) SemBlurBridge.clearNative(v);
+                if (compBridge != null && pill) compBridge.setPill(true);
                 // A new bridge takes the veil measured for this opening.
                 pushToneVeil();
                 if (semBridge != null) semBridge.setSuspended(stacked);
@@ -863,6 +910,13 @@ public final class HeadsUpHooks {
             refreshLens();
             glass.configure(original, shape(), fill, tone);
             if (lastFallback != null) { lastFallback = null; Probe.log("NATIVE_FALLBACK", "viewId=" + Integer.toHexString(System.identityHashCode(v)) + " reason=none"); }
+            if (pill && !pillReported) {
+                pillReported = true;
+                View sh = row.get();
+                Probe.log("PILL_GLASS", "bg=" + v.getClass().getName() + " shelf=" + (sh == null ? "null" : sh.getClass().getName())
+                        + " size=" + v.getWidth() + "x" + v.getHeight() + " radii=" + java.util.Arrays.toString(shape())
+                        + " nativeAlpha=" + original.getAlpha() + " native=" + original.getClass().getName() + " blur=" + Tuning.get().pillBlur);
+            }
             if (!materialReported) {
                 materialReported = true;
                 Probe.material(v, row.get(), original, String.valueOf(kind), fill, tone);
@@ -891,8 +945,9 @@ public final class HeadsUpHooks {
         void refreshLens() {
             View r = row.get();
             Boolean keyguard = Reflect.bool(r, "isOnKeyguard", "mOnKeyguard");
-            boolean kgSurface = Eligibility.keyguardOptics(barState, Reflect.bool(r, "isHeadsUpState", "mIsHeadsUp"));
-            boolean lens = Eligibility.lens(barState, shadeExpanded, keyguard);
+            // The pill is plain light glass: no lens, no compositor material.
+            boolean kgSurface = !pill && Eligibility.keyguardOptics(barState, Reflect.bool(r, "isHeadsUpState", "mIsHeadsUp"));
+            boolean lens = !pill && Eligibility.lens(barState, shadeExpanded, keyguard);
             // The edge shader steps back only for a card the compositor demonstrably lights: profile
             // 1 requested, a tag that survives every program (radius and shape), and a library whose
             // profile-1 optics are confirmed (debug.oulg.sf.optics). Otherwise it keeps its lighting.
@@ -958,7 +1013,7 @@ public final class HeadsUpHooks {
             if (!reported) { reported = true; Probe.log("DRAW_HOOK_CALLED", "view=" + v.getClass().getName()); }
             long started = Perf.start();
             try {
-                View row = findRow(v); if (row == null) return;
+                View row = findHost(v); if (row == null) return;
                 State s = state(v, row);
                 Object current = backgroundField.get(v); if (!(current instanceof Drawable)) return;
                 GlassDrawable glass = s.material((Drawable) current); if (glass == null) return;

@@ -87,6 +87,13 @@ public final class Tuning {
     /** Blur radius in px for the drawable path (debug.oulg.kgblurradius); -1 = semradiuslens. */
     public final int kgBlurRadius;
     /**
+     * The lockscreen's overflow pill (the shelf's icons of notifications that do not fit) as light
+     * glass (debug.oulg.pillglass, default 1; 0 leaves SystemUI's grey pill): an untagged, plain
+     * compositor blur of debug.oulg.pillblur px (default 40) under the glass veil and edge.
+     */
+    public final boolean pillGlass;
+    public final int pillBlur;
+    /**
      * Compositor optics profile of lockscreen cards (debug.oulg.kgoptics): 1 (default) the lockscreen
      * material of sfhook/refract.h (wider body blur, more taps, vibrancy); 0 the established heads-up
      * material. Heads-up cards always carry profile 0. It travels in the corner tag: a change shows
@@ -183,6 +190,8 @@ public final class Tuning {
         shadeFadeCut = clamp(number("shadefadecut", 0.5f), 0f, 1f);
         kgWinBlur = number("kgwinblur", 0f) >= 1f;
         kgBlurRadius = Math.round(clamp(number("kgblurradius", -1f), -1f, 400f));
+        pillGlass = number("pillglass", 1f) >= 1f;
+        pillBlur = Math.round(clamp(number("pillblur", 40f), 0f, 400f));
         kgOptics = Math.round(clamp(number("kgoptics", 1f), 0f, 1f));
         huOptics = Math.round(clamp(number("huoptics", 0f), 0f, 1f));
         float kl = number("kglens", 0.40f);
@@ -217,7 +226,7 @@ public final class Tuning {
         return "backdrop=" + backdrop + " profile=" + profile + " lens=" + lens + " rimhz=" + rimHz + " rimblur=" + rimBlur
                 + " refract=" + refract + " ior=" + ior + " blur=" + blur + " sat=" + saturation
                 + " disp=" + dispersion + " hz=" + hz + " hzkg=" + keyguardHz + " tint=" + tintAlpha
-                + " semradius=" + semRadius + " semradiuslens=" + semRadiusLens + " sflens=" + sfLens + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " kgblurpath=" + kgBlurPath + " shadeblurpath=" + shadeBlurPath + " shadefadecut=" + shadeFadeCut + " kgblurradius=" + kgBlurRadius + " kgoptics=" + kgOptics + " huoptics=" + huOptics + " kglens=" + kgLens + " shadetone=" + shadeTone + " shadeveil=" + shadeVeil + " shadeadaptive=" + shadeAdaptive + " shadecap=" + shadeCap + " shadelift=" + shadeLift + " shadescaleveil=" + shadeScaleVeil + " sfoptics=" + sfOptics + " kgwinblur=" + kgWinBlur + " headergap=" + headerGap + " perf=" + perf + " trace=" + trace;
+                + " semradius=" + semRadius + " semradiuslens=" + semRadiusLens + " sflens=" + sfLens + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " kgblurpath=" + kgBlurPath + " shadeblurpath=" + shadeBlurPath + " shadefadecut=" + shadeFadeCut + " kgblurradius=" + kgBlurRadius + " pillglass=" + pillGlass + " pillblur=" + pillBlur + " kgoptics=" + kgOptics + " huoptics=" + huOptics + " kglens=" + kgLens + " shadetone=" + shadeTone + " shadeveil=" + shadeVeil + " shadeadaptive=" + shadeAdaptive + " shadecap=" + shadeCap + " shadelift=" + shadeLift + " shadescaleveil=" + shadeScaleVeil + " sfoptics=" + sfOptics + " kgwinblur=" + kgWinBlur + " headergap=" + headerGap + " perf=" + perf + " trace=" + trace;
     }
 
     private static float clamp(float v, float lo, float hi) { return Float.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : lo; }

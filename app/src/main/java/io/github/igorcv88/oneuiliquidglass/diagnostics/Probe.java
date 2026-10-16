@@ -114,6 +114,54 @@ public final class Probe {
         census(root, count);
         log("BLUR_CENSUS_END", "views=" + count[0]);
     }
+    /**
+     * The lockscreen's overflow pill, found by name: every shown view whose class names a shelf, an
+     * icon container, an overflow or a footer, and its children, with position, size, alpha, the
+     * background and the Drawable fields that may paint the grey pill. One OVERFLOW line each.
+     */
+    public static void overflow(View root) {
+        if (!trace || root == null) return;
+        int[] budget = {60};
+        log("OVERFLOW_BEGIN", "root=" + root.getClass().getName());
+        walkOverflow(root, false, 0, budget);
+        log("OVERFLOW_END", "left=" + budget[0]);
+    }
+    private static void walkOverflow(View v, boolean inside, int depth, int[] budget) {
+        if (budget[0] <= 0 || depth > 24) return;
+        String simple = v.getClass().getSimpleName().toLowerCase(java.util.Locale.ROOT);
+        boolean match = simple.contains("shelf") || simple.contains("iconcontainer") || simple.contains("overflow") || simple.contains("footer") || simple.contains("pill");
+        if ((match || inside) && v.isShown()) {
+            budget[0]--;
+            int[] xy = new int[2]; v.getLocationOnScreen(xy);
+            String id;
+            try { id = v.getId() == View.NO_ID ? "-" : v.getResources().getResourceEntryName(v.getId()); } catch (RuntimeException e) { id = "?"; }
+            StringBuilder fieldsOut = new StringBuilder();
+            for (Class<?> c = v.getClass(); c != null && c != View.class; c = c.getSuperclass()) {
+                for (java.lang.reflect.Field f : c.getDeclaredFields()) {
+                    if (java.lang.reflect.Modifier.isStatic(f.getModifiers())) continue;
+                    boolean drawable = android.graphics.drawable.Drawable.class.isAssignableFrom(f.getType());
+                    boolean view = View.class.isAssignableFrom(f.getType()) && f.getName().toLowerCase(java.util.Locale.ROOT).contains("background");
+                    if (!drawable && !view) continue;
+                    try {
+                        f.setAccessible(true);
+                        Object d = f.get(v);
+                        if (d == null) continue;
+                        fieldsOut.append(' ').append(f.getName()).append('=')
+                                .append(drawable ? describe((android.graphics.drawable.Drawable) d, 0) : d.getClass().getName());
+                    } catch (ReflectiveOperationException | RuntimeException e) { fieldsOut.append(' ').append(f.getName()).append("=?"); }
+                }
+            }
+            StringBuilder supers = new StringBuilder();
+            for (Class<?> c = v.getClass().getSuperclass(); c != null && c != View.class && supers.length() < 200; c = c.getSuperclass()) supers.append('<').append(c.getSimpleName());
+            log("OVERFLOW", "view=" + v.getClass().getName() + supers + " id=" + id + " depth=" + depth + " xy=" + xy[0] + "," + xy[1]
+                    + " size=" + v.getWidth() + "x" + v.getHeight() + " alpha=" + v.getAlpha() + " scale=" + v.getScaleX() + "x" + v.getScaleY()
+                    + " bg=" + describe(v.getBackground(), 0) + fieldsOut);
+        }
+        if (v instanceof android.view.ViewGroup) {
+            android.view.ViewGroup g = (android.view.ViewGroup) v;
+            for (int i = 0; i < g.getChildCount(); i++) walkOverflow(g.getChildAt(i), inside || match, depth + 1, budget);
+        }
+    }
     private static java.lang.reflect.Field viewInfoField;
     private static boolean viewInfoResolved;
     private static void census(View v, int[] count) {
