@@ -190,11 +190,8 @@ public final class SemBlurBridge implements Backdrop {
         String shape = applyShape(b, t.semShape, radii);
         lastPx = px; lastTint = tint; System.arraycopy(radii, 0, lastRadii, 0, 8); built = true;
         if (!shape.equals(lastShape)) { lastShape = shape; Probe.log("SEM_BLUR_SHAPE", "mode=" + shape + " radius=" + radii[0] + " size=" + host.getWidth() + "x" + host.getHeight()); }
-        int veil = t.semAlpha >= 0 ? (tint & 0x00ffffff) | (t.semAlpha << 24) : tint;
-        if (scaled && !lens && tagProfile(false, keyguard) == 2 && t.shadeScaleVeil > 0) {
-            // Untagged while scaled (see setScaled): a veil stands in for the tone map.
-            veil = (shadeStrength() < 0.65f ? 0x000000 : 0xffffff) | (t.shadeScaleVeil << 24);
-        }
+        int veil = shadeVeil(lens, keyguard, scaled);
+        if (veil == 0) veil = t.semAlpha >= 0 ? (tint & 0x00ffffff) | (t.semAlpha << 24) : tint;
         if (color != null) color.invoke(b, veil);
         // "auto": lens cards carry an explicit neutral curve. A blur without one takes whatever curve
         // the compositor last had, and the panel blur leaves its dark one behind after a pull-down
@@ -220,7 +217,8 @@ public final class SemBlurBridge implements Backdrop {
             case "none": return mode;
             case "single":
                 if (corner == null) break;
-                corner.invoke(b, cornerTag(radii[0], scaled && !lens ? -1 : tagProfile(lens, keyguard)));
+                tagSent = scaled && !lens ? -1 : tagProfile(lens, keyguard);
+                corner.invoke(b, cornerTag(radii[0], tagSent));
                 return mode;
             case "path":
                 if (clipPath == null || host.getWidth() <= 0 || host.getHeight() <= 0) break;
@@ -432,6 +430,20 @@ public final class SemBlurBridge implements Backdrop {
         if (released || lastInfo == null) return;
         pending = lastInfo;
         if (!posted) { posted = true; host.post(apply); }
+    }
+    /** The tag profile the last build sent (-1: none), for the trace. */
+    public int tagSent = -1;
+    public boolean scaled() { return scaled; }
+    /**
+     * The veil a shade (non-lens) card carries instead of its tint, or 0: always with
+     * debug.oulg.shadetone=2, otherwise while it is untagged because it is scaled. Black under light
+     * text, white under dark text, at debug.oulg.shadescaleveil alpha; it stands in for the tone map.
+     */
+    static int shadeVeil(boolean lens, boolean keyguard, boolean scaled) {
+        Tuning t = Tuning.get();
+        if (lens || t.shadeScaleVeil <= 0) return 0;
+        boolean on = t.shadeVeil || (scaled && tagProfile(false, keyguard) == 2);
+        return on ? (shadeStrength() < 0.65f ? 0x000000 : 0xffffff) | (t.shadeScaleVeil << 24) : 0;
     }
     /** Whether an ancestor scales the card on screen (see {@link #setScaled}). */
     private boolean scaled;

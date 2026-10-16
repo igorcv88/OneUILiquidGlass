@@ -598,7 +598,11 @@ public final class HeadsUpHooks {
                     Object nd = null;
                     try { nd = backgroundField != null ? backgroundField.get(v) : null; } catch (IllegalAccessException ignored) { }
                     String line = FrameTrace.describe(v, sr, nd instanceof Drawable ? (Drawable) nd : null)
-                            + " glass=" + (glass != null) + " suspended=" + stacked;
+                            + " glass=" + (glass != null) + " suspended=" + stacked
+                            + " path=" + (compBridge != null ? "drawable" : semBridge != null ? "samsung" : "-")
+                            + " tag=" + (compBridge != null ? compBridge.tagSent : semBridge != null ? semBridge.tagSent : -1)
+                            + " scaled=" + (compBridge != null ? compBridge.scaled() : semBridge != null && semBridge.scaled())
+                            + (compBridge != null ? " drawableA=" + compBridge.drawable.getAlpha() : "");
                     if (!line.equals(lastTrace)) { lastTrace = line; FrameTrace.log("ROW_FRAME", v, line); }
                 }
                 boolean eligible = eligible();

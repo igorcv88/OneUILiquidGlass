@@ -83,10 +83,9 @@ public final class BackgroundBlurBridge implements Backdrop {
             // The same veil as the Samsung path (semalpha over the Samsung tone).
             if (t.semAlpha >= 0) tint = (tint & 0x00ffffff) | (t.semAlpha << 24);
             int profile = scaled && !lens ? -1 : SemBlurBridge.tagProfile(lens, keyguard);
-            if (scaled && !lens && SemBlurBridge.tagProfile(false, keyguard) == 2 && t.shadeScaleVeil > 0) {
-                // Untagged while scaled (see setScaled): a veil stands in for the tone map.
-                tint = (SemBlurBridge.shadeStrength() < 0.65f ? 0x000000 : 0xffffff) | (t.shadeScaleVeil << 24);
-            }
+            tagSent = profile;
+            int veil = SemBlurBridge.shadeVeil(lens, keyguard, scaled);
+            if (veil != 0) tint = veil;
             tl = SemBlurBridge.cornerTag(tl, profile); tr = SemBlurBridge.cornerTag(tr, profile);
             bl = SemBlurBridge.cornerTag(bl, profile); br = SemBlurBridge.cornerTag(br, profile);
         }
@@ -100,6 +99,9 @@ public final class BackgroundBlurBridge implements Backdrop {
     /** Whether a curve was ever sent: the drawable keeps it, so from then on one is always sent. */
     private boolean curveSent;
     private boolean scaled;
+    /** The tag profile the last build sent (-1: none), for the trace. */
+    public int tagSent = -1;
+    public boolean scaled() { return scaled; }
     /**
      * An ancestor scales the card (the shade closing): its region reaches the compositor at a
      * fractional size and radius, where the tag matched on some frames only. While scaled a

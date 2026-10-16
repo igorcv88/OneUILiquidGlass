@@ -597,6 +597,12 @@ Not verified on device yet. The flash diagnosis comes from the recording and the
 - **Curve:** a shade card that never carried a curve sends none, as before. Heads-up cards keep the Samsung path.
 - **Switch:** `debug.oulg.shadeblurpath` (live, default 1); 0 restores the Samsung path.
 
+**Third device pass (screen recording, 2026-10-16).** The recording catches the flash at rest, with the cards not moving:
+- Over a white app the top cards sat at luma about 237, the plain blur. Every 4 to 6 frames they dropped to about 211 for a single frame, then went back.
+- Inferred cause: the profile-2 tag recognised on some frames only. Not yet confirmed by a trace.
+- **New mode:** `debug.oulg.shadetone=2` leaves shade cards untagged and gives them the stand-in veil permanently, so there is nothing for the compositor to recognise.
+- **Trace:** `ROW_FRAME` now also logs the blur path, the tag profile sent, the scaled flag and the drawable's alpha.
+
 ## Expanded notification header gap (2026-10-11)
 
 A layout-only refinement, independent of the glass: in expanded notifications the title sat too close to the header row (`Chrome · 3 hours left · 15:52` over the file name). `HeaderGapHooks` adds `debug.oulg.headergap` dp (default 4, 0 turns it off, at most 8) between the two. The policy, which the host tests cover, lives in `HeaderGap`.
