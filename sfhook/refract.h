@@ -99,6 +99,37 @@
 // Placing the taps by the Gaussian's radial CDF with equal weights was tried for profile 1 and
 // measured worse: same kernel, more grain (render_check: 1.33 vs 1.04 at 24 taps); the outer
 // rings of a stratified pattern get too sparse.
+// The heads-up disc with bloom control (index, bloom, taps, taps), used for profile 0 when its bloom
+// strength is above 0 (v0.19): a tap much brighter than the pixel's own sample (by more than 0.10
+// luma) loses weight, exp(-6 bloom x excess). A small bright object behind the card (a white header
+// icon, a vivid bubble) then no longer spreads into a wide stain over the darker area around it:
+// the disc, 48 px, carried it ~50 px into the card. Within 0.10 luma, and wherever the backdrop is
+// even, the weights are those of the plain disc. Off by default (debug.oulg.sf.hubloom 0): on the
+// host, bloom 1.5 cut a green bubble's spread into the card by ~40 % but doubled the backdrop
+// structure left in the body (render_check 2.61 -> 5.2: text behind a pop-up reads through it), and
+// higher thresholds kept most of that cost while losing the benefit. Compacting bloom is, by
+// construction, blurring high-contrast content less.
+#define OULG_FS_DISC_BLOOM_FMT \
+    "mediump vec4 oulg_disc%d(sampler2D s, highp vec2 uv) {\n" \
+    "  const mediump vec3 w709 = vec3(0.2126, 0.7152, 0.0722);\n" \
+    "  const mediump float bloom = %.3f;\n" \
+    "  mediump float lc = dot(textureLod(s, uv, 0.0).rgb, w709);\n" \
+    "  highp float a0 = 6.2831853 * fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));\n" \
+    "  highp vec2 dir = vec2(cos(a0), sin(a0));\n" \
+    "  const highp mat2 rot = mat2(-0.7373688, 0.6754903, -0.6754903, -0.7373688);\n" \
+    "  mediump vec4 acc = vec4(0.0);\n" \
+    "  mediump float wsum = 0.0;\n" \
+    "  for (int i = 0; i < %d; i++) {\n" \
+    "    highp float rr = sqrt((float(i) + 0.5) / %d.0);\n" \
+    "    highp vec2 o = dir * (rr * oulg_br);\n" \
+    "    mediump vec4 tap = textureLod(s, uv + oulg_jx * o.x + oulg_jy * o.y, 0.0);\n" \
+    "    mediump float w = exp(-2.0 * rr * rr) * exp(-6.0 * bloom * max(dot(tap.rgb, w709) - lc - 0.10, 0.0));\n" \
+    "    acc += w * tap;\n" \
+    "    wsum += w;\n" \
+    "    dir = rot * dir;\n" \
+    "  }\n" \
+    "  return acc / wsum;\n" \
+    "}\n"
 #define OULG_FS_DISC_FMT \
     "mediump vec4 oulg_disc%d(sampler2D s, highp vec2 uv) {\n" \
     "  highp float a0 = 6.2831853 * fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));\n" \
@@ -173,7 +204,7 @@
     "    mediump float f = clamp(%.3f * pow(1.0 - cos(%.3f * g), 5.0), 0.0, 1.0);\n" \
     "    rgb = mix(rgb, env, f);\n" \
     "    highp float px = (1.0 - oulg_t) * oulg_bv;\n" \
-    "    mediump float line = %.3f * exp(-px * px / 2.56) * (0.7 + 0.3 * max(facing, 0.0));\n" \
+    "    mediump float line = %.3f * exp(-px * px / 5.12) * (0.7 + 0.3 * max(facing, 0.0));\n" \
     "    rgb = mix(rgb, vec3(0.97, 0.985, 1.0), clamp(line, 0.0, 1.0));\n" \
     "    mediump float band = smoothstep(0.30, 0.62, tg) * (1.0 - smoothstep(0.80, 0.95, tg));\n" \
     "    mediump float lobe = pow(max(facing, 0.0), 3.0) + 0.45 * pow(max(-facing, 0.0), 3.0);\n" \
@@ -235,10 +266,12 @@
 // transmission flattening (0 = none) toward a luma level, cool tint (0 = none), rim tilt at the
 // outline (rad), contour strength (0 = none), the body radius cap in px (>= core: none) and the cap on
 // the flattening weight (1: none), the core dimming gain (0: none) and the width of the rim glow
-// (Fresnel and specular band) as a fraction of the bevel band (1: v0.11).
+// (Fresnel and specular band) as a fraction of the bevel band (1: v0.11); profile 0 only: the bloom
+// control of its body disc (0: none, the plain disc).
 struct oulg_profile { float core; int taps; float ramp; float sat; float tone; float rim; float spec; float cap; float lift;
-                      float flat; float level; float cool; float tilt; float line; float ccap; float fcap; float cdim; float glow; };
+                      float flat; float level; float cool; float tilt; float line; float ccap; float fcap; float cdim; float glow; float bloom; };
 #define OULG_CORE_DEFAULT 48.0f
+#define OULG_HU_BLOOM_DEFAULT 0.0f
 #define OULG_TAPS_DEFAULT 24
 #define OULG_RAMP_DEFAULT 1.5f
 // Lockscreen: a wide body blur, so a large dark object behind the card no longer shows as a blotch
@@ -277,7 +310,10 @@ struct oulg_profile { float core; int taps; float ramp; float sat; float tone; f
 #define OULG_KG_LEVEL_DEFAULT 0.40f
 #define OULG_KG_COOL_DEFAULT 0.5f
 #define OULG_KG_TILT_DEFAULT 1.42f
-#define OULG_KG_LINE_DEFAULT 0.55f
+// Contour (v0.19): the module's hairline is no longer drawn over compositor-lit cards; it peaked
+// ~6 px inside this contour, a double outline on the device (bottom edge: 0.43 at 5 px, 0.60 at the
+// outline). The contour takes its place: sigma 1.13 -> 1.6 px, gain 0.55 -> 0.62.
+#define OULG_KG_LINE_DEFAULT 0.62f
 // Shade legibility (profile 2): the brightest luma a light-text card shows (white text keeps ~3.4:1
 // at 0.55) and the darkest a dark-text card shows.
 #define OULG_SHADE_CAP_DEFAULT 0.55f
@@ -287,13 +323,14 @@ struct oulg_profile { float core; int taps; float ramp; float sat; float tone; f
 // The optics this library implements, announced to the module (debug.oulg.sf.optics).
 #define OULG_OPTICS_VERSION "9"
 static const struct oulg_profile OULG_PROFILES_DEFAULT[OULG_PROFILES] = {
-    {OULG_CORE_DEFAULT, OULG_TAPS_DEFAULT, OULG_RAMP_DEFAULT, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 400.0f, 1.0f, 0.0f, 1.0f},
+    {OULG_CORE_DEFAULT, OULG_TAPS_DEFAULT, OULG_RAMP_DEFAULT, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 400.0f, 1.0f, 0.0f, 1.0f,
+     OULG_HU_BLOOM_DEFAULT},
     {OULG_KG_CORE_DEFAULT, OULG_KG_TAPS_DEFAULT, OULG_KG_RAMP_DEFAULT, OULG_KG_SAT_DEFAULT, OULG_KG_TONE_DEFAULT,
      OULG_KG_RIM_DEFAULT, OULG_KG_SPEC_DEFAULT, 0.0f, 0.0f,
      OULG_KG_FLAT_DEFAULT, OULG_KG_LEVEL_DEFAULT, OULG_KG_COOL_DEFAULT, OULG_KG_TILT_DEFAULT, OULG_KG_LINE_DEFAULT,
-     OULG_KG_CCAP_DEFAULT, OULG_KG_FCAP_DEFAULT, OULG_KG_CDIM_DEFAULT, OULG_KG_GLOW_DEFAULT},
+     OULG_KG_CCAP_DEFAULT, OULG_KG_FCAP_DEFAULT, OULG_KG_CDIM_DEFAULT, OULG_KG_GLOW_DEFAULT, 0.0f},
     {0.0f, OULG_TAPS_DEFAULT, OULG_RAMP_DEFAULT, 1.0f, 0.0f, 0.0f, 0.0f, OULG_SHADE_CAP_DEFAULT, OULG_SHADE_LIFT_DEFAULT,
-     0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 400.0f, 1.0f, 0.0f, 1.0f},
+     0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 400.0f, 1.0f, 0.0f, 1.0f, 0.0f},
 };
 #define OULG_VS_RADII_AT "highp vec2 neighbor_radii = radii_and_neighbors.zw;\n"
 #define OULG_VS_POS_AT "gl_Position = vec4(devcoord, 0.0, 1.0);\n"
@@ -402,6 +439,7 @@ static void oulg_fix_params(struct oulg_profile p[OULG_PROFILES]) {
         if (!(p[i].fcap >= 0.0f && p[i].fcap <= 1.0f)) p[i].fcap = d->fcap;
         if (!(p[i].cdim >= 0.0f && p[i].cdim <= 0.5f)) p[i].cdim = d->cdim;
         if (!(p[i].glow >= 0.2f && p[i].glow <= 1.0f)) p[i].glow = d->glow;
+        if (!(p[i].bloom >= 0.0f && p[i].bloom <= 4.0f)) p[i].bloom = d->bloom;
     }
 }
 
@@ -425,8 +463,12 @@ static int oulg_lib(char *out, size_t cap, int external, const struct oulg_profi
     if (!oulg_append(out, cap, &at, "%s", OULG_FS_GLOBALS)) return 0;
     if (!external) {
         if (!oulg_append(out, cap, &at, "%s", OULG_FS_BSPLINE)) return 0;
-        for (int i = 0; i < 2; i++)
-            if (!oulg_append(out, cap, &at, OULG_FS_DISC_FMT, i, p[i].taps, p[i].taps)) return 0;
+        for (int i = 0; i < 2; i++) {
+            int ok = i == 0 && p[0].bloom > 0.0f
+                ? oulg_append(out, cap, &at, OULG_FS_DISC_BLOOM_FMT, i, (double) p[0].bloom, p[i].taps, p[i].taps)
+                : oulg_append(out, cap, &at, OULG_FS_DISC_FMT, i, p[i].taps, p[i].taps);
+            if (!ok) return 0;
+        }
     }
     if (!oulg_append(out, cap, &at, OULG_FS_FIELD_FMT, (double) p[1].ramp, (double) p[1].core, (double) p[1].ccap,
                      (double) p[0].core, (double) p[0].ramp)) return 0;

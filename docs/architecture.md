@@ -644,6 +644,22 @@ Profile 1 only (profile 0 stays bit-identical, `render_check` max 0; profile 2 u
 - **Body:** after vibrancy and the highlight knee, luma moves `kgflat·body` (0.50) of the way to `kglevel` (0.40). Darkening is a gain; lifting adds cool scattered light, so near-black does not turn into amplified noise. Then a luma-neutral cool tint (`kgcool` 0.5). Disc 80 px with 48 taps.
 - **Host preview:** `sfhook/tools/kg_preview.mjs` renders the real FillRRect rewrite over a photographic crop of the user's lockscreen and composites region colour, glass fill and hairline as on the device. Over the dark jacket crop: body luma SD 0.151 → 0.072, p95 0.64 → 0.54, top contour +0.02 → +0.18 over the body, worst-case white-text contrast 2.5 → 3.5. Not device-validated; the real compositor input and Samsung filter are unknown.
 
+### v0.20: one lockscreen contour; pop-up lens 0.45; optional bloom control (2026-10-16)
+
+**Double outline on the device.**
+- At the bottom edge of a lockscreen card the profile read 0.43 about 5 px inside, then 0.60 at the outline. The inner peak is the module's hairline (half gain, centred ~6 px inside).
+- **Fix:** compositor-lit cards skip the edge shader. The compositor contour widens (σ 1.13 → 1.6 px, gain 0.62).
+
+**Pop-up lens.**
+- `sflens` now defaults to 0.45 instead of 0.7. The quadratic heads-up field folds above 0.5.
+- At 0.45 it no longer folds, but it still magnifies about 10× in the outermost pixels.
+
+**Bloom control.**
+- New `OULG_FS_DISC_BLOOM_FMT`, emitted for profile 0 when `hubloom > 0`: tap weight × `exp(−6·bloom·max(l_tap − l_centre − 0.10, 0))`.
+- **Off by default.** At 1.5 it cuts a vivid object's spread into the card by ~40 %, but it doubles the backdrop structure left in the body (render_check 2.61 → 5.2).
+
+**Unchanged:** profile 0 with `hubloom = 0` is bit-identical.
+
 ### Lockscreen v0.19: a narrower rim glow (2026-10-16)
 
 On the device, the v0.18 lockscreen rim glow fell from 0.59 at the outline to 0.17 about 28 px in. That reads as a lit rim, not a surface reflection. Profile 1 changes:

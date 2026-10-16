@@ -28,6 +28,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(kv, "fcap")) prof[1].fcap = v;
         else if (!strcmp(kv, "cdim")) prof[1].cdim = v;
         else if (!strcmp(kv, "glow")) prof[1].glow = v;
+        else if (!strcmp(kv, "hubloom")) prof[0].bloom = v;
     }
     FILE *f = fopen(argv[1], "rb"); fseek(f, 0, SEEK_END); long n = ftell(f); fseek(f, 0, SEEK_SET);
     char *t = malloc(n + 1); if (fread(t, 1, n, f) != (size_t) n) return 1; t[n] = 0; fclose(f);

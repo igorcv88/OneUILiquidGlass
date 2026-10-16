@@ -2,6 +2,31 @@
 
 Documento para continuar o trabalho em outra conversa. Leia inteiro antes de mexer em qualquer coisa. O histórico técnico detalhado está em `docs/architecture.md`; as seções de 2026-10-16 cobrem a central de notificações.
 
+## 0o. Atualização (2026-10-16, sfhook v0.20 + app): contorno duplo, lente do pop-up, bloom
+
+**Contorno duplo na tela de bloqueio (borda inferior, fundo azul).**
+- No print, pixel a pixel: 0,43 a ~5 px para dentro, vale de 0,41, depois 0,60 no contorno.
+- O pico interno é o hairline do app (`LiquidGlassShader`, meio ganho, centrado ~6 px para dentro).
+- **Correção:** nos cards que o compositor ilumina (perfil 1, `sf.optics ≥ 9`), o app não desenha o shader de borda. O contorno do compositor fica mais largo (σ 1,13 → 1,6 px) e mais forte (`kgline` 0,55 → 0,62).
+- **Host:** um contorno único (0,53 → 0,58 → 0,64 → 0,66).
+
+**Lente do pop-up.**
+- Padrão `sflens` 0,7 → 0,45 (`Tuning`). Acima de 0,5 o campo do perfil 0 rebatia o conteúdo na faixa externa do bisel.
+- Em 0,45 não há rebatimento, mas a ampliação na borda chega a ~10× nos pixels externos (`field_check`).
+
+**Bloom do pop-up.**
+- Novo disco do perfil 0 com controle de bloom (`debug.oulg.sf.hubloom`): amostras mais de 0,10 de luma acima do pixel central perdem peso.
+- **Desligado por padrão.** No host, com força 1,5, o vazamento do balão verde cai ~40%, mas a estrutura do fundo no miolo dobra (`render_check` 2,61 → 5,2): o texto atrás do pop-up passa a aparecer. Limiares maiores mantêm quase todo o custo e perdem o ganho.
+- Com 0 o perfil 0 é bit a bit igual.
+
+**Mantido da v0.19:** halo mais fino na tela de bloqueio e miolo no nível da borda interna.
+
+**Teste:**
+1. Instale o APK v20 (o app mudou).
+2. Lib `SurfaceFlingerProp.v20.so`; confirme com `grep -c hubloom`.
+3. Reinicie o SurfaceFlinger com o cache limpo.
+4. Para testar o bloom: `setprop debug.oulg.sf.hubloom 1.5` e reinicie o SurfaceFlinger com o cache limpo.
+
 ## 0n. Atualização (2026-10-16, sfhook v0.19): halo da borda mais fino na tela de bloqueio; pop-up analisado, sem mudança
 
 **Prints do usuário (v0.18), comparados com o iOS 26.**

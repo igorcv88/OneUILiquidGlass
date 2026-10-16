@@ -66,13 +66,14 @@ public final class GlassDrawable extends Drawable {
     public boolean failed() { return failed; }
     public void setPressed(boolean on) { if (pressed != on) { pressed = on; invalidateSelf(); } }
     /**
-     * The compositor lights this card (sfhook profile 1: rim reflectance and specular from the real
-     * backdrop): the edge shader keeps a thinner hairline for the outline and drops its own lit runs
-     * and thickness shadow.
+     * The compositor lights this card (sfhook profile 1: rim reflectance, specular and contour from
+     * the real backdrop): the edge shader is not drawn. Its lit runs and thickness shadow were already
+     * off; its hairline, kept at half gain until v0.19, peaked ~6 px inside the compositor's contour,
+     * a double outline on the device (bottom edge, blue backdrop). The compositor's contour is wider
+     * to take its place.
      */
     private boolean compositorLit;
     public void setCompositorLit(boolean on) { if (compositorLit != on) { compositorLit = on; invalidateSelf(); } }
-    static final float LIT_HAIR_GAIN = 0.5f;
     /** See {@link Backdrop#reassert()}. */
     public void reassertBackdrop() { if (!failed) backdrop.reassert(); }
     /** Compositor-blur body with a captured lens band (see {@link HybridBackdrop}). */
@@ -126,7 +127,7 @@ public final class GlassDrawable extends Drawable {
             fill.setAlpha(android.graphics.Color.alpha(fillColor) * alpha / 255);
             canvas.drawRect(rect, fill);
             drawPressed(canvas);
-            if (shader != null) {
+            if (shader != null && !compositorLit) {
                 edgeUniforms(shader, bounds);
                 canvas.drawRect(rect, paint);
             }
@@ -153,8 +154,8 @@ public final class GlassDrawable extends Drawable {
         s.setFloatUniform("light", spec.lightX, spec.lightY);
         s.setFloatUniform("specular", spec.specular);
         s.setFloatUniform("shadow", spec.innerShadow);
-        s.setFloatUniform("hairGain", compositorLit ? LIT_HAIR_GAIN : 1f);
-        s.setFloatUniform("decor", compositorLit ? 0f : 1f);
+        s.setFloatUniform("hairGain", 1f);
+        s.setFloatUniform("decor", 1f);
     }
     /**
      * False until the first frame arrives; the caller then draws veil and edge alone.
