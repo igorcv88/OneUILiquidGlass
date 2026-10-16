@@ -27,11 +27,16 @@ import fs from 'fs';
 const { chromium } = createRequire(import.meta.url)('playwright');
 
 const [dir, bgPath, outPath, cardYArg] = process.argv.slice(2);
-const K = 0.40;
+// KG_PF=0 draws the heads-up profile instead (KG_K its strength, sflens), for pop-up comparisons.
+const PF = +(process.env.KG_PF ?? 1), K = +(process.env.KG_K ?? (PF === 1 ? 0.40 : 0.70));
 // The module's layers for a compositor-lit card: by default the v0.11-v0.13 and v0.16 stack (8 %
 // white region colour, half-gain hairline); KG_VEIL=0 KG_HAIR=0 reproduce v0.14-v0.15.
 const VEIL = +(process.env.KG_VEIL ?? 20), HAIR = +(process.env.KG_HAIR ?? 0.5);
-const tag = r => { const s = Math.min(1, Math.max(0, (K - 0.1) / 1.1)); const t = Math.floor(r) + 0.30 + 0.15 * s; return t <= r ? t : t - 1; };
+const tag = r => {
+  const s = Math.min(1, Math.max(0, (K - 0.1) / 1.1));
+  if (PF === 0) return Math.floor(r) - 1 + 0.55 + 0.15 * s;
+  const t = Math.floor(r) + 0.30 + 0.15 * s; return t <= r ? t : t - 1;
+};
 const frag = fs.readFileSync(`${dir}/mod_002.frag`, 'utf8')
   .replace(/#extension GL_NV_shader_noperspective_interpolation : require\n/, '').replace(/noperspective /g, '');
 const bg = 'data:image/png;base64,' + fs.readFileSync(bgPath).toString('base64');
@@ -148,7 +153,7 @@ const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--ena
 const p = await browser.newPage();
 await p.setContent('<body></body>');
 const cardY = cardYArg ? +cardYArg : 150;
-const res = await p.evaluate(`(${harness.toString()})(${JSON.stringify(frag)}, ${JSON.stringify(bg)}, ${cardY}, ${tag(108)}, ${2 + K}, ${VEIL}, ${HAIR})`);
+const res = await p.evaluate(`(${harness.toString()})(${JSON.stringify(frag)}, ${JSON.stringify(bg)}, ${cardY}, ${tag(108)}, ${2 * PF + K}, ${VEIL}, ${HAIR})`);
 await browser.close();
 fs.writeFileSync(outPath, Buffer.from(res.png.split(',')[1], 'base64'));
 console.log(JSON.stringify(res.metrics));

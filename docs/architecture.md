@@ -644,6 +644,22 @@ Profile 1 only (profile 0 stays bit-identical, `render_check` max 0; profile 2 u
 - **Body:** after vibrancy and the highlight knee, luma moves `kgflat·body` (0.50) of the way to `kglevel` (0.40). Darkening is a gain; lifting adds cool scattered light, so near-black does not turn into amplified noise. Then a luma-neutral cool tint (`kgcool` 0.5). Disc 80 px with 48 taps.
 - **Host preview:** `sfhook/tools/kg_preview.mjs` renders the real FillRRect rewrite over a photographic crop of the user's lockscreen and composites region colour, glass fill and hairline as on the device. Over the dark jacket crop: body luma SD 0.151 → 0.072, p95 0.64 → 0.54, top contour +0.02 → +0.18 over the body, worst-case white-text contrast 2.5 → 3.5. Not device-validated; the real compositor input and Samsung filter are unknown.
 
+### Lockscreen v0.19: a narrower rim glow (2026-10-16)
+
+On the device, the v0.18 lockscreen rim glow fell from 0.59 at the outline to 0.17 about 28 px in. That reads as a lit rim, not a surface reflection. Profile 1 changes:
+- Fresnel and the specular band use `tg = 1 − (1 − t)/kgglow`, with `kgglow` 0.7, so they are 30 % narrower.
+- `kgrim` 0.72 and `kgspec` 0.19 make them weaker.
+- The contour line is unchanged.
+
+**Host lift results:**
+- 6–15 px: 33–43 % lower.
+- 15–30 px: about half.
+- 30 px and beyond: unchanged.
+
+`kgglow 1`, `kgrim 1` and `kgspec 0.30` reproduce v0.18.
+
+**Pop-up, not changed.** On the host, the two white streaks and the green stain hardly change with lens strength (0.7 to 0.4). They are backdrop content spread by the 48 px body blur near the rim, not a blurred specular.
+
 ### Lockscreen v0.18: core level with the inner rim (2026-10-16)
 
 A core lighter than the inner rim reads as raised. Measured lift over the wallpaper, inner rim (30–45 px) vs core (> 68 px):

@@ -166,7 +166,8 @@
     "  rgb *= 1.0 - %.3f * smoothstep(0.5, 1.0, body);\n" \
     "  rgb *= vec3(%.4f, %.4f, %.4f);\n" \
     "  if (oulg_t > 0.0) {\n" \
-    "    highp float g = oulg_t * oulg_t * (3.0 - 2.0 * oulg_t);\n" \
+    "    highp float tg = clamp(1.0 - (1.0 - oulg_t) / %.3f, 0.0, 1.0);\n" \
+    "    highp float g = tg * tg * (3.0 - 2.0 * tg);\n" \
     "    mediump float facing = dot(oulg_n, vec2(-0.4512, -0.8924));\n" \
     "    mediump vec3 env = vec3(0.90, 0.94, 1.0) * mix(0.62, 1.0, 0.5 + 0.5 * facing);\n" \
     "    mediump float f = clamp(%.3f * pow(1.0 - cos(%.3f * g), 5.0), 0.0, 1.0);\n" \
@@ -174,7 +175,7 @@
     "    highp float px = (1.0 - oulg_t) * oulg_bv;\n" \
     "    mediump float line = %.3f * exp(-px * px / 2.56) * (0.7 + 0.3 * max(facing, 0.0));\n" \
     "    rgb = mix(rgb, vec3(0.97, 0.985, 1.0), clamp(line, 0.0, 1.0));\n" \
-    "    mediump float band = smoothstep(0.30, 0.62, oulg_t) * (1.0 - smoothstep(0.80, 0.95, oulg_t));\n" \
+    "    mediump float band = smoothstep(0.30, 0.62, tg) * (1.0 - smoothstep(0.80, 0.95, tg));\n" \
     "    mediump float lobe = pow(max(facing, 0.0), 3.0) + 0.45 * pow(max(-facing, 0.0), 3.0);\n" \
     "    mediump float m = max(max(rgb.r, rgb.g), max(rgb.b, 1e-3));\n" \
     "    mediump vec3 hue = mix(vec3(1.0), rgb / m, 0.3);\n" \
@@ -233,9 +234,10 @@
 // body saturation (1 = none), highlight knee (0 = none), rim reflectance gain and specular strength,
 // transmission flattening (0 = none) toward a luma level, cool tint (0 = none), rim tilt at the
 // outline (rad), contour strength (0 = none), the body radius cap in px (>= core: none) and the cap on
-// the flattening weight (1: none) and the core dimming gain (0: none).
+// the flattening weight (1: none), the core dimming gain (0: none) and the width of the rim glow
+// (Fresnel and specular band) as a fraction of the bevel band (1: v0.11).
 struct oulg_profile { float core; int taps; float ramp; float sat; float tone; float rim; float spec; float cap; float lift;
-                      float flat; float level; float cool; float tilt; float line; float ccap; float fcap; float cdim; };
+                      float flat; float level; float cool; float tilt; float line; float ccap; float fcap; float cdim; float glow; };
 #define OULG_CORE_DEFAULT 48.0f
 #define OULG_TAPS_DEFAULT 24
 #define OULG_RAMP_DEFAULT 1.5f
@@ -262,8 +264,15 @@ struct oulg_profile { float core; int taps; float ramp; float sat; float tone; f
 #define OULG_KG_CDIM_DEFAULT 0.04f
 #define OULG_KG_SAT_DEFAULT 1.25f
 #define OULG_KG_TONE_DEFAULT 0.15f
-#define OULG_KG_RIM_DEFAULT 1.0f
-#define OULG_KG_SPEC_DEFAULT 0.30f
+// Rim glow (v0.19): on device the Fresnel and the specular band spread a lit band ~28 px inward from
+// the contour (card over the jacket: 0.59 at the outline to 0.17 at 28 px), a lit rim rather than a
+// reflection on the glass surface. Both are drawn 30 % narrower (`glow` 0.7: the band coordinate is
+// compressed toward the outline) and weaker (rim 1.0 -> 0.72, spec 0.30 -> 0.19: the 6-15 px band
+// loses 33-43 % of its lift on the host, the 15-30 px band about half); the fine
+// contour line (`line`) keeps its width and strength. glow 1, rim 1, spec 0.30 restore v0.11.
+#define OULG_KG_RIM_DEFAULT 0.72f
+#define OULG_KG_SPEC_DEFAULT 0.19f
+#define OULG_KG_GLOW_DEFAULT 0.70f
 #define OULG_KG_FLAT_DEFAULT 0.50f
 #define OULG_KG_LEVEL_DEFAULT 0.40f
 #define OULG_KG_COOL_DEFAULT 0.5f
@@ -278,13 +287,13 @@ struct oulg_profile { float core; int taps; float ramp; float sat; float tone; f
 // The optics this library implements, announced to the module (debug.oulg.sf.optics).
 #define OULG_OPTICS_VERSION "9"
 static const struct oulg_profile OULG_PROFILES_DEFAULT[OULG_PROFILES] = {
-    {OULG_CORE_DEFAULT, OULG_TAPS_DEFAULT, OULG_RAMP_DEFAULT, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 400.0f, 1.0f, 0.0f},
+    {OULG_CORE_DEFAULT, OULG_TAPS_DEFAULT, OULG_RAMP_DEFAULT, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 400.0f, 1.0f, 0.0f, 1.0f},
     {OULG_KG_CORE_DEFAULT, OULG_KG_TAPS_DEFAULT, OULG_KG_RAMP_DEFAULT, OULG_KG_SAT_DEFAULT, OULG_KG_TONE_DEFAULT,
      OULG_KG_RIM_DEFAULT, OULG_KG_SPEC_DEFAULT, 0.0f, 0.0f,
      OULG_KG_FLAT_DEFAULT, OULG_KG_LEVEL_DEFAULT, OULG_KG_COOL_DEFAULT, OULG_KG_TILT_DEFAULT, OULG_KG_LINE_DEFAULT,
-     OULG_KG_CCAP_DEFAULT, OULG_KG_FCAP_DEFAULT, OULG_KG_CDIM_DEFAULT},
+     OULG_KG_CCAP_DEFAULT, OULG_KG_FCAP_DEFAULT, OULG_KG_CDIM_DEFAULT, OULG_KG_GLOW_DEFAULT},
     {0.0f, OULG_TAPS_DEFAULT, OULG_RAMP_DEFAULT, 1.0f, 0.0f, 0.0f, 0.0f, OULG_SHADE_CAP_DEFAULT, OULG_SHADE_LIFT_DEFAULT,
-     0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 400.0f, 1.0f, 0.0f},
+     0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 400.0f, 1.0f, 0.0f, 1.0f},
 };
 #define OULG_VS_RADII_AT "highp vec2 neighbor_radii = radii_and_neighbors.zw;\n"
 #define OULG_VS_POS_AT "gl_Position = vec4(devcoord, 0.0, 1.0);\n"
@@ -392,6 +401,7 @@ static void oulg_fix_params(struct oulg_profile p[OULG_PROFILES]) {
         if (!(p[i].ccap >= 0.0f && p[i].ccap <= 400.0f)) p[i].ccap = d->ccap;
         if (!(p[i].fcap >= 0.0f && p[i].fcap <= 1.0f)) p[i].fcap = d->fcap;
         if (!(p[i].cdim >= 0.0f && p[i].cdim <= 0.5f)) p[i].cdim = d->cdim;
+        if (!(p[i].glow >= 0.2f && p[i].glow <= 1.0f)) p[i].glow = d->glow;
     }
 }
 
@@ -426,7 +436,7 @@ static int oulg_lib(char *out, size_t cap, int external, const struct oulg_profi
     double cl = 0.2126 * cr + 0.7152 * cg + 0.0722 * cb;
     if (!external && !oulg_append(out, cap, &at, OULG_FS_LENS_FMT, (double) (p[1].core > 0.001f ? 1.0f : 0.0f),
                                   (double) p[1].sat, (double) p[1].tone, (double) p[1].flat, (double) p[1].fcap, (double) p[1].level, (double) p[1].cdim,
-                                  cr / cl, cg / cl, cb / cl, (double) p[1].rim, (double) p[1].tilt, (double) p[1].line,
+                                  cr / cl, cg / cl, cb / cl, (double) p[1].glow, (double) p[1].rim, (double) p[1].tilt, (double) p[1].line,
                                   (double) p[1].spec)) return 0;
     return 1;
 }

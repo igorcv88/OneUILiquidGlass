@@ -2,6 +2,36 @@
 
 Documento para continuar o trabalho em outra conversa. Leia inteiro antes de mexer em qualquer coisa. O histórico técnico detalhado está em `docs/architecture.md`; as seções de 2026-10-16 cobrem a central de notificações.
 
+## 0n. Atualização (2026-10-16, sfhook v0.19): halo da borda mais fino na tela de bloqueio; pop-up analisado, sem mudança
+
+**Prints do usuário (v0.18), comparados com o iOS 26.**
+- **Tela de bloqueio, card sobre a jaqueta:** a borda vai de 0,59 no contorno a 0,17 a ~28 px para dentro. É uma faixa iluminada larga, não um reflexo na superfície.
+- **Pop-up sobre o WhatsApp:** duas manchas brancas descem da borda e um verde se espalha embaixo.
+
+**Pop-up: sem mudança, por evidência.**
+- O padrão `sflens` 0,7 dobra o perfil 0 no terço externo do bisel (`field_check`).
+- No host, com ícones claros e um balão verde atrás (`bg_popup`), k = 0,7, 0,5, 0,45 e 0,4 dão quase o mesmo resultado. As manchas são o próprio conteúdo (ícones do cabeçalho, balão verde) espalhado pelo blur de miolo de 48 px perto da borda, não especular borrado.
+- Opções, se o usuário quiser: reduzir o blur do miolo do pop-up ou atenuar cores muito saturadas nele. As duas mudam o pop-up, que foi declarado bom.
+
+**Tela de bloqueio (só perfil 1):**
+- o Fresnel e a faixa especular ficam 30% mais estreitos (`kgglow` 0,70: a coordenada da faixa é comprimida para a borda);
+- a intensidade cai: `kgrim` 1,0 → 0,72, `kgspec` 0,30 → 0,19;
+- a linha fina do contorno (`kgline`) não muda.
+
+**Host,** brilho acima do papel de parede por faixa:
+
+| Faixa | v0.18 | v0.19 | Redução |
+|---|---|---|---|
+| 6–15 px | +0,216 / +0,173 / +0,162 | +0,124 / +0,116 / +0,105 | 33–43% |
+| 15–30 px | | | ~50% |
+| contorno 0–6 px | | | 12–20% (pelo Fresnel que se sobrepõe) |
+
+- Borda interna (30 px em diante) e miolo: iguais à v0.18.
+- **Rollback:** `kgglow=1 kgrim=1 kgspec=0.30` dá a v0.18 bit a bit.
+- Pop-up bit a bit igual.
+
+**Teste:** lib `SurfaceFlingerProp.v19.so`; confirme com `grep -c kgglow`. O APK v16 continua.
+
 ## 0m. Atualização (2026-10-16, sfhook v0.18): miolo no nível da borda interna
 
 **Regra do usuário:** o miolo tem a mesma luminosidade da borda interna (no máximo ~1% acima) e mais blur. Um miolo mais claro parece elevado e destrói a profundidade.

@@ -135,7 +135,7 @@ static float prop_float(const char *name, float fallback) {
 // .kglevel (transmission flattening toward a luma level), .kgcool (cool tint), .kgtilt (rim tilt at
 // the outline, rad), .kgline (contour strength) and .kgcorecap (body blur radius cap in px; 80 or
 // more restores v0.11) and .kgflatcap (flattening weight cap; 1 restores v0.11) and .kgcoredim (core gain; 0
-// restores v0.11). Profile 2
+// restores v0.11) and .kgglow (rim glow width; 1 with kgrim 1 and kgspec 0.30 restores v0.11). Profile 2
 // (expanded-shade legibility): debug.oulg.sf.shadecap and .shadelift (luma limits). Which
 // profile a card gets travels in its tag, set live by the module.
 static void layered_blur(struct oulg_profile p[OULG_PROFILES]) {
@@ -158,6 +158,7 @@ static void layered_blur(struct oulg_profile p[OULG_PROFILES]) {
     p[1].ccap = prop_float("debug.oulg.sf.kgcorecap", OULG_KG_CCAP_DEFAULT);
     p[1].fcap = prop_float("debug.oulg.sf.kgflatcap", OULG_KG_FCAP_DEFAULT);
     p[1].cdim = prop_float("debug.oulg.sf.kgcoredim", OULG_KG_CDIM_DEFAULT);
+    p[1].glow = prop_float("debug.oulg.sf.kgglow", OULG_KG_GLOW_DEFAULT);
     p[2] = OULG_PROFILES_DEFAULT[2];
     p[2].cap = prop_float("debug.oulg.sf.shadecap", OULG_SHADE_CAP_DEFAULT);
     p[2].lift = prop_float("debug.oulg.sf.shadelift", OULG_SHADE_LIFT_DEFAULT);
