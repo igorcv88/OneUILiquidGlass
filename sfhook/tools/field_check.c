@@ -1,12 +1,13 @@
 // Host check of the refraction field in refract.h (OULG_FS_FIELD_FMT), ported line for line. It
 // verifies on a dense grid of card shapes and lens strengths:
-//  - the shift is zero outside the bevel band and C1 at its inner edge (depth = bevel);
-//  - the shift points inward and never exceeds k * bevel;
+//  - the shift is zero outside its band (profile 0: the bevel; profile 1: the dome, the whole corner
+//    radius) and C1 at the band's inner edge;
+//  - the shift points inward and never exceeds k * bevel (profile 0) or A * r (profile 1);
 //  - the 2-D Jacobian of the sampling map q -> q + s(q), by central differences, matches the closed
 //    form det = m(t) * (1 - |s| / rho) (rho = distance to the corner centre; 1 on the straight
 //    edges), with m = 1 - 2 k t for profile 0 (positive for k <= 0.5, folds exactly where
-//    t > 1 / (2 k) above) and m = 1 - 6 A t (1 - t), A = min(k, 0.5), for profile 1 (never folds;
-//    1 at the outline);
+//    t > 1 / (2 k) above) and m = 1 - 2 A t, A = min(0.6 k, 0.35), for profile 1 (monotone in
+//    depth, never folds);
 //  - the body blur radius rises monotonically from 0 at the rim to the core radius;
 //  - the clip program's geometry (centre and half size rebuilt from uinnerRect and uradiusPlusHalf)
 //    is the FillRRect program's, and both decode the same strength and profile from the corner tag;
@@ -15,12 +16,13 @@
 #include <math.h>
 #include <stdio.h>
 
-static const double CORES[2] = {48.0, 56.0}, RAMPS[2] = {1.5, 1.5};  // OULG_PROFILES_DEFAULT
+static const double CORES[2] = {48.0, 80.0}, RAMPS[2] = {1.5, 0.85};  // OULG_PROFILES_DEFAULT (profile 1: fraction of r)
 
 static double clampd(double v, double lo, double hi) { return v < lo ? lo : v > hi ? hi : v; }
 static double smoothstepd(double e0, double e1, double x) { double t = clampd((x - e0) / (e1 - e0), 0, 1); return t * t * (3 - 2 * t); }
 static double signd(double v) { return v > 0 ? 1 : v < 0 ? -1 : 0; }
 
+static double domeA(double k) { return fmin(0.6 * k, 0.35); }
 // oulg_field: kp = k + 2 x profile; returns the shift in s[2], the body blur radius in *br.
 static void field(double qx, double qy, double hx, double hy, double r, double kp, double s[2], double *br) {
     int pf = kp >= 2;
@@ -28,13 +30,22 @@ static void field(double qx, double qy, double hx, double hy, double r, double k
     double wx = fabs(qx) - (hx - r), wy = fabs(qy) - (hy - r);
     double vx = fmax(wx, 0), vy = fmax(wy, 0);
     double l = sqrt(vx * vx + vy * vy);
-    double bevel = clampd(r * 0.42, 16, 56);
     double depth = r - l - fmin(fmax(wx, wy), 0);
-    *br = CORES[pf] * smoothstepd(0.25 * bevel, RAMPS[pf] * bevel, depth);
     s[0] = s[1] = 0;
-    if (l <= 0 || depth <= 0 || depth >= bevel) return;
-    double t = 1 - depth / bevel;
-    double mag = pf ? fmin(k, 0.5) * bevel * t * t * (3 - 2 * t) : k * bevel * t * t;
+    double bevel, mag;
+    if (pf) {
+        bevel = r;
+        *br = CORES[1] * smoothstepd(0.04, RAMPS[1], clampd(depth / r, 0, 1));
+        if (l <= 0 || depth <= 0 || depth >= r) return;
+        double t = 1 - depth / r;
+        mag = domeA(k) * r * t * t;
+    } else {
+        bevel = clampd(r * 0.42, 16, 56);
+        *br = CORES[0] * smoothstepd(0.25 * bevel, RAMPS[0] * bevel, depth);
+        if (l <= 0 || depth <= 0 || depth >= bevel) return;
+        double t = 1 - depth / bevel;
+        mag = k * bevel * t * t;
+    }
     s[0] = -(vx / l) * signd(qx) * mag;
     s[1] = -(vy / l) * signd(qy) * mag;
 }
@@ -75,8 +86,9 @@ int main(void) {
         for (unsigned ki = 0; ki < 2 * sizeof ks / sizeof ks[0]; ki++) {
             int pf = ki % 2;
             double k = ks[ki / 2], r = tag(r0, k, pf), kp = k + 2 * pf;
-            double bevel = clampd(r * 0.42, 16, 56);
-            CHECK(bevel < r, "bevel %.2f >= r %.2f", bevel, r);
+            // The band: profile 0 the bevel (inside the corner radius), profile 1 the dome (all of it).
+            double bevel = pf ? r : clampd(r * 0.42, 16, 56);
+            CHECK(pf || bevel < r, "bevel %.2f >= r %.2f", bevel, r);
             // Tag round trip, both programs.
             double kf = decodeFill(r - floor(r)), kc = decodeClip((r + 0.5) - floor(r + 0.5));
             CHECK(r <= r0 && r0 - r < 1.5, "tag %.3f for radius %.1f", r, r0);
@@ -105,7 +117,7 @@ int main(void) {
                 if (depth <= 0) continue;  // outside the card: coverage is zero there
                 points++;
                 double mag = hypot(s[0], s[1]);
-                CHECK(mag <= (pf ? fmin(k, 0.5) : k) * bevel + 1e-9, "shift %.3f > k*bevel", mag);
+                CHECK(mag <= (pf ? domeA(k) : k) * bevel + 1e-9, "shift %.3f > k*bevel", mag);
                 if (depth >= bevel) { CHECK(mag == 0, "shift outside band"); }
                 else {
                     // Inward: against the outward normal (v / l) * sign(q).
@@ -132,8 +144,7 @@ int main(void) {
                 double expect = 1, m = 1;
                 if (depth < bevel) {
                     int corner = wx > 0 && wy > 0;
-                    double A = fmin(k, 0.5);
-                    m = pf ? 1 - 6 * A * t * (1 - t) : 1 - 2 * k * t;
+                    m = pf ? 1 - 2 * domeA(k) * t : 1 - 2 * k * t;
                     expect = m * (corner ? 1 - mag / l : 1);
                 }
                 double err = fabs(det - expect);
@@ -154,7 +165,7 @@ int main(void) {
             for (double dep = 0; dep < hy; dep += 0.25) {
                 double sv[2], b; field(0, hy - dep, hx, hy, r, kp, sv, &b);
                 CHECK(b >= last - 1e-12, "br not monotone"); last = b;
-                if (dep < 0.25 * bevel) CHECK(b == 0, "br at rim");
+                if (dep < (pf ? 0.04 : 0.25) * bevel) CHECK(b == 0, "br at rim");
                 if (dep >= RAMPS[pf] * bevel && dep <= hy - 1) CHECK(fabs(b - CORES[pf]) < 1e-9, "br at body");
             }
         }
@@ -192,7 +203,7 @@ int main(void) {
 
     printf("field: %ld points, max |det - closed form| = %.2e, min det profile 0 (k <= 0.5) = %.3f, profile 1 (all k) = %.3f\n",
            points, worstErr, minDetLow, minDet1);
-    printf("field: profile 1 min radial stretch by k:");
+    printf("field: profile 1 (dome) min radial stretch by k:");
     for (unsigned i = 0; i < sizeof ks / sizeof ks[0]; i++) printf(" %.2f->%.3f", ks[i], minM1[i]);
     printf("\nfield: max texture magnification 1/sigma_min (no fold), profile 0 | profile 1:");
     for (unsigned i = 0; i < sizeof ks / sizeof ks[0]; i++) {

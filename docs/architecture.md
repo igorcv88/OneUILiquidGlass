@@ -644,6 +644,25 @@ Profile 1 only (profile 0 stays bit-identical, `render_check` max 0; profile 2 u
 - **Body:** after vibrancy and the highlight knee, luma moves `kgflat·body` (0.50) of the way to `kglevel` (0.40). Darkening is a gain; lifting adds cool scattered light, so near-black does not turn into amplified noise. Then a luma-neutral cool tint (`kgcool` 0.5). Disc 80 px with 48 taps.
 - **Host preview:** `sfhook/tools/kg_preview.mjs` renders the real FillRRect rewrite over a photographic crop of the user's lockscreen and composites region colour, glass fill and hairline as on the device. Over the dark jacket crop: body luma SD 0.151 → 0.072, p95 0.64 → 0.54, top contour +0.02 → +0.18 over the body, worst-case white-text contrast 2.5 → 3.5. Not device-validated; the real compositor input and Samsung filter are unknown.
 
+### Lockscreen v0.12: a dome instead of a bevelled slab; born in the final profile (2026-10-16)
+
+Device report on v0.11: the card read as a speed bump (abrupt rise, flat top, abrupt fall), and a notification arrived in one look and switched to the right one about 2 s later.
+
+**Speed bump, from the field.** Profile 1 shifted the sample by `A·bevel·G(t)`, `G = t²(3 − 2t)`, over a band of `0.42·r` (45 px on a 108 px half height). Its radial Jacobian `1 − 6At(1 − t)` is smallest mid-band, so magnification went 1.05× at the outline, **2.46× at 20–25 px**, back to 1.00× at 45 px, and then a flat core. That gives a ring of peak magnification (the shoulder) and a plateau, with a luminance step on top: the transmission flattening ran from weight 0 at the rim to 1 in the core.
+
+**Dome.** Profile 1 now spans the whole corner radius:
+- `t = 1 − depth/r` (on a pill the lens reaches the centre line), shift `A·r·t²`, `A = min(0.6k, 0.35)`.
+- Radial Jacobian `1 − 2At`: monotone, strongest at the outline (1.91× at k = 0.40), 1 at the centre, C1 where it ends, never folds (`field_check`; 3.3× at the cap).
+- The body blur is `core·smoothstep(0.04, ramp, depth/r)` with ramp 0.85: refraction and filtering share one coordinate.
+- Transmission flattening weight `0.35 + 0.65·body`.
+- Fresnel tilt `kgtilt·t` (the slope of a `t²` height).
+- Specular: a Gaussian crescent at t = 0.74.
+- Profile 0 is bit-identical (`render_check` max 0) and profile 2 is untouched.
+
+**Late arrival.** `Eligibility.keyguardOptics` denied profile 1 to any row in its heads-up state. A notification that arrives on the lockscreen enters the stack as a heads-up, so it carried the heads-up material until that state ended. On bar state 1 every row now takes profile 1. On state 2 and over apps a heads-up keeps profile 0.
+
+This is inferred from the code, not traced. The new `OPTICS` / `OPTICS_FINAL` timeline logs every change of path, tag, heads-up, pinned, region fade, ancestor scale and fallback for lockscreen cards, with the time since the card was created and whether the first frame was already final.
+
 ### Overflow pill on the lockscreen (2026-10-16)
 
 The pill with the icons of notifications that do not fit is assumed to be the notification shelf's `NotificationBackgroundView`. The draw hook now accepts a background under a `NotificationShelf` as well as under a row. On the keyguard state with the drawable path it gets light glass: an untagged blur of `debug.oulg.pillblur` px (40), whole-pixel corners so no tag band is hit by accident, the module's veil and edge, no lens and no compositor material; elsewhere it stays native. `PILL_GLASS`, `BACKGROUND_HOSTLESS` and the trace-only `OVERFLOW` census confirm or refute the assumption on the device.

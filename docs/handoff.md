@@ -2,6 +2,41 @@
 
 Documento para continuar o trabalho em outra conversa. Leia inteiro antes de mexer em qualquer coisa. O histórico técnico detalhado está em `docs/architecture.md`; as seções de 2026-10-16 cobrem a central de notificações.
 
+## 0g. Atualização (2026-10-16, sfhook v0.12): "lombada" e chegada tardia na tela de bloqueio
+
+Estado de partida confirmado pelo usuário: `VS_OK=24 FS_OK=36 FAIL=0`, `sf.optics=9`. Nada abaixo foi validado no aparelho.
+
+### Lombada: causa e correção (só perfil 1)
+
+- **Causa, no código:** o perfil 1 deslocava a amostra por uma curva em S, `G(t) = t²(3−2t)`, só numa faixa de `0,42·r` (45 px num card de meia altura 108). O Jacobiano dessa curva é mínimo no meio da faixa, então a ampliação subia de 1,05× na borda a **2,46× a 20–25 px para dentro** e voltava a 1,00× a 45 px. Daí para dentro o miolo era plano, com o blur subindo de 11 a 68 px e o achatamento de tom aplicado só lá.
+  - Resultado: anel de ampliação máxima (o "ombro"), platô plano e um degrau de luminância entre a borda intocada e o miolo achatado.
+- **Correção: o perfil 1 virou um domo.**
+  - A lente cobre o raio inteiro do canto (num card-pílula, até a linha central): `t = 1 − depth/r`, deslocamento `A·r·t²`, `A = min(0,6·k; 0,35)`.
+  - A ampliação cai de forma monotônica, de 1,91× na borda a 1,00× no centro, sem pico interno e sem dobra (`field_check`).
+  - Blur do miolo `80·smoothstep(0,04; 0,85; depth/r)`: mesma coordenada da refração.
+  - Achatamento de tom com peso de 0,35 na borda a 1 no miolo. Antes ia de 0 a 1, e esse era o degrau de luminância.
+  - Inclinação de Fresnel `kgtilt·t` (a inclinação de um perfil `t²`), especular como gaussiana em `t = 0,74`.
+- **Pop-up (perfil 0):** bit a bit igual (`render_check` max 0). **Central (perfil 2):** código intocado.
+- Prévia: `docs/img/lockscreen-v12-preview.jpg`, v0.11 em cima e v0.12 embaixo, sobre a jaqueta e sobre uma grade.
+
+### Chegada tardia: causa provável e correção
+
+- **Causa provável (código, não trace):** `Eligibility.keyguardOptics` negava o perfil 1 a qualquer linha em estado heads-up.
+  - Uma notificação que chega na tela de bloqueio fica em heads-up enquanto entra na pilha. Nesse tempo ela recebia o perfil 0 (material do pop-up) e só trocava para o perfil 1 quando o heads-up terminava.
+  - O caminho (drawable) não muda; só o perfil da marca. Isso bate com "chega de um jeito e assenta depois".
+- **Correção:** no estado 1, toda linha recebe o perfil 1, inclusive em heads-up. No estado 2 e sobre apps (estado 0), o heads-up mantém o perfil 0. Pop-up sobre apps intocado.
+- **Instrumentação** (sempre ligada, só nos estados 1 e 2, no máximo 60 linhas por card, reinicia a cada troca de estado):
+  - `OPTICS`: uma linha por desenho em que o estado muda, com `dt` (ms desde a criação do card), `sinceBar`, `frame`, caminho, `tag`, `headsUp`, `pinned`, `alpha` (1/partial/0), `scaled`, `fallback`, `stacked` e `final`;
+  - `OPTICS_FINAL`: primeiro desenho no estado final (perfil 1, caminho drawable, opaco, sem escala), com `firstFrame=true|false`.
+- Se o atraso continuar, o trace diz qual campo muda em ~2 s: `tag` (perfil), `alpha=partial` (fade de entrada mistura o fundo nítido na região), `scaled` (marca perdida no shader) ou `fallback`.
+
+### Teste no aparelho
+
+1. Instalar o APK; trocar a lib ao vivo (seção 4) com `SurfaceFlingerProp.v12.so`; confirmar com `grep -c "smoothstep(0.04"`; reiniciar o SurfaceFlinger com o cache limpo.
+2. Na tela de bloqueio, com a tela ligada, mandar uma notificação para si mesmo e depois:
+   `su -c 'logcat -d | grep -E "OPTICS|BAR_STATE|HEADSUP" > /sdcard/Download/optics.txt'`
+3. Prints: a tela de bloqueio parada, e um vídeo da chegada de uma notificação.
+
 ## 0f. Atualização (2026-10-16, sfhook v0.11): material da tela de bloqueio e pílula de excedentes
 
 Nada disto foi validado no aparelho. A validação foi no host (render WebGL do shader real sobre recortes das capturas do usuário).

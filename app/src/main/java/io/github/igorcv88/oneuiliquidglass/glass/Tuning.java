@@ -96,7 +96,7 @@ public final class Tuning {
     /**
      * Compositor optics profile of lockscreen cards (debug.oulg.kgoptics): 1 (default) the lockscreen
      * material of sfhook/refract.h (wider body blur, more taps, vibrancy); 0 the established heads-up
-     * material. Heads-up cards always carry profile 0. It travels in the corner tag: a change shows
+     * material. Heads-up cards carry profile 0 except on the idle lockscreen. It travels in the corner tag: a change shows
      * live, without restarting SurfaceFlinger.
      */
     public final int kgOptics;

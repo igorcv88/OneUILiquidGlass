@@ -7,8 +7,11 @@ public final class EligibilityTest {
     @Test public void onlyLockscreenCardsTakeTheLockscreenOptics() {
         assertTrue(Eligibility.keyguardOptics(Eligibility.BAR_KEYGUARD, false));
         assertTrue(Eligibility.keyguardOptics(Eligibility.BAR_SHADE_LOCKED, null));
-        // A heads-up keeps the established material wherever it shows.
-        assertFalse(Eligibility.keyguardOptics(Eligibility.BAR_KEYGUARD, true));
+        // A card arriving on the idle lockscreen is born with the lockscreen material, even while
+        // it is still in its heads-up state; elsewhere a heads-up keeps the established one.
+        assertTrue(Eligibility.keyguardOptics(Eligibility.BAR_KEYGUARD, true));
+        assertFalse(Eligibility.keyguardOptics(Eligibility.BAR_SHADE_LOCKED, true));
+        assertFalse(Eligibility.keyguardOptics(0, true));
         assertFalse(Eligibility.keyguardOptics(0, false));
         assertFalse(Eligibility.keyguardOptics(null, false));
     }
