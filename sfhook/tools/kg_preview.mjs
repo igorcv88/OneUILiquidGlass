@@ -9,10 +9,10 @@
 //  1. the region's input: the backdrop at quarter resolution with a light blur (RenderEngine's
 //     downscaled blur pass for a small radius; the exact Samsung filter is not known on the host);
 //  2. the rewritten FillRRect program over that input (refraction, body blur, profile-1 material);
-//  3. the region's colour, drawn by RenderEngine over the blur (semalpha 20 over the dark-theme
-//     Samsung tone: 0x14ffffff);
+//  3. the region's colour, drawn by RenderEngine over the blur (KG_VEIL alpha of white, default 20:
+//     0x14ffffff; v0.14-v0.15 sent none, KG_VEIL=0);
 //  4. the module's glass at the native alpha 204: the dark fill (0x0a000000) and the edge shader's
-//     hairline at the compositor-lit gain (LiquidGlassShader, decor 0, hairGain 0.5);
+//     hairline (KG_HAIR gain, default 0.5 for compositor-lit cards; v0.14-v0.15 drew none, KG_HAIR=0);
 //  5. white notification text, for legibility.
 // Card: 1340 x 216, corner 108, as SystemUI lays out a two-line lockscreen card; lens 0.40.
 //
@@ -20,19 +20,28 @@
 //  - body: mean, standard deviation and 5th/95th percentiles past 1.5 compositor bevels (68 px)
 //    (homogeneity: a smaller spread is a more even body), share of pixels darker than 0.08;
 //  - rim: mean luma in the outer 4 px band minus the body mean (contour brightness), top and bottom;
-//  - contrast: WCAG ratio of white text against the body's 95th percentile (worst case).
+//  - contrast: WCAG ratio of white text against the body's 95th percentile (worst case);
+//  - warm: mean (R - B) in the body (positive: amber cast); chroma: mean (max - min) channel spread.
 import { createRequire } from 'module';
 import fs from 'fs';
 const { chromium } = createRequire(import.meta.url)('playwright');
 
 const [dir, bgPath, outPath, cardYArg] = process.argv.slice(2);
-const K = 0.40;
-const tag = r => { const s = Math.min(1, Math.max(0, (K - 0.1) / 1.1)); const t = Math.floor(r) + 0.30 + 0.15 * s; return t <= r ? t : t - 1; };
+// KG_PF=0 draws the heads-up profile instead (KG_K its strength, sflens), for pop-up comparisons.
+const PF = +(process.env.KG_PF ?? 1), K = +(process.env.KG_K ?? (PF === 1 ? 0.40 : 0.70));
+// The module's layers for a compositor-lit card: by default the v0.11-v0.13 and v0.16 stack (8 %
+// white region colour, half-gain hairline); KG_VEIL=0 KG_HAIR=0 reproduce v0.14-v0.15.
+const VEIL = +(process.env.KG_VEIL ?? 20), HAIR = +(process.env.KG_HAIR ?? 0.5);
+const tag = r => {
+  const s = Math.min(1, Math.max(0, (K - 0.1) / 1.1));
+  if (PF === 0) return Math.floor(r) - 1 + 0.55 + 0.15 * s;
+  const t = Math.floor(r) + 0.30 + 0.15 * s; return t <= r ? t : t - 1;
+};
 const frag = fs.readFileSync(`${dir}/mod_002.frag`, 'utf8')
   .replace(/#extension GL_NV_shader_noperspective_interpolation : require\n/, '').replace(/noperspective /g, '');
 const bg = 'data:image/png;base64,' + fs.readFileSync(bgPath).toString('base64');
 
-async function harness(frag, bg, cardY, rTag, kp) {
+async function harness(frag, bg, cardY, rTag, kp, veilAlpha, hairGain) {
   const img = new Image(); img.src = bg; await img.decode();
   const W = img.width, H = img.height, CARD = { x: 50, y: cardY, w: 1340, h: 216, r: 108 };
   const src = document.createElement('canvas'); src.width = W; src.height = H;
@@ -76,7 +85,7 @@ void main() { vec2 dev = vec2(${CARD.x + hs[0]}.0, ${CARD.y + hs[1]}.0) + p * ve
   // Composite on the CPU, top-down rows.
   const out = new Uint8ClampedArray(plain);
   const density = 3.5, bevel = Math.max(1, Math.min(20 * density, Math.min(CARD.w, CARD.h) * 0.32));
-  const hair = Math.max(1.5, Math.min(0.95 * density, 5)), fringe = 0.55, specular = 0.60, hairGain = 0.5;
+  const hair = Math.max(1.5, Math.min(0.95 * density, 5)), fringe = 0.55, specular = 0.60;
   const sdf = (x, y) => {
     const qx = Math.abs(x) - hs[0] + CARD.r, qy = Math.abs(y) - hs[1] + CARD.r;
     return Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0) - CARD.r;
@@ -90,7 +99,7 @@ void main() { vec2 dev = vec2(${CARD.x + hs[0]}.0, ${CARD.y + hs[1]}.0) + p * ve
     const i = (y * W + x) * 4, j = ((H - 1 - y) * W + x) * 4;
     // 2: the compositor's region (premultiplied, opaque over the card), then its colour.
     let r = px[j] / 255, gg = px[j + 1] / 255, b = px[j + 2] / 255;
-    const va = 0x14 / 255; r = r * (1 - va) + va; gg = gg * (1 - va) + va; b = b * (1 - va) + va;
+    const va = veilAlpha / 255; r = r * (1 - va) + va; gg = gg * (1 - va) + va; b = b * (1 - va) + va;
     // 4: the glass at the native alpha (fill, then the hairline, which is additive light).
     const ga = 204 / 255, fa = 0x0a / 255 * ga;
     r *= 1 - fa; gg *= 1 - fa; b *= 1 - fa;
@@ -112,9 +121,13 @@ void main() { vec2 dev = vec2(${CARD.x + hs[0]}.0, ${CARD.y + hs[1]}.0) + p * ve
   // Metrics before the text.
   const lum = (k) => (0.2126 * out[k] + 0.7152 * out[k + 1] + 0.0722 * out[k + 2]) / 255;
   const body = [], rimTop = [], rimBottom = [], sfBevel = clamp(0.42 * CARD.r, 16, 56);
+  let warm = 0, chroma = 0;
   for (let y = CARD.y; y < CARD.y + CARD.h; y++) for (let x = CARD.x; x < CARD.x + CARD.w; x++) {
     const d = -sdf(x + 0.5 - CARD.x - hs[0], y + 0.5 - CARD.y - hs[1]), k = (y * W + x) * 4;
-    if (d > 1.5 * sfBevel) body.push(lum(k));
+    if (d > 1.5 * sfBevel) {
+      body.push(lum(k)); warm += (out[k] - out[k + 2]) / 255;
+      chroma += (Math.max(out[k], out[k + 1], out[k + 2]) - Math.min(out[k], out[k + 1], out[k + 2])) / 255;
+    }
     else if (d > 0.5 && d < 4.5 && Math.abs(x + 0.5 - CARD.x - hs[0]) < hs[0] - CARD.r) (y < CARD.y + hs[1] ? rimTop : rimBottom).push(lum(k));
   }
   const mean = a => a.reduce((s, v) => s + v, 0) / a.length;
@@ -124,7 +137,8 @@ void main() { vec2 dev = vec2(${CARD.x + hs[0]}.0, ${CARD.y + hs[1]}.0) + p * ve
   const metrics = { bodyMean: +m.toFixed(3), bodySd: +sd.toFixed(3), p05: +pct(0.05).toFixed(3), p95: +pct(0.95).toFixed(3),
     dark: +(body.filter(v => v < 0.08).length / body.length).toFixed(3),
     rimTop: +(mean(rimTop) - m).toFixed(3), rimBottom: +(mean(rimBottom) - m).toFixed(3),
-    contrast: +(1.05 / (lin(pct(0.95)) + 0.05)).toFixed(2) };
+    contrast: +(1.05 / (lin(pct(0.95)) + 0.05)).toFixed(2),
+    warm: +(warm / body.length).toFixed(3), chroma: +(chroma / body.length).toFixed(3) };
   // 5: the text.
   const o = document.createElement('canvas'); o.width = W; o.height = H;
   const og = o.getContext('2d'); og.putImageData(new ImageData(out, W, H), 0, 0);
@@ -139,7 +153,7 @@ const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--ena
 const p = await browser.newPage();
 await p.setContent('<body></body>');
 const cardY = cardYArg ? +cardYArg : 150;
-const res = await p.evaluate(`(${harness.toString()})(${JSON.stringify(frag)}, ${JSON.stringify(bg)}, ${cardY}, ${tag(108)}, ${2 + K})`);
+const res = await p.evaluate(`(${harness.toString()})(${JSON.stringify(frag)}, ${JSON.stringify(bg)}, ${cardY}, ${tag(108)}, ${2 * PF + K}, ${VEIL}, ${HAIR})`);
 await browser.close();
 fs.writeFileSync(outPath, Buffer.from(res.png.split(',')[1], 'base64'));
 console.log(JSON.stringify(res.metrics));

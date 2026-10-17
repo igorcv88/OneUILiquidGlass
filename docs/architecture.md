@@ -644,6 +644,152 @@ Profile 1 only (profile 0 stays bit-identical, `render_check` max 0; profile 2 u
 - **Body:** after vibrancy and the highlight knee, luma moves `kgflat·body` (0.50) of the way to `kglevel` (0.40). Darkening is a gain; lifting adds cool scattered light, so near-black does not turn into amplified noise. Then a luma-neutral cool tint (`kgcool` 0.5). Disc 80 px with 48 taps.
 - **Host preview:** `sfhook/tools/kg_preview.mjs` renders the real FillRRect rewrite over a photographic crop of the user's lockscreen and composites region colour, glass fill and hairline as on the device. Over the dark jacket crop: body luma SD 0.151 → 0.072, p95 0.64 → 0.54, top contour +0.02 → +0.18 over the body, worst-case white-text contrast 2.5 → 3.5. Not device-validated; the real compositor input and Samsung filter are unknown.
 
+### v0.20: one lockscreen contour; pop-up lens 0.45; optional bloom control (2026-10-16)
+
+**Double outline on the device.**
+- At the bottom edge of a lockscreen card the profile read 0.43 about 5 px inside, then 0.60 at the outline. The inner peak is the module's hairline (half gain, centred ~6 px inside).
+- **Fix:** compositor-lit cards skip the edge shader. The compositor contour widens (σ 1.13 → 1.6 px, gain 0.62).
+
+**Pop-up lens.**
+- `sflens` now defaults to 0.45 instead of 0.7. The quadratic heads-up field folds above 0.5.
+- At 0.45 it no longer folds, but it still magnifies about 10× in the outermost pixels.
+
+**Bloom control.**
+- New `OULG_FS_DISC_BLOOM_FMT`, emitted for profile 0 when `hubloom > 0`: tap weight × `exp(−6·bloom·max(l_tap − l_centre − 0.10, 0))`.
+- **Off by default.** At 1.5 it cuts a vivid object's spread into the card by ~40 %, but it doubles the backdrop structure left in the body (render_check 2.61 → 5.2).
+
+**Unchanged:** profile 0 with `hubloom = 0` is bit-identical.
+
+### Lockscreen v0.19: a narrower rim glow (2026-10-16)
+
+On the device, the v0.18 lockscreen rim glow fell from 0.59 at the outline to 0.17 about 28 px in. That reads as a lit rim, not a surface reflection. Profile 1 changes:
+- Fresnel and the specular band use `tg = 1 − (1 − t)/kgglow`, with `kgglow` 0.7, so they are 30 % narrower.
+- `kgrim` 0.72 and `kgspec` 0.19 make them weaker.
+- The contour line is unchanged.
+
+**Host lift results:**
+- 6–15 px: 33–43 % lower.
+- 15–30 px: about half.
+- 30 px and beyond: unchanged.
+
+`kgglow 1`, `kgrim 1` and `kgspec 0.30` reproduce v0.18.
+
+**Pop-up, not changed.** On the host, the two white streaks and the green stain hardly change with lens strength (0.7 to 0.4). They are backdrop content spread by the 48 px body blur near the rim, not a blurred specular.
+
+### Lockscreen v0.18: core level with the inner rim (2026-10-16)
+
+A core lighter than the inner rim reads as raised. Measured lift over the wallpaper, inner rim (30–45 px) vs core (> 68 px):
+
+| | inner rim | core |
+|---|---|---|
+| v0.17, skin | +0.103 | +0.132 |
+| v0.17, dark | +0.025 | +0.072 |
+| v0.18, skin | +0.079 | +0.090 |
+| v0.18, dark | +0.028 | +0.047 |
+| v0.18, light | +0.024 | +0.014 |
+
+**Changes:**
+- The flattening cap drops to 0.22.
+- A 4 % gain applies to the deep core only: `1 − kgcoredim·smoothstep(0.5, 1, body)`.
+
+The cap alone could not close the gap on dark backdrops, where the wider core blur mixes in brighter surroundings. Because the gain is multiplicative, the core still follows the wallpaper.
+
+- **Rim:** 0–30 px is unchanged. The 30–45 px band darkens slightly over dark backdrops.
+- **Rollback:** `kgcorecap = 80`, `kgflatcap = 1` and `kgcoredim = 0` together are bit-identical to v0.11.
+- **Profile 0:** bit-identical.
+
+### Lockscreen v0.17: a dynamic core (2026-10-16)
+
+The v0.11 flattening (`kgflat` 0.5 toward 0.40) is weighted by the body ramp. Measured on the host against the wallpaper under the card:
+- the rim sits +0.14 above it and follows it at 81 %;
+- the core sits +0.20 above it and follows it at only 40–46 %.
+
+That is the light, fixed core the user reported. The weight is now `min(body, kgflatcap)`, with a cap of 0.5:
+- **Rim:** weight below 0.5 up to ~38 px, so effectively unchanged (mean 0.04–0.28/255).
+- **Core:** +0.13 and 68 %, level with the rim.
+- **Rollback:** `kgflatcap = 1` with `kgcorecap ≥ 80` is bit-identical to v0.11. Profile 0 is bit-identical.
+
+### Lockscreen v0.16: the v0.11 material with a capped core blur (2026-10-16)
+
+**Decision.** The user approved the look of lib v0.11 with the v0.12 app; v0.13–v0.15 are withdrawn. The lib v0.12 dome never ran on the device.
+
+**Restored from `aa6fd27`:**
+- `sfhook/refract.h`, `oulg_sf.c`, `field_check.c` and `refract_check.c`;
+- `GlassDrawable` and `BackgroundBlurBridge`.
+
+The app is now identical to `431cf07`: the first-frame fix (profile 1 on bar state 1), the `OPTICS` logs and the overflow pill.
+
+**Only visual change.** Profile 1's body radius is `min(80·bw, kgcorecap)`, where `bw` is the v0.11 ramp and the cap defaults to 62 px. The material weights its colour terms by `bw` instead of radius/core.
+- Every pixel whose v0.11 radius is below the cap samples identically.
+- Host masks against v0.11: the rim (0–45 px) has a maximum difference of 0 on three backdrops. `kgcorecap ≥ 80` is bit-identical overall.
+- `render_check`: core structure 0.87 → 1.36, grain 0.51 → 0.40, same cost. Profile 0 is bit-identical.
+
+### Lockscreen v0.15: neutral body, surface sheen (2026-10-16)
+
+**v0.14 device screenshot.** The rim is single (0.52 contour, a smooth 0.29–0.32 core). The face area of the body reads amber: R − B is 0.10 at the median and 0.27 at p95.
+
+**Cause.** The 80 px disc spreads skin and leather into wide patches. Saturation 1.12 and v0.14's transmission gain (up to 1.8×) raised their chroma; on the host, body chroma was up 58 % from v0.13.
+
+**v0.15, profile 1 only:**
+- saturation 1.0;
+- gain capped at 1.35×;
+- chroma cut by `kgwarm` (0.6) where red exceeds blue, while cool hues keep theirs;
+- cool tint 0.7;
+- a surface sheen `kgsheen` (5 % at the top, 0.5 % at the bottom, fading over bright backdrops): the environment reflected by the glass face, which a pure blur lacks.
+
+**Host,** over a crop of the device's own wallpaper under the card: R − B p99 goes 0.12 → 0.02 and chroma p95 0.19 → 0.16. Profile 0 is bit-identical.
+
+### Lockscreen v0.14: one rim, no app edge, no veil (2026-10-16)
+
+The v0.13 device screenshot, measured down the card: contour 0.59, trough 0.33, **a second ring of 0.49 about 19 px in**, then a 0.32–0.34 core; at the bottom an inner ring of 0.42 and a contour of 0.41. That reads as two drops.
+
+The ring is the compositor's specular crescent (t = 0.62 ≈ 20 px). Stacked with it at the edge were:
+- the compositor's Fresnel and contour;
+- the module's hairline (half gain, three-line colour fringe centred ~6 px inside, a second contour);
+- the refracted band between them.
+
+The core was milky from the region's 8 % white colour and from additive shadow lift.
+
+**Fix:**
+- **Compositor, profile 1 only:** grazing reflectance and contour form one weight toward the environment, plus a glint decaying 5 px from the outline on the lit side. No inner ring.
+- **Transmission:** a gain (0.6×–1.8×) toward 0.48, with scattered light only for what a gain cannot reach.
+- **Module:** on compositor-lit cards (profile 1 tagged, `sf.optics ≥ 9`), `GlassDrawable` skips the edge shader and `BackgroundBlurBridge` sends no region colour.
+- Heads-up keeps both, and profile 0 is bit-identical. The shade is untouched.
+
+### Lockscreen v0.13: edge lens on a clean core (2026-10-16)
+
+The device screenshot of v0.12 has this luma profile across the card: contour 0.51, a trough of 0.17 about 28 px in, a flat 0.29 plateau, then 0.24 and contour 0.40. The eye reads that shading as relief, i.e. a padded slab. It has three causes:
+- **Late core blur.** The core blur reached full radius only at 0.85·r, so it was 14 px at 28 px depth and the dark backdrop showed almost raw.
+- **Depth-weighted transmission.** Flattening was weighted by depth, and highlights were pulled as hard as shadows. The core came out uniform and darkened (smoked) next to a raw rim.
+- **Whole-card lens.** The v0.12 dome made the whole card a magnifier, which reads as inflated.
+
+**v0.13, profile 1 only:**
+- Edge lens over `b = r/2`, shift `A·b·t³`, `A = min(0.5k, 0.25)`. Jacobian `1 − 3At²`: monotone, 2.5× at the outline at k = 0.40, C2 at the band end.
+- Body blur `80·smoothstep(0.02, 0.38, depth/r)`.
+- Transmission uniform over the card: shadows move 0.55 of the way to 0.44 by added scattered light; highlights move half that, as a gain.
+- Saturation 1.12.
+- Fresnel tilt `kgtilt·t²`; specular a narrow Gaussian at t = 0.62.
+- Profile 0 is bit-identical (`render_check` max 0); profile 2 is untouched.
+
+### Lockscreen v0.12: a dome instead of a bevelled slab; born in the final profile (2026-10-16)
+
+Device report on v0.11: the card read as a speed bump (abrupt rise, flat top, abrupt fall), and a notification arrived in one look and switched to the right one about 2 s later.
+
+**Speed bump, from the field.** Profile 1 shifted the sample by `A·bevel·G(t)`, `G = t²(3 − 2t)`, over a band of `0.42·r` (45 px on a 108 px half height). Its radial Jacobian `1 − 6At(1 − t)` is smallest mid-band, so magnification went 1.05× at the outline, **2.46× at 20–25 px**, back to 1.00× at 45 px, and then a flat core. That gives a ring of peak magnification (the shoulder) and a plateau, with a luminance step on top: the transmission flattening ran from weight 0 at the rim to 1 in the core.
+
+**Dome.** Profile 1 now spans the whole corner radius:
+- `t = 1 − depth/r` (on a pill the lens reaches the centre line), shift `A·r·t²`, `A = min(0.6k, 0.35)`.
+- Radial Jacobian `1 − 2At`: monotone, strongest at the outline (1.91× at k = 0.40), 1 at the centre, C1 where it ends, never folds (`field_check`; 3.3× at the cap).
+- The body blur is `core·smoothstep(0.04, ramp, depth/r)` with ramp 0.85: refraction and filtering share one coordinate.
+- Transmission flattening weight `0.35 + 0.65·body`.
+- Fresnel tilt `kgtilt·t` (the slope of a `t²` height).
+- Specular: a Gaussian crescent at t = 0.74.
+- Profile 0 is bit-identical (`render_check` max 0) and profile 2 is untouched.
+
+**Late arrival.** `Eligibility.keyguardOptics` denied profile 1 to any row in its heads-up state. A notification that arrives on the lockscreen enters the stack as a heads-up, so it carried the heads-up material until that state ended. On bar state 1 every row now takes profile 1. On state 2 and over apps a heads-up keeps profile 0.
+
+This is inferred from the code, not traced. The new `OPTICS` / `OPTICS_FINAL` timeline logs every change of path, tag, heads-up, pinned, region fade, ancestor scale and fallback for lockscreen cards, with the time since the card was created and whether the first frame was already final.
+
 ### Overflow pill on the lockscreen (2026-10-16)
 
 The pill with the icons of notifications that do not fit is assumed to be the notification shelf's `NotificationBackgroundView`. The draw hook now accepts a background under a `NotificationShelf` as well as under a row. On the keyguard state with the drawable path it gets light glass: an untagged blur of `debug.oulg.pillblur` px (40), whole-pixel corners so no tag band is hit by accident, the module's veil and edge, no lens and no compositor material; elsewhere it stays native. `PILL_GLASS`, `BACKGROUND_HOSTLESS` and the trace-only `OVERFLOW` census confirm or refute the assumption on the device.

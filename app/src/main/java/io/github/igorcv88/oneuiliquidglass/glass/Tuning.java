@@ -46,6 +46,8 @@ public final class Tuning {
     /**
      * Compositor lens strength: shift at the outline as a fraction of the bevel (0.1-1.2). It
      * travels in the corner-radius tag, so a change shows without restarting SurfaceFlinger.
+     * Default 0.45 (v0.19; was 0.7): above 0.5 the heads-up profile's quadratic field folds over
+     * the outer bevel (sfhook/tools/field_check.c), a mirrored band of the content at the rim.
      */
     public final float sfLens;
     public final String semCurve;
@@ -96,7 +98,7 @@ public final class Tuning {
     /**
      * Compositor optics profile of lockscreen cards (debug.oulg.kgoptics): 1 (default) the lockscreen
      * material of sfhook/refract.h (wider body blur, more taps, vibrancy); 0 the established heads-up
-     * material. Heads-up cards always carry profile 0. It travels in the corner tag: a change shows
+     * material. Heads-up cards carry profile 0 except on the idle lockscreen. It travels in the corner tag: a change shows
      * live, without restarting SurfaceFlinger.
      */
     public final int kgOptics;
@@ -178,7 +180,7 @@ public final class Tuning {
         tintAlpha = Math.round(clamp(number("tint", -1f), -1f, 255f));
         semRadius = Math.round(clamp(number("semradius", -1f), -1f, 400f));
         semRadiusLens = Math.round(clamp(number("semradiuslens", 16f), -1f, 400f));
-        sfLens = clamp(number("sflens", 0.7f), 0.1f, 1.2f);
+        sfLens = clamp(number("sflens", 0.45f), 0.1f, 1.2f);
         // "spatial" stopped the blur rendering on S938BXXUCZZIC (sharp backdrop in screenshots): off by default.
         semCurve = prop("semcurve", "auto");
         semAlpha = Math.round(clamp(number("semalpha", -1f), -1f, 255f));

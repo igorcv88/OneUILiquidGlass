@@ -129,11 +129,14 @@ static float prop_float(const char *name, float fallback) {
 
 // Optical profiles, read when a shader is compiled like the debug tint. Profile 0 (heads-up; the
 // established material): debug.oulg.sf.core (body blur radius in px, 0 = off), debug.oulg.sf.taps
-// (taps per pixel) and debug.oulg.sf.ramp (depth where the body radius is reached, in bevels).
+// (taps per pixel) and debug.oulg.sf.ramp (depth where the body radius is reached, in bevels)
+// and debug.oulg.sf.hubloom (bloom control of the body disc; 0 restores the plain disc).
 // Profile 1 (lockscreen): debug.oulg.sf.kgcore, .kgtaps, .kgramp, .kgsat (body saturation),
 // .kgtone (highlight knee), .kgrim (rim reflectance gain), .kgspec (specular strength), .kgflat and
 // .kglevel (transmission flattening toward a luma level), .kgcool (cool tint), .kgtilt (rim tilt at
-// the outline, rad) and .kgline (contour strength). Profile 2
+// the outline, rad), .kgline (contour strength) and .kgcorecap (body blur radius cap in px; 80 or
+// more restores v0.11) and .kgflatcap (flattening weight cap; 1 restores v0.11) and .kgcoredim (core gain; 0
+// restores v0.11) and .kgglow (rim glow width; 1 with kgrim 1 and kgspec 0.30 restores v0.11). Profile 2
 // (expanded-shade legibility): debug.oulg.sf.shadecap and .shadelift (luma limits). Which
 // profile a card gets travels in its tag, set live by the module.
 static void layered_blur(struct oulg_profile p[OULG_PROFILES]) {
@@ -141,6 +144,7 @@ static void layered_blur(struct oulg_profile p[OULG_PROFILES]) {
     p[0].core = prop_float("debug.oulg.sf.core", OULG_CORE_DEFAULT);
     p[0].taps = (int) prop_float("debug.oulg.sf.taps", OULG_TAPS_DEFAULT);
     p[0].ramp = prop_float("debug.oulg.sf.ramp", OULG_RAMP_DEFAULT);
+    p[0].bloom = prop_float("debug.oulg.sf.hubloom", OULG_HU_BLOOM_DEFAULT);
     p[1].core = prop_float("debug.oulg.sf.kgcore", OULG_KG_CORE_DEFAULT);
     p[1].taps = (int) prop_float("debug.oulg.sf.kgtaps", OULG_KG_TAPS_DEFAULT);
     p[1].ramp = prop_float("debug.oulg.sf.kgramp", OULG_KG_RAMP_DEFAULT);
@@ -153,6 +157,10 @@ static void layered_blur(struct oulg_profile p[OULG_PROFILES]) {
     p[1].cool = prop_float("debug.oulg.sf.kgcool", OULG_KG_COOL_DEFAULT);
     p[1].tilt = prop_float("debug.oulg.sf.kgtilt", OULG_KG_TILT_DEFAULT);
     p[1].line = prop_float("debug.oulg.sf.kgline", OULG_KG_LINE_DEFAULT);
+    p[1].ccap = prop_float("debug.oulg.sf.kgcorecap", OULG_KG_CCAP_DEFAULT);
+    p[1].fcap = prop_float("debug.oulg.sf.kgflatcap", OULG_KG_FCAP_DEFAULT);
+    p[1].cdim = prop_float("debug.oulg.sf.kgcoredim", OULG_KG_CDIM_DEFAULT);
+    p[1].glow = prop_float("debug.oulg.sf.kgglow", OULG_KG_GLOW_DEFAULT);
     p[2] = OULG_PROFILES_DEFAULT[2];
     p[2].cap = prop_float("debug.oulg.sf.shadecap", OULG_SHADE_CAP_DEFAULT);
     p[2].lift = prop_float("debug.oulg.sf.shadelift", OULG_SHADE_LIFT_DEFAULT);

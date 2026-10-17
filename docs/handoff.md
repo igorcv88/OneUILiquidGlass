@@ -2,6 +2,313 @@
 
 Documento para continuar o trabalho em outra conversa. Leia inteiro antes de mexer em qualquer coisa. O histórico técnico detalhado está em `docs/architecture.md`; as seções de 2026-10-16 cobrem a central de notificações.
 
+## 0o. Atualização (2026-10-16, sfhook v0.20 + app): contorno duplo, lente do pop-up, bloom
+
+**Contorno duplo na tela de bloqueio (borda inferior, fundo azul).**
+- No print, pixel a pixel: 0,43 a ~5 px para dentro, vale de 0,41, depois 0,60 no contorno.
+- O pico interno é o hairline do app (`LiquidGlassShader`, meio ganho, centrado ~6 px para dentro).
+- **Correção:** nos cards que o compositor ilumina (perfil 1, `sf.optics ≥ 9`), o app não desenha o shader de borda. O contorno do compositor fica mais largo (σ 1,13 → 1,6 px) e mais forte (`kgline` 0,55 → 0,62).
+- **Host:** um contorno único (0,53 → 0,58 → 0,64 → 0,66).
+
+**Lente do pop-up.**
+- Padrão `sflens` 0,7 → 0,45 (`Tuning`). Acima de 0,5 o campo do perfil 0 rebatia o conteúdo na faixa externa do bisel.
+- Em 0,45 não há rebatimento, mas a ampliação na borda chega a ~10× nos pixels externos (`field_check`).
+
+**Bloom do pop-up.**
+- Novo disco do perfil 0 com controle de bloom (`debug.oulg.sf.hubloom`): amostras mais de 0,10 de luma acima do pixel central perdem peso.
+- **Desligado por padrão.** No host, com força 1,5, o vazamento do balão verde cai ~40%, mas a estrutura do fundo no miolo dobra (`render_check` 2,61 → 5,2): o texto atrás do pop-up passa a aparecer. Limiares maiores mantêm quase todo o custo e perdem o ganho.
+- Com 0 o perfil 0 é bit a bit igual.
+
+**Mantido da v0.19:** halo mais fino na tela de bloqueio e miolo no nível da borda interna.
+
+**Teste:**
+1. Instale o APK v20 (o app mudou).
+2. Lib `SurfaceFlingerProp.v20.so`; confirme com `grep -c hubloom`.
+3. Reinicie o SurfaceFlinger com o cache limpo.
+4. Para testar o bloom: `setprop debug.oulg.sf.hubloom 1.5` e reinicie o SurfaceFlinger com o cache limpo.
+
+## 0n. Atualização (2026-10-16, sfhook v0.19): halo da borda mais fino na tela de bloqueio; pop-up analisado, sem mudança
+
+**Prints do usuário (v0.18), comparados com o iOS 26.**
+- **Tela de bloqueio, card sobre a jaqueta:** a borda vai de 0,59 no contorno a 0,17 a ~28 px para dentro. É uma faixa iluminada larga, não um reflexo na superfície.
+- **Pop-up sobre o WhatsApp:** duas manchas brancas descem da borda e um verde se espalha embaixo.
+
+**Pop-up: sem mudança, por evidência.**
+- O padrão `sflens` 0,7 dobra o perfil 0 no terço externo do bisel (`field_check`).
+- No host, com ícones claros e um balão verde atrás (`bg_popup`), k = 0,7, 0,5, 0,45 e 0,4 dão quase o mesmo resultado. As manchas são o próprio conteúdo (ícones do cabeçalho, balão verde) espalhado pelo blur de miolo de 48 px perto da borda, não especular borrado.
+- Opções, se o usuário quiser: reduzir o blur do miolo do pop-up ou atenuar cores muito saturadas nele. As duas mudam o pop-up, que foi declarado bom.
+
+**Tela de bloqueio (só perfil 1):**
+- o Fresnel e a faixa especular ficam 30% mais estreitos (`kgglow` 0,70: a coordenada da faixa é comprimida para a borda);
+- a intensidade cai: `kgrim` 1,0 → 0,72, `kgspec` 0,30 → 0,19;
+- a linha fina do contorno (`kgline`) não muda.
+
+**Host,** brilho acima do papel de parede por faixa:
+
+| Faixa | v0.18 | v0.19 | Redução |
+|---|---|---|---|
+| 6–15 px | +0,216 / +0,173 / +0,162 | +0,124 / +0,116 / +0,105 | 33–43% |
+| 15–30 px | | | ~50% |
+| contorno 0–6 px | | | 12–20% (pelo Fresnel que se sobrepõe) |
+
+- Borda interna (30 px em diante) e miolo: iguais à v0.18.
+- **Rollback:** `kgglow=1 kgrim=1 kgspec=0.30` dá a v0.18 bit a bit.
+- Pop-up bit a bit igual.
+
+**Teste:** lib `SurfaceFlingerProp.v19.so`; confirme com `grep -c kgglow`. O APK v16 continua.
+
+## 0m. Atualização (2026-10-16, sfhook v0.18): miolo no nível da borda interna
+
+**Regra do usuário:** o miolo tem a mesma luminosidade da borda interna (no máximo ~1% acima) e mais blur. Um miolo mais claro parece elevado e destrói a profundidade.
+
+**Medido no host:** quanto cada região clareia acima do papel de parede borrado.
+
+| | borda interna 30–45 px | miolo > 68 px |
+|---|---|---|
+| v0.11, pele | +0,107 | +0,202 |
+| v0.11, escuro | +0,024 | +0,102 |
+| v0.17, pele | +0,103 | +0,132 |
+| v0.17, escuro | +0,025 | +0,072 |
+| **v0.18, pele** | +0,079 | **+0,090** |
+| **v0.18, escuro** | +0,028 | **+0,047** |
+| **v0.18, claro** | +0,024 | **+0,014** |
+
+Na v0.18 a diferença média entre miolo e borda interna é de cerca de +0,007.
+
+**Mudança, só no perfil 1:**
+- teto do peso do achatamento 0,5 → 0,22 (`kgflatcap`);
+- ganho de 4% só no miolo profundo (`kgcoredim`, a partir de body 0,5, depois da faixa da borda). É um ganho, então o miolo continua acompanhando o fundo.
+
+**Borda:**
+- 0–30 px igual (0,290 contra 0,291);
+- a faixa de 30–45 px escureceu um pouco sobre fundos escuros (−0,028 sobre pele), porque o teto agora é menor que o peso dela.
+
+**Contraste do texto branco no pior caso:** pele 9,1, escuro 2,9, claro 4,3.
+
+**Rollback:** `kgcorecap=80`, `kgflatcap=1` e `kgcoredim=0` dão saída bit a bit igual à v0.11.
+
+**Teste:** lib `SurfaceFlingerProp.v18.so` (seção 4; APK v16); confirme com `grep -c kgcoredim`.
+
+## 0l. Atualização (2026-10-16, sfhook v0.17): miolo dinâmico, sem branco fixo
+
+**Relato do usuário (v0.16):** contorno claro, borda escurecendo (bonita) e o miolo claro de novo, branco e sem acompanhar o papel de parede. Pedido: só o contorno deve ser fixo e iluminado; o resto, dinâmico. Reduzir o clareamento em uns 50%.
+
+**Medido no host** (luma do card menos a do papel de parede borrado; inclinação = quanto acompanha o fundo):
+
+| | Borda | Miolo |
+|---|---|---|
+| v0.11 / v0.16 | +0,14 / 81% | +0,20 / 40–46% |
+
+**Causa:** o achatamento de transmissão da v0.11 (`kgflat` 0,5 em direção a 0,40) tem peso pela rampa do miolo. A borda recebe pouco, o miolo recebe tudo, e por isso o miolo fica claro e quase fixo.
+
+**Correção:** o peso do achatamento é limitado a 0,5 (`OULG_KG_FCAP_DEFAULT`, propriedade `debug.oulg.sf.kgflatcap`).
+- Na faixa da borda o peso já fica abaixo de 0,5 até ~38 px, então ela não muda (média 0,04–0,28/255, máx 8 na ponta interna).
+- O miolo recebe metade do achatamento: +0,13 e 68% (sobre pele/jaqueta), no mesmo nível da borda.
+
+**Mantido:** o limite de 62 px do raio do miolo (v0.16) e todo o resto da v0.11.
+
+**Rollback exato:** `kgflatcap=1` e `kgcorecap=80` dão saída bit a bit igual à v0.11.
+
+**Contraste:** o do texto branco no pior caso, sobre o fundo escuro, cai de 3,5 para 2,9 no host. É a consequência de o miolo acompanhar o fundo claro.
+
+Prévia: `docs/img/lockscreen-v17-preview.jpg` (v0.11 e v0.17 alternados).
+
+**Teste:**
+1. O APK da v0.16 continua.
+2. Lib `SurfaceFlingerProp.v17.so` (seção 4); confirme com `grep -c kgflatcap`.
+3. Reinicie o SurfaceFlinger com o cache limpo.
+
+## 0k. Atualização (2026-10-16, sfhook v0.16): volta à estética da v0.11, miolo menos borrado
+
+**Decisão do usuário:** a referência visual é a estética da **lib v0.11** com a correção de primeiro quadro e flicker do **APK v0.12**.
+- A lib v0.12 nunca rodou no aparelho: o `oulg_live` não tem `v12.so`, e o print das 13:22 era lib v0.11 + APK v12.
+- As v0.13–v0.15 mudaram a estética e foram descartadas.
+
+**Restaurado:**
+- `sfhook/refract.h`, `oulg_sf.c`, `tools/field_check.c` e `tools/refract_check.c` saem de `aa6fd27` (v0.11): bisel em curva S, Fresnel de 1,42 rad, contorno, especular, transmissão, tom frio e vibração 1,25;
+- `GlassDrawable` e `BackgroundBlurBridge` saem de `aa6fd27`: hairline a meio ganho e véu da região. O app inteiro ficou idêntico ao de `431cf07` (diff vazio).
+
+**Preservado da v0.12:**
+- perfil 1 para toda linha no estado 1, inclusive em heads-up (correção do primeiro quadro);
+- logs `OPTICS` e `OPTICS_FINAL`;
+- pílula de excedentes;
+- ferramentas de host (`kg_preview.mjs`).
+
+**A única mudança visual:**
+- o raio do blur extra do miolo continua `80·smoothstep(0,25·bisel; 1,5·bisel; depth)`, mas agora limitado a **62 px** (`OULG_KG_CCAP_DEFAULT`, propriedade `debug.oulg.sf.kgcorecap`);
+- abaixo do limite, cada pixel amostra exatamente como na v0.11. Num canto de 108 px, o raio só passa de 62 px depois da faixa do bisel;
+- as cores do material são ponderadas pela rampa (`oulg_bw`), não por raio/núcleo, então limitar o raio não muda a cor do miolo;
+- as leituras ficam em 48, o que deixa o disco mais denso.
+
+**Validação no host**, com máscaras por região (borda 0–45 px, transição 45–68 px, miolo > 68 px), contra a v0.11 nos fundos pele/jaqueta, escuro e claro:
+
+| Região | Diferença contra v0.11 |
+|---|---|
+| borda | máx **0** em todos os fundos |
+| transição | máx 3–9/255 |
+| miolo | média 0,5–1,0/255, máx 3–4 |
+
+- Com `kgcorecap=80` a saída é bit a bit igual à v0.11 em todas as regiões (rollback).
+- `render_check`, perfil 1: estrutura do fundo visível no miolo 0,87 → 1,36 (mais fundo aparece), grão 0,51 → 0,40, custo igual.
+- Perfil 0 bit a bit igual à v0.11.
+- **Limite do host:** a entrada simulada do compositor já vem muito borrada, então 80, 62 e 48 px ficam quase iguais no render. A intensidade real só se vê no aparelho.
+- Prévia: `docs/img/lockscreen-v16-preview.jpg`. De cima para baixo: v0.11, v0.16 (62), 48 px, v0.15.
+
+**Teste:**
+1. Instale o APK v0.16, que é igual ao v12.
+2. Lib `SurfaceFlingerProp.v16.so` (seção 4; nome novo); confirme com `grep -c kgcorecap`.
+3. Reinicie o SurfaceFlinger com o cache limpo.
+
+Comparar o raio no aparelho (lido na compilação; reinicie o SurfaceFlinger com o cache limpo a cada troca):
+- `setprop debug.oulg.sf.kgcorecap 80`: v0.11 exata;
+- `setprop debug.oulg.sf.kgcorecap 48`: miolo ainda mais claro;
+- vazio: 62.
+
+## 0j. Atualização (2026-10-16, sfhook v0.15): miolo quente, "blur em vez de vidro"
+
+**Print da v0.14 no aparelho:**
+- gota dupla resolvida: um contorno único (0,52) e miolo liso (0,29–0,32);
+- miolo quente: na região do rosto, R−B fica em 0,10 na mediana e 0,27 no p95 (borrão âmbar);
+- a faixa de cima puxa o azul da camisa (croma 0,18).
+
+**Origem do tom quente:**
+- o disco de 80 px espalha pele, couro e mãos em manchas largas;
+- a vibração (1,12) e o ganho de transmissão da v0.14 (até 1,8×) aumentavam esse croma. No host, o croma do miolo subiu 58% da v0.13 para a v0.14.
+
+**"Blur em vez de vidro":** o miolo era só fundo filtrado; faltava o reflexo da própria face do vidro.
+
+**v0.15, só perfil 1 (a borda não mudou):**
+- vibração 1,0;
+- ganho de transmissão limitado a 1,35×;
+- neutralização do croma quente (`sf.kgwarm` 0,6): onde R > B, o croma cai 60%; tons frios mantêm o croma;
+- tom frio 0,5 → 0,7 (neutro em luma);
+- reflexo de superfície (`sf.kgsheen` 0,05): ambiente frio refletido pela face do vidro, 5% em cima caindo a 0,5% embaixo, mais fraco sobre fundo claro.
+
+**Host** (fundo recortado do print do aparelho, logo abaixo do card):
+
+| | v0.14 | v0.15 |
+|---|---|---|
+| R−B p99 | 0,12 | 0,02 |
+| croma p95 | 0,19 | 0,16 |
+
+- Pop-up bit a bit igual; central e app intocados.
+- Prévia: `docs/img/lockscreen-v15-preview.jpg` (em cima v0.14, embaixo v0.15).
+
+**Teste:** lib `SurfaceFlingerProp.v15.so` (seção 4; o APK da v0.14 continua); confirme com `grep -c kgsheen`; reinicie o SurfaceFlinger com o cache limpo; mande um print na mesma posição.
+
+## 0i. Atualização (2026-10-16, sfhook v0.14 + app): "duas gotas" e miolo leitoso
+
+**Medido no print da v0.13**, na vertical do card: contorno 0,59, vale 0,33, **segundo anel 0,49 a ~19 px para dentro**, miolo 0,32–0,34. Embaixo, anel interno 0,42 e contorno 0,41.
+
+**Contribuições de borda que competiam** num card da tela de bloqueio:
+1. Fresnel do compositor (~8 px externos).
+2. Contorno do compositor (gaussiana de 1,6 px).
+3. **Crescente especular do compositor a ~20 px para dentro**, mais um oposto embaixo: era o segundo anel.
+4. **Hairline do app** (`LiquidGlassShader`, meio ganho): três linhas com franja cromática centradas a ~6 px para dentro, ou seja, um segundo contorno.
+5. Faixa de refração mostrando o conteúdo escuro comprimido entre os anéis (o vale).
+
+**Miolo leitoso:**
+- o véu branco de 8% da região (`semalpha` sobre o tom Samsung);
+- o clareamento por luz aditiva, que acinzenta.
+
+**Correção:**
+- **Compositor (só perfil 1):** um único termo de borda (Fresnel e contorno somados num só peso, um pouco mais forte do lado da luz) e um brilho que decai da borda (5 px) no lado iluminado. Sem anel interno.
+- **Transmissão por ganho** (0,6× a 1,8×, preserva o croma) em direção a 0,48. Só o que o ganho não alcança (quase preto) recebe luz espalhada.
+- **App, só nos cards em que o compositor ilumina o perfil 1:**
+  - não desenha o shader de borda (`GlassDrawable`);
+  - a região vai sem cor (`BackgroundBlurBridge`, quando o perfil 1 é enviado e `sf.optics ≥ 9`).
+
+**Host:** o perfil vertical, que na v0.13 tinha contorno, vale e anel, agora é um contorno único decaindo de forma monotônica (0,81 → 0,44 → 0,37 → miolo 0,32–0,44). Contraste do texto branco no pior caso 2,9 → 3,1. Prévia: `docs/img/lockscreen-v14-preview.jpg` (v0.13 e v0.14 alternados).
+
+**Pop-up:** perfil 0 bit a bit igual; o shader de borda e o véu continuam (`compositorLit` só vale para o perfil 1). **Central:** intocada.
+
+**Teste:**
+1. Instale o APK novo.
+2. Troque a lib com o nome `SurfaceFlingerProp.v14.so` (seção 4). **Nunca reuse um nome montado.**
+3. Confirme com `grep -c "exp(-px / 5.0)"`.
+4. Reinicie o SurfaceFlinger com o cache limpo.
+5. Mande um print na mesma posição.
+
+## 0h. Atualização (2026-10-16, sfhook v0.13): "fumê" e "almofada" na tela de bloqueio
+
+**Confirmado no aparelho (v0.12):**
+- a notificação nasce no estado final (`OPTICS_FINAL ... frames=1 firstFrame=true`, com `headsUp=true` no estado 1);
+- no estado 2 o card fica sem marca (`tag=-1`), como previsto.
+
+**Diagnóstico pelo print da v0.12.** Perfil de luma na vertical do card, medido no print:
+
+| Posição | Luma |
+|---|---|
+| contorno | 0,51 |
+| vale a ~28 px para dentro | 0,17 |
+| platô uniforme | 0,29 |
+| vale | 0,24 |
+| contorno | 0,40 |
+
+- O olho lê esse sombreado como relevo: borda clara, sulco escuro e miolo plano elevado é a almofada.
+- **Causas no código:**
+  - o blur do miolo só chegava ao raio total a 0,85·r. A ~28 px ele era 14 px, e o fundo escuro passava quase cru;
+  - o achatamento de tom tinha peso pela profundidade (0,35 na borda) e escurecia as altas luzes tanto quanto clareava as sombras. Resultado: miolo uniforme e escurecido (fumê) ao lado de uma borda com o fundo escuro original;
+  - o domo da v0.12 espalhava a lente pelo raio inteiro, e o card todo virava uma lupa (inflado).
+
+**Correção (só perfil 1):**
+- lente de borda numa faixa de `r/2` (54 px), deslocamento `A·b·t³`, `A = min(0,5·k; 0,25)`. Ampliação 2,5× na borda (igual à do pop-up), caindo de forma monotônica, sem pico interno e C2 no fim da faixa;
+- blur do miolo `80·smoothstep(0,02; 0,38; depth/r)`: raio total a 41 px, logo atrás da lente;
+- transmissão uniforme no card inteiro: sombras sobem 55% do caminho até 0,44 (luz espalhada); altas luzes descem metade disso (ganho);
+- vibração 1,25 → 1,12;
+- Fresnel `tilt·t²`, restrito aos pixels externos; especular estreito em `t = 0,62`.
+
+**Host** (`kg_preview`, mesmo recorte):
+
+| | v0.12 | v0.13 |
+|---|---|---|
+| miolo médio | 0,43 | 0,46 |
+| p05 | 0,32 | 0,35 |
+| p95 | 0,54 | 0,59 |
+| contraste do texto branco no pior caso | 3,5 | 2,9 |
+
+- O contraste caiu no host. No aparelho os cards saem ~0,14 de luma mais escuros que no modelo, então o contraste real deve ficar acima disso. Confirmar com print.
+- Prévia: `docs/img/lockscreen-v13-preview.jpg`, v0.12 e v0.13 alternados, sobre a jaqueta e sobre a grade.
+
+**Pop-up:** bit a bit igual (`render_check` max 0). **Central:** intocada. **App:** sem mudança nesta rodada.
+
+**Teste:** lib `SurfaceFlingerProp.v13.so` (seção 4); confirme com `grep -c 0.0128`; reinicie o SurfaceFlinger com o cache limpo. Mande um print na mesma posição do anterior.
+
+## 0g. Atualização (2026-10-16, sfhook v0.12): "lombada" e chegada tardia na tela de bloqueio
+
+Estado de partida confirmado pelo usuário: `VS_OK=24 FS_OK=36 FAIL=0`, `sf.optics=9`. Nada abaixo foi validado no aparelho.
+
+### Lombada: causa e correção (só perfil 1)
+
+- **Causa, no código:** o perfil 1 deslocava a amostra por uma curva em S, `G(t) = t²(3−2t)`, só numa faixa de `0,42·r` (45 px num card de meia altura 108). O Jacobiano dessa curva é mínimo no meio da faixa, então a ampliação subia de 1,05× na borda a **2,46× a 20–25 px para dentro** e voltava a 1,00× a 45 px. Daí para dentro o miolo era plano, com o blur subindo de 11 a 68 px e o achatamento de tom aplicado só lá.
+  - Resultado: anel de ampliação máxima (o "ombro"), platô plano e um degrau de luminância entre a borda intocada e o miolo achatado.
+- **Correção: o perfil 1 virou um domo.**
+  - A lente cobre o raio inteiro do canto (num card-pílula, até a linha central): `t = 1 − depth/r`, deslocamento `A·r·t²`, `A = min(0,6·k; 0,35)`.
+  - A ampliação cai de forma monotônica, de 1,91× na borda a 1,00× no centro, sem pico interno e sem dobra (`field_check`).
+  - Blur do miolo `80·smoothstep(0,04; 0,85; depth/r)`: mesma coordenada da refração.
+  - Achatamento de tom com peso de 0,35 na borda a 1 no miolo. Antes ia de 0 a 1, e esse era o degrau de luminância.
+  - Inclinação de Fresnel `kgtilt·t` (a inclinação de um perfil `t²`), especular como gaussiana em `t = 0,74`.
+- **Pop-up (perfil 0):** bit a bit igual (`render_check` max 0). **Central (perfil 2):** código intocado.
+- Prévia: `docs/img/lockscreen-v12-preview.jpg`, v0.11 em cima e v0.12 embaixo, sobre a jaqueta e sobre uma grade.
+
+### Chegada tardia: causa provável e correção
+
+- **Causa provável (código, não trace):** `Eligibility.keyguardOptics` negava o perfil 1 a qualquer linha em estado heads-up.
+  - Uma notificação que chega na tela de bloqueio fica em heads-up enquanto entra na pilha. Nesse tempo ela recebia o perfil 0 (material do pop-up) e só trocava para o perfil 1 quando o heads-up terminava.
+  - O caminho (drawable) não muda; só o perfil da marca. Isso bate com "chega de um jeito e assenta depois".
+- **Correção:** no estado 1, toda linha recebe o perfil 1, inclusive em heads-up. No estado 2 e sobre apps (estado 0), o heads-up mantém o perfil 0. Pop-up sobre apps intocado.
+- **Instrumentação** (sempre ligada, só nos estados 1 e 2, no máximo 60 linhas por card, reinicia a cada troca de estado):
+  - `OPTICS`: uma linha por desenho em que o estado muda, com `dt` (ms desde a criação do card), `sinceBar`, `frame`, caminho, `tag`, `headsUp`, `pinned`, `alpha` (1/partial/0), `scaled`, `fallback`, `stacked` e `final`;
+  - `OPTICS_FINAL`: primeiro desenho no estado final (perfil 1, caminho drawable, opaco, sem escala), com `firstFrame=true|false`.
+- Se o atraso continuar, o trace diz qual campo muda em ~2 s: `tag` (perfil), `alpha=partial` (fade de entrada mistura o fundo nítido na região), `scaled` (marca perdida no shader) ou `fallback`.
+
+### Teste no aparelho
+
+1. Instalar o APK; trocar a lib ao vivo (seção 4) com `SurfaceFlingerProp.v12.so`; confirmar com `grep -c "smoothstep(0.04"`; reiniciar o SurfaceFlinger com o cache limpo.
+2. Na tela de bloqueio, com a tela ligada, mandar uma notificação para si mesmo e depois:
+   `su -c 'logcat -d | grep -E "OPTICS|BAR_STATE|HEADSUP" > /sdcard/Download/optics.txt'`
+3. Prints: a tela de bloqueio parada, e um vídeo da chegada de uma notificação.
+
 ## 0f. Atualização (2026-10-16, sfhook v0.11): material da tela de bloqueio e pílula de excedentes
 
 Nada disto foi validado no aparelho. A validação foi no host (render WebGL do shader real sobre recortes das capturas do usuário).

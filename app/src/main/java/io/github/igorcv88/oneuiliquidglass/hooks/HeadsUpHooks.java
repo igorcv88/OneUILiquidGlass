@@ -57,6 +57,8 @@ public final class HeadsUpHooks {
     private int shadeOpens;
     /** SystemUI's StatusBarState (0 shade, 1 keyguard, 2 shade over keyguard); null until first set. */
     private Integer barState;
+    /** When barState last changed (uptime ms), for the optics timeline. */
+    private long barStateAt;
     /** Set once HybridBackdrop could not be built; heads-up rows then keep the plain compositor blur. */
     private boolean hybridFailed;
     /** enabled == null: preferences unreadable, resolve through the module's ConfigProvider. */
@@ -416,7 +418,10 @@ public final class HeadsUpHooks {
                 Object state = Reflect.read(p.thisObject, "mState");
                 if (!(state instanceof Integer) || state.equals(barState)) return;
                 barState = (Integer) state;
+                barStateAt = android.os.SystemClock.uptimeMillis();
                 Probe.log("BAR_STATE", "state=" + barState);
+                // Every card's optics timeline starts over on a state change (OPTICS lines).
+                for (State s : states.values()) { s.opticsLines = 0; s.finalSeen = false; s.lastOptics = null; }
                 if (barState == Eligibility.BAR_KEYGUARD) clampNotificationScrims();
                 if (Probe.trace && barState == Eligibility.BAR_KEYGUARD) {
                     // The overflow pill: every shelf, icon container or footer in the window once settled.
@@ -584,6 +589,53 @@ public final class HeadsUpHooks {
         String lastTrace;
         /** The background of the notification shelf, not of a row: the lockscreen's overflow pill. */
         final boolean pill;
+        /** When this card's state was created (uptime ms): the arrival, for the optics timeline. */
+        final long born = android.os.SystemClock.uptimeMillis();
+        /** Draws of this card so far, glass or native (frame 1 is the first one on screen). */
+        int frames;
+        String lastOptics;
+        boolean finalSeen;
+        int opticsLines;
+        /**
+         * The optics timeline of a card on the lockscreen (bar state 1 or 2), one OPTICS line per draw
+         * whose state differs from the previous one: what the compositor gets (path, tag profile,
+         * region fade, ancestor scale) and the row state that decides it (heads-up, pinned, fallback
+         * reason). OPTICS_FINAL marks the first draw in the final state (the lockscreen profile on
+         * the drawable path, opaque and unscaled) with the time since the card's state was created;
+         * firstFrame=true means it was born final. At most 60 lines per card.
+         */
+        void opticsTrace() {
+            if (barState == null || (barState != Eligibility.BAR_KEYGUARD && barState != Eligibility.BAR_SHADE_LOCKED)) return;
+            View v = background.get(), r = row.get();
+            if (v == null || opticsLines >= 60) return;
+            float a = 1f, sx = 1f, sy = 1f;
+            for (Object p = v; p instanceof View; p = ((View) p).getParent()) {
+                View pv = (View) p; a *= pv.getAlpha(); sx *= pv.getScaleX(); sy *= pv.getScaleY();
+            }
+            int tag = compBridge != null ? compBridge.tagSent : semBridge != null ? semBridge.tagSent : -1;
+            String path = compBridge != null ? "drawable" : semBridge != null ? "samsung" : glass != null ? String.valueOf(glassKind) : "native";
+            boolean scaled = Math.abs(sx - 1f) > 0.001f || Math.abs(sy - 1f) > 0.001f;
+            int want = pill ? -1 : SemBlurBridge.tagProfile(true, true);
+            boolean fin = glass != null && compBridge != null && tag == want && a >= 0.999f && !scaled;
+            Boolean hu = r == null ? null : Reflect.bool(r, "isHeadsUpState", "mIsHeadsUp");
+            Boolean pinned = r == null ? null : Reflect.bool(r, "isPinned", "mIsPinned");
+            String sig = "path=" + path + " tag=" + tag + " headsUp=" + hu + " pinned=" + pinned
+                    + " alpha=" + (a >= 0.999f ? "1" : a <= 0.001f ? "0" : "partial") + " scaled=" + scaled
+                    + " fallback=" + lastFallback + " stacked=" + stacked + " final=" + fin;
+            long dt = android.os.SystemClock.uptimeMillis() - born;
+            String id = Integer.toHexString(System.identityHashCode(v));
+            if (!sig.equals(lastOptics)) {
+                lastOptics = sig; opticsLines++;
+                Probe.log("OPTICS", "viewId=" + id + " dt=" + dt + " sinceBar=" + (android.os.SystemClock.uptimeMillis() - barStateAt)
+                        + " frame=" + frames + " barState=" + barState + (pill ? " pill=true" : "") + " " + sig
+                        + (a < 0.999f ? " a=" + String.format(java.util.Locale.ROOT, "%.2f", a) : "")
+                        + (scaled ? " s=" + String.format(java.util.Locale.ROOT, "%.3fx%.3f", sx, sy) : ""));
+            }
+            if (fin && !finalSeen) {
+                finalSeen = true;
+                Probe.log("OPTICS_FINAL", "viewId=" + id + " dt=" + dt + " sinceBar=" + (android.os.SystemClock.uptimeMillis() - barStateAt) + " frames=" + frames + " firstFrame=" + (frames <= 1) + (pill ? " pill=true" : ""));
+            }
+        }
         boolean pillReported;
         State(View background, View row) {
             this.background = new WeakReference<>(background); this.row = new WeakReference<>(row);
@@ -1016,7 +1068,10 @@ public final class HeadsUpHooks {
                 View row = findHost(v); if (row == null) return;
                 State s = state(v, row);
                 Object current = backgroundField.get(v); if (!(current instanceof Drawable)) return;
-                GlassDrawable glass = s.material((Drawable) current); if (glass == null) return;
+                s.frames++;
+                GlassDrawable glass = s.material((Drawable) current);
+                s.opticsTrace();
+                if (glass == null) return;
                 if (s.scratch == null) s.scratch = new android.graphics.RenderNode("oulg-native-bounds");
                 Canvas scratch = s.scratch.beginRecording(Math.max(1, v.getWidth()), Math.max(1, v.getHeight()));
                 p.setObjectExtra("oulgCanvas", p.args[0]);

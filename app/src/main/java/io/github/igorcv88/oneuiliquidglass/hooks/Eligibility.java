@@ -35,13 +35,17 @@ public final class Eligibility {
         return !sharedBackdrop(shadeExpanded, keyguard);
     }
     /**
-     * Whether a lens card takes the lockscreen optics profile: the keyguard or the shade over it, by
-     * the status bar state like {@link #lens}, and never a heads-up, which keeps its established
-     * material wherever it shows.
+     * Whether a lens card takes the lockscreen optics profile, by the status bar state like
+     * {@link #lens}. On the idle lockscreen every card does, a heads-up included: a notification
+     * arriving there is still in its heads-up state while it enters the stack, and taking the
+     * heads-up material for that time made it arrive as one material and switch to the lockscreen
+     * one when the state ended. In the shade over the lockscreen a heads-up keeps the established
+     * material, as it does over apps (bar state 0: never this profile).
      */
     public static boolean keyguardOptics(Integer barState, Boolean headsUp) {
-        if (Boolean.TRUE.equals(headsUp) || barState == null) return false;
-        return barState == BAR_KEYGUARD || barState == BAR_SHADE_LOCKED;
+        if (barState == null) return false;
+        if (barState == BAR_KEYGUARD) return true;
+        return barState == BAR_SHADE_LOCKED && !Boolean.TRUE.equals(headsUp);
     }
     /** Diagnostic label only; unknown firmware state does not block rendering. */
     public static String surface(Boolean headsUp, Boolean keyguard, Boolean shadeExpanded) {

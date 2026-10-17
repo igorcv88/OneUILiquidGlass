@@ -15,7 +15,9 @@
 #include <math.h>
 #include <stdio.h>
 
-static const double CORES[2] = {48.0, 56.0}, RAMPS[2] = {1.5, 1.5};  // OULG_PROFILES_DEFAULT
+// OULG_PROFILES_DEFAULT; profile 1 also caps its body radius (v0.16).
+static const double CORES[2] = {48.0, 80.0}, RAMPS[2] = {1.5, 1.5}, CCAP1 = 62.0;
+static double brMax(int pf) { return pf ? fmin(CORES[1], CCAP1) : CORES[0]; }
 
 static double clampd(double v, double lo, double hi) { return v < lo ? lo : v > hi ? hi : v; }
 static double smoothstepd(double e0, double e1, double x) { double t = clampd((x - e0) / (e1 - e0), 0, 1); return t * t * (3 - 2 * t); }
@@ -31,6 +33,7 @@ static void field(double qx, double qy, double hx, double hy, double r, double k
     double bevel = clampd(r * 0.42, 16, 56);
     double depth = r - l - fmin(fmax(wx, wy), 0);
     *br = CORES[pf] * smoothstepd(0.25 * bevel, RAMPS[pf] * bevel, depth);
+    if (pf) *br = fmin(*br, CCAP1);
     s[0] = s[1] = 0;
     if (l <= 0 || depth <= 0 || depth >= bevel) return;
     double t = 1 - depth / bevel;
@@ -112,7 +115,7 @@ int main(void) {
                     double nx = vx / l * signd(qx), ny = vy / l * signd(qy);
                     CHECK(s[0] * nx + s[1] * ny < 0, "shift not inward at %.2f,%.2f", qx, qy);
                 }
-                CHECK(br >= 0 && br <= CORES[pf] + 1e-9, "br range");
+                CHECK(br >= 0 && br <= brMax(pf) + 1e-9, "br range");
                 // Jacobian away from the kinks of the field: the band edges and the inner-rect lines.
                 double t = 1 - depth / bevel;
                 if (depth < 0.02 || fabs(depth - bevel) < 0.02 || fabs(wx) < 0.02 || fabs(wy) < 0.02) continue;
@@ -155,7 +158,7 @@ int main(void) {
                 double sv[2], b; field(0, hy - dep, hx, hy, r, kp, sv, &b);
                 CHECK(b >= last - 1e-12, "br not monotone"); last = b;
                 if (dep < 0.25 * bevel) CHECK(b == 0, "br at rim");
-                if (dep >= RAMPS[pf] * bevel && dep <= hy - 1) CHECK(fabs(b - CORES[pf]) < 1e-9, "br at body");
+                if (dep >= RAMPS[pf] * bevel && dep <= hy - 1) CHECK(fabs(b - brMax(pf)) < 1e-9, "br at body");
             }
         }
     }
