@@ -810,6 +810,34 @@ A layout-only refinement, independent of the glass: in expanded notifications th
   - **Bug 2: the measured gap was negative.** The header view is 180 px tall (it spans the icon), so its bottom sits below the title. `HEADER_GAP_MEASURE` now measures from the bottom of `notification_top_line`.
 - **Diagnostics.** With `debug.oulg.trace=1`, each newly resolved expanded child logs `HEADER_GAP_TREE`, one line per view with class, id, visibility, top, height, top margin and top padding. Use it when the outcome is `structure`, `noHeader` or `noTitle`. Each outcome change also logs `HEADER_GAP_MEASURE` after the next layout: the bottom of the header and the top of the title in window coordinates, `gapPx` between them, and the title's line count.
 
+## LSPosed-only mode (2026-10-24)
+
+**Context.** The user's device now runs without the KernelSU module and without any metamodule: integrity and Wallet are kept, and `/system` stays untouched. With the APK alone the cards flickered, changed colour at random, and the content behind a pop-up trailed motion (the clock on the launcher lagged a home-screen swipe, then caught up).
+
+**What the APK did without the module** (`sfrefract` stays 0, read from the code):
+
+| Surface | Path | Defect it can produce |
+|---|---|---|
+| Pop-up over an app or the launcher | `HybridBackdrop`: Samsung blur on the view for the body, a 60 Hz capture refracted in the rim band | The rim shows a capture one or more frames old: the trailing clock. Secure layers back capture off for 3 s and the card drops to the plain blur, a colour jump. The Samsung region is applied after the traversal that requested it, so the first frame has no blur |
+| Lockscreen | `WallpaperBackdrop`, or a 5 Hz capture over a live wallpaper (the user's case per the 2026-10-08 log) | Lag and source switches; `kgblurpath` was gated on `sfrefract`, so the drawable path that fixed the lockscreen never applied |
+| Shade, unlocked | Drawable path (`shadeblurpath`, not gated) | None new: the approved configuration |
+| Heads-up row in the open shade | Samsung path (heads-up excluded from the drawable path) | When the heads-up state ends, the card swaps to the drawable path: release, new bridge, visible material change |
+
+These causes are inferred from the code and from earlier device findings on the same paths. They have not been traced on the device in this configuration.
+
+**Change.** `Tuning.live` is true when `sfrefract` is 0, `debug.oulg.liveblur` is 1 (default) and `backdrop` is `auto`. Then:
+- `drawablePath()` is true on every surface. Every card, the pop-up included, draws its `BackgroundBlurDrawable` with the glass, so the region takes the card's bounds and fade in the frame that draws it.
+- `sampledRow()` is false. No hybrid rim, no wallpaper refraction, no per-frame capture. `ShadeTone` still takes its one capture per shade opening.
+- All cards share one radius, `debug.oulg.liveradius` (-1 = `semradius`, 180). A pop-up that becomes a shade card, or a lockscreen card under the pulled-down shade, does not jump. `kgblurradius`, when set, still applies to lockscreen cards (`Tuning.livePx`).
+- The idle-lockscreen panel-blur ramps (radius ≤ 4) are dropped as with `sfrefract`, the configuration confirmed on the device.
+- Nothing is tagged (`tagProfile` returns -1 without `sfrefract`), and the edge shader keeps its own lighting (`sf.optics` is unset).
+
+The pre-change `auto` stays available as `debug.oulg.backdrop=hybrid`. With the KernelSU module (`sfrefract=1`) nothing changes.
+
+**Not covered:** live refraction. It needs the content of another window in the frame the card is drawn, which only the compositor has. `docs/sf-sem-overlay.md` analyses ways to put the shader rewrite into SurfaceFlinger without OverlayFS.
+
+**Validation:** compiled with `javac` against `android.jar` (SDK 36) and the Xposed API; 59 JUnit tests pass, including `LiveModeTest`. Gradle lint and the APK build did not run in this session (Maven Central refused the requests); the release workflow runs both. Not tested on the device.
+
 ## Future work
 
 - **Separate blur for the notification center and the control center.** Theme Park and HomeUp set a single blur amount for both panels. The user runs 12 %: lower leaves the control center unreadable, higher over-blurs the notification list. A split needs its own investigation: find where SystemUI applies the panel blur, whether the two panels are separate blur regions or one window, and whether the module can own one of them.

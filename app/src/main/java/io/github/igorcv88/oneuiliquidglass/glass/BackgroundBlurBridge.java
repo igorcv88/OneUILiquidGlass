@@ -64,7 +64,10 @@ public final class BackgroundBlurBridge implements Backdrop {
     }
     @Override public String name() { return "compositor"; }
     public boolean lens() { return lens; }
-    /** Lockscreen card (lens mode is only used there); a heads-up on top keeps the heads-up profile. */
+    /**
+     * Lockscreen card (lens mode is used there, in the unlocked shade, and on every surface in
+     * LSPosed-only mode); a heads-up on top keeps the heads-up profile.
+     */
     private boolean keyguard = true;
     /**
      * The lockscreen's overflow pill: a plain blur of debug.oulg.pillblur px, never tagged (no lens,
@@ -89,7 +92,8 @@ public final class BackgroundBlurBridge implements Backdrop {
         if (lensMode) {
             Tuning t = Tuning.get();
             int lensPx = t.kgBlurRadius >= 0 ? t.kgBlurRadius : t.semRadiusLens;
-            px = lens && lensPx >= 0 ? lensPx : t.semRadius >= 0 ? t.semRadius : GlassSpec.SAMSUNG_RADIUS;
+            // LSPosed-only: no lens to leave backdrop detail for, so one full blur everywhere.
+            px = t.live ? t.livePx(keyguard) : lens && lensPx >= 0 ? lensPx : t.semRadius >= 0 ? t.semRadius : GlassSpec.SAMSUNG_RADIUS;
             // The same veil as the Samsung path (semalpha over the Samsung tone).
             if (t.semAlpha >= 0) tint = (tint & 0x00ffffff) | (t.semAlpha << 24);
             if (pill) px = t.pillBlur;

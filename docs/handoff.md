@@ -2,6 +2,40 @@
 
 Documento para continuar o trabalho em outra conversa. Leia inteiro antes de mexer em qualquer coisa. O histórico técnico detalhado está em `docs/architecture.md`; as seções de 2026-10-16 cobrem a central de notificações.
 
+## 0p. Atualização (2026-10-24): modo só-LSPosed, sem módulo KernelSU
+
+**Ambiente novo do usuário:**
+- aparelho restaurado de fábrica, DZIF, root RMG por late-load com `ksud` managerless pelo Termux;
+- sem metamódulo, sem OverlayFS, sem DFReroot;
+- integridade e Wallet funcionando.
+
+**Pedido:** estabilidade (sem pisca, sem troca de cor, sem atraso atrás do pop-up) só com o APK; depois, se der, a estética do SF sem OverlayFS.
+
+**Diagnóstico pelo código** (não medido no aparelho nesta configuração). Sem o módulo, `sfrefract` fica 0, e então:
+- o pop-up usava o `HybridBackdrop`: a borda era uma captura de tela a 60 Hz, sempre atrasada. Esse é o relógio que fica para trás e depois acompanha;
+- a tela de bloqueio usava o papel de parede ou uma captura a 5 Hz (papel de parede animado), porque o caminho drawable (`kgblurpath`) só valia com `sfrefract`;
+- um heads-up na central trocava do caminho Samsung para o drawable quando o estado heads-up acabava: a cor mudava de repente.
+
+**Correção (app):** com `sfrefract=0`, `liveblur=1` e `backdrop=auto`, que são os padrões:
+- todo card, inclusive o pop-up, usa o caminho drawable (`BackgroundBlurDrawable` desenhado com o vidro);
+- nenhuma captura por quadro (a central mantém a única captura por abertura do `ShadeTone`);
+- um raio só para todas as superfícies (`debug.oulg.liveradius`, padrão = `semradius`, 180);
+- a iluminação de borda é a do app. **Não há lente.** Refração ao vivo exige o compositor.
+
+**Voltar ao comportamento anterior:** `setprop debug.oulg.backdrop hybrid` ou `setprop debug.oulg.liveblur 0`. Com o módulo KernelSU (`sfrefract=1`) nada mudou.
+
+**Validado:** compilação com `javac` e 59 testes JUnit (inclui `LiveModeTest`). Lint e APK pelo Gradle não rodaram nesta sessão (Maven Central recusou as requisições); o workflow de release roda os dois. **Não testado no aparelho.**
+
+**Teste no aparelho:**
+1. Instale o APK e reinicie o SystemUI. Não defina nenhuma `debug.oulg.*`.
+2. Confirme `live=true` na linha `TUNING`: `su -c 'logcat -d -s OULG | grep -m1 TUNING'`.
+3. Pop-up sobre a tela inicial, arrastando as páginas: o que está atrás deve acompanhar sem atraso.
+4. Tela de bloqueio, central e um heads-up que vira card da central: sem pisca e sem troca de cor.
+5. Se o blur ficar forte demais no pop-up: `setprop debug.oulg.liveradius 90` (vale ao vivo).
+6. Se algo piscar: `setprop debug.oulg.trace 1` e mande `logcat -d -s OULG` com `ROW_FRAME` e `DECISION`.
+
+**SF sem OverlayFS:** análise em `docs/sf-sem-overlay.md`. A rota recomendada é a injeção por ptrace num SF reiniciado depois do late-load. Ela não monta nada e não toca em `/system` nem no `system_server`, mas tem três checagens no aparelho antes de qualquer código: ptrace pelo domínio do root, rótulo SELinux da lib e custo do reinício do userspace.
+
 ## 0o. Atualização (2026-10-16, sfhook v0.20 + app): contorno duplo, lente do pop-up, bloom
 
 **Contorno duplo na tela de bloqueio (borda inferior, fundo azul).**
