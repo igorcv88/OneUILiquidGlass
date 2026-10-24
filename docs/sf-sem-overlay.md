@@ -1,7 +1,9 @@
 # Alterar o SurfaceFlinger sem OverlayFS: rotas e riscos
 
-Data: 2026-10-24. Documento de análise. Nada aqui foi implementado ou testado no
-aparelho.
+Data: 2026-10-24. **Nota de pesquisa, não recomendação.** Nada aqui foi implementado ou testado no
+aparelho, e nada disto faz parte do modo só-LSPosed. Para um aparelho cuja prioridade é Play
+Integrity e Wallet, toda rota abaixo que coloca código no compositor é **risco alto, viabilidade
+indeterminada** até haver evidência no aparelho e uma decisão própria do dono.
 
 ## 0. Ponto de partida
 
@@ -27,13 +29,13 @@ O módulo atual chega lá por um caminho: copia `/system/bin/surfaceflinger`, tr
 
 | Rota | Mexe em `/system` | Montagem | Código no SF | Persiste no reboot | Viabilidade |
 | --- | --- | --- | --- | --- | --- |
-| A. Injeção por ptrace no SF reiniciado | não | não | sim (lib em `/data`) | não; refeito a cada late-load | alta, com 3 checagens no aparelho |
+| A. Injeção por ptrace no SF reiniciado | não | não | sim (lib em `/data`) | não; refeito a cada late-load | indeterminada; depende de 3 checagens no aparelho |
 | B. Bind mount de um arquivo só | não (sobrepõe) | sim | sim | não | tecnicamente simples; pior em detecção que A |
 | C. GLES layers (`debug.gles.layers`) | não | não | sim | – | não funciona em build `user` sem `ro.debuggable=1`, que quebra a integridade |
 | D. Cache de shaders do SF pré-preenchido | não | não | não (só o GLSL muda) | **sim** | pesquisa; depende do formato do cache da Samsung |
 | E. Injeção no SF já rodando, sem reiniciar | não | não | sim | não | baixa: os programas já compilados não passam de novo por `glShaderSource` |
 
-### A. Injeção por ptrace num SurfaceFlinger reiniciado (recomendada)
+### A. Injeção por ptrace num SurfaceFlinger reiniciado (a menos invasiva das rotas nativas, não testada)
 
 **Fluxo, depois do late-load, comandado do Termux:**
 1. Apagar `skia_shaders` e `egl_shaders` em `/data/misc/surfaceflinger`, como o `post-fs-data.sh` atual faz.
@@ -53,8 +55,7 @@ O módulo atual chega lá por um caminho: copia `/system/bin/surfaceflinger`, tr
 - Nada é montado e nada em `/system` muda. O `system_server` não é tocado.
 - O SF mapeia uma lib de `/data`. Isso só aparece em `/proc/<pid_do_SF>/maps`, que um app não lê.
 - O `TracerPid` só fica diferente de 0 durante a injeção (milissegundos).
-- O Play Integrity (DroidGuard no processo do GMS) e a Wallet não têm acesso ao processo do SF. A atestação de chave depende do bootloader e do TEE, não do SF.
-- Isso é inferência sobre o que esses verificadores conseguem ler, não medição.
+- **Hipótese, não fato:** o DroidGuard (no processo do GMS) e a Wallet provavelmente não leem a memória do SF. Não foi medido o que esses verificadores observam: podem existir sinais indiretos (estado SELinux, propriedades, reinícios do userspace, comportamento do compositor). Play Integrity, certificação da Play Store e elegibilidade da Wallet são três verificações distintas; nenhuma delas foi medida com esta rota.
 
 **Segurança contra falha:**
 - Sem persistência no boot: um reboot sempre volta ao SF original.
@@ -108,12 +109,9 @@ Os programas que o Skia já compilou ou carregou do cache, incluindo o `FillRRec
 
 ## 2. Recomendação
 
-1. **Agora:** o modo só-LSPosed (nesta mesma rodada) resolve a estabilidade: pisca, atraso atrás do pop-up e troca de material. Não precisa de nada além do APK.
-2. **Depois, se a estética do perfil 1 e da lente for indispensável:** a rota A, nesta ordem:
-   1. as três checagens de §1.A, que são comandos manuais e não instalam nada;
-   2. um injetor mínimo que só carrega a lib atual em modo dump (`debug.oulg.sf.norewrite=1`) e confirma `LOADED` e o dump;
-   3. só então a reescrita.
-3. **A rota D** só depois da A funcionar, porque precisa do dump do DZIF.
+1. **Agora:** só o modo só-LSPosed. Nenhuma rota deste documento: nada de ptrace, reinício do SurfaceFlinger, limpeza do cache de shaders, regra SELinux ou módulo novo.
+2. **A estética que falta** (lente, blur em camadas) primeiro como material procedural no AGSL do próprio SystemUI, sobre o blur ao vivo do compositor. Isso não acrescenta nenhuma superfície de detecção.
+3. **Só se o dono decidir voltar a tocar no compositor**, e com Play Integrity e Wallet medidos antes e depois: as três checagens de §1.A (leitura, sem instalar nada), um injetor que só faz o dump e, por último, a reescrita. A rota D depende da A.
 
 ## 3. Riscos que valem para qualquer rota
 

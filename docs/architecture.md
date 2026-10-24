@@ -834,9 +834,15 @@ These causes are inferred from the code and from earlier device findings on the 
 
 The pre-change `auto` stays available as `debug.oulg.backdrop=hybrid`. With the KernelSU module (`sfrefract=1`) nothing changes.
 
-**Not covered:** live refraction. It needs the content of another window in the frame the card is drawn, which only the compositor has. `docs/sf-sem-overlay.md` analyses ways to put the shader rewrite into SurfaceFlinger without OverlayFS.
+**Fallback.** The drawable path had never run on the pop-up. If `BackgroundBlurBridge.create` throws, the card keeps the Samsung blur for its lifetime (never per frame) and `BLUR_DRAWABLE_FALLBACK` is logged. A missing factory or setter (`ReflectiveOperationException`) switches the whole process to the Samsung path. The lockscreen pill has no Samsung variant and stays native. Before this, the exception reached the draw hook, which marked the card failed and left it native.
 
-**Validation:** compiled with `javac` against `android.jar` (SDK 36) and the Xposed API; 59 JUnit tests pass, including `LiveModeTest`. Gradle lint and the APK build did not run in this session (Maven Central refused the requests); the release workflow runs both. Not tested on the device.
+**Shade veil ramp.** `ShadeTone` lands a few frames into an opening, while the card shows the previous opening's veil. The new veil now ramps over 180 ms (`VeilRamp.ends`) when both veils have the same colour or one of them is none; a dark-to-light change still applies at once. The measurement itself is unchanged: when capture is unavailable, `SHADE_TONE capture=unavailable` is logged and the card keeps the previous veil.
+
+**Mode selection is a property, not a probe.** `live` follows `sfrefract`, which the KernelSU module sets at boot. A leftover `debug.oulg.sfrefract=1` without the library turns `live` off. `sf.optics` alone cannot suppress the edge shader in this mode: `setCompositorLit` also needs a profile-1 tag, which `tagProfile` never sends without `sfrefract`.
+
+**Not covered:** live refraction. It needs the content of another window in the frame the card is drawn, which only the compositor has. `docs/sf-sem-overlay.md` is a research note on putting the shader rewrite into SurfaceFlinger without OverlayFS; it is not part of this mode.
+
+**Validation:** compiled with `javac` against `android.jar` (SDK 36) and the Xposed API; 62 JUnit tests pass, including `LiveModeTest` and `VeilRampTest`. Gradle lint and the APK build did not run in this session (Maven Central refused the requests); the release workflow runs both. Not tested on the device.
 
 ## Future work
 

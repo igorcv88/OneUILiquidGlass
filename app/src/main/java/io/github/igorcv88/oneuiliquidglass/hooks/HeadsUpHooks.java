@@ -61,6 +61,11 @@ public final class HeadsUpHooks {
     private long barStateAt;
     /** Set once HybridBackdrop could not be built; heads-up rows then keep the plain compositor blur. */
     private boolean hybridFailed;
+    /**
+     * Set once ViewRootImpl's blur drawable factory or one of its setters is missing on this firmware:
+     * cards then take the Samsung blur for the rest of the process instead of the drawable path.
+     */
+    private boolean drawableUnavailable;
     /** enabled == null: preferences unreadable, resolve through the module's ConfigProvider. */
     public HeadsUpHooks(ClassLoader loader, Boolean enabled) {
         this.loader = loader; this.enabled = Boolean.TRUE.equals(enabled); this.configPending = enabled == null;
@@ -539,6 +544,8 @@ public final class HeadsUpHooks {
     }
     /** How long a card stays untagged after it last scaled or faded. */
     private static final long SETTLE_MS = 300;
+    /** How long a card's shade veil takes to move to a new measurement. */
+    private static final long VEIL_RAMP_MS = 180;
     private final class State implements View.OnAttachStateChangeListener, ViewTreeObserver.OnPreDrawListener {
         final WeakReference<View> background;
         final WeakReference<View> row;
@@ -572,11 +579,39 @@ public final class HeadsUpHooks {
         int toneOpen = -1;
         /** The veil measured for this card at the current shade opening (0: none needed). */
         int measuredVeil;
-        void pushToneVeil() {
+        /** The drawable path could not be built for this card: it keeps the Samsung blur. */
+        boolean drawableFailed;
+        void pushToneVeil() { pushToneVeil(measuredVeil); }
+        void pushToneVeil(int veil) {
             try {
-                if (compBridge != null) compBridge.setToneVeil(measuredVeil);
-                if (semBridge != null) semBridge.setToneVeil(measuredVeil);
+                if (compBridge != null) compBridge.setToneVeil(veil);
+                if (semBridge != null) semBridge.setToneVeil(veil);
             } catch (ReflectiveOperationException | RuntimeException e) { Probe.error("SHADE_TONE_APPLY_FAILED", e); }
+        }
+        android.animation.ValueAnimator veilRamp;
+        /**
+         * A measurement lands a few frames into the opening, while the card already shows the veil of
+         * the previous opening: switched in one frame, the card jumped in colour. It now ramps over
+         * VEIL_RAMP_MS when both veils darken (or both lighten); a switch between a dark and a light
+         * veil (theme change) still applies at once.
+         */
+        void applyMeasuredVeil(int veil) {
+            int from = measuredVeil;
+            measuredVeil = veil;
+            if (veilRamp != null) { veilRamp.cancel(); veilRamp = null; }
+            View v = background.get();
+            int[] ends = io.github.igorcv88.oneuiliquidglass.glass.VeilRamp.ends(from, veil);
+            if (ends == null || v == null || !v.isShown() || (compBridge == null && semBridge == null)) {
+                pushToneVeil(); invalidate(); return;
+            }
+            android.animation.ValueAnimator a = android.animation.ValueAnimator.ofArgb(ends[0], ends[1]);
+            a.setDuration(VEIL_RAMP_MS);
+            a.addUpdateListener(an -> { pushToneVeil((Integer) an.getAnimatedValue()); invalidate(); });
+            a.addListener(new android.animation.AnimatorListenerAdapter() {
+                @Override public void onAnimationEnd(android.animation.Animator an) { pushToneVeil(); invalidate(); }
+            });
+            veilRamp = a;
+            a.start();
         }
         // Hiding the region until the new measurement arrived made every opening pop in late; the
         // card keeps the veil of the previous opening meanwhile (measuredVeil persists), which is
@@ -744,11 +779,7 @@ public final class HeadsUpHooks {
                         && Boolean.TRUE.equals(shadeExpanded) && barState != null && barState == Eligibility.BAR_SHADE && v.isShown()) {
                     // Once per shade opening: the veil is measured from the backdrop and kept.
                     toneOpen = shadeOpens;
-                    ShadeTone.measure(v, veil -> {
-                        measuredVeil = veil;
-                        pushToneVeil();
-                        invalidate();
-                    });
+                    ShadeTone.measure(v, this::applyMeasuredVeil);
                 }
                 boolean eligible = eligible();
                 View r = row.get();
@@ -813,7 +844,7 @@ public final class HeadsUpHooks {
         }
         Backdrop.Kind kind() {
             Backdrop.Kind k = Backdrop.choose(blurEnabled, samsungBlur, sharedBackdrop(), sampledRow());
-            return k == Backdrop.Kind.SAMSUNG && drawablePath() ? Backdrop.Kind.COMPOSITOR : k;
+            return k == Backdrop.Kind.SAMSUNG && drawablePath() && !drawableFailed && !drawableUnavailable ? Backdrop.Kind.COMPOSITOR : k;
         }
         /**
          * Lockscreen cards (and the shade over the lockscreen) take their blur from a
@@ -868,7 +899,7 @@ public final class HeadsUpHooks {
          */
         boolean pillSurface() {
             Tuning t = Tuning.get();
-            return t.pillGlass && barState != null && barState == Eligibility.BAR_KEYGUARD && drawablePath();
+            return t.pillGlass && barState != null && barState == Eligibility.BAR_KEYGUARD && drawablePath() && !drawableFailed && !drawableUnavailable;
         }
         boolean onKeyguard() { View r = row.get(); return r != null && Boolean.TRUE.equals(Reflect.bool(r, "isOnKeyguard", "mOnKeyguard")); }
         /** Which sampled source this row wants now; a change replaces the material. */
@@ -941,10 +972,29 @@ public final class HeadsUpHooks {
             }
             if (glass == null) {
                 nativePending = false;
-                Backdrop backdrop = kind == Backdrop.Kind.SHARED ? new SharedBackdrop()
-                        : kind == Backdrop.Kind.SAMPLED ? sampledBackdrop(v, source)
-                        : kind == Backdrop.Kind.SAMSUNG ? (semBridge = SemBlurBridge.create(v))
-                        : drawablePath() ? (compBridge = BackgroundBlurBridge.create(v, true)) : BackgroundBlurBridge.create(v);
+                Backdrop backdrop;
+                if (kind == Backdrop.Kind.COMPOSITOR && drawablePath()) {
+                    try { backdrop = compBridge = BackgroundBlurBridge.create(v, true); }
+                    catch (ReflectiveOperationException | RuntimeException e) {
+                        // The drawable path is the default on every surface in LSPosed-only mode and
+                        // was never exercised on the pop-up: if it cannot be built, this card keeps
+                        // the Samsung blur for its lifetime (never per frame, which would flash). A
+                        // missing factory or setter holds for the whole process.
+                        if (e instanceof ReflectiveOperationException) drawableUnavailable = true;
+                        drawableFailed = true;
+                        Probe.error("BLUR_DRAWABLE_FALLBACK", e);
+                        if (pill || !samsungBlur || !SemBlurBridge.supports(Reflect.read(v, "mCornerRadii"))) {
+                            release(); return fallback("drawableFailed");
+                        }
+                        kind = Backdrop.Kind.SAMSUNG;
+                        backdrop = semBridge = SemBlurBridge.create(v);
+                    }
+                } else {
+                    backdrop = kind == Backdrop.Kind.SHARED ? new SharedBackdrop()
+                            : kind == Backdrop.Kind.SAMPLED ? sampledBackdrop(v, source)
+                            : kind == Backdrop.Kind.SAMSUNG ? (semBridge = SemBlurBridge.create(v))
+                            : BackgroundBlurBridge.create(v);
+                }
                 if (compBridge != null) SemBlurBridge.clearNative(v);
                 if (compBridge != null && pill) compBridge.setPill(true);
                 // A new bridge takes the veil measured for this opening.
