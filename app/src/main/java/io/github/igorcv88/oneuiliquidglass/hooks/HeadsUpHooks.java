@@ -215,7 +215,7 @@ public final class HeadsUpHooks {
                         if (states.containsKey(v) || (rowClass != null && rowClass.isInstance(v))
                                 || BACKGROUND.equals(v.getClass().getName())) SemBlurBridge.recordNative(v, p.args[0]);
                         if (v.getRootView() == v && p.args[0] != null && barState != null && barState == Eligibility.BAR_KEYGUARD
-                                && (Tuning.get().sfRefract || Tuning.get().live) && !Tuning.get().kgWinBlur && v.getClass().getName().endsWith("NotificationShadeWindowView")
+                                && (Tuning.get().sfRefract || (enabled && Tuning.get().live)) && !Tuning.get().kgWinBlur && v.getClass().getName().endsWith("NotificationShadeWindowView")
                                 && Reflect.read(p.args[0], "mBlurRadius") instanceof Integer && (Integer) Reflect.read(p.args[0], "mBlurRadius") <= 4) {
                             // On the idle lockscreen a touch makes the panel blur ramp the shade window to a
                             // radius of 1-3 and back, each step with the panel's dark color curve. Only radii
