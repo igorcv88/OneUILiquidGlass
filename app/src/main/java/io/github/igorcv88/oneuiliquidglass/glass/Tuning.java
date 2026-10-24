@@ -11,10 +11,11 @@ import io.github.igorcv88.oneuiliquidglass.diagnostics.Probe;
  */
 public final class Tuning {
     /**
-     * auto: heads-up rows get the live compositor blur in the body and a captured, refracted lens
-     * band at the rim; lockscreen rows refract the still wallpaper (or a slow capture over a live
-     * wallpaper); capture: full-surface capture (laggy behind motion); grid: synthetic numbered
-     * texture; off: no sampling.
+     * auto: without the compositor lens, LSPosed-only mode ({@link #live}); with it, the compositor
+     * refracts and nothing is sampled. hybrid: heads-up rows get the live compositor blur in the
+     * body and a captured, refracted lens band at the rim; lockscreen rows refract the still
+     * wallpaper (or a slow capture over a live wallpaper), the earlier auto. capture:
+     * full-surface capture (laggy behind motion); grid: synthetic numbered texture; off: no sampling.
      */
     public final String backdrop;
     /** lens (default): bounded-slope lens, strength {@link #lens}; snell: physical model x {@link #refract}. */
@@ -62,6 +63,18 @@ public final class Tuning {
      * captured lens band is not drawn (debug.oulg.sfrefract).
      */
     public final boolean sfRefract;
+    /**
+     * LSPosed-only mode: no SurfaceFlinger module (sfrefract=0), debug.oulg.liveblur=1 (default)
+     * and backdrop=auto. Every card, heads-up included, takes its blur from a BackgroundBlurDrawable
+     * drawn with the glass, the path already stable on the lockscreen and in the shade: its region
+     * is submitted with the frame that draws the card and follows its bounds and fade. Nothing is
+     * captured per frame, so nothing trails motion behind the card, and a heads-up that becomes a
+     * shade card keeps the same blur instead of swapping material. No lens: the edge optics are the
+     * module's own. liveblur=0 or backdrop=hybrid restore the captured lens band and the wallpaper.
+     */
+    public final boolean live;
+    /** Blur radius in px of every card in LSPosed-only mode (debug.oulg.liveradius); -1 = semradius. */
+    public final int liveRadius;
     /**
      * Lockscreen blur source with the compositor lens (debug.oulg.kgblurpath): 1 (default) draws
      * a BackgroundBlurDrawable inside the glass with the glass's own bounds; 0 installs the Samsung
@@ -164,7 +177,7 @@ public final class Tuning {
 
     private Tuning() {
         String b = prop("backdrop", "auto");
-        backdrop = b.equals("grid") || b.equals("off") || b.equals("capture") ? b : "auto";
+        backdrop = b.equals("grid") || b.equals("off") || b.equals("capture") || b.equals("hybrid") ? b : "auto";
         profile = prop("profile", "lens").equals("snell") ? "snell" : "lens";
         lens = clamp(number("lens", 0.30f), 0f, 0.45f);
         refract = clamp(number("refract", 1f), 0f, 6f);
@@ -187,6 +200,8 @@ public final class Tuning {
         String shape = prop("semshape", "auto");
         shadeBlur = number("shadeblur", 1f) >= 1f;
         sfRefract = number("sfrefract", 0f) >= 1f;
+        live = live(sfRefract, number("liveblur", 1f) >= 1f, backdrop);
+        liveRadius = Math.round(clamp(number("liveradius", -1f), -1f, 400f));
         kgBlurPath = Math.round(clamp(number("kgblurpath", 1f), 0f, 1f));
         shadeBlurPath = Math.round(clamp(number("shadeblurpath", 1f), 0f, 1f));
         shadeFadeCut = clamp(number("shadefadecut", 0.5f), 0f, 1f);
@@ -214,6 +229,23 @@ public final class Tuning {
         semShape = shape.equals("single") || shape.equals("path") || shape.equals("four") || shape.equals("none") ? shape : "auto";
     }
 
+    /** See {@link #live}. */
+    static boolean live(boolean sfRefract, boolean liveBlur, String backdrop) {
+        return !sfRefract && liveBlur && "auto".equals(backdrop);
+    }
+
+    /**
+     * Blur radius of a card in LSPosed-only mode: one radius for every surface, so a heads-up that
+     * becomes a shade card, or a lockscreen card that the shade pulls over, does not jump. kgblurradius,
+     * when set, still applies to lockscreen cards.
+     */
+    static int livePx(int liveRadius, int semRadius, int kgBlurRadius, boolean keyguard) {
+        if (keyguard && kgBlurRadius >= 0) return kgBlurRadius;
+        if (liveRadius >= 0) return liveRadius;
+        return semRadius >= 0 ? semRadius : GlassSpec.SAMSUNG_RADIUS;
+    }
+    public int livePx(boolean keyguard) { return livePx(liveRadius, semRadius, kgBlurRadius, keyguard); }
+
     public static Tuning get() {
         long now = SystemClock.uptimeMillis();
         if (cached == null || now - readAt > 1000) {
@@ -228,7 +260,7 @@ public final class Tuning {
         return "backdrop=" + backdrop + " profile=" + profile + " lens=" + lens + " rimhz=" + rimHz + " rimblur=" + rimBlur
                 + " refract=" + refract + " ior=" + ior + " blur=" + blur + " sat=" + saturation
                 + " disp=" + dispersion + " hz=" + hz + " hzkg=" + keyguardHz + " tint=" + tintAlpha
-                + " semradius=" + semRadius + " semradiuslens=" + semRadiusLens + " sflens=" + sfLens + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " kgblurpath=" + kgBlurPath + " shadeblurpath=" + shadeBlurPath + " shadefadecut=" + shadeFadeCut + " kgblurradius=" + kgBlurRadius + " pillglass=" + pillGlass + " pillblur=" + pillBlur + " kgoptics=" + kgOptics + " huoptics=" + huOptics + " kglens=" + kgLens + " shadetone=" + shadeTone + " shadeveil=" + shadeVeil + " shadeadaptive=" + shadeAdaptive + " shadecap=" + shadeCap + " shadelift=" + shadeLift + " shadescaleveil=" + shadeScaleVeil + " sfoptics=" + sfOptics + " kgwinblur=" + kgWinBlur + " headergap=" + headerGap + " perf=" + perf + " trace=" + trace;
+                + " semradius=" + semRadius + " semradiuslens=" + semRadiusLens + " sflens=" + sfLens + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " live=" + live + " liveradius=" + liveRadius + " kgblurpath=" + kgBlurPath + " shadeblurpath=" + shadeBlurPath + " shadefadecut=" + shadeFadeCut + " kgblurradius=" + kgBlurRadius + " pillglass=" + pillGlass + " pillblur=" + pillBlur + " kgoptics=" + kgOptics + " huoptics=" + huOptics + " kglens=" + kgLens + " shadetone=" + shadeTone + " shadeveil=" + shadeVeil + " shadeadaptive=" + shadeAdaptive + " shadecap=" + shadeCap + " shadelift=" + shadeLift + " shadescaleveil=" + shadeScaleVeil + " sfoptics=" + sfOptics + " kgwinblur=" + kgWinBlur + " headergap=" + headerGap + " perf=" + perf + " trace=" + trace;
     }
 
     private static float clamp(float v, float lo, float hi) { return Float.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : lo; }

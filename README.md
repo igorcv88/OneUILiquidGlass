@@ -12,17 +12,37 @@ The project ships as two parts. Both are attached to every [release](https://git
 - **`OneUILiquidGlass-<version>.apk`**: an LSPosed module for SystemUI. It draws the glass material and the rim lighting, and requests the blur behind each card.
 - **`OneUILiquidGlass-SurfaceFlinger-<version>.zip`**: a KernelSU module. It loads a small library into SurfaceFlinger that rewrites the compositor's rounded-rect blur shaders. That library produces the live refraction and the layered blur. Without it, the glass is a plain blur with rim lighting.
 
+### LSPosed-only mode
+
+The APK works alone, without the KernelSU module, the metamodule or any change to `/system`. This is the default whenever `debug.oulg.sfrefract` is not 1, which is the case when the KernelSU module is not installed:
+
+- Every card (pop-up, lockscreen, shade) takes its blur from a `BackgroundBlurDrawable` drawn with the glass, so the blur region follows the card's own bounds and fade. This path was already confirmed stable on the device on the lockscreen and in the shade; on the pop-up it is new and not yet tested on the device.
+- Nothing is captured from the screen per frame (the shade still takes one capture per opening for its tone). In earlier builds the pop-up refracted a 60 Hz screen capture at its rim and the lockscreen refracted the wallpaper or a 5 Hz capture. Those captures arrive one or more frames late. From the code, they are the most likely cause of the content behind the pop-up trailing motion and of the cards flickering without the KernelSU module; this has not been traced on the device.
+- A pop-up that becomes a shade card keeps the same blur path, so it no longer switches material when its heads-up state ends.
+- There is no lens: compared with the KernelSU module this mode gives up the refraction at the rim and the layered body blur. The rim lighting is the app's own edge shader. Live refraction of the content behind the card needs the compositor, so it needs the KernelSU module. [docs/sf-sem-overlay.md](docs/sf-sem-overlay.md) is a research note on routes that avoid OverlayFS; none of them is part of this mode, and none is recommended for a device whose priority is Play Integrity and Wallet.
+- If the blur drawable cannot be built for a card, that card falls back to the Samsung blur for its lifetime (`BLUR_DRAWABLE_FALLBACK` in the log).
+
+`debug.oulg.liveradius` sets the blur radius of every card in this mode. `debug.oulg.backdrop=hybrid` restores the earlier captured rim and wallpaper refraction.
+
 ## Requirements
 
-- **Device:** Galaxy S25 Ultra **SM-S938B**, firmware **S938BXXUCZZIC** (Android 17, One UI 9). The KernelSU module refuses any other firmware fingerprint, because it patches this firmware's SurfaceFlinger binary.
+**APK (every setup):**
+- **Device:** Galaxy S25 Ultra **SM-S938B**, One UI 9 (Android 17). Developed on S938BXXUCZZIC; S938BXXUCDZIF (One UI 9 Stable) shares the same `framework.jar`, but the APK has not been validated on it yet.
+- **LSPosed** (API 93 or newer), with the module enabled for **SystemUI** only.
+- **Samsung pop-up style:** **Detailed**. Brief pop-ups (Edge Lighting) are not covered.
+
+**KernelSU module (optional, for the compositor lens):**
+- **Firmware:** the installer accepts only the fingerprints in `sfhook/module/customize.sh` (S938BXXUCZZIC and S938BXXUCDZIF), because it patches that firmware's SurfaceFlinger binary.
 - **Root:** [KernelSU](https://kernelsu.org). The module installer does not support Magisk.
 - **A KernelSU metamodule that mounts `/system`:** the module installs its files under `system/`, which only take effect through a mount metamodule. The installer aborts if `/data/adb/metamodule` is missing. Either of these works:
   - [Meta-OverlayFSX (ViPER-safe fork)](https://github.com/igorcv88/Meta-Overlayfsx-ViPER-safe), the one this project is tested with;
   - [Meta-OverlayFSX, upstream](https://github.com/RipperHybrid/meta-overlayfsx).
-- **LSPosed** (API 93 or newer), with the module enabled for **SystemUI**.
-- **Samsung pop-up style:** **Detailed**. Brief pop-ups (Edge Lighting) are not covered.
 
 ## Install
+
+**APK only (LSPosed-only mode):** do steps 3 to 5 below and skip the KernelSU parts.
+
+**With the compositor lens:**
 
 1. Install the overlay metamodule in KernelSU and reboot.
 2. Install `OneUILiquidGlass-SurfaceFlinger-<version>.zip` in KernelSU and **reboot**. The module patches a copy of `/system/bin/surfaceflinger` at install time, and the metamodule mounts it only at boot. Restarting SurfaceFlinger without a reboot keeps the stock binary.
@@ -59,6 +79,9 @@ Settings are system properties, read live by the app about once a second unless 
 | Property | Default | Effect |
 | --- | --- | --- |
 | `debug.oulg.sfrefract` | 0 in the app; set to 1 at boot by the KernelSU module | Compositor lens on pop-ups and the lockscreen |
+| `debug.oulg.liveblur` | 1 | LSPosed-only mode while `sfrefract` is 0; 0 restores the captured backdrops |
+| `debug.oulg.liveradius` | -1 (same as `semradius`) | Blur radius in px of every card in LSPosed-only mode |
+| `debug.oulg.backdrop` | auto | `hybrid`: captured pop-up rim and wallpaper refraction on the lockscreen (the earlier default); `capture`, `grid`, `off` for experiments |
 | `debug.oulg.sflens` | 0.7 | Lens strength, 0.1–1.2 |
 | `debug.oulg.shadeblur` | 1 | Each shade card gets its own blur |
 | `debug.oulg.semradiuslens` | 16 | Blur radius under lens cards (Samsung blur) |
