@@ -849,6 +849,23 @@ public final class HeadsUpHooks {
          * (fading in or moving) and every POPUP_MEASURE_MS once still. Any other surface carries no
          * pop-up veil and no swapped text.
          */
+        /**
+         * tone() isolated: a failure in the measurement, the veil or the text swap is logged and
+         * leaves the card's glass alone. Called from onPreDraw and material(), an exception used to
+         * mark the card failed (PREDRAW_FAILED / DRAW_SWAP_FAILED) and leave it on another material
+         * for the rest of the process.
+         */
+        void safeTone(View v) {
+            try { tone(v); }
+            catch (RuntimeException | LinkageError e) {
+                if (toneErrors++ >= 5) return;
+                StringBuilder at = new StringBuilder();
+                StackTraceElement[] st = e.getStackTrace();
+                for (int i = 0; i < Math.min(4, st.length); i++) at.append(i == 0 ? "" : "<").append(st[i].getClassName().replaceAll(".*\\.", "")).append('.').append(st[i].getMethodName()).append(':').append(st[i].getLineNumber());
+                Probe.log("TONE_FAILED", "error=" + e.getClass().getSimpleName() + " at=" + at);
+            }
+        }
+        int toneErrors;
         void tone(View v) {
             Tuning t = Tuning.get();
             if (t.shadeAdaptive && Boolean.TRUE.equals(shadeExpanded) && barState != null && barState == Eligibility.BAR_SHADE) { shadeTone(v); return; }
@@ -1291,7 +1308,7 @@ public final class HeadsUpHooks {
                 // disabled, or a card going back to its native background (ineligible, failed), its
                 // text is left as SystemUI drew it.
                 if (!pill) {
-                    if (Eligibility.textTone(enabled, glass != null, glass != null && glass.failed(), eligible)) tone(v);
+                    if (Eligibility.textTone(enabled, glass != null, glass != null && glass.failed(), eligible)) safeTone(v);
                     else setForeground(false);
                 }
                 View r = row.get();
@@ -1512,7 +1529,7 @@ public final class HeadsUpHooks {
                 // A new bridge takes the veil measured for this opening; a pop-up its native look or
                 // measurement now, so its first frame is not drawn with the plain tint.
                 pushToneVeil();
-                if (compBridge != null && !pill) tone(v);
+                if (compBridge != null && !pill) safeTone(v);
                 if (semBridge != null) semBridge.setSuspended(stacked);
                 glass = new GlassDrawable(backdrop, v.getResources().getDisplayMetrics().density, spec);
                 glass.setLightStyle(lightStyle);
