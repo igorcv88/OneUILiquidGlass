@@ -1062,7 +1062,10 @@ public final class HeadsUpHooks {
             glass.setPressed(pressed);
             refreshLens();
             glass.configure(original, shape(), fill, tone);
-            if (live) { updateLens(v); liveState(v, fill); }
+            if (live) {
+                glass.setGlint(popupSurface() ? Tuning.get().liveGlint : 1f);
+                updateLens(v); liveState(v, fill);
+            }
             if (lastFallback != null) { lastFallback = null; Probe.log("NATIVE_FALLBACK", "viewId=" + Integer.toHexString(System.identityHashCode(v)) + " reason=none"); }
             if (pill && !pillReported) {
                 pillReported = true;
@@ -1101,6 +1104,8 @@ public final class HeadsUpHooks {
             View r = row.get();
             return !pill && Eligibility.lens(barState, shadeExpanded, r == null ? null : Reflect.bool(r, "isOnKeyguard", "mOnKeyguard"));
         }
+        /** A pop-up over an app: a lens surface outside the lockscreen. */
+        boolean popupSurface() { return lensSurface() && barState != null && barState == Eligibility.BAR_SHADE; }
         /**
          * A pop-up over an app (not the shade, not the lockscreen) in LSPosed-only mode carries the
          * gated lens band (debug.oulg.livelens); every other surface, or a band whose capture became

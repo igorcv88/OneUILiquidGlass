@@ -121,6 +121,9 @@ public final class GlassDrawable extends Drawable {
         if (!draw) return;
         drawRefraction(canvas, bounds, frame, view, true, true, lensWeight);
     }
+    /** Gain of the lit-corner glint in the LSPosed-only edge model (1: unchanged); see liveEdge(). */
+    private float glint = 1f;
+    public void setGlint(float g) { if (glint != g) { glint = g; invalidateSelf(); } }
     public void setPressed(boolean on) { if (pressed != on) { pressed = on; invalidateSelf(); } }
     /**
      * The compositor lights this card (sfhook profile 1: rim reflectance, specular and contour from
@@ -229,6 +232,7 @@ public final class GlassDrawable extends Drawable {
         s.setFloatUniform("decor", live ? t.liveOptics : 1f);
         s.setFloatUniform("live", live ? 1f : 0f);
         s.setFloatUniform("sheen", live ? t.liveSheen : 0f);
+        s.setFloatUniform("glintGain", live ? glint : 1f);
     }
     /**
      * False until the first frame arrives; the caller then draws veil and edge alone.
