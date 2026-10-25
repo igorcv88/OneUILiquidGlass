@@ -93,7 +93,7 @@ public final class BackgroundBlurBridge implements Backdrop {
             Tuning t = Tuning.get();
             int lensPx = t.kgBlurRadius >= 0 ? t.kgBlurRadius : t.semRadiusLens;
             // LSPosed-only: no lens to leave backdrop detail for, so one full blur everywhere.
-            px = t.live ? t.livePx(keyguard) : lens && lensPx >= 0 ? lensPx : t.semRadius >= 0 ? t.semRadius : GlassSpec.SAMSUNG_RADIUS;
+            px = t.live ? t.livePx(lens, keyguard) : lens && lensPx >= 0 ? lensPx : t.semRadius >= 0 ? t.semRadius : GlassSpec.SAMSUNG_RADIUS;
             // The same veil as the Samsung path (semalpha over the Samsung tone).
             if (t.semAlpha >= 0) tint = (tint & 0x00ffffff) | (t.semAlpha << 24);
             if (pill) px = t.pillBlur;
@@ -107,12 +107,54 @@ public final class BackgroundBlurBridge implements Backdrop {
             if (pill) { tl = (float) Math.floor(tl); tr = (float) Math.floor(tr); bl = (float) Math.floor(bl); br = (float) Math.floor(br); }
         }
         drawable.setVisible(true, false);
-        radius.invoke(drawable, px);
+        lastRequestedPx = px;
+        applyRadius(px);
+        lastRequestedTint = tint;
         color.invoke(drawable, tint);
         // API order: top-left, top-right, bottom-left, bottom-right.
         corners.invoke(drawable, tl, tr, bl, br);
         if (lensMode && curve != null && (lens || keyguard || curveSent)) applyCurve();
     }
+    /** Redraws the host; the drawable has no callback of its own (it is drawn by the glass). */
+    private Runnable invalidator;
+    public void setInvalidator(Runnable r) { invalidator = r; }
+    /** The radius the region has now (-1 before the first build) and the ramp moving it. */
+    private int shownPx = -1;
+    private android.animation.ValueAnimator radiusRamp;
+    private int rampTarget = -1;
+    private static final long RADIUS_RAMP_MS = 200;
+    /**
+     * A built card whose radius changes (a pop-up turning into a shade card, a tuning change) moves
+     * to the new radius over RADIUS_RAMP_MS instead of in one frame, which read as a jump in blur.
+     */
+    private void applyRadius(int px) throws ReflectiveOperationException {
+        // Corner and tint updates arrive every frame of a transition: a ramp already heading for this
+        // radius keeps running, or the restarts would hold the radius at its start.
+        if (radiusRamp != null && radiusRamp.isRunning() && rampTarget == px) return;
+        if (radiusRamp != null) { radiusRamp.cancel(); radiusRamp = null; }
+        if (shownPx < 0 || shownPx == px || invalidator == null
+                || android.os.Looper.myLooper() != android.os.Looper.getMainLooper()) {
+            radius.invoke(drawable, px); shownPx = px; return;
+        }
+        android.animation.ValueAnimator a = android.animation.ValueAnimator.ofInt(shownPx, px);
+        a.setDuration(RADIUS_RAMP_MS);
+        a.addUpdateListener(an -> {
+            int v = (Integer) an.getAnimatedValue();
+            if (v == shownPx) return;
+            try { radius.invoke(drawable, v); shownPx = v; }
+            catch (ReflectiveOperationException | RuntimeException e) { an.cancel(); return; }
+            invalidator.run();
+        });
+        radiusRamp = a;
+        rampTarget = px;
+        a.start();
+    }
+    /** The radius last requested from the compositor, for the LIVE_STATE snapshot. */
+    public int requestedPx() { return lastRequestedPx; }
+    private int lastRequestedPx = -1;
+    /** The region colour last requested, for the same snapshot. */
+    public int requestedTint() { return lastRequestedTint; }
+    private int lastRequestedTint;
     /** Whether a curve was ever sent: the drawable keeps it, so from then on one is always sent. */
     private boolean curveSent;
     private boolean scaled;
@@ -175,6 +217,8 @@ public final class BackgroundBlurBridge implements Backdrop {
         return true;
     }
     @Override public void release() {
+        if (radiusRamp != null) { radiusRamp.cancel(); radiusRamp = null; }
+        invalidator = null;
         try { radius.invoke(drawable, 0); } catch (ReflectiveOperationException | RuntimeException ignored) { }
         drawable.setVisible(false, false);
         drawable.setAlpha(0);

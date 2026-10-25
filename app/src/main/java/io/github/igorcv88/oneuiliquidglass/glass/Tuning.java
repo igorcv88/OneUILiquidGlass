@@ -73,8 +73,21 @@ public final class Tuning {
      * module's own. liveblur=0 or backdrop=hybrid restore the captured lens band and the wallpaper.
      */
     public final boolean live;
-    /** Blur radius in px of every card in LSPosed-only mode (debug.oulg.liveradius); -1 = semradius. */
+    /**
+     * Blur radius in px of pop-ups and lockscreen cards in LSPosed-only mode (debug.oulg.liveradius,
+     * default 80). At 180, the first live build, the device showed every card as a uniformly frosted
+     * plate: the backdrop kept no structure for the eye to read as glass.
+     */
     public final int liveRadius;
+    /**
+     * Blur radius in px of expanded-shade cards in LSPosed-only mode (debug.oulg.liveshaderadius,
+     * default 120). The shade window blurs the whole backdrop already, so a card needs less of its own.
+     */
+    public final int liveShadeRadius;
+    /** Gain of the LSPosed-only edge optics (debug.oulg.liveoptics, default 1, 0 to 2). */
+    public final float liveOptics;
+    /** Sheen at the top of LSPosed-only cards, fading to none at the bottom (debug.oulg.livesheen, 0.02). */
+    public final float liveSheen;
     /**
      * Lockscreen blur source with the compositor lens (debug.oulg.kgblurpath): 1 (default) draws
      * a BackgroundBlurDrawable inside the glass with the glass's own bounds; 0 installs the Samsung
@@ -201,7 +214,10 @@ public final class Tuning {
         shadeBlur = number("shadeblur", 1f) >= 1f;
         sfRefract = number("sfrefract", 0f) >= 1f;
         live = live(sfRefract, number("liveblur", 1f) >= 1f, backdrop);
-        liveRadius = Math.round(clamp(number("liveradius", -1f), -1f, 400f));
+        liveRadius = Math.round(clamp(number("liveradius", LIVE_RADIUS), 0f, 400f));
+        liveShadeRadius = Math.round(clamp(number("liveshaderadius", LIVE_SHADE_RADIUS), 0f, 400f));
+        liveOptics = clamp(number("liveoptics", 1f), 0f, 2f);
+        liveSheen = clamp(number("livesheen", 0.02f), 0f, 0.15f);
         kgBlurPath = Math.round(clamp(number("kgblurpath", 1f), 0f, 1f));
         shadeBlurPath = Math.round(clamp(number("shadeblurpath", 1f), 0f, 1f));
         shadeFadeCut = clamp(number("shadefadecut", 0.5f), 0f, 1f);
@@ -234,17 +250,18 @@ public final class Tuning {
         return !sfRefract && liveBlur && "auto".equals(backdrop);
     }
 
+    static final int LIVE_RADIUS = 80, LIVE_SHADE_RADIUS = 120;
     /**
-     * Blur radius of a card in LSPosed-only mode: one radius for every surface, so a heads-up that
-     * becomes a shade card, or a lockscreen card that the shade pulls over, does not jump. kgblurradius,
-     * when set, still applies to lockscreen cards.
+     * Blur radius of a card in LSPosed-only mode. Pop-ups (and lockscreen cards) take less blur than
+     * shade cards: over an app they are the only blur, in the shade the window is blurred already.
+     * A card that moves between the two (a pop-up opening the shade) ramps between the radii
+     * (BackgroundBlurBridge). kgblurradius, when set, still applies to lockscreen cards.
      */
-    static int livePx(int liveRadius, int semRadius, int kgBlurRadius, boolean keyguard) {
+    static int livePx(int liveRadius, int liveShadeRadius, int kgBlurRadius, boolean lens, boolean keyguard) {
         if (keyguard && kgBlurRadius >= 0) return kgBlurRadius;
-        if (liveRadius >= 0) return liveRadius;
-        return semRadius >= 0 ? semRadius : GlassSpec.SAMSUNG_RADIUS;
+        return lens ? liveRadius : liveShadeRadius;
     }
-    public int livePx(boolean keyguard) { return livePx(liveRadius, semRadius, kgBlurRadius, keyguard); }
+    public int livePx(boolean lens, boolean keyguard) { return livePx(liveRadius, liveShadeRadius, kgBlurRadius, lens, keyguard); }
 
     public static Tuning get() {
         long now = SystemClock.uptimeMillis();
@@ -260,7 +277,7 @@ public final class Tuning {
         return "backdrop=" + backdrop + " profile=" + profile + " lens=" + lens + " rimhz=" + rimHz + " rimblur=" + rimBlur
                 + " refract=" + refract + " ior=" + ior + " blur=" + blur + " sat=" + saturation
                 + " disp=" + dispersion + " hz=" + hz + " hzkg=" + keyguardHz + " tint=" + tintAlpha
-                + " semradius=" + semRadius + " semradiuslens=" + semRadiusLens + " sflens=" + sfLens + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " live=" + live + " liveradius=" + liveRadius + " kgblurpath=" + kgBlurPath + " shadeblurpath=" + shadeBlurPath + " shadefadecut=" + shadeFadeCut + " kgblurradius=" + kgBlurRadius + " pillglass=" + pillGlass + " pillblur=" + pillBlur + " kgoptics=" + kgOptics + " huoptics=" + huOptics + " kglens=" + kgLens + " shadetone=" + shadeTone + " shadeveil=" + shadeVeil + " shadeadaptive=" + shadeAdaptive + " shadecap=" + shadeCap + " shadelift=" + shadeLift + " shadescaleveil=" + shadeScaleVeil + " sfoptics=" + sfOptics + " kgwinblur=" + kgWinBlur + " headergap=" + headerGap + " perf=" + perf + " trace=" + trace;
+                + " semradius=" + semRadius + " semradiuslens=" + semRadiusLens + " sflens=" + sfLens + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " live=" + live + " liveradius=" + liveRadius + " liveshaderadius=" + liveShadeRadius + " liveoptics=" + liveOptics + " livesheen=" + liveSheen + " kgblurpath=" + kgBlurPath + " shadeblurpath=" + shadeBlurPath + " shadefadecut=" + shadeFadeCut + " kgblurradius=" + kgBlurRadius + " pillglass=" + pillGlass + " pillblur=" + pillBlur + " kgoptics=" + kgOptics + " huoptics=" + huOptics + " kglens=" + kgLens + " shadetone=" + shadeTone + " shadeveil=" + shadeVeil + " shadeadaptive=" + shadeAdaptive + " shadecap=" + shadeCap + " shadelift=" + shadeLift + " shadescaleveil=" + shadeScaleVeil + " sfoptics=" + sfOptics + " kgwinblur=" + kgWinBlur + " headergap=" + headerGap + " perf=" + perf + " trace=" + trace;
     }
 
     private static float clamp(float v, float lo, float hi) { return Float.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : lo; }

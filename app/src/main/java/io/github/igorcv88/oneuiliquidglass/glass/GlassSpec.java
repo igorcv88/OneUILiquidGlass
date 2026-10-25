@@ -32,6 +32,14 @@ public final class GlassSpec {
     public static final int SAMSUNG_RADIUS = 180;
     public final int samsungLightColor = 0x40ffffff;
     public final int samsungDarkColor = 0x14ffffff;
+    /**
+     * LSPosed-only mode, dark theme: region colour of pop-ups and lockscreen cards, then of shade
+     * cards. Samsung's 8 % white over a dark backdrop left the card the same tone as the blurred shade
+     * around it; a little more lift separates the pane without the milky body a strong veil gives. The
+     * dark fill (4 % black) is dropped there for the same reason. Light theme keeps samsungLightColor.
+     */
+    public final int liveDarkColor = 0x1cffffff;
+    public final int liveShadeDarkColor = 0x24ffffff;
     /** Width of the lit bevel inside the outline. */
     public final float rimDp = 20f;
     public final float hairDp = 0.95f;

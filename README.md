@@ -22,7 +22,7 @@ The APK works alone, without the KernelSU module, the metamodule or any change t
 - There is no lens: compared with the KernelSU module this mode gives up the refraction at the rim and the layered body blur. The rim lighting is the app's own edge shader. Live refraction of the content behind the card needs the compositor, so it needs the KernelSU module. [docs/sf-sem-overlay.md](docs/sf-sem-overlay.md) is a research note on routes that avoid OverlayFS; none of them is part of this mode, and none is recommended for a device whose priority is Play Integrity and Wallet.
 - If the blur drawable cannot be built for a card, that card falls back to the Samsung blur for its lifetime (`BLUR_DRAWABLE_FALLBACK` in the log).
 
-`debug.oulg.liveradius` sets the blur radius of every card in this mode. `debug.oulg.backdrop=hybrid` restores the earlier captured rim and wallpaper refraction.
+Pop-ups and lockscreen cards take an 80 px blur and shade cards 120 px (`debug.oulg.liveradius`, `debug.oulg.liveshaderadius`); a card that moves from one surface to the other ramps between the two. The edge is drawn by a light-only model (`docs/img/live-edge-preview.jpg`, host render): an outline bright on the lit side and nearly gone opposite, a Fresnel lift toward the outline, a glint at the corner facing the light, a fainter internal reflection opposite, a soft absorption ring and a faint top sheen. It is shading, not refraction: the backdrop pixels are not displaced. `debug.oulg.backdrop=hybrid` restores the earlier captured rim and wallpaper refraction.
 
 ## Requirements
 
@@ -80,7 +80,10 @@ Settings are system properties, read live by the app about once a second unless 
 | --- | --- | --- |
 | `debug.oulg.sfrefract` | 0 in the app; set to 1 at boot by the KernelSU module | Compositor lens on pop-ups and the lockscreen |
 | `debug.oulg.liveblur` | 1 | LSPosed-only mode while `sfrefract` is 0; 0 restores the captured backdrops |
-| `debug.oulg.liveradius` | -1 (same as `semradius`) | Blur radius in px of every card in LSPosed-only mode |
+| `debug.oulg.liveradius` | 80 | Blur radius in px of pop-ups and lockscreen cards in LSPosed-only mode |
+| `debug.oulg.liveshaderadius` | 120 | Blur radius in px of expanded-shade cards in LSPosed-only mode |
+| `debug.oulg.liveoptics` | 1 | Gain of the LSPosed-only edge optics, 0–2 |
+| `debug.oulg.livesheen` | 0.02 | Sheen at the top of LSPosed-only cards, 0–0.15 |
 | `debug.oulg.backdrop` | auto | `hybrid`: captured pop-up rim and wallpaper refraction on the lockscreen (the earlier default); `capture`, `grid`, `off` for experiments |
 | `debug.oulg.sflens` | 0.7 | Lens strength, 0.1–1.2 |
 | `debug.oulg.shadeblur` | 1 | Each shade card gets its own blur |

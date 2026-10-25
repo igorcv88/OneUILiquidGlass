@@ -154,8 +154,13 @@ public final class GlassDrawable extends Drawable {
         s.setFloatUniform("light", spec.lightX, spec.lightY);
         s.setFloatUniform("specular", spec.specular);
         s.setFloatUniform("shadow", spec.innerShadow);
+        // LSPosed-only cards over the live drawable blur take the light-only edge model.
+        Tuning t = Tuning.get();
+        boolean live = t.live && backdrop instanceof BackgroundBlurBridge;
         s.setFloatUniform("hairGain", 1f);
-        s.setFloatUniform("decor", 1f);
+        s.setFloatUniform("decor", live ? t.liveOptics : 1f);
+        s.setFloatUniform("live", live ? 1f : 0f);
+        s.setFloatUniform("sheen", live ? t.liveSheen : 0f);
     }
     /**
      * False until the first frame arrives; the caller then draws veil and edge alone.
