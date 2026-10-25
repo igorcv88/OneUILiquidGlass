@@ -66,12 +66,29 @@ public final class HeadsUpHooks {
     private long shadeOpenAt;
     private int shadeCards, shadeEarlyDraws;
     /**
-     * Whether the app behind the status bar asked for dark status-bar icons, i.e. its top is light
-     * (LightBarController); null when unknown. Recorded only with the shade closed over an app, so
-     * the shade's own appearance never replaces it. A first-frame estimate of the backdrop, used
-     * until a capture says otherwise.
+     * A capture of the backdrop taken when a touch went down at the top edge with the shade closed,
+     * the start of a pull-down (preOpen); a shade opening within PRE_OPEN_MAX_MS adopts it on its
+     * first frame. The status-bar appearance used as the first-frame estimate in round 36 read a dark
+     * toolbar over a white page as a dark backdrop (device log, 25/10) and is gone.
      */
-    private volatile Boolean appLightTop;
+    private ToneGrid preGrid;
+    private long preRequestAt;
+    /**
+     * The touch gesture a pre-open capture belongs to (MotionEvent.getDownTime, the same for every
+     * receiver that sees it), and the current gesture: its down time, whether it lifted and when.
+     * A capture is adopted only by an opening that this same gesture drives (Eligibility.preOpenValid).
+     */
+    private long preGesture, preGridGesture;
+    private volatile long gestureDown = Long.MIN_VALUE, gestureUpAt;
+    private volatile boolean gestureUp;
+    /** The shade panel view (NotificationPanelViewController.mView), the anchor of pre-open captures. */
+    private WeakReference<View> panelView;
+    private static final long PRE_OPEN_MAX_MS = 1500;
+    /** How long after its finger lifts a gesture may still be the one opening the shade (a fling). */
+    private static final long PRE_OPEN_LIFT_MS = 250;
+    /** Fraction of the screen height from the top where a touch down may start a pull-down. */
+    private static final float PRE_OPEN_EDGE = 0.06f;
+    private final android.os.Handler main = new android.os.Handler(android.os.Looper.getMainLooper());
     /** SystemUI's StatusBarState (0 shade, 1 keyguard, 2 shade over keyguard); null until first set. */
     private Integer barState;
     /** When barState last changed (uptime ms), for the optics timeline. */
@@ -183,7 +200,6 @@ public final class HeadsUpHooks {
         new HeaderGapHooks(loader, rowClass, () -> enabled).install();
         installShade();
         installBarState();
-        installStatusBarTone();
         installScrimClamp();
         for (String manager : new String[]{"com.android.systemui.statusbar.notification.headsup.HeadsUpManagerImpl", "com.android.systemui.statusbar.policy.BaseHeadsUpManager", "com.android.systemui.statusbar.policy.HeadsUpManager"}) {
             Class<?> c = resolve(manager);
@@ -223,6 +239,14 @@ public final class HeadsUpHooks {
                     float h = android.content.res.Resources.getSystem().getDisplayMetrics().heightPixels;
                     boolean outside = barState != null && barState == Eligibility.BAR_SHADE && !Boolean.TRUE.equals(shadeExpanded)
                             && m.getRawY() > h * 0.30f && m.getRawY() < h * 0.80f;
+                    int action = m.getActionMasked();
+                    long down = m.getDownTime();
+                    if (action == android.view.MotionEvent.ACTION_DOWN && down != gestureDown) { gestureDown = down; gestureUp = false; }
+                    else if ((action == android.view.MotionEvent.ACTION_UP || action == android.view.MotionEvent.ACTION_CANCEL) && down == gestureDown && !gestureUp) {
+                        gestureUp = true; gestureUpAt = android.os.SystemClock.uptimeMillis();
+                    }
+                    if (action == android.view.MotionEvent.ACTION_DOWN && m.getRawY() < h * PRE_OPEN_EDGE
+                            && barState != null && barState == Eligibility.BAR_SHADE && !Boolean.TRUE.equals(shadeExpanded)) main.post(() -> preOpen(down));
                     boolean was = BackdropMotion.active();
                     BackdropMotion.onTouch(p.thisObject, p.thisObject.getClass().getName(), m.getActionMasked(), m.getRawX(), m.getRawY(),
                             android.os.SystemClock.uptimeMillis(), outside);
@@ -426,58 +450,61 @@ public final class HeadsUpHooks {
         return p.thisObject != null ? p.thisObject.getClass().getName() : ((Method) p.method).getDeclaringClass().getName();
     }
     /**
-     * The status bar's appearance as the foreground app sets it: APPEARANCE_LIGHT_STATUS_BARS (dark
-     * icons) means the app's top is light. A cheap estimate of what is behind a pop-up or the shade
-     * for the frames before a capture is measured; it can be wrong (a light header over a dark
-     * page), which the capture corrects a few frames later. Observation only.
+     * A touch down at the top edge with the shade closed over an app: a pull-down may follow. The
+     * backdrop is captured now, ~100 ms before the shade's first frame, so cards are born in the right
+     * style. On the main thread; one request per gesture, bound to it.
      */
-    private void installStatusBarTone() {
-        XC_MethodHook hook = new XC_MethodHook() {
-            @Override protected void afterHookedMethod(MethodHookParam p) {
-                try {
-                    if (p.args.length == 0 || !(p.args[0] instanceof Object[])) return;
-                    if (barState == null || barState != Eligibility.BAR_SHADE || Boolean.TRUE.equals(shadeExpanded)) return;
-                    Boolean light = null;
-                    for (Object region : (Object[]) p.args[0]) {
-                        Object a = Reflect.call(region, "getAppearance");
-                        Object b = Reflect.call(region, "getBounds");
-                        if (!(a instanceof Integer)) continue;
-                        // The region at the top of the screen, where pop-ups sit; the first one otherwise.
-                        boolean top = b instanceof android.graphics.Rect && ((android.graphics.Rect) b).top <= 0;
-                        if (light == null || top) light = ((Integer) a & APPEARANCE_LIGHT_STATUS_BARS) != 0;
-                        if (top) break;
-                    }
-                    if (light == null || light.equals(appLightTop)) return;
-                    appLightTop = light;
-                    Probe.log("STATUSBAR_TONE", "lightTop=" + light);
-                } catch (ReflectiveOperationException | RuntimeException | LinkageError e) { Probe.error("STATUSBAR_TONE_FAILED", e); }
+    private void preOpen(long gesture) {
+        Tuning t = Tuning.get();
+        if (!enabled || !t.shadeAdaptive || barState == null || barState != Eligibility.BAR_SHADE || Boolean.TRUE.equals(shadeExpanded)) return;
+        if (gesture == preGesture || gesture != gestureDown) return;
+        View anchor = panelView == null ? null : panelView.get();
+        if (anchor == null || !anchor.isAttachedToWindow()) return;
+        long requested = android.os.SystemClock.uptimeMillis();
+        preGesture = gesture; preRequestAt = requested;
+        // A newer gesture's capture replaces an older one that was never adopted.
+        preGrid = null;
+        ShadeTone.prefetch(anchor, -1, grid -> {
+            if (grid == null || gesture != preGesture) return;
+            // Opened by this gesture while the capture was in flight: adopted if the opening has none yet.
+            if (Boolean.TRUE.equals(shadeExpanded)) {
+                if (shadeOpenAt >= requested && (shadeGrid == null || shadeGrid.generation != shadeOpens) && preValid(gesture, grid))
+                    adoptGrid(grid.forGeneration(shadeOpens), "preopen");
+                return;
             }
-        };
-        boolean hooked = false;
-        for (String name : new String[]{"com.android.systemui.statusbar.phone.LightBarControllerImpl", "com.android.systemui.statusbar.phone.LightBarController"}) {
-            hooked |= hook(resolve(name), "onStatusBarAppearanceChanged", hook);
-        }
-        Probe.log("STATUSBAR_TONE", "hooked=" + hooked);
+            preGrid = grid; preGridGesture = gesture;
+        });
     }
-    /** WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS. */
-    private static final int APPEARANCE_LIGHT_STATUS_BARS = 1 << 3;
-    /** Luma assumed behind the cards before a capture: from the status bar, or null (unknown). */
-    private Float estimatedLuma() {
-        Boolean light = appLightTop;
-        return light == null ? null : light ? 0.92f : 0.08f;
+    private boolean preValid(long gesture, ToneGrid grid) {
+        long now = android.os.SystemClock.uptimeMillis();
+        return Eligibility.preOpenValid(gesture, gestureDown, gestureUp, now - gestureUpAt, now - grid.takenAt, PRE_OPEN_LIFT_MS, PRE_OPEN_MAX_MS);
+    }
+    private void adoptGrid(ToneGrid grid, String state) {
+        shadeGrid = grid;
+        long now = android.os.SystemClock.uptimeMillis();
+        Probe.log("SHADE_PREFETCH", "generation=" + grid.generation + " state=" + state + " tFromOpen=" + (now - shadeOpenAt)
+                + " age=" + (now - grid.takenAt) + " earlyDraws=" + shadeEarlyDraws + " top=" + grid.top + " band=" + grid.band);
+        for (State st : new ArrayList<>(states.values())) st.invalidate();
     }
     /**
-     * First frame of a shade opening: the backdrop tone starts over. Cards drawn before the capture
-     * lands take the status-bar estimate (or, without one, the veil they had); the capture is asked
-     * for now, before the panel or any card is visible, and applies only to this generation.
+     * First frame of a shade opening: the backdrop tone starts over. A pre-open capture younger than
+     * PRE_OPEN_MAX_MS is adopted at once; otherwise one is asked for now, before the panel or any
+     * card is visible, and applies only to this generation. Cards drawn before it lands keep their
+     * theme's native look (no veil, no swap): over a white app the body stays light and only the
+     * text tone changes when the capture lands, instead of a light card turning grey.
      */
     private void beginShadeTone(Object controller) {
         int generation = shadeOpens;
         shadeGrid = null; shadeOpenAt = android.os.SystemClock.uptimeMillis(); shadeCards = 0; shadeEarlyDraws = 0;
         Tuning t = Tuning.get();
         boolean adaptive = t.shadeAdaptive && barState != null && barState == Eligibility.BAR_SHADE;
-        Probe.log("SHADE_OPEN_BEGIN", "generation=" + generation + " adaptive=" + adaptive + " lightTop=" + appLightTop);
+        ToneGrid pre = preGrid;
+        preGrid = null;
+        long preAge = pre == null ? -1 : shadeOpenAt - pre.takenAt;
+        boolean preOk = pre != null && preValid(preGridGesture, pre);
+        Probe.log("SHADE_OPEN_BEGIN", "generation=" + generation + " adaptive=" + adaptive + " preAge=" + preAge + " preValid=" + preOk);
         if (!adaptive) return;
+        if (preOk) { adoptGrid(pre.forGeneration(generation), "preopen"); return; }
         Object panel = Reflect.read(controller, "mView");
         View anchor = panel instanceof View && ((View) panel).isAttachedToWindow() ? (View) panel : null;
         for (State state : new ArrayList<>(states.values())) {
@@ -492,10 +519,9 @@ public final class HeadsUpHooks {
                 return;
             }
             if (grid == null) { Probe.log("SHADE_PREFETCH", "generation=" + generation + " state=unavailable tFromOpen=" + dt); return; }
-            shadeGrid = grid;
-            Probe.log("SHADE_PREFETCH", "generation=" + generation + " state=sample tFromOpen=" + dt + " earlyDraws=" + shadeEarlyDraws
-                    + " top=" + grid.top + " band=" + grid.band);
-            for (State state : new ArrayList<>(states.values())) state.invalidate();
+            // A pre-open capture that landed meanwhile is as good and older-or-equal: keep the first.
+            if (shadeGrid != null && shadeGrid.generation == generation) return;
+            adoptGrid(grid, "sample");
         });
     }
     private void endShadeTone() {
@@ -594,6 +620,10 @@ public final class HeadsUpHooks {
         try { applyShade(controller); } finally { Perf.end(Perf.SHADE, started); }
     }
     private void applyShade(Object controller) {
+        if (panelView == null || panelView.get() == null) {
+            Object pv = Reflect.read(controller, "mView");
+            if (pv instanceof View) panelView = new WeakReference<>((View) pv);
+        }
         Object height = Reflect.read(controller, "mExpandedHeight");
         if (!(height instanceof Number)) height = Reflect.read(controller, "expandedHeight");
         if (!(height instanceof Number)) {
@@ -683,7 +713,9 @@ public final class HeadsUpHooks {
     private static final long VEIL_RAMP_MS = 180;
     /** How often a shown pop-up measures the backdrop under it again (the app may scroll or change). */
     private static final long POPUP_MEASURE_MS = 1000;
-    private static final long HALO_WALK_MS = 500;
+    private static final long SWAP_WALK_MS = 500;
+    /** While a pop-up enters, how often the backdrop under it is measured again. */
+    private static final long POPUP_ENTER_MS = 100;
     private static final String SURFACE_SHADE = "shade", SURFACE_POPUP = "popup";
     /** The accumulated alpha of a view and its ancestors. */
     private static float shownAlpha(View v) {
@@ -722,20 +754,28 @@ public final class HeadsUpHooks {
         boolean stacked;
         /** The shade opening whose backdrop this card's veil was taken from (shadetone=3). */
         int toneOpen = -1;
-        /** Which surface the veil was measured for (SHADE, POPUP) or null, and from what (estimate, cached, grid, sample). */
+        /** Which surface the veil was measured for (SHADE, POPUP) or null, and from what (native, grid, sample). */
         String toneSurface, toneSource;
-        /** Uptime of the last pop-up measurement request. */
+        /** Uptime of the last pop-up measurement request, and the card's position and alpha then. */
         long popupMeasureAt;
-        /** Halo alpha on this card's text (0: none) and when the views were last walked. */
-        float haloAlpha;
-        long haloAt;
+        int popupMeasuredY;
+        float popupMeasuredAlpha;
+        /** The backdrop read as light at the last measurement (the style's hysteresis state). */
+        boolean lightBackdrop;
+        /** The style last logged (MATERIAL_STYLE), and the opening whose first visible draw was logged. */
+        String loggedStyle;
+        int firstVisibleOpen = -1;
+        /** Whether this card's text and icons carry the swapped tone, and when its views were last walked. */
+        boolean swapped;
+        long swapAt;
         final int[] toneXy = new int[2];
         /**
-         * The card's veil and text halo from the backdrop behind it. Shade cards: the opening's
-         * capture (ToneGrid) under the card's current position once it has landed, before that the
-         * status-bar estimate (or the veil of the previous opening when there is none). Pop-ups over
-         * an app in LSPosed-only mode: the estimate on their first frame, then a capture under the
-         * card every POPUP_MEASURE_MS while shown. Any other surface carries no pop-up veil and no halo.
+         * The card's material from the backdrop behind it. Shade cards: the opening's capture
+         * (ToneGrid, possibly taken at the pull-down's first touch) under the card's current position;
+         * before it lands, the theme's native look. Pop-ups over an app in LSPosed-only mode: native
+         * on the first frame, then a capture under the card every POPUP_ENTER_MS while it enters
+         * (fading in or moving) and every POPUP_MEASURE_MS once still. Any other surface carries no
+         * pop-up veil and no swapped text.
          */
         void tone(View v) {
             Tuning t = Tuning.get();
@@ -746,7 +786,7 @@ public final class HeadsUpHooks {
                 pushToneVeil(0);
                 toneSurface = null; toneSource = null;
             }
-            setHalo(0f);
+            setForeground(false);
         }
         void shadeTone(View v) {
             boolean first = toneOpen != shadeOpens;
@@ -759,11 +799,11 @@ public final class HeadsUpHooks {
                 if (luma < 0f) return;
                 source = "grid";
             } else if (first) {
-                Float estimate = estimatedLuma();
-                luma = estimate == null ? Float.NaN : estimate;
-                source = estimate == null ? "cached" : "estimate";
+                luma = Float.NaN;
+                source = "native";
             } else {
                 if (v.isShown() && shownAlpha(v) > 0.01f) shadeEarlyDraws++;
+                firstVisible(v);
                 return;
             }
             boolean changedSource = !source.equals(toneSource);
@@ -772,47 +812,80 @@ public final class HeadsUpHooks {
             toneOpen = shadeOpens; toneSurface = SURFACE_SHADE; toneSource = source;
             // The shade slot may hold an older veil than the one the pop-up slot had.
             if (changedSurface) pushToneVeil();
-            if (!Float.isNaN(luma)) setTone(luma, changedSource);
+            if (Float.isNaN(luma)) setNative(); else setTone(luma, changedSource);
             if (changedSource) logTone("SHADE_TONE_APPLY", v, source, luma, grid != null && source.equals("grid") ? grid.bright(toneXy[1], toneXy[1] + v.getHeight()) : -1f,
-                    " generation=" + shadeOpens + " tFromOpen=" + (android.os.SystemClock.uptimeMillis() - shadeOpenAt));
+                    " generation=" + shadeOpens + " tFromOpen=" + (android.os.SystemClock.uptimeMillis() - shadeOpenAt)
+                    + (grid != null && source.equals("grid") ? " age=" + (android.os.SystemClock.uptimeMillis() - grid.takenAt) : ""));
+            firstVisible(v);
+        }
+        /** FIRST_VISIBLE_MATERIAL: the material a card shows on its first visible draw of an opening. */
+        void firstVisible(View v) {
+            if (firstVisibleOpen == shadeOpens || !v.isShown() || shownAlpha(v) <= 0.01f) return;
+            firstVisibleOpen = shadeOpens;
+            // Recorded at pre-draw: the material this card's next draw is built with, not proof of
+            // which frame reached the display (RenderThread and the compositor follow).
+            logTone("FIRST_VISIBLE_MATERIAL", v, String.valueOf(toneSource), Float.NaN, -1f,
+                    " generation=" + shadeOpens + " tFromOpen=" + (android.os.SystemClock.uptimeMillis() - shadeOpenAt) + " at=preDraw");
         }
         void popupTone(View v) {
             long now = android.os.SystemClock.uptimeMillis();
             if (!SURFACE_POPUP.equals(toneSurface)) {
-                toneSurface = SURFACE_POPUP; popupMeasureAt = 0;
+                toneSurface = SURFACE_POPUP; popupMeasureAt = 0; popupMeasuredAlpha = 0f;
                 // The pop-up slot is empty or stale: write the current veil before any step from it.
                 pushToneVeil();
-                Float estimate = estimatedLuma();
-                toneSource = estimate == null ? "none" : "estimate";
-                if (estimate != null) setTone(estimate, true); else { applyMeasuredVeil(0); setHalo(0f); }
-                logTone("POPUP_CONTRAST", v, toneSource, estimate == null ? Float.NaN : estimate, -1f, "");
-            } else setHalo(haloAlpha);
-            if (now - popupMeasureAt < POPUP_MEASURE_MS || !v.isShown()) return;
-            popupMeasureAt = now;
+                toneSource = "native";
+                setNative();
+                logTone("POPUP_CONTRAST", v, toneSource, Float.NaN, -1f, "");
+            } else setForeground(swapped);
+            if (!v.isShown()) return;
+            v.getLocationOnScreen(toneXy);
+            float alpha = shownAlpha(v);
+            // While it enters (fading in, sliding down) the region under it is not yet the final one:
+            // measure again every POPUP_ENTER_MS until it is opaque and still, then every second.
+            boolean entering = popupMeasuredAlpha < 0.99f || Math.abs(toneXy[1] - popupMeasuredY) > 8;
+            if (now - popupMeasureAt < (entering ? POPUP_ENTER_MS : POPUP_MEASURE_MS)) return;
+            popupMeasureAt = now; popupMeasuredY = toneXy[1]; popupMeasuredAlpha = alpha;
+            long requested = now;
             ShadeTone.measure(v, luma -> {
                 if (!SURFACE_POPUP.equals(toneSurface)) return;
                 boolean firstSample = !"sample".equals(toneSource);
                 int before = measuredVeil;
+                boolean wasSwapped = swapped;
                 toneSource = "sample";
                 setTone((float) luma, firstSample);
-                if (firstSample || before != measuredVeil) logTone("POPUP_CONTRAST", v, "sample", (float) luma, -1f, "");
+                if (firstSample || before != measuredVeil || wasSwapped != swapped) logTone("POPUP_CONTRAST", v, "sample", (float) luma, -1f,
+                        " age=" + (android.os.SystemClock.uptimeMillis() - requested) + " measuredAlpha=" + String.format(java.util.Locale.ROOT, "%.2f", alpha));
             });
         }
         void logTone(String event, View v, String source, float luma, float bright, String extra) {
             Probe.log(event, "viewId=" + Integer.toHexString(System.identityHashCode(v)) + " source=" + source
                     + " luma=" + (Float.isNaN(luma) ? "na" : String.format(java.util.Locale.ROOT, "%.2f", luma))
                     + (bright >= 0f ? " lumaP90=" + String.format(java.util.Locale.ROOT, "%.2f", bright) : "")
-                    + " veil=" + Integer.toHexString(measuredVeil) + " halo=" + String.format(java.util.Locale.ROOT, "%.2f", haloAlpha)
+                    + " style=" + (swapped ? (lightBackdrop ? "light" : "dark") : "native") + " veil=" + Integer.toHexString(measuredVeil)
                     + " alpha=" + String.format(java.util.Locale.ROOT, "%.2f", shownAlpha(v)) + " shown=" + v.isShown() + extra);
         }
+        /** The theme's own look: no veil, no swapped text; the hysteresis starts on the theme's side. */
+        void setNative() {
+            lightBackdrop = !ShadeTone.lightText();
+            setForeground(false);
+            // At once, never ramped: a ramp would replay the previous opening's (or surface's) veil
+            // for VEIL_RAMP_MS on a card that is starting over.
+            if (veilRamp != null) { veilRamp.cancel(); veilRamp = null; }
+            if (measuredVeil != 0) { measuredVeil = 0; pushToneVeil(); invalidate(); }
+            styleChanged("native");
+        }
         /**
-         * Moves the card to the veil and halo for {@code luma}. A small step (the card sliding over
-         * the next band) applies directly; a change of source or a large step goes through
-         * applyMeasuredVeil, which ramps on a visible card and applies at once on a hidden one.
+         * Moves the card to the material for {@code luma}. A small veil step (the card sliding over
+         * the next band) applies directly; a change of source or style, or a large step, goes through
+         * applyMeasuredVeil, which ramps between veils of one colour on a visible card and switches at
+         * once otherwise (light glass and a black veil never ramp through grey).
          */
         void setTone(float luma, boolean transition) {
-            int veil = ShadeTone.veilFor(luma);
-            setHalo(ShadeTone.haloFor(luma));
+            io.github.igorcv88.oneuiliquidglass.glass.Material m = ShadeTone.materialFor(luma, lightBackdrop);
+            lightBackdrop = m.light;
+            setForeground(m.swap);
+            styleChanged(m.style());
+            int veil = m.veil;
             if (veil == measuredVeil) return;
             int da = Math.abs((veil >>> 24) - (measuredVeil >>> 24));
             boolean sameColour = veil == 0 || measuredVeil == 0 || (veil & 0x00ffffff) == (measuredVeil & 0x00ffffff);
@@ -824,18 +897,27 @@ public final class HeadsUpHooks {
             }
             applyMeasuredVeil(veil);
         }
-        /** Text halo of this card; the views are walked again every HALO_WALK_MS while it is on (new inflations). */
-        void setHalo(float alpha) {
-            alpha = Math.round(alpha * 20f) / 20f;
+        void styleChanged(String style) {
+            if (style.equals(loggedStyle)) return;
+            String from = loggedStyle;
+            loggedStyle = style;
+            View v = background.get();
+            if (from == null || v == null) return;
+            Probe.log("MATERIAL_STYLE", "viewId=" + Integer.toHexString(System.identityHashCode(v)) + " surface=" + toneSurface
+                    + " from=" + from + " to=" + style + " source=" + toneSource + " alpha=" + String.format(java.util.Locale.ROOT, "%.2f", shownAlpha(v))
+                    + (SURFACE_SHADE.equals(toneSurface) ? " generation=" + shadeOpens + " tFromOpen=" + (android.os.SystemClock.uptimeMillis() - shadeOpenAt) : ""));
+        }
+        /** Swapped text and icon tone; the views are walked again every SWAP_WALK_MS while it is on (new inflations). */
+        void setForeground(boolean swap) {
             long now = android.os.SystemClock.uptimeMillis();
-            if (alpha == haloAlpha && (alpha == 0f || now - haloAt < HALO_WALK_MS)) return;
-            haloAt = now;
+            if (swap == swapped && (!swap || now - swapAt < SWAP_WALK_MS)) return;
+            swapAt = now;
             try {
-                int changed = TextHalo.apply(row.get(), alpha, ShadeTone.lightText());
-                // Recorded only once the walk went through: a failed removal is retried.
-                haloAlpha = alpha;
-                if (changed > 0 && Probe.trace) Probe.log("TEXT_HALO", "rowId=" + Integer.toHexString(System.identityHashCode(row.get())) + " alpha=" + alpha + " views=" + changed);
-            } catch (RuntimeException e) { Probe.error("TEXT_HALO_FAILED", e); }
+                int changed = Foreground.apply(row.get(), swap, ShadeTone.lightText());
+                // Recorded only once the walk went through: a failed restore is retried.
+                swapped = swap;
+                if (changed > 0 && Probe.trace) Probe.log("TEXT_TONE", "rowId=" + Integer.toHexString(System.identityHashCode(row.get())) + " swap=" + swap + " views=" + changed);
+            } catch (RuntimeException e) { Probe.error("TEXT_TONE_FAILED", e); }
         }
         /** The veil measured for this card at the current shade opening (0: none needed). */
         int measuredVeil;
@@ -1042,12 +1124,12 @@ public final class HeadsUpHooks {
                     if (!line.equals(lastTrace)) { lastTrace = line; FrameTrace.log("ROW_FRAME", v, line); }
                 }
                 boolean eligible = eligible();
-                // Only a card that draws glass this frame takes a veil or a halo: with the module
+                // Only a card that draws glass this frame takes a veil or swapped text: with the module
                 // disabled, or a card going back to its native background (ineligible, failed), its
                 // text is left as SystemUI drew it.
                 if (!pill) {
                     if (Eligibility.textTone(enabled, glass != null, glass != null && glass.failed(), eligible)) tone(v);
-                    else setHalo(0f);
+                    else setForeground(false);
                 }
                 View r = row.get();
                 Boolean headsUp = r == null ? null : Reflect.bool(r, "isHeadsUpState", "mIsHeadsUp");
@@ -1264,7 +1346,7 @@ public final class HeadsUpHooks {
                 }
                 if (compBridge != null) { SemBlurBridge.clearNative(v); compBridge.setInvalidator(this::invalidate); }
                 if (compBridge != null && pill) compBridge.setPill(true);
-                // A new bridge takes the veil measured for this opening; a pop-up its estimate or
+                // A new bridge takes the veil measured for this opening; a pop-up its native look or
                 // measurement now, so its first frame is not drawn with the plain tint.
                 pushToneVeil();
                 if (compBridge != null && !pill) tone(v);
@@ -1290,7 +1372,7 @@ public final class HeadsUpHooks {
             refreshLens();
             glass.configure(original, shape(), fill, tone);
             if (live) {
-                glass.setGlint(popupSurface() ? Tuning.get().liveGlint : 1f);
+                glass.setGlint(popupSurface() ? Tuning.get().liveGlint : !lensSurface() ? Tuning.get().shadeGlint : 1f);
                 updateLens(v); liveState(v, fill);
             }
             if (lastFallback != null) { lastFallback = null; Probe.log("NATIVE_FALLBACK", "viewId=" + Integer.toHexString(System.identityHashCode(v)) + " reason=none"); }
@@ -1415,8 +1497,8 @@ public final class HeadsUpHooks {
          */
         void release(boolean restore) {
             // Every path to the native background (hidden, ineligible, failed draw or compose)
-            // passes here: the text gets its own shadow back in the same frame.
-            setHalo(0f);
+            // passes here: the text gets its own colours back in the same frame.
+            setForeground(false);
             if (glass == null) return;
             // The blur guard also blocked calls aimed at the row while this material was managed.
             boolean compositor = glassKind == Backdrop.Kind.SAMSUNG || glass.hybrid() || compBridge != null;

@@ -2,6 +2,45 @@
 
 Documento para continuar o trabalho em outra conversa. Leia inteiro antes de mexer em qualquer coisa. O histórico técnico detalhado está em `docs/architecture.md`; as seções de 2026-10-16 cobrem a central de notificações.
 
+## 0t. Atualização (2026-10-25): rodada 37 — estilo de material no lugar do véu cinza, sem halo por letra
+
+Base: handoff pós-PR #36 (log conservative, captura `82192.png`, vídeos). **Não testado no aparelho.**
+
+**Por que mudou:** o OULG aplicava preto sobre branco (`veil=59000000`), e preto 25 % sobre branco é `#BFBFBF`: cinza, com contraste de ~1,8:1 para texto branco. Nenhum `veilmax` resolve. O halo por letra virou contorno sujo. A estimativa pela barra de status errou (toolbar escura do Chrome sobre página branca).
+
+**Agora:**
+- **Fundo do lado do tema** (escuro no tema escuro): visual nativo, véu pequeno limitado a `veilmax` (padrão 0,25).
+- **Fundo do lado oposto** (claro no tema escuro): **vidro claro** (branco 25 %, o véu do próprio tema claro Samsung) **com texto escuro**. No tema claro sobre fundo escuro, o inverso.
+- **Histerese por card:** claro a partir de `stylehi` 0,62, volta a escuro em `stylelo` 0,48.
+- **Troca do texto:** só views dos templates padrão (ids do framework `android` ou do SystemUI; ícone só o de expandir). Layouts `RemoteViews` personalizados têm ids do app e nunca são tocados. Dentro disso, só cinzas do tom do tema são espelhados (branco → preto, cinza claro → cinza escuro, alpha mantido). Texto colorido, spans, ícones de app e ações não mudam. Restaurado em todo caminho para o fundo nativo, como o halo era.
+- **Halo removido. Estimativa pela barra de status removida.**
+- **Primeiro quadro da central:** sem dados, visual nativo (sobre branco: card claro cujo texto escurece quando a captura chega, sem passar por cinza). Um toque nos 6 % superiores da tela com a central fechada já pede a captura, vinculada a esse gesto: só a abertura feita pelo mesmo gesto (dedo ainda na tela ou solto há no máximo 250 ms) e com captura de até 1,5 s a usa; qualquer outro toque no meio invalida. O visual nativo é aplicado na hora, sem rampa do véu anterior. Os 616 ms vinham do `CaptureHub` dormindo 500 ms; agora um cliente novo é atendido na hora.
+- **Pop-up:** nativo no primeiro quadro; captura a cada 100 ms enquanto entra (alpha < 0,99 ou ainda se movendo), depois a cada 1 s. A faixa refratada usa a mesma cor da região do corpo: acaba o anel claro em volta do miolo cinza.
+- **Glint:** `liveglint` 0,10 (aprovado) e novo `shadeglint` 0,10 na central; lockscreen continua 1.
+- **Gate:** `lensgate` padrão agora é `directional`.
+
+**Props novas:** `stylelo`, `stylehi`, `lightglass`, `textswap` (0 volta ao véu sem troca de estilo), `shadeglint`. Removida: `texthalo`.
+
+**Logs:** `MATERIAL_STYLE`, `FIRST_VISIBLE_MATERIAL`, `SHADE_PREFETCH state=preopen|sample age=`, `SHADE_OPEN_BEGIN preAge=`, `POPUP_CONTRAST source=native|sample style=`.
+
+```sh
+su -c 'grep -E "MATERIAL_STYLE|FIRST_VISIBLE|SHADE_OPEN|SHADE_PREFETCH|SHADE_TONE_APPLY|POPUP_CONTRAST|LENS_STATS" /sdcard/Download/oulg37_log.txt | tail -150'
+```
+
+**Teste:** (1) central sobre página branca, puxando pelo topo e pelo gesto do launcher, três vezes cada; (2) o mesmo sobre fundo escuro e colorido, conferindo texto primário, secundário, ações e ícones; (3) pop-up sobre branco por mais de 2 s; (4) quina superior esquerda na central (`shadeglint` 0 / 0.10 / 0.25); (5) desligar o módulo com a central aberta: nenhum texto deve ficar escuro.
+
+**Reverter por prop:**
+
+```sh
+su -c 'setprop debug.oulg.textswap 0; setprop debug.oulg.shadeglint 1; setprop debug.oulg.lensgate conservative'
+```
+
+(`textswap 0` volta ao véu preto limitado a `veilmax`, sem halo.)
+
+**Limite do log:** `FIRST_VISIBLE_MATERIAL` é registrado no pré-desenho (`at=preDraw`): diz com que material o próximo desenho é feito, não prova qual quadro chegou ao display.
+
+**Validado:** Gradle `testDebugUnitTest` (96), `lintDebug`, `assembleDebug`.
+
 ## 0s. Atualização (2026-10-25): rodada 36 — tom desde o primeiro quadro, contraste do pop-up, véu limitado, glint, gate direcional
 
 Base: handoff do aparelho de 25/10 (DZIF). Cada mudança tem prop de reversão. **Não testado no aparelho.**

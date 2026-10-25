@@ -76,4 +76,17 @@ public final class EligibilityTest {
         // No material yet: the tone is applied when it is built (material()).
         assertFalse(Eligibility.textTone(true, false, false, true));
     }
+    @Test public void preOpenCaptureBelongsToItsGesture() {
+        // The pull-down that started at the top edge, finger still down.
+        assertTrue(Eligibility.preOpenValid(100, 100, false, 0, 120, 250, 1500));
+        // A fling: lifted 150 ms before the opening.
+        assertTrue(Eligibility.preOpenValid(100, 100, true, 150, 300, 250, 1500));
+        // A tap at the top, lifted long ago, then a launcher pull-down: stale.
+        assertFalse(Eligibility.preOpenValid(100, 100, true, 900, 1000, 250, 1500));
+        // A new touch went down since (cancelled pull, then another): not this capture.
+        assertFalse(Eligibility.preOpenValid(100, 250, false, 0, 200, 250, 1500));
+        // Too old, or a clock oddity.
+        assertFalse(Eligibility.preOpenValid(100, 100, false, 0, 1600, 250, 1500));
+        assertFalse(Eligibility.preOpenValid(100, 100, false, 0, -5, 250, 1500));
+    }
 }

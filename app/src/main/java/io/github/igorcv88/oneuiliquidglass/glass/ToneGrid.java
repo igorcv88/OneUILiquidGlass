@@ -11,12 +11,16 @@ public final class ToneGrid {
     public final int top, band;
     /** Mean and 90th percentile luma of each band. */
     final float[] mean, p90;
-    /** The shade opening this capture belongs to (HeadsUpHooks.shadeOpens). */
+    /** The shade opening this capture belongs to (HeadsUpHooks.shadeOpens; -1: taken before an opening). */
     public final int generation;
+    /** Uptime (ms) the capture was requested: the backdrop is at least this old. */
+    public final long takenAt;
 
-    ToneGrid(int top, int band, float[] mean, float[] p90, int generation) {
-        this.top = top; this.band = Math.max(1, band); this.mean = mean; this.p90 = p90; this.generation = generation;
+    ToneGrid(int top, int band, float[] mean, float[] p90, int generation, long takenAt) {
+        this.top = top; this.band = Math.max(1, band); this.mean = mean; this.p90 = p90; this.generation = generation; this.takenAt = takenAt;
     }
+    /** The same capture adopted by shade opening {@code g} (a pre-open capture). */
+    public ToneGrid forGeneration(int g) { return new ToneGrid(top, band, mean, p90, g, takenAt); }
 
     /** Mean luma under the screen rows [y0, y1), each band weighted by its overlap; -1 if none. */
     public float luma(int y0, int y1) { return over(mean, y0, y1); }

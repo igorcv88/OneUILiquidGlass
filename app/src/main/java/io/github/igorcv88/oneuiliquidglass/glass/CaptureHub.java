@@ -95,9 +95,17 @@ public final class CaptureHub {
         return !disabled && SystemClock.uptimeMillis() >= secureUntil && CaptureApi.get() != null;
     }
 
+    private static final Runnable TICK = CaptureHub::tick;
+    /**
+     * A new client is served at once: with no client shown the loop sleeps 500 ms between ticks, and
+     * a one-shot measurement registered then waited that long (616 ms to the first shade capture in
+     * a device log, 25/10).
+     */
     public static void register(Client client) {
         clients.add(new WeakReference<>(client));
-        if (!ticking) { ticking = true; MAIN.post(CaptureHub::tick); }
+        ticking = true;
+        MAIN.removeCallbacks(TICK);
+        MAIN.post(TICK);
     }
 
     public static void unregister(Client client) {
@@ -128,7 +136,7 @@ public final class CaptureHub {
             int h = shown.get(i).hz();
             if (h <= 0) shown.remove(i); else hz = Math.max(hz, h);
         }
-        MAIN.postDelayed(CaptureHub::tick, hz > 0 ? 1000L / hz : anyShown ? IDLE_POLL_MS : 500L);
+        MAIN.postDelayed(TICK, hz > 0 ? 1000L / hz : anyShown ? IDLE_POLL_MS : 500L);
         if (shown.isEmpty() || inFlight || !available()) return;
         View first = shown.get(0).view();
         PowerManager pm = first.getContext().getSystemService(PowerManager.class);
