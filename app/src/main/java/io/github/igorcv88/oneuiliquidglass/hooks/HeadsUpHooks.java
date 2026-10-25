@@ -1290,7 +1290,7 @@ public final class HeadsUpHooks {
             refreshLens();
             glass.configure(original, shape(), fill, tone);
             if (live) {
-                glass.setGlint(popupSurface() ? Tuning.get().liveGlint : 1f);
+                glass.setGlint(popupSurface() ? Tuning.get().liveGlint : !lensSurface() ? Tuning.get().shadeGlint : 1f);
                 updateLens(v); liveState(v, fill);
             }
             if (lastFallback != null) { lastFallback = null; Probe.log("NATIVE_FALLBACK", "viewId=" + Integer.toHexString(System.identityHashCode(v)) + " reason=none"); }

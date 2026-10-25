@@ -296,6 +296,10 @@ public final class GlassDrawable extends Drawable {
         refract.setFloatUniform("dispersion", t.dispersion);
         int override = hybrid ? t.semAlpha : t.tintAlpha;
         int veil = override >= 0 ? (tintColor & 0x00ffffff) | (override << 24) : tintColor;
+        // The band over a live body takes the colour the body's region was given (the measured veil
+        // or material style included), so rim and body read as one glass: with the plain tint the
+        // band stayed light around a darkened body (device video, 25/10).
+        if (lensBand && backdrop instanceof BackgroundBlurBridge) veil = ((BackgroundBlurBridge) backdrop).requestedTint();
         premultiplied(refract, "tint", veil);
         premultiplied(refract, "fillColor", hybrid ? 0 : fillColor);
         RenderEffect optics = RenderEffect.createRuntimeShaderEffect(refract, "backdrop");
