@@ -1254,6 +1254,8 @@ public final class HeadsUpHooks {
         }
         @Override public void onViewDetachedFromWindow(View view) {
             release();
+            // The shelf keeps its swapped text through release(); a detached shelf gives it back.
+            if (pill) setForeground(false);
             if (observer != null && observer.isAlive()) observer.removeOnPreDrawListener(this);
             observer = null;
             if (wm != null && blurListener != null) {
@@ -1722,7 +1724,10 @@ public final class HeadsUpHooks {
             // must not apply its pending swap to a card that is going native.
             pendingSwap = null;
             if (veilRamp != null) { veilRamp.cancel(); veilRamp = null; }
-            setForeground(false);
+            // The shelf's text follows the shade's scene, not its glass: in the shade its native
+            // background is drawn through material() -> release() on every frame, and restoring
+            // here undid shelfTone() each redraw. shelfTone() restores it when the shade closes.
+            if (!pill) setForeground(false);
             if (glass == null) return;
             // The blur guard also blocked calls aimed at the row while this material was managed.
             boolean compositor = glassKind == Backdrop.Kind.SAMSUNG || glass.hybrid() || compBridge != null;
