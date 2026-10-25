@@ -864,7 +864,13 @@ public final class HeadsUpHooks {
             // measure again every POPUP_ENTER_MS until it is opaque and still, then every second.
             boolean entering = popupMeasuredAlpha < 0.99f || Math.abs(toneXy[1] - popupMeasuredY) > 8;
             long interval = entering ? POPUP_ENTER_MS : POPUP_MEASURE_MS;
-            if (now - popupMeasureAt < interval) return;
+            if (now - popupMeasureAt < interval) {
+                // Not due yet (the interval grew as the pop-up settled): keep the timer armed for the
+                // rest of it, or the loop would stop once no other draw comes.
+                v.removeCallbacks(popupPoke);
+                v.postDelayed(popupPoke, interval - (now - popupMeasureAt));
+                return;
+            }
             popupMeasureAt = now; popupMeasuredY = toneXy[1]; popupMeasuredAlpha = alpha;
             // The entrance animates RenderNode properties without redrawing the card: without a poke
             // the next measurement waited for an unrelated draw (1.2 s on the device). One redraw per
