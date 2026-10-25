@@ -36,6 +36,9 @@ public final class CaptureBackdrop implements SampledBackdrop, CaptureHub.Client
     @Override public int hz() { return rate.getAsInt(); }
     @Override public void onFrame(CaptureHub.Frame next) {
         if (released) return;
+        // A frame taken for the shade's tone prefetch alone (an eighth of the resolution) is not
+        // refracted: the lens keeps its last frame, or the live blur, until the next capture.
+        if (next.scale < CaptureHub.SCALE) return;
         frame = next;
         View v = view.get();
         if (v != null) v.invalidate();

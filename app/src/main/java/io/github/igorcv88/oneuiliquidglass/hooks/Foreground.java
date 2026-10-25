@@ -33,6 +33,8 @@ final class Foreground {
         boolean lightText;
         Rec(Object saved) { this.saved = saved; }
     }
+    /** Whether a child row draws its own glass (and so its own tone); set by HeadsUpHooks. */
+    static java.util.function.Predicate<View> ownsTone = v -> true;
     /** Set while this class changes colours itself: its own calls pass the interception untouched. */
     static boolean applying;
     /** Colour sets on swapped views redirected since the last read (interceptions()). */
@@ -129,6 +131,20 @@ final class Foreground {
         surveyWalk(root, lightText, max, out);
         return out;
     }
+    /** swap on a fixed set of views (the shade header's clock, date and carrier), outside any row. */
+    static int applyViews(java.util.List<View> views, boolean swap, boolean lightText, java.util.List<View> tracked) {
+        if (tracked != null) tracked.clear();
+        int changed = 0;
+        applying = true;
+        try {
+            for (View v : views) {
+                if (!(v instanceof TextView)) continue;
+                changed += ink(new Text((TextView) v), swap, lightText, swapped) ? 1 : 0;
+                if (tracked != null && swap && swapped.containsKey(v)) tracked.add(v);
+            }
+        } finally { applying = false; }
+        return changed;
+    }
     /**
      * Every text view in a row (or the shelf), with whether this class would touch it and why not:
      * class, id, colour, standard-template test, theme-tone test, swapped now. Trace only; no text.
@@ -204,8 +220,11 @@ final class Foreground {
             ViewGroup g = (ViewGroup) v;
             for (int i = 0; i < g.getChildCount(); i++) {
                 View c = g.getChildAt(i);
-                // A group's child rows are cards of their own, with their own material.
-                if (c.getClass().getName().endsWith("ExpandableNotificationRow")) continue;
+                // A group's child rows that draw their own glass have their own material and tone; a
+                // child row drawn inside the group's card (a collapsed or minimised group, whose
+                // own background is hidden) takes the group's tone, or its text stayed white on
+                // the group's light glass (TEXT_ROW: app_name_text ffffffff swapped=false, 25/10).
+                if (c.getClass().getName().endsWith("ExpandableNotificationRow") && ownsTone.test(c)) continue;
                 changed += walk(c, swap, lightText, tracked);
             }
         }

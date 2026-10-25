@@ -222,6 +222,12 @@ public final class HeadsUpHooks {
         installBlurGuard();
         installTouchSignal();
         installTextColorGuard();
+        // A child row with its own glass keeps its own tone; one drawn inside its group's card
+        // (no glass of its own) is walked with the group's.
+        Foreground.ownsTone = child -> {
+            for (State st : states.values()) if (st.row.get() == child && st.glass != null) return true;
+            return false;
+        };
         // Shade state is only known once SystemUI constructs the controller, after this point.
         Probe.log("READY", "mode=" + (enabled ? "glass" : "probe") + " drawHook=" + drawHook + " shadeHook=" + shadeHook + " samsungBlur=" + samsungBlur);
         if (enabled && (!drawHook || !shadeHook)) Probe.log("GLASS_UNAVAILABLE", "drawHook=" + drawHook + " shadeHook=" + shadeHook);
@@ -551,6 +557,47 @@ public final class HeadsUpHooks {
             }, 700);
         }
         for (State st : new ArrayList<>(states.values())) st.invalidate();
+        headerTone(grid);
+    }
+    /** The shade header's clock, date and carrier while they carry the swapped tone. */
+    private final java.util.List<View> headerViews = new ArrayList<>();
+    private static final String[] HEADER_IDS = { "header_clock", "header_date", "shade_carrier_text" };
+    /**
+     * The shade header's labels follow the backdrop under them like the cards' text: white on a
+     * white app read as missing (device frames, 25/10). Clear-all and the settings button are left:
+     * they sit on pills of their own. Off with debug.oulg.headertone=0.
+     */
+    private void headerTone(ToneGrid grid) {
+        restoreHeader();
+        View pv = panelView == null ? null : panelView.get();
+        if (pv == null || !Tuning.get().headerTone || !Tuning.get().textSwap) return;
+        View root = pv.getRootView();
+        java.util.List<View> found = new ArrayList<>();
+        int top = Integer.MAX_VALUE, bottom = Integer.MIN_VALUE;
+        int[] xy = new int[2];
+        for (String name : HEADER_IDS) {
+            int id = root.getResources().getIdentifier(name, "id", root.getContext().getPackageName());
+            View v = id == 0 ? null : root.findViewById(id);
+            if (v == null) continue;
+            found.add(v);
+            v.getLocationOnScreen(xy);
+            top = Math.min(top, xy[1]); bottom = Math.max(bottom, xy[1] + v.getHeight());
+        }
+        if (found.isEmpty() || bottom <= top) { Probe.log("HEADER_TONE", "views=" + found.size() + " state=skip"); return; }
+        float luma = grid.luma(top, bottom);
+        boolean light = ShadeTone.lightBackdrop(luma, shadeScene);
+        boolean swap = light == ShadeTone.lightText();
+        int changed = 0;
+        try { changed = Foreground.applyViews(found, swap, ShadeTone.lightText(), headerViews); }
+        catch (RuntimeException e) { Probe.error("TEXT_TONE_FAILED", e); }
+        Probe.log("HEADER_TONE", "views=" + found.size() + " luma=" + String.format(java.util.Locale.ROOT, "%.2f", luma)
+                + " swap=" + swap + " changed=" + changed);
+    }
+    private void restoreHeader() {
+        if (headerViews.isEmpty()) return;
+        try { Foreground.applyViews(new ArrayList<>(headerViews), false, ShadeTone.lightText(), null); }
+        catch (RuntimeException e) { Probe.error("TEXT_TONE_FAILED", e); }
+        headerViews.clear();
     }
     /**
      * First frame of a shade opening: the backdrop tone starts over. A pre-open capture younger than
@@ -596,6 +643,7 @@ public final class HeadsUpHooks {
                 + " cards=" + shadeCards + " earlyDraws=" + shadeEarlyDraws + " sampled=" + (shadeGrid != null)
                 + " intercepted=" + Foreground.interceptions());
         shadeGrid = null; shadeOpenAt = 0;
+        restoreHeader();
     }
     private void installShade() {
         Class<?> c = resolve("com.android.systemui.shade.NotificationPanelViewController");
@@ -1117,7 +1165,13 @@ public final class HeadsUpHooks {
         int driftCount;
         long driftWindowAt;
         /** Light glass: the edge's thickness shadow is drawn stronger (debug.oulg.lightedge) to define the card on white. */
-        void setLightStyle(boolean on) { lightStyle = on; if (glass != null) glass.setLightStyle(on); }
+        void setLightStyle(boolean on) { lightStyle = on; if (glass != null) glass.setLightStyle(on, lightEdge()); }
+        /**
+         * The shade's light glass takes a lighter thickness shadow (debug.oulg.shadeedge): at the
+         * pop-up's 2x it drew a grey inner bevel on every card of a stack over a white app (device
+         * frames, 25/10). The pop-up keeps debug.oulg.lightedge.
+         */
+        float lightEdge() { return SURFACE_SHADE.equals(toneSurface) ? Tuning.get().shadeEdge : Tuning.get().lightEdge; }
         boolean lightStyle;
         /** The veil measured for this card at the current shade opening (0: none needed). */
         int measuredVeil;
@@ -1558,7 +1612,7 @@ public final class HeadsUpHooks {
                 if (compBridge != null && !pill) safeTone(v);
                 if (semBridge != null) semBridge.setSuspended(stacked);
                 glass = new GlassDrawable(backdrop, v.getResources().getDisplayMetrics().density, spec);
-                glass.setLightStyle(lightStyle);
+                glass.setLightStyle(lightStyle, lightEdge());
                 glassKind = kind;
                 glassSource = source;
                 glass.setCallback(v);

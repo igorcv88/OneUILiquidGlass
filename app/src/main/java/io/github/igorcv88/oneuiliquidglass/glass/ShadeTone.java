@@ -60,6 +60,13 @@ public final class ShadeTone implements CaptureHub.Client {
         @Override public View view() { return done ? null : panel.get(); }
         @Override public int hz() { return 60; }
         @Override public boolean evenHidden() { return true; }
+        /**
+         * An eighth of the screen's resolution: the bands need ~2 000 samples, not 1.8 M. At the
+         * band's 0.5 the software copy and the bands took 55-100 ms, so the capture landed after the
+         * cards' first visible frame (42-58 ms) and their text turned dark on screen (device log
+         * 25/10). At 0.125 the copy is 16x smaller.
+         */
+        @Override public float scale() { return PREFETCH_SCALE; }
         @Override public void onUnavailable() {
             if (done) return;
             done = true;
@@ -87,6 +94,7 @@ public final class ShadeTone implements CaptureHub.Client {
     }
     private static void scheduleDrop() { MAIN.removeCallbacks(DROP); MAIN.postDelayed(DROP, 1000); }
     static final int BANDS = 32;
+    static final float PREFETCH_SCALE = 0.125f;
     /** Luminance bands of the whole frame (screen coordinates), or null. Worker thread. */
     private static ToneGrid grid(CaptureHub.Frame frame, int generation) {
         try {
@@ -96,12 +104,14 @@ public final class ShadeTone implements CaptureHub.Client {
             int n = (h + bandPx - 1) / bandPx;
             float[] mean = new float[n], p90 = new float[n];
             int[] row = new int[w];
-            float[] samples = new float[(bandPx / 3 + 1) * (w / 3 + 1)];
+            // Every pixel of a low-resolution prefetch, every third of a full one.
+            int step = frame.scale < 0.3f ? 1 : 3;
+            float[] samples = new float[(bandPx / step + 1) * (w / step + 1)];
             for (int b = 0; b < n; b++) {
                 int count = 0;
-                for (int y = b * bandPx; y < Math.min(h, (b + 1) * bandPx); y += 3) {
+                for (int y = b * bandPx; y < Math.min(h, (b + 1) * bandPx); y += step) {
                     soft.getPixels(row, 0, w, 0, y, w, 1);
-                    for (int x = 0; x < w; x += 3) samples[count++] = luma(row[x]);
+                    for (int x = 0; x < w; x += step) samples[count++] = luma(row[x]);
                 }
                 double sum = 0;
                 for (int i = 0; i < count; i++) sum += samples[i];
@@ -202,6 +212,11 @@ public final class ShadeTone implements CaptureHub.Client {
         int lightGlass = Math.round(255f * t.lightGlass) << 24 | t.lightTone;
         return VeilMath.material(luma, scene, lightText(), t.shadeCap, t.shadeLift, t.veilMax, t.styleLo, t.styleHi,
                 lightGlass, DARK_GLASS);
+    }
+    /** Whether a backdrop of mean {@code luma} reads as light in {@code scene} (see {@link VeilMath#classify}). */
+    public static boolean lightBackdrop(float luma, Boolean scene) {
+        Tuning t = Tuning.get();
+        return VeilMath.classify(luma, scene, t.styleLo, t.styleHi);
     }
     /** Dark glass under light text in the light theme: the dark theme's pop-up colour (GlassSpec.liveDarkColor). */
     static final int DARK_GLASS = 0x1cffffff;
