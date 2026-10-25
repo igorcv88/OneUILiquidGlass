@@ -38,6 +38,7 @@ public final class CaptureHub {
     private static final long TIMEOUT_MS = 500;
     private static final int MAX_CONSECUTIVE_FAILURES = 5;
     private static final long SECURE_BACKOFF_MS = 3000;
+    private static final long IDLE_POLL_MS = 33;
 
     /**
      * A captured frame: a hardware bitmap of {@code crop} (screen px) scaled by {@code scale}.
@@ -114,9 +115,15 @@ public final class CaptureHub {
             if (latest != null) { latest.supersede(); latest = null; }
             return;
         }
-        int hz = 1;
-        for (Client c : shown) hz = Math.max(hz, c.hz());
-        MAIN.postDelayed(CaptureHub::tick, 1000L / (shown.isEmpty() ? 2 : hz));
+        // A client asking 0 Hz wants no frames for now (a lens band blocked by motion) but may soon:
+        // the loop keeps polling every IDLE_POLL_MS, capturing nothing, so it resumes promptly.
+        int hz = 0;
+        boolean anyShown = !shown.isEmpty();
+        for (int i = shown.size() - 1; i >= 0; i--) {
+            int h = shown.get(i).hz();
+            if (h <= 0) shown.remove(i); else hz = Math.max(hz, h);
+        }
+        MAIN.postDelayed(CaptureHub::tick, hz > 0 ? 1000L / hz : anyShown ? IDLE_POLL_MS : 500L);
         if (shown.isEmpty() || inFlight || !available()) return;
         View first = shown.get(0).view();
         PowerManager pm = first.getContext().getSystemService(PowerManager.class);

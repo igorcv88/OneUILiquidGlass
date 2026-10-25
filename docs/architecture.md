@@ -878,26 +878,39 @@ The pre-change `auto` stays available as `debug.oulg.backdrop=hybrid`. With the 
 
 **Device test:** `backdrop=hybrid` (captured rim over the Samsung body) gave the refracted rim the user wants, but the launcher behind the pop-up trailed a home-screen swipe again. The rim draws a capture that lands one or more frames late, while the body blur is live. A faster capture rate shortens the interval between captures, not the delay of each one.
 
-**Change:** LSPosed-only pop-ups keep the live drawable body and the light-only edge, and add the hybrid's refracted rim band (`GlassDrawable.drawLens`, `rimOnly`, no edge lighting of its own) at a weight that `BackdropMotion.block` gates:
-- **No signal, no band.** The signal is every touch SystemUI's input receivers see, from a hook on `InputEventReceiver.dispatchInputEvent` (observation only).
-  - It counts only once a touch down has been seen in the middle of the screen with the shade closed. Only a display-wide monitor (gesture navigation) receives touches there.
-  - With button navigation it never counts, and the band stays off.
-- **Touch outside the pop-up:** the band fades out in 40 ms. A touch down redraws every card that has a band at once, before the content it moves.
-- **After the touch:** the band stays off until `lenssettle` ms (600) after the finger lifts, which covers a page snap or a fling.
-- **Fresh capture only:** after settling, the band comes back over 180 ms, only from a capture requested after the backdrop settled and at most `lensmaxage` ms (50) old at draw time.
-- **Touches on the pop-up itself** (drag, tap) do not hide it: the backdrop does not move.
-- **Not covered:** motion without touch (video, an app's own animation). The age limit is the only guard there.
+**Change:** LSPosed-only pop-ups keep the live drawable body and the light-only edge, and add the hybrid's refracted rim band (`GlassDrawable.drawLens`, `rimOnly`, no edge lighting of its own) at a weight that `BackdropMotion.block` gates.
 
-`CaptureHub.Frame.capturedAt` records the request time. `LENS_STATS` (every 240 draws and when a band is dropped) logs:
-- how many draws showed the band;
-- why the others did not (`noSignal`, `motion`, `preSettle`, `age`, `noFrame`);
-- the capture age at draw time (P50, P95, max).
+**Signal:**
+- Touches from a hook on `InputEventReceiver.dispatchInputEvent` (observation only).
+- Only receivers that are not a SystemUI window's own (`ViewRootImpl$WindowInputEventReceiver`) count at all.
+- The signal is proven by a touch down from such a receiver in the middle of the screen with the shade closed, which only a display-wide monitor (gesture navigation) delivers.
+- The proof lasts as long as that receiver: a hook on `InputEventReceiver.dispose` revokes it.
+- No proof means no band and no captures. That covers button navigation, and the case where the disposal hook is missing.
 
-The age counts from the capture request to the draw; the frame reaches the screen one or two vsyncs later. `TOUCH_SIGNAL` and `LENS_BAND` log the hook and each band attach. Shade and lockscreen cards never get a band.
+**Blocked band:**
+- A touch outside the pop-up blocks it, until `lenssettle` ms (600) after the finger lifts.
+- A blocked band is not drawn at all from the first blocked frame, and a touch down redraws every card that has one. There is no fade-out: fading would keep the stale capture on screen for the frames of the fade.
+- It returns over 180 ms, only from a capture requested after the backdrop settled and at most `lensmaxage` ms (50) old at draw time.
+- Touches on the pop-up itself do not block it.
 
-**Cost:** while a pop-up with a band is shown, captures run at `rimhz` (60 Hz), as with `hybrid`, even while the band is hidden.
+**No captures while blocked:** the band's capture client asks `CaptureHub` for 0 Hz while `BackdropMotion.wantsFrames` is false. The hub then requests nothing and polls every 33 ms, so capture resumes promptly once the backdrop settles.
 
-**Validation:** `javac` and 67 JUnit tests pass, including `BackdropMotionTest` for the gate. Gradle is still blocked here. Not tested on the device.
+**Failure isolation:** `drawLens` runs in its own try. A failure logs `LENS_BAND_FAILED`, restores the canvas, drops the band and turns bands off until SystemUI restarts. The live body and the edge keep drawing.
+
+**Not covered:** motion without touch (video, an app's own animation). The age limit is the only guard there.
+
+**Telemetry:**
+- `LENS_STATS`: draws that put captured pixels on screen, blocked draws by reason, and `requestToDraw` P50/P95/max.
+- `requestToDraw` runs from the capture request to the draw that records it; the pixels reach the display one or two vsyncs later.
+- `TOUCH_SIGNAL` logs the hooks, the proof (with the receiver class) and its revocation. `LENS_BAND` logs each attach.
+
+**Validation:** `javac` and 73 JUnit tests pass, including `BackdropMotionTest`. It covers:
+- the gate;
+- window receivers, button navigation, proof and revocation by disposal;
+- one full gesture, with capture suspension and the settle;
+- the immediate cut.
+
+The draw path, the hub and the hooks need an Android runtime and are not covered by these tests. Gradle is blocked here. Not tested on the device.
 
 ## Future work
 

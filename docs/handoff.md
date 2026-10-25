@@ -19,18 +19,27 @@ A captura sempre chega atrasada; o blur do corpo, não.
 - Com navegação por botões, a faixa nunca aparece.
 
 **Regras da faixa:**
-- toque fora do pop-up: some em 40 ms, antes de o conteúdo começar a mexer;
-- volta 600 ms depois de soltar o dedo (`lenssettle`);
-- só volta com uma captura feita depois disso e com no máximo 50 ms de idade (`lensmaxage`);
+- toque fora do pop-up: a faixa some no mesmo quadro, sem fade, e as capturas param;
+- volta 600 ms depois de soltar o dedo (`lenssettle`), em 180 ms;
+- só volta com uma captura pedida depois disso e com no máximo 50 ms de idade (`lensmaxage`);
 - tocar no próprio pop-up não esconde a faixa.
+
+**Sinal:**
+- só valem receptores que não são janela do SystemUI;
+- a prova é um toque no meio da tela com a central fechada;
+- ela some se esse receptor for descartado.
+
+**Falha da faixa:** `LENS_BAND_FAILED`; só a faixa sai, o blur e a borda continuam.
 
 **Limite:** movimento sem toque (vídeo, animação do app) só é barrado pela idade, então ali o atraso pode aparecer.
 
-**Diagnóstico:** `LENS_STATS` (quantos desenhos mostraram a faixa, por que os outros não, idade P50/P95/máx), `TOUCH_SIGNAL`, `LENS_BAND`.
+**Diagnóstico:**
+- `LENS_STATS`: desenhos com pixels capturados, bloqueios por motivo e `requestToDraw` P50/P95/máx. Essa é a idade até o desenho, não até a tela.
+- `TOUCH_SIGNAL`, `LENS_BAND`.
 
 **Desligar:** `setprop debug.oulg.livelens 0`.
 
-**Validado:** `javac` e 67 testes JUnit. **Não testado no aparelho.**
+**Validado:** `javac` e 73 testes JUnit. **Não testado no aparelho.**
 
 ## 0q. Atualização (2026-10-25): material do modo só-LSPosed, segunda passada
 

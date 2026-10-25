@@ -10,8 +10,9 @@ import java.util.TreeMap;
 /**
  * What the lens band of LSPosed-only pop-ups did, logged as LENS_STATS every 240 draws and when a
  * band is dropped: how many draws showed it, why the others did not (BackdropMotion.block), and the
- * age of the capture it drew (ms from the capture request to the draw; the frame reaches the screen
- * one or two vsyncs later). Main thread only.
+ * age of the capture it drew. That age runs from the capture request to the draw that records it; it
+ * is not the age of the pixels on the display, which reach it one or two vsyncs later (RenderThread,
+ * then SurfaceFlinger). A blocked draw never draws the band. Main thread only.
  */
 final class LensStats {
     private LensStats() {}
@@ -19,17 +20,18 @@ final class LensStats {
     private static final Map<String, Integer> blocked = new TreeMap<>();
     private static int draws, shown;
 
-    static void note(String block, long ageMs, float weight) {
+    /** drawn: whether this draw put captured pixels on screen (any weight). */
+    static void note(String block, long ageMs, boolean drawn) {
         draws++;
-        if (block == null && weight > 0.004f) { shown++; if (ageMs >= 0) ages.add(ageMs); }
-        else if (block != null) blocked.merge(block, 1, Integer::sum);
+        if (drawn) { shown++; if (ageMs >= 0) ages.add(ageMs); }
+        if (block != null) blocked.merge(block, 1, Integer::sum);
         if (draws >= 240) flush("periodic");
     }
 
     static void flush(String why) {
         if (draws == 0) return;
         Probe.log("LENS_STATS", "reason=" + why + " draws=" + draws + " shown=" + shown + " blocked=" + blocked
-                + " ageP50=" + pct(50) + " ageP95=" + pct(95) + " ageMax=" + pct(100) + " signal=" + BackdropMotion.active());
+                + " requestToDrawP50=" + pct(50) + " requestToDrawP95=" + pct(95) + " requestToDrawMax=" + pct(100) + " signal=" + BackdropMotion.active());
         ages.clear(); blocked.clear(); draws = 0; shown = 0;
     }
 

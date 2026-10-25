@@ -26,30 +26,53 @@ public final class BackdropMotion {
     private static volatile long lastActive = Long.MIN_VALUE / 2;
     private static volatile float downX = Float.NaN, downY = Float.NaN;
     /**
-     * Whether the input hook is installed, and whether it has proved to see touches meant for other
-     * apps: a touch down in the middle of the screen with the shade closed, where no SystemUI window
-     * takes touches, reaches SystemUI only through a display-wide monitor (gesture navigation). With
-     * button navigation it never does, swipes on the launcher stay invisible, and no band is shown.
+     * Whether the input hook is installed, and which receiver proved to see touches meant for other
+     * apps. Only receivers that are not a SystemUI window's own (ViewRootImpl's) count at all: a touch
+     * on a SystemUI window, wherever it lies, says nothing about the app below. The proof is a touch
+     * down from such a receiver in the middle of the screen with the shade closed, which only a
+     * display-wide input monitor (gesture navigation) delivers. It lasts as long as that receiver:
+     * when it is disposed (navigation mode changed, monitor recreated) the signal is lost until a new
+     * proof. With button navigation there is no such receiver, and no band is shown.
      */
-    private static volatile boolean hooked, verified;
+    private static volatile boolean hooked;
+    private static volatile WeakReference<Object> monitor;
     private static final List<WeakReference<Runnable>> listeners = new ArrayList<>();
     private static android.os.Handler main;
 
     public static void setHooked() { hooked = true; }
-    public static boolean active() { return hooked && verified; }
+    public static boolean active() {
+        WeakReference<Object> m = monitor;
+        return hooked && m != null && m.get() != null;
+    }
+    /** Whether a receiver of this class can carry touches meant for other apps (not a window's own). */
+    static boolean monitorReceiver(String receiverClass) {
+        return receiverClass != null && !receiverClass.contains("ViewRootImpl");
+    }
 
     /**
-     * A touch event anywhere SystemUI sees it, on whichever thread its receiver runs. outsideSystemUi:
-     * the point lies where only a display-wide monitor could have received it.
+     * A touch event delivered to {@code receiver}, on whichever thread it runs. outsideSystemUi: the
+     * point lies where no SystemUI window takes touches while the shade is closed.
      */
-    public static void onTouch(int actionMasked, float rawX, float rawY, long now, boolean outsideSystemUi) {
-        if (actionMasked == 0 && outsideSystemUi) verified = true;
+    public static void onTouch(Object receiver, String receiverClass, int actionMasked, float rawX, float rawY, long now, boolean outsideSystemUi) {
+        if (!monitorReceiver(receiverClass)) return;
+        if (actionMasked == 0 && outsideSystemUi && !active()) monitor = new WeakReference<>(receiver);
         lastActive = now;
         if (actionMasked == 0) { downX = rawX; downY = rawY; }
         boolean wasTouching = touching;
         touching = actionMasked != 1 && actionMasked != 3;
         // Cards with a band redraw now: the content behind them may move before their next capture.
         if (actionMasked == 0 || (touching && !wasTouching)) notifyListeners();
+    }
+    /** A receiver was disposed; if it was the proven monitor, the signal is gone. Returns whether it was. */
+    public static boolean onDisposed(Object receiver) {
+        WeakReference<Object> m = monitor;
+        if (m == null || m.get() != receiver) return false;
+        monitor = null;
+        return true;
+    }
+    /** Test only: back to the state of a fresh process. */
+    static void reset() {
+        hooked = false; monitor = null; touching = false; lastActive = Long.MIN_VALUE / 2; downX = Float.NaN; downY = Float.NaN;
     }
 
     /** Runs {@code r} on the main thread whenever a touch starts; held weakly. */
@@ -79,6 +102,24 @@ public final class BackdropMotion {
                 && downX >= card.left - SLOP && downX <= card.right + SLOP && downY >= card.top - SLOP && downY <= card.bottom + SLOP;
         return block(active(), touching, lastActive, inCard, capturedAt, now, maxAgeMs, settleMs);
     }
+    /**
+     * Whether a pop-up's band wants captures now: only when it could show one. While blocked by
+     * motion, or with no signal, the capture loop is not asked for frames at all; once the backdrop
+     * settles it is asked again, and the band returns from the first capture requested after that.
+     */
+    public static boolean wantsFrames(Rect card, long now, long settleMs) {
+        return block(now, now, card, Long.MAX_VALUE / 4, settleMs) == null;
+    }
+
+    /**
+     * The band's weight for the next draw. A blocked band is gone at once: fading it out would keep
+     * drawing the stale capture for the frames of the fade, the trail this gate exists to remove.
+     * It comes back over inMs, and only from a capture the gate accepts.
+     */
+    public static float nextWeight(float weight, boolean allowed, float dtMs, float inMs) {
+        return allowed ? Math.min(1f, weight + dtMs / inMs) : 0f;
+    }
+
     /** A touch that starts on the card itself (dragging or tapping the pop-up) does not move the backdrop. */
     static final int SLOP = 48;
 

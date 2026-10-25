@@ -206,11 +206,20 @@ public final class HeadsUpHooks {
                     float h = android.content.res.Resources.getSystem().getDisplayMetrics().heightPixels;
                     boolean outside = barState != null && barState == Eligibility.BAR_SHADE && !Boolean.TRUE.equals(shadeExpanded)
                             && m.getRawY() > h * 0.30f && m.getRawY() < h * 0.80f;
-                    BackdropMotion.onTouch(m.getActionMasked(), m.getRawX(), m.getRawY(), android.os.SystemClock.uptimeMillis(), outside);
+                    boolean was = BackdropMotion.active();
+                    BackdropMotion.onTouch(p.thisObject, p.thisObject.getClass().getName(), m.getActionMasked(), m.getRawX(), m.getRawY(),
+                            android.os.SystemClock.uptimeMillis(), outside);
+                    if (!was && BackdropMotion.active()) Probe.log("TOUCH_SIGNAL", "verified=true receiver=" + p.thisObject.getClass().getName());
                 }
             });
-            if (!hooks.isEmpty()) BackdropMotion.setHooked();
-            Probe.log("TOUCH_SIGNAL", "hooked=" + !hooks.isEmpty());
+            Set<?> disposals = XposedBridge.hookAllMethods(receiver, "dispose", new XC_MethodHook() {
+                @Override protected void beforeHookedMethod(MethodHookParam p) {
+                    if (BackdropMotion.onDisposed(p.thisObject)) Probe.log("TOUCH_SIGNAL", "verified=false reason=disposed receiver=" + p.thisObject.getClass().getName());
+                }
+            });
+            // Without the disposal hook a monitor could die and leave the signal proven: no signal then.
+            if (!hooks.isEmpty() && !disposals.isEmpty()) BackdropMotion.setHooked();
+            Probe.log("TOUCH_SIGNAL", "hooked=" + !hooks.isEmpty() + " disposeHooked=" + !disposals.isEmpty());
         } catch (ClassNotFoundException | RuntimeException | LinkageError e) { Probe.error("TOUCH_SIGNAL_FAILED", e); }
     }
     private String lastPanelBlur;
@@ -1104,9 +1113,18 @@ public final class HeadsUpHooks {
             boolean want = Tuning.get().liveLens && !pill && !Boolean.TRUE.equals(keyguard)
                     && barState != null && barState == Eligibility.BAR_SHADE
                     && Eligibility.captureSurface(headsUp, keyguard, shadeExpanded)
-                    && CaptureHub.available() && GlassDrawable.refractionAvailable() && !glass.lensUnavailable();
+                    && CaptureHub.available() && GlassDrawable.lensAvailable() && !glass.lensUnavailable();
             if (want == glass.hasLens()) return;
-            if (want) glass.setLens(new CaptureBackdrop(v, false, () -> Tuning.get().rimHz));
+            // Frames are requested only while the band could show (BackdropMotion.wantsFrames): no
+            // capture during motion or without a verified signal.
+            int[] xy = new int[2];
+            android.graphics.Rect card = new android.graphics.Rect();
+            if (want) glass.setLens(new CaptureBackdrop(v, false, () -> {
+                v.getLocationOnScreen(xy);
+                card.set(xy[0], xy[1], xy[0] + v.getWidth(), xy[1] + v.getHeight());
+                Tuning t = Tuning.get();
+                return BackdropMotion.wantsFrames(card, android.os.SystemClock.uptimeMillis(), t.lensSettle) ? t.rimHz : 0;
+            }));
             else glass.dropLens();
             Probe.log("LENS_BAND", "viewId=" + Integer.toHexString(System.identityHashCode(v)) + " on=" + glass.hasLens()
                     + " signal=" + BackdropMotion.active());

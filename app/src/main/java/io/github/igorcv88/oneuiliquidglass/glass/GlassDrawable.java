@@ -68,13 +68,16 @@ public final class GlassDrawable extends Drawable {
     public boolean failed() { return failed; }
     /**
      * LSPosed-only pop-ups: a captured, refracted lens band drawn over the live body, at a weight
-     * that BackdropMotion gates. The body stays the live compositor blur; the band fades out within
-     * LENS_OUT_MS when the backdrop may move and back in over LENS_IN_MS from a fresh capture.
+     * that BackdropMotion gates. The body stays the live compositor blur; the band is gone in the
+     * first frame the backdrop may move and comes back over LENS_IN_MS from a fresh capture.
      */
     private CaptureBackdrop lens;
     private float lensWeight;
     private long lensDrawnAt;
-    private static final float LENS_OUT_MS = 40f, LENS_IN_MS = 180f;
+    private static final float LENS_IN_MS = 180f;
+    /** Set once a band failed to draw: no card gets one again until SystemUI restarts. */
+    private static boolean lensBroken;
+    public static boolean lensAvailable() { return !lensBroken && !refractBroken; }
     private final Runnable lensWake = this::invalidateSelf;
     private final int[] lensXy = new int[2];
     private final Rect lensRect = new Rect();
@@ -111,11 +114,11 @@ public final class GlassDrawable extends Drawable {
         }
         float dt = lensDrawnAt == 0 ? 16f : Math.max(1f, Math.min(100f, now - lensDrawnAt));
         lensDrawnAt = now;
-        float target = block == null ? 1f : 0f;
-        lensWeight = target > lensWeight ? Math.min(1f, lensWeight + dt / LENS_IN_MS) : Math.max(0f, lensWeight - dt / LENS_OUT_MS);
-        if (lensWeight != target) invalidateSelf();
-        LensStats.note(block, frame == null ? -1 : now - frame.capturedAt, lensWeight);
-        if (lensWeight <= 0.004f || frame == null || view == null || frame.bitmap.isRecycled()) return;
+        lensWeight = BackdropMotion.nextWeight(lensWeight, block == null, dt, LENS_IN_MS);
+        if (block == null && lensWeight < 1f) invalidateSelf();
+        boolean draw = block == null && lensWeight > 0.004f;
+        LensStats.note(block, frame == null ? -1 : now - frame.capturedAt, draw);
+        if (!draw) return;
         drawRefraction(canvas, bounds, frame, view, true, true, lensWeight);
     }
     public void setPressed(boolean on) { if (pressed != on) { pressed = on; invalidateSelf(); } }
@@ -177,7 +180,17 @@ public final class GlassDrawable extends Drawable {
                 return;
             }
             backdrop.draw(canvas, bounds);
-            drawLens(canvas, bounds);
+            if (lens != null) {
+                // The band is optional: its failure must not take the live body with it.
+                int lensSave = canvas.getSaveCount();
+                try { drawLens(canvas, bounds); }
+                catch (RuntimeException e) {
+                    canvas.restoreToCount(lensSave);
+                    lensBroken = true;
+                    Probe.error("LENS_BAND_FAILED", e);
+                    try { dropLens(); } catch (RuntimeException ignored) { lens = null; lensWeight = 0f; }
+                }
+            }
             fill.setColor(fillColor);
             fill.setAlpha(android.graphics.Color.alpha(fillColor) * alpha / 255);
             canvas.drawRect(rect, fill);
