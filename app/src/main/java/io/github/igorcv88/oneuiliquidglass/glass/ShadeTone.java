@@ -199,7 +199,7 @@ public final class ShadeTone implements CaptureHub.Client {
             boolean light = VeilMath.lightBackdrop(wasLight, luma, t.styleLo, t.styleHi);
             return new Material(VeilMath.veil(VeilMath.need(luma, lightText(), t.shadeCap, t.shadeLift), lightText(), t.veilMax), false, light);
         }
-        int lightGlass = Math.round(255f * t.lightGlass) << 24 | 0xffffff;
+        int lightGlass = Math.round(255f * t.lightGlass) << 24 | t.lightTone;
         return VeilMath.material(luma, wasLight, lightText(), t.shadeCap, t.shadeLift, t.veilMax, t.styleLo, t.styleHi,
                 lightGlass, DARK_GLASS);
     }

@@ -2,6 +2,29 @@
 
 Documento para continuar o trabalho em outra conversa. Leia inteiro antes de mexer em qualquer coisa. O histórico técnico detalhado está em `docs/architecture.md`; as seções de 2026-10-16 cobrem a central de notificações.
 
+## 0u. Atualização (2026-10-25): rodada 38 — fim do piscar do texto, vidro claro menos branco
+
+Base: rodada física do PR #37 (`OULG37_20261025_165840`, vídeo 17:08). **Não testado no aparelho.**
+
+**Causa do piscar, no log (card `f959dce`, o pop-up que virou card da central):**
+- `08.946 swap=false` → `08.996 swap=true`: na passagem pop-up → central o card ficava sem superfície e o texto era restaurado (branco) por ~50 ms.
+- `09.189 BACKGROUND_UPDATE` (o SystemUI refaz o bind e põe o branco de volta) → `09.693 swap=true`: 504 ms depois, a varredura de 500 ms. É o branco de ~450 ms do vídeo.
+
+**Correções:**
+- O módulo guarda as views que trocou e confere a cor delas em todo pré-desenho (leitura simples, sem alocação). Se o SystemUI repôs a cor ou trocou as views, reaplica no mesmo quadro. A varredura de 500 ms fica só como reserva. Log `TEXT_REAPPLY reason=rebind|detached`.
+- Entre superfícies (pop-up saindo, central ainda não aberta) o material é mantido, sem restaurar. Restauração continua na lockscreen e em todo retorno ao fundo nativo.
+- Card medido há menos de 1,5 s (o pop-up que ele era) mantém essa leitura no início da abertura até a captura chegar (`source=held`), em vez de ir para nativo e voltar.
+- Pop-up entrando é forçado a redesenhar a cada 100 ms (1 s parado): a medição esperava 1,2 s por um desenho qualquer.
+- **Vidro claro:** cinza claro frio `b8c2ce` a 0,32 (≈ `#E8ECEF` sobre branco, luma ~0,92) no lugar de branco 0,25, e sombra de espessura da borda 2× (`lightedge`). Ainda longe do preto 25 % (`#BFBFBF`).
+
+**Props novas:** `lighttone` (hex), `lightedge`; `lightglass` agora é o alpha dessa cor. Rodada 37: `setprop debug.oulg.lighttone ffffff; setprop debug.oulg.lightglass 0.25; setprop debug.oulg.lightedge 1`.
+
+**Teste:** 10× pop-up em fundo colorido → app branco → abrir a central (com o pop-up ainda fixado e depois que ele sair), com `trace=1` e gravação. Esperado: zero `TEXT_REAPPLY` com `sinceLastWalk` alto, texto do card de cima escuro do início ao fim. Comparar o vidro claro no mesmo fundo branco com `lightglass` 0.24 / 0.32 / 0.40 e `lightedge` 1 / 2.
+
+**Limite:** abertura sem captura pré-abertura e sem leitura recente ainda pode desenhar os primeiros quadros no visual nativo (gens 52/54).
+
+**Validado:** Gradle `testDebugUnitTest` (99), `lintDebug`, `assembleDebug`.
+
 ## 0t. Atualização (2026-10-25): rodada 37 — estilo de material no lugar do véu cinza, sem halo por letra
 
 Base: handoff pós-PR #36 (log conservative, captura `82192.png`, vídeos). **Não testado no aparelho.**

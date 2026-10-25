@@ -124,6 +124,9 @@ public final class GlassDrawable extends Drawable {
     /** Gain of the lit-corner glint in the LSPosed-only edge model (1: unchanged); see liveEdge(). */
     private float glint = 1f;
     public void setGlint(float g) { if (glint != g) { glint = g; invalidateSelf(); } }
+    /** Light glass (ShadeTone light style): the thickness shadow is scaled by debug.oulg.lightedge. */
+    private boolean lightStyle;
+    public void setLightStyle(boolean on) { if (lightStyle != on) { lightStyle = on; invalidateSelf(); } }
     public void setPressed(boolean on) { if (pressed != on) { pressed = on; invalidateSelf(); } }
     /**
      * The compositor lights this card (sfhook profile 1: rim reflectance, specular and contour from
@@ -224,7 +227,9 @@ public final class GlassDrawable extends Drawable {
         s.setFloatUniform("fringe", spec.fringe);
         s.setFloatUniform("light", spec.lightX, spec.lightY);
         s.setFloatUniform("specular", spec.specular);
-        s.setFloatUniform("shadow", spec.innerShadow);
+        // On light glass over a white app the additive light edge is invisible; a stronger
+        // thickness shadow on the far side is what separates the card (debug.oulg.lightedge).
+        s.setFloatUniform("shadow", spec.innerShadow * (lightStyle && Tuning.get().live ? Tuning.get().lightEdge : 1f));
         // LSPosed-only cards over the live drawable blur take the light-only edge model.
         Tuning t = Tuning.get();
         boolean live = t.live && backdrop instanceof BackgroundBlurBridge;

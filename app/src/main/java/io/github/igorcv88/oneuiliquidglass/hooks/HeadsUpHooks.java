@@ -714,6 +714,8 @@ public final class HeadsUpHooks {
     /** How often a shown pop-up measures the backdrop under it again (the app may scroll or change). */
     private static final long POPUP_MEASURE_MS = 1000;
     private static final long SWAP_WALK_MS = 500;
+    /** How recent a card's last measurement must be to stand for it at the start of a shade opening. */
+    private static final long HOLD_MS = 1500;
     /** While a pop-up enters, how often the backdrop under it is measured again. */
     private static final long POPUP_ENTER_MS = 100;
     private static final String SURFACE_SHADE = "shade", SURFACE_POPUP = "popup";
@@ -768,6 +770,12 @@ public final class HeadsUpHooks {
         /** Whether this card's text and icons carry the swapped tone, and when its views were last walked. */
         boolean swapped;
         long swapAt;
+        /** The views carrying the swapped tone (Foreground.drift checks them every pre-draw). */
+        final ArrayList<View> swappedViews = new ArrayList<>();
+        /** Uptime of the last measurement applied to this card (grid or sample), 0 before any. */
+        long toneAt;
+        /** Poke that makes an entering pop-up draw (and measure) again: see popupTone. */
+        final Runnable popupPoke = this::invalidate;
         final int[] toneXy = new int[2];
         /**
          * The card's material from the backdrop behind it. Shade cards: the opening's capture
@@ -781,12 +789,18 @@ public final class HeadsUpHooks {
             Tuning t = Tuning.get();
             if (t.shadeAdaptive && Boolean.TRUE.equals(shadeExpanded) && barState != null && barState == Eligibility.BAR_SHADE) { shadeTone(v); return; }
             if (t.live && t.popupTone && compBridge != null && popupSurface()) { popupTone(v); return; }
+            // Unlocked, between surfaces (a pop-up handing over to the shade: heads-up animating away,
+            // the shade not yet expanded): hold the material. Restoring here and applying it again a
+            // few frames later flashed the text white-dark (TEXT_TONE swap=false, then true 50 ms
+            // later, device log 25/10). A held pop-up veil reaches no shade card (own slot).
+            if (barState != null && barState == Eligibility.BAR_SHADE) { setForeground(swapped); return; }
             if (SURFACE_POPUP.equals(toneSurface)) {
                 if (veilRamp != null) { veilRamp.cancel(); veilRamp = null; }
                 pushToneVeil(0);
                 toneSurface = null; toneSource = null;
             }
             setForeground(false);
+            setLightStyle(false);
         }
         void shadeTone(View v) {
             boolean first = toneOpen != shadeOpens;
@@ -798,6 +812,11 @@ public final class HeadsUpHooks {
                 luma = grid.luma(toneXy[1], toneXy[1] + v.getHeight());
                 if (luma < 0f) return;
                 source = "grid";
+            } else if (first && toneAt > 0 && android.os.SystemClock.uptimeMillis() - toneAt <= HOLD_MS) {
+                // Measured moments ago (the pop-up this card was, or a reopened shade): that reading
+                // stands until this opening's capture lands, instead of native first and back.
+                luma = Float.NaN;
+                source = "held";
             } else if (first) {
                 luma = Float.NaN;
                 source = "native";
@@ -812,7 +831,8 @@ public final class HeadsUpHooks {
             toneOpen = shadeOpens; toneSurface = SURFACE_SHADE; toneSource = source;
             // The shade slot may hold an older veil than the one the pop-up slot had.
             if (changedSurface) pushToneVeil();
-            if (Float.isNaN(luma)) setNative(); else setTone(luma, changedSource);
+            if (source.equals("native")) setNative(); else if (!Float.isNaN(luma)) setTone(luma, changedSource);
+            else setForeground(swapped);
             if (changedSource) logTone("SHADE_TONE_APPLY", v, source, luma, grid != null && source.equals("grid") ? grid.bright(toneXy[1], toneXy[1] + v.getHeight()) : -1f,
                     " generation=" + shadeOpens + " tFromOpen=" + (android.os.SystemClock.uptimeMillis() - shadeOpenAt)
                     + (grid != null && source.equals("grid") ? " age=" + (android.os.SystemClock.uptimeMillis() - grid.takenAt) : ""));
@@ -843,8 +863,20 @@ public final class HeadsUpHooks {
             // While it enters (fading in, sliding down) the region under it is not yet the final one:
             // measure again every POPUP_ENTER_MS until it is opaque and still, then every second.
             boolean entering = popupMeasuredAlpha < 0.99f || Math.abs(toneXy[1] - popupMeasuredY) > 8;
-            if (now - popupMeasureAt < (entering ? POPUP_ENTER_MS : POPUP_MEASURE_MS)) return;
+            long interval = entering ? POPUP_ENTER_MS : POPUP_MEASURE_MS;
+            if (now - popupMeasureAt < interval) {
+                // Not due yet (the interval grew as the pop-up settled): keep the timer armed for the
+                // rest of it, or the loop would stop once no other draw comes.
+                v.removeCallbacks(popupPoke);
+                v.postDelayed(popupPoke, interval - (now - popupMeasureAt));
+                return;
+            }
             popupMeasureAt = now; popupMeasuredY = toneXy[1]; popupMeasuredAlpha = alpha;
+            // The entrance animates RenderNode properties without redrawing the card: without a poke
+            // the next measurement waited for an unrelated draw (1.2 s on the device). One redraw per
+            // interval keeps the cadence; still pop-ups are poked once a second.
+            v.removeCallbacks(popupPoke);
+            v.postDelayed(popupPoke, interval);
             long requested = now;
             ShadeTone.measure(v, luma -> {
                 if (!SURFACE_POPUP.equals(toneSurface)) return;
@@ -868,6 +900,7 @@ public final class HeadsUpHooks {
         void setNative() {
             lightBackdrop = !ShadeTone.lightText();
             setForeground(false);
+            setLightStyle(false);
             // At once, never ramped: a ramp would replay the previous opening's (or surface's) veil
             // for VEIL_RAMP_MS on a card that is starting over.
             if (veilRamp != null) { veilRamp.cancel(); veilRamp = null; }
@@ -883,7 +916,9 @@ public final class HeadsUpHooks {
         void setTone(float luma, boolean transition) {
             io.github.igorcv88.oneuiliquidglass.glass.Material m = ShadeTone.materialFor(luma, lightBackdrop);
             lightBackdrop = m.light;
+            toneAt = android.os.SystemClock.uptimeMillis();
             setForeground(m.swap);
+            setLightStyle(m.swap && m.light);
             styleChanged(m.style());
             int veil = m.veil;
             if (veil == measuredVeil) return;
@@ -910,15 +945,31 @@ public final class HeadsUpHooks {
         /** Swapped text and icon tone; the views are walked again every SWAP_WALK_MS while it is on (new inflations). */
         void setForeground(boolean swap) {
             long now = android.os.SystemClock.uptimeMillis();
-            if (swap == swapped && (!swap || now - swapAt < SWAP_WALK_MS)) return;
+            String reason = swap == swapped ? null : swap ? "style" : "restore";
+            if (reason == null && swap) {
+                // Swapped already: walk again only if SystemUI changed a colour back (rebind) or
+                // replaced the views; the periodic walk stays as a backstop for new views.
+                reason = Foreground.drift(swappedViews);
+                if (reason == null && now - swapAt >= SWAP_WALK_MS) reason = "walk";
+            }
+            if (reason == null) return;
+            long sinceSwap = now - swapAt;
             swapAt = now;
             try {
-                int changed = Foreground.apply(row.get(), swap, ShadeTone.lightText());
+                int changed = Foreground.apply(row.get(), swap, ShadeTone.lightText(), swappedViews);
                 // Recorded only once the walk went through: a failed restore is retried.
                 swapped = swap;
-                if (changed > 0 && Probe.trace) Probe.log("TEXT_TONE", "rowId=" + Integer.toHexString(System.identityHashCode(row.get())) + " swap=" + swap + " views=" + changed);
+                if (changed > 0 && (Probe.trace || reason.equals("rebind") || reason.equals("detached"))) {
+                    Probe.log("TEXT_REAPPLY", "rowId=" + Integer.toHexString(System.identityHashCode(row.get())) + " reason=" + reason
+                            + " swap=" + swap + " views=" + changed + " sinceLastWalk=" + sinceSwap + " surface=" + toneSurface
+                            + " style=" + (swap ? (lightBackdrop ? "light" : "dark") : "native")
+                            + (SURFACE_SHADE.equals(toneSurface) ? " generation=" + shadeOpens : ""));
+                }
             } catch (RuntimeException e) { Probe.error("TEXT_TONE_FAILED", e); }
         }
+        /** Light glass: the edge's thickness shadow is drawn stronger (debug.oulg.lightedge) to define the card on white. */
+        void setLightStyle(boolean on) { lightStyle = on; if (glass != null) glass.setLightStyle(on); }
+        boolean lightStyle;
         /** The veil measured for this card at the current shade opening (0: none needed). */
         int measuredVeil;
         /** The drawable path could not be built for this card: it keeps the Samsung blur. */
@@ -1352,6 +1403,7 @@ public final class HeadsUpHooks {
                 if (compBridge != null && !pill) tone(v);
                 if (semBridge != null) semBridge.setSuspended(stacked);
                 glass = new GlassDrawable(backdrop, v.getResources().getDisplayMetrics().density, spec);
+                glass.setLightStyle(lightStyle);
                 glassKind = kind;
                 glassSource = source;
                 glass.setCallback(v);

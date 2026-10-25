@@ -91,4 +91,21 @@ public final class ForegroundTest {
         assertFalse(Foreground.standardId("android", host, "right_icon"));
         assertFalse(Foreground.standardId("com.whatsapp", host, "expand_more"));
     }
+    /** SystemUI binds the content again while swapped: the next pre-draw sees it, not the 500 ms walk. */
+    @Test public void aRebindIsSeenAsDrift() {
+        Map<Object, Foreground.Rec> m = new HashMap<>();
+        Fake title = new Fake(0xffffffff);
+        Foreground.ink(title, true, true, m);
+        assertFalse(Foreground.drifted(title, m));
+        title.color = 0xffffffff; // the rebind restored the theme's white
+        assertTrue(Foreground.drifted(title, m));
+        // The repair walk swaps it again and takes white as the original.
+        assertTrue(Foreground.ink(title, true, true, m));
+        assertFalse(Foreground.drifted(title, m));
+        assertEquals(0xff000000, title.color);
+        Foreground.ink(title, false, true, m);
+        assertEquals(0xffffffff, title.color);
+        // A view this class no longer tracks counts as drift (it must be walked again).
+        assertTrue(Foreground.drifted(title, m));
+    }
 }

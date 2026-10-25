@@ -47,4 +47,22 @@ public final class VeilMathTest {
         assertFalse(l.swap);
         assertEquals(0, l.veil);
     }
+    @Test public void lightToneParses() {
+        assertEquals(0xb8c2ce, Tuning.rgb("b8c2ce", 1));
+        assertEquals(0xffffff, Tuning.rgb("#ffffff", 1));
+        assertEquals(1, Tuning.rgb("zzz", 1));
+        assertEquals(1, Tuning.rgb("12345", 1));
+    }
+    /** The default light glass over pure white: a light cool frost, far from the lead grey of a 25 % black veil. */
+    @Test public void defaultLightGlassOverWhiteIsAFrostNotGrey() {
+        int tone = 0xb8c2ce;
+        float a = 0.32f;
+        int r = Math.round(255 * (1 - a) + ((tone >> 16) & 255) * a);
+        int g = Math.round(255 * (1 - a) + ((tone >> 8) & 255) * a);
+        int b = Math.round(255 * (1 - a) + (tone & 255) * a);
+        float luma = (0.2126f * r + 0.7152f * g + 0.0722f * b) / 255f;
+        assertTrue(luma > 0.90f && luma < 0.95f);
+        assertTrue(b > r);
+        assertTrue(luma > 191 / 255f + 0.1f);
+    }
 }
