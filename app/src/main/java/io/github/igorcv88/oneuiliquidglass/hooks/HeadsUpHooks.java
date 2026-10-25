@@ -22,6 +22,7 @@ import io.github.igorcv88.oneuiliquidglass.diagnostics.Perf;
 import io.github.igorcv88.oneuiliquidglass.diagnostics.Probe;
 import io.github.igorcv88.oneuiliquidglass.diagnostics.WindowSurvey;
 import io.github.igorcv88.oneuiliquidglass.glass.Backdrop;
+import io.github.igorcv88.oneuiliquidglass.glass.BackdropMotion;
 import io.github.igorcv88.oneuiliquidglass.glass.BackgroundBlurBridge;
 import io.github.igorcv88.oneuiliquidglass.glass.CaptureBackdrop;
 import io.github.igorcv88.oneuiliquidglass.glass.CaptureHub;
@@ -182,9 +183,35 @@ public final class HeadsUpHooks {
         }
         WindowSurvey.installWindowHook();
         installBlurGuard();
+        installTouchSignal();
         // Shade state is only known once SystemUI constructs the controller, after this point.
         Probe.log("READY", "mode=" + (enabled ? "glass" : "probe") + " drawHook=" + drawHook + " shadeHook=" + shadeHook + " samsungBlur=" + samsungBlur);
         if (enabled && (!drawHook || !shadeHook)) Probe.log("GLASS_UNAVAILABLE", "drawHook=" + drawHook + " shadeHook=" + shadeHook);
+    }
+    /**
+     * Touches seen by SystemUI's input receivers, its gesture-navigation monitor included, feed
+     * BackdropMotion, which hides the captured lens band of LSPosed-only pop-ups while the content
+     * behind them may move. Observation only: the event is not changed or consumed.
+     */
+    private void installTouchSignal() {
+        try {
+            Class<?> receiver = Class.forName("android.view.InputEventReceiver");
+            Set<?> hooks = XposedBridge.hookAllMethods(receiver, "dispatchInputEvent", new XC_MethodHook() {
+                @Override protected void beforeHookedMethod(MethodHookParam p) {
+                    Object e = p.args.length > 1 ? p.args[1] : null;
+                    if (!(e instanceof android.view.MotionEvent)) return;
+                    android.view.MotionEvent m = (android.view.MotionEvent) e;
+                    if (!m.isFromSource(android.view.InputDevice.SOURCE_TOUCHSCREEN)) return;
+                    // The middle of the screen with the shade closed belongs to the app below, not to SystemUI.
+                    float h = android.content.res.Resources.getSystem().getDisplayMetrics().heightPixels;
+                    boolean outside = barState != null && barState == Eligibility.BAR_SHADE && !Boolean.TRUE.equals(shadeExpanded)
+                            && m.getRawY() > h * 0.30f && m.getRawY() < h * 0.80f;
+                    BackdropMotion.onTouch(m.getActionMasked(), m.getRawX(), m.getRawY(), android.os.SystemClock.uptimeMillis(), outside);
+                }
+            });
+            if (!hooks.isEmpty()) BackdropMotion.setHooked();
+            Probe.log("TOUCH_SIGNAL", "hooked=" + !hooks.isEmpty());
+        } catch (ClassNotFoundException | RuntimeException | LinkageError e) { Probe.error("TOUCH_SIGNAL_FAILED", e); }
     }
     private String lastPanelBlur;
     private final Set<String> foreignBlurLogged = new java.util.HashSet<>();
@@ -808,7 +835,7 @@ public final class HeadsUpHooks {
                     // A debug.oulg.* knob changed: redraw so the material (and Samsung blur) rebuilds now.
                     tuningGeneration = Tuning.generation; v.invalidate();
                 }
-                if (glassKind == Backdrop.Kind.SAMPLED) {
+                if (glassKind == Backdrop.Kind.SAMPLED || (glass != null && glass.hasLens())) {
                     // Slide and stack animations move the row through RenderNode properties without
                     // re-recording; the sampled backdrop must follow the screen position every frame.
                     v.getLocationOnScreen(location);
@@ -1026,7 +1053,7 @@ public final class HeadsUpHooks {
             glass.setPressed(pressed);
             refreshLens();
             glass.configure(original, shape(), fill, tone);
-            if (live) liveState(v, fill);
+            if (live) { updateLens(v); liveState(v, fill); }
             if (lastFallback != null) { lastFallback = null; Probe.log("NATIVE_FALLBACK", "viewId=" + Integer.toHexString(System.identityHashCode(v)) + " reason=none"); }
             if (pill && !pillReported) {
                 pillReported = true;
@@ -1065,6 +1092,25 @@ public final class HeadsUpHooks {
             View r = row.get();
             return !pill && Eligibility.lens(barState, shadeExpanded, r == null ? null : Reflect.bool(r, "isOnKeyguard", "mOnKeyguard"));
         }
+        /**
+         * A pop-up over an app (not the shade, not the lockscreen) in LSPosed-only mode carries the
+         * gated lens band (debug.oulg.livelens); every other surface, or a band whose capture became
+         * unavailable, does not.
+         */
+        void updateLens(View v) {
+            View r = row.get();
+            Boolean keyguard = r == null ? null : Reflect.bool(r, "isOnKeyguard", "mOnKeyguard");
+            Boolean headsUp = r == null ? null : Reflect.bool(r, "isHeadsUpState", "mIsHeadsUp");
+            boolean want = Tuning.get().liveLens && !pill && !Boolean.TRUE.equals(keyguard)
+                    && barState != null && barState == Eligibility.BAR_SHADE
+                    && Eligibility.captureSurface(headsUp, keyguard, shadeExpanded)
+                    && CaptureHub.available() && GlassDrawable.refractionAvailable() && !glass.lensUnavailable();
+            if (want == glass.hasLens()) return;
+            if (want) glass.setLens(new CaptureBackdrop(v, false, () -> Tuning.get().rimHz));
+            else glass.dropLens();
+            Probe.log("LENS_BAND", "viewId=" + Integer.toHexString(System.identityHashCode(v)) + " on=" + glass.hasLens()
+                    + " signal=" + BackdropMotion.active());
+        }
         /** Last LIVE_STATE line of this card; logged again only when the material it describes changes. */
         String lastLiveState;
         /**
@@ -1076,7 +1122,7 @@ public final class HeadsUpHooks {
             int px = compBridge.requestedPx(), tint = compBridge.requestedTint();
             String surface = pill ? "pill" : lensSurface() ? (barState != null && barState != Eligibility.BAR_SHADE ? "lockscreen" : "popup") : "shade";
             String line = "surface=" + surface + " radius=" + px + " tint=" + Integer.toHexString(tint) + " fill=" + Integer.toHexString(fill)
-                    + " veil=" + Integer.toHexString(measuredVeil) + " crossBlur=" + blurEnabled;
+                    + " veil=" + Integer.toHexString(measuredVeil) + " crossBlur=" + blurEnabled + " lens=" + (glass != null && glass.hasLens());
             if (line.equals(lastLiveState)) return;
             lastLiveState = line;
             Tuning t = Tuning.get();

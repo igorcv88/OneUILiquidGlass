@@ -874,6 +874,31 @@ The pre-change `auto` stays available as `debug.oulg.backdrop=hybrid`. With the 
 
 **Validation:** `javac` and 62 JUnit tests pass. Gradle lint and the APK build were blocked again by Maven Central. Not tested on the device.
 
+### Gated lens band on LSPosed-only pop-ups (2026-10-25)
+
+**Device test:** `backdrop=hybrid` (captured rim over the Samsung body) gave the refracted rim the user wants, but the launcher behind the pop-up trailed a home-screen swipe again. The rim draws a capture that lands one or more frames late, while the body blur is live. A faster capture rate shortens the interval between captures, not the delay of each one.
+
+**Change:** LSPosed-only pop-ups keep the live drawable body and the light-only edge, and add the hybrid's refracted rim band (`GlassDrawable.drawLens`, `rimOnly`, no edge lighting of its own) at a weight that `BackdropMotion.block` gates:
+- **No signal, no band.** The signal is every touch SystemUI's input receivers see, from a hook on `InputEventReceiver.dispatchInputEvent` (observation only).
+  - It counts only once a touch down has been seen in the middle of the screen with the shade closed. Only a display-wide monitor (gesture navigation) receives touches there.
+  - With button navigation it never counts, and the band stays off.
+- **Touch outside the pop-up:** the band fades out in 40 ms. A touch down redraws every card that has a band at once, before the content it moves.
+- **After the touch:** the band stays off until `lenssettle` ms (600) after the finger lifts, which covers a page snap or a fling.
+- **Fresh capture only:** after settling, the band comes back over 180 ms, only from a capture requested after the backdrop settled and at most `lensmaxage` ms (50) old at draw time.
+- **Touches on the pop-up itself** (drag, tap) do not hide it: the backdrop does not move.
+- **Not covered:** motion without touch (video, an app's own animation). The age limit is the only guard there.
+
+`CaptureHub.Frame.capturedAt` records the request time. `LENS_STATS` (every 240 draws and when a band is dropped) logs:
+- how many draws showed the band;
+- why the others did not (`noSignal`, `motion`, `preSettle`, `age`, `noFrame`);
+- the capture age at draw time (P50, P95, max).
+
+The age counts from the capture request to the draw; the frame reaches the screen one or two vsyncs later. `TOUCH_SIGNAL` and `LENS_BAND` log the hook and each band attach. Shade and lockscreen cards never get a band.
+
+**Cost:** while a pop-up with a band is shown, captures run at `rimhz` (60 Hz), as with `hybrid`, even while the band is hidden.
+
+**Validation:** `javac` and 67 JUnit tests pass, including `BackdropMotionTest` for the gate. Gradle is still blocked here. Not tested on the device.
+
 ## Future work
 
 - **Separate blur for the notification center and the control center.** Theme Park and HomeUp set a single blur amount for both panels. The user runs 12 %: lower leaves the control center unreadable, higher over-blurs the notification list. A split needs its own investigation: find where SystemUI applies the panel blur, whether the two panels are separate blur regions or one window, and whether the module can own one of them.

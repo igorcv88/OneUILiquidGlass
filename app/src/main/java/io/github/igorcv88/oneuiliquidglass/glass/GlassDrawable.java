@@ -52,18 +52,72 @@ public final class GlassDrawable extends Drawable {
     private boolean pressed;
     public GlassDrawable(Backdrop backdrop, float density, GlassSpec spec) {
         this.backdrop = backdrop; this.density = density; this.spec = spec;
-        if (backdrop instanceof SampledBackdrop && !refractBroken) {
-            try { refract = new RuntimeShader(LiquidGlassShader.REFRACT_SOURCE); }
-            catch (RuntimeException e) {
-                // Compiled on the device only: keep the compiler message, and stop choosing capture.
-                refractBroken = true;
-                Probe.log("REFRACT_SHADER_FAILED", "error=" + e.getClass().getSimpleName() + " message=" + e.getMessage());
-            }
-        }
+        if (backdrop instanceof SampledBackdrop) ensureRefract();
         try { shader = new RuntimeShader(LiquidGlassShader.SOURCE); paint.setShader(shader); }
         catch (RuntimeException e) { Probe.error("SHADER_UNAVAILABLE", e); }
     }
+    private void ensureRefract() {
+        if (refract != null || refractBroken) return;
+        try { refract = new RuntimeShader(LiquidGlassShader.REFRACT_SOURCE); }
+        catch (RuntimeException e) {
+            // Compiled on the device only: keep the compiler message, and stop choosing capture.
+            refractBroken = true;
+            Probe.log("REFRACT_SHADER_FAILED", "error=" + e.getClass().getSimpleName() + " message=" + e.getMessage());
+        }
+    }
     public boolean failed() { return failed; }
+    /**
+     * LSPosed-only pop-ups: a captured, refracted lens band drawn over the live body, at a weight
+     * that BackdropMotion gates. The body stays the live compositor blur; the band fades out within
+     * LENS_OUT_MS when the backdrop may move and back in over LENS_IN_MS from a fresh capture.
+     */
+    private CaptureBackdrop lens;
+    private float lensWeight;
+    private long lensDrawnAt;
+    private static final float LENS_OUT_MS = 40f, LENS_IN_MS = 180f;
+    private final Runnable lensWake = this::invalidateSelf;
+    private final int[] lensXy = new int[2];
+    private final Rect lensRect = new Rect();
+    public boolean hasLens() { return lens != null; }
+    public void setLens(CaptureBackdrop band) {
+        dropLens();
+        ensureRefract();
+        if (refract == null) { band.release(); return; }
+        lens = band; lensWeight = 0f; lensDrawnAt = 0;
+        BackdropMotion.listen(lensWake);
+    }
+    public void dropLens() {
+        if (lens == null) return;
+        LensStats.flush("dropped");
+        BackdropMotion.unlisten(lensWake);
+        if (backdrop instanceof SampledBackdrop) { lens.release(); lens = null; return; }
+        unbind(lens.view());
+        lens.release(); lens = null; lensWeight = 0f;
+    }
+    /** Whether the band can no longer sample (secure content, capture failures). */
+    public boolean lensUnavailable() { return lens != null && lens.unavailable(); }
+    private void drawLens(Canvas canvas, Rect bounds) {
+        if (lens == null || !(canvas instanceof RecordingCanvas)) return;
+        CaptureHub.Frame frame = lens.frame();
+        android.view.View view = lens.view();
+        long now = android.os.SystemClock.uptimeMillis();
+        String block;
+        if (frame == null || view == null || frame.bitmap.isRecycled()) block = "noFrame";
+        else {
+            view.getLocationOnScreen(lensXy);
+            lensRect.set(lensXy[0] + bounds.left, lensXy[1] + bounds.top, lensXy[0] + bounds.right, lensXy[1] + bounds.bottom);
+            Tuning t = Tuning.get();
+            block = BackdropMotion.block(frame.capturedAt, now, lensRect, t.lensMaxAge, t.lensSettle);
+        }
+        float dt = lensDrawnAt == 0 ? 16f : Math.max(1f, Math.min(100f, now - lensDrawnAt));
+        lensDrawnAt = now;
+        float target = block == null ? 1f : 0f;
+        lensWeight = target > lensWeight ? Math.min(1f, lensWeight + dt / LENS_IN_MS) : Math.max(0f, lensWeight - dt / LENS_OUT_MS);
+        if (lensWeight != target) invalidateSelf();
+        LensStats.note(block, frame == null ? -1 : now - frame.capturedAt, lensWeight);
+        if (lensWeight <= 0.004f || frame == null || view == null || frame.bitmap.isRecycled()) return;
+        drawRefraction(canvas, bounds, frame, view, true, true, lensWeight);
+    }
     public void setPressed(boolean on) { if (pressed != on) { pressed = on; invalidateSelf(); } }
     /**
      * The compositor lights this card (sfhook profile 1: rim reflectance, specular and contour from
@@ -123,6 +177,7 @@ public final class GlassDrawable extends Drawable {
                 return;
             }
             backdrop.draw(canvas, bounds);
+            drawLens(canvas, bounds);
             fill.setColor(fillColor);
             fill.setAlpha(android.graphics.Color.alpha(fillColor) * alpha / 255);
             canvas.drawRect(rect, fill);
@@ -176,6 +231,15 @@ public final class GlassDrawable extends Drawable {
         CaptureHub.Frame frame = sampled.frame();
         android.view.View view = sampled.view();
         if (frame == null || view == null || frame.bitmap.isRecycled()) return false;
+        drawRefraction(canvas, bounds, frame, view, backdrop instanceof HybridBackdrop, false, 1f);
+        return true;
+    }
+    /**
+     * Draws {@code frame} refracted. rim: only the lens band, as the hybrid does. lensBand: the band
+     * over an LSPosed-only body, without its own edge lighting (the card's edge shader draws that once,
+     * on top) and at {@code weight}.
+     */
+    private void drawRefraction(Canvas canvas, Rect bounds, CaptureHub.Frame frame, android.view.View view, boolean rim, boolean lensBand, float weight) {
         if (frame != boundFrame) {
             BitmapShader image = new BitmapShader(frame.bitmap, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
             image.setFilterMode(BitmapShader.FILTER_MODE_LINEAR);
@@ -185,7 +249,7 @@ public final class GlassDrawable extends Drawable {
             boundFrame = frame;
         }
         Tuning t = Tuning.get();
-        boolean hybrid = backdrop instanceof HybridBackdrop;
+        boolean hybrid = rim;
         float radius = hybrid ? t.rimBlur : t.blur;
         view.getLocationOnScreen(screen);
         int margin = (int) Math.ceil(radius * 2f) + 2;
@@ -203,6 +267,7 @@ public final class GlassDrawable extends Drawable {
         } finally { node.endRecording(); }
 
         edgeUniforms(refract, bounds);
+        if (lensBand) { refract.setFloatUniform("hairGain", 0f); refract.setFloatUniform("decor", 0f); }
         refract.setFloatUniform("origin", (float) margin, (float) margin);
         refract.setFloatUniform("refractScale", t.refract);
         refract.setFloatUniform("lensRatio", t.lens);
@@ -222,11 +287,11 @@ public final class GlassDrawable extends Drawable {
             optics = RenderEffect.createChainEffect(optics, blur);
         }
         node.setRenderEffect(optics);
+        node.setAlpha(weight);
         int save = canvas.save();
         canvas.translate(bounds.left - margin, bounds.top - margin);
         ((RecordingCanvas) canvas).drawRenderNode(node);
         canvas.restoreToCount(save);
-        return true;
     }
     /**
      * The previous frame stays in the display list being replaced until this recording is committed;
@@ -251,6 +316,7 @@ public final class GlassDrawable extends Drawable {
     @Override public void setColorFilter(ColorFilter filter) { paint.setColorFilter(filter); }
     @Override public int getOpacity() { return PixelFormat.TRANSLUCENT; }
     public void release() {
+        dropLens();
         if (backdrop instanceof SampledBackdrop) unbind(((SampledBackdrop) backdrop).view());
         backdrop.release(); nativeDrawable = null; setCallback(null);
         if (node != null) { node.discardDisplayList(); node = null; }

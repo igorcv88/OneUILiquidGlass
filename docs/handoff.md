@@ -2,6 +2,36 @@
 
 Documento para continuar o trabalho em outra conversa. Leia inteiro antes de mexer em qualquer coisa. O histórico técnico detalhado está em `docs/architecture.md`; as seções de 2026-10-16 cobrem a central de notificações.
 
+## 0r. Atualização (2026-10-25): lente com controle de latência no pop-up
+
+**Teste do usuário:**
+- com `backdrop=hybrid`, a refração na borda ficou próxima do módulo SF;
+- mas voltou o atraso atrás do pop-up ao arrastar as páginas do launcher.
+
+A captura sempre chega atrasada; o blur do corpo, não.
+
+**Mudança, no modo só-LSPosed** (o padrão, sem `hybrid`):
+- o pop-up mantém o corpo ao vivo e a borda de luz;
+- ganha a faixa refratada do `hybrid`, mas só quando o fundo está parado.
+
+**Sinal de movimento:** os toques que o SystemUI enxerga.
+- Ele só vale depois de um toque no meio da tela com a central fechada, o que prova o monitor de gestos da navegação por gestos.
+- Com navegação por botões, a faixa nunca aparece.
+
+**Regras da faixa:**
+- toque fora do pop-up: some em 40 ms, antes de o conteúdo começar a mexer;
+- volta 600 ms depois de soltar o dedo (`lenssettle`);
+- só volta com uma captura feita depois disso e com no máximo 50 ms de idade (`lensmaxage`);
+- tocar no próprio pop-up não esconde a faixa.
+
+**Limite:** movimento sem toque (vídeo, animação do app) só é barrado pela idade, então ali o atraso pode aparecer.
+
+**Diagnóstico:** `LENS_STATS` (quantos desenhos mostraram a faixa, por que os outros não, idade P50/P95/máx), `TOUCH_SIGNAL`, `LENS_BAND`.
+
+**Desligar:** `setprop debug.oulg.livelens 0`.
+
+**Validado:** `javac` e 67 testes JUnit. **Não testado no aparelho.**
+
 ## 0q. Atualização (2026-10-25): material do modo só-LSPosed, segunda passada
 
 **Relato (vídeo e log de 24/10):**

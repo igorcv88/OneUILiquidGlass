@@ -49,10 +49,15 @@ public final class CaptureHub {
         public final Bitmap bitmap;
         public final Rect crop;
         public final float scale;
+        /** Uptime (ms) when the capture was requested: its content is at least this old. */
+        public final long capturedAt;
         private final boolean owned;
         private int refs;
         private boolean superseded;
-        Frame(Bitmap bitmap, Rect crop, float scale, boolean owned) { this.bitmap = bitmap; this.crop = crop; this.scale = scale; this.owned = owned; }
+        Frame(Bitmap bitmap, Rect crop, float scale, boolean owned) { this(bitmap, crop, scale, owned, SystemClock.uptimeMillis()); }
+        Frame(Bitmap bitmap, Rect crop, float scale, boolean owned, long capturedAt) {
+            this.bitmap = bitmap; this.crop = crop; this.scale = scale; this.owned = owned; this.capturedAt = capturedAt;
+        }
         public void retain() { refs++; }
         public void release() { refs--; reclaim(); }
         void supersede() { superseded = true; reclaim(); }
@@ -149,6 +154,7 @@ public final class CaptureHub {
     private static void capture(int displayId, Rect crop, SurfaceControl[] exclude) {
         CaptureApi api = CaptureApi.get();
         long t0 = SystemClock.elapsedRealtimeNanos();
+        long requestedAt = SystemClock.uptimeMillis();
         Object lock = new Object();
         Object[] result = new Object[1];
         int[] status = {-1};
@@ -181,7 +187,7 @@ public final class CaptureHub {
                     ColorSpace space = api.colorSpace(shot);
                     // The bitmap keeps its own reference to the buffer; the handle is closed below.
                     Bitmap bitmap = secure ? null : Bitmap.wrapHardwareBuffer(hb, space);
-                    if (bitmap != null) frame = new Frame(bitmap, crop, SCALE, true);
+                    if (bitmap != null) frame = new Frame(bitmap, crop, SCALE, true, requestedAt);
                     else if (!secure) error = "wrapFailed";
                 } finally { if (hb != null) hb.close(); }
             }
