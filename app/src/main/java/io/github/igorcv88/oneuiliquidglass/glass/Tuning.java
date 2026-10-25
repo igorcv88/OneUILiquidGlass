@@ -99,10 +99,18 @@ public final class Tuning {
      * Captured lens band on LSPosed-only pop-ups (debug.oulg.livelens, default 1). It shows only while
      * BackdropMotion knows the backdrop is still, from a capture taken after it settled and at most
      * lensmaxage ms old (default 50); a touch outside the pop-up hides it until lenssettle ms
-     * (default 600) after the finger lifts. 0: the live material alone.
+     * (default 100, the value chosen on the device on 25/10; was 600) after the finger lifts.
+     * 0: the live material alone.
      */
     public final boolean liveLens;
     public final int lensMaxAge, lensSettle;
+    /**
+     * Which touches hide the lens band (debug.oulg.lensgate): conservative (default) any touch
+     * outside the pop-up; directional only a horizontal move or a second pointer, plus the settle
+     * after a tap or a horizontal gesture (BackdropMotion.blockDirectional). Experimental.
+     */
+    public final String lensGate;
+    public boolean lensDirectional() { return lensGate.equals("directional"); }
     /**
      * Lockscreen blur source with the compositor lens (debug.oulg.kgblurpath): 1 (default) draws
      * a BackgroundBlurDrawable inside the glass with the glass's own bounds; 0 installs the Samsung
@@ -209,7 +217,8 @@ public final class Tuning {
         profile = prop("profile", "lens").equals("snell") ? "snell" : "lens";
         lens = clamp(number("lens", 0.30f), 0f, 0.45f);
         refract = clamp(number("refract", 1f), 0f, 6f);
-        rimHz = Math.round(clamp(number("rimhz", 60f), 1f, 120f));
+        // 80 Hz: the rate chosen on the device with the lens band (25/10); was 60.
+        rimHz = Math.round(clamp(number("rimhz", 80f), 1f, 120f));
         rimBlur = clamp(number("rimblur", 24f), 0f, 32f);
         ior = clamp(number("ior", 1.5f), 1.0f, 2.4f);
         // The node margin (2 x radius + 2) must stay inside CaptureHub's 80 px capture margin.
@@ -236,7 +245,8 @@ public final class Tuning {
         liveGlint = clamp(number("liveglint", 0f), 0f, 1f);
         liveLens = number("livelens", 1f) >= 1f;
         lensMaxAge = Math.round(clamp(number("lensmaxage", 50f), 8f, 500f));
-        lensSettle = Math.round(clamp(number("lenssettle", 600f), 0f, 3000f));
+        lensSettle = Math.round(clamp(number("lenssettle", 100f), 0f, 3000f));
+        lensGate = prop("lensgate", "conservative").equals("directional") ? "directional" : "conservative";
         kgBlurPath = Math.round(clamp(number("kgblurpath", 1f), 0f, 1f));
         shadeBlurPath = Math.round(clamp(number("shadeblurpath", 1f), 0f, 1f));
         shadeFadeCut = clamp(number("shadefadecut", 0.5f), 0f, 1f);
@@ -296,7 +306,7 @@ public final class Tuning {
         return "backdrop=" + backdrop + " profile=" + profile + " lens=" + lens + " rimhz=" + rimHz + " rimblur=" + rimBlur
                 + " refract=" + refract + " ior=" + ior + " blur=" + blur + " sat=" + saturation
                 + " disp=" + dispersion + " hz=" + hz + " hzkg=" + keyguardHz + " tint=" + tintAlpha
-                + " semradius=" + semRadius + " semradiuslens=" + semRadiusLens + " sflens=" + sfLens + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " live=" + live + " liveradius=" + liveRadius + " liveshaderadius=" + liveShadeRadius + " liveoptics=" + liveOptics + " livesheen=" + liveSheen + " liveglint=" + liveGlint + " livelens=" + liveLens + " lensmaxage=" + lensMaxAge + " lenssettle=" + lensSettle + " kgblurpath=" + kgBlurPath + " shadeblurpath=" + shadeBlurPath + " shadefadecut=" + shadeFadeCut + " kgblurradius=" + kgBlurRadius + " pillglass=" + pillGlass + " pillblur=" + pillBlur + " kgoptics=" + kgOptics + " huoptics=" + huOptics + " kglens=" + kgLens + " shadetone=" + shadeTone + " shadeveil=" + shadeVeil + " shadeadaptive=" + shadeAdaptive + " shadecap=" + shadeCap + " shadelift=" + shadeLift + " shadescaleveil=" + shadeScaleVeil + " sfoptics=" + sfOptics + " kgwinblur=" + kgWinBlur + " headergap=" + headerGap + " perf=" + perf + " trace=" + trace;
+                + " semradius=" + semRadius + " semradiuslens=" + semRadiusLens + " sflens=" + sfLens + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " live=" + live + " liveradius=" + liveRadius + " liveshaderadius=" + liveShadeRadius + " liveoptics=" + liveOptics + " livesheen=" + liveSheen + " liveglint=" + liveGlint + " livelens=" + liveLens + " lensmaxage=" + lensMaxAge + " lenssettle=" + lensSettle + " lensgate=" + lensGate + " kgblurpath=" + kgBlurPath + " shadeblurpath=" + shadeBlurPath + " shadefadecut=" + shadeFadeCut + " kgblurradius=" + kgBlurRadius + " pillglass=" + pillGlass + " pillblur=" + pillBlur + " kgoptics=" + kgOptics + " huoptics=" + huOptics + " kglens=" + kgLens + " shadetone=" + shadeTone + " shadeveil=" + shadeVeil + " shadeadaptive=" + shadeAdaptive + " shadecap=" + shadeCap + " shadelift=" + shadeLift + " shadescaleveil=" + shadeScaleVeil + " sfoptics=" + sfOptics + " kgwinblur=" + kgWinBlur + " headergap=" + headerGap + " perf=" + perf + " trace=" + trace;
     }
 
     private static float clamp(float v, float lo, float hi) { return Float.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : lo; }

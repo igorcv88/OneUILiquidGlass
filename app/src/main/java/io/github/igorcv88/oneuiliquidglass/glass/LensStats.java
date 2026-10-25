@@ -31,7 +31,10 @@ final class LensStats {
     static void flush(String why) {
         if (draws == 0) return;
         Probe.log("LENS_STATS", "reason=" + why + " draws=" + draws + " shown=" + shown + " blocked=" + blocked
-                + " requestToDrawP50=" + pct(50) + " requestToDrawP95=" + pct(95) + " requestToDrawMax=" + pct(100) + " signal=" + BackdropMotion.active());
+                + " requestToDrawP50=" + pct(50) + " requestToDrawP95=" + pct(95) + " requestToDrawMax=" + pct(100) + " signal=" + BackdropMotion.active()
+                + " gate=" + Tuning.get().lensGate + " gestures=tap:" + BackdropMotion.gestures[BackdropMotion.PENDING]
+                + ",vertical:" + BackdropMotion.gestures[BackdropMotion.VERTICAL] + ",horizontal:" + BackdropMotion.gestures[BackdropMotion.HORIZONTAL]);
+        java.util.Arrays.fill(BackdropMotion.gestures, 0);
         ages.clear(); blocked.clear(); draws = 0; shown = 0;
     }
 

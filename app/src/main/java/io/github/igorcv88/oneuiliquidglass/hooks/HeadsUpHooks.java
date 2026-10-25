@@ -1128,7 +1128,7 @@ public final class HeadsUpHooks {
                 v.getLocationOnScreen(xy);
                 card.set(xy[0], xy[1], xy[0] + v.getWidth(), xy[1] + v.getHeight());
                 Tuning t = Tuning.get();
-                return BackdropMotion.wantsFrames(card, android.os.SystemClock.uptimeMillis(), t.lensSettle) ? t.rimHz : 0;
+                return BackdropMotion.wantsFrames(card, android.os.SystemClock.uptimeMillis(), t.lensSettle, t.lensDirectional()) ? t.rimHz : 0;
             }));
             else glass.dropLens();
             Probe.log("LENS_BAND", "viewId=" + Integer.toHexString(System.identityHashCode(v)) + " on=" + glass.hasLens()

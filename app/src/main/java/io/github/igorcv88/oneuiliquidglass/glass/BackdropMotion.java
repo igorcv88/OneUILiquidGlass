@@ -26,6 +26,26 @@ public final class BackdropMotion {
     private static volatile long lastActive = Long.MIN_VALUE / 2;
     private static volatile float downX = Float.NaN, downY = Float.NaN;
     /**
+     * What the current (or last) gesture is, for debug.oulg.lensgate=directional: PENDING until the
+     * pointer has moved SLOP_MOVE px from the down point, then VERTICAL or HORIZONTAL for the rest of
+     * the gesture. A second pointer (pinch) counts as HORIZONTAL: the content scales under the card.
+     */
+    static final int NONE = 0, PENDING = 1, VERTICAL = 2, HORIZONTAL = 3;
+    private static volatile int kind = NONE;
+    /**
+     * Uptime of the last event that may move the content under the card in directional mode: a
+     * horizontal move, or the lift that ends a tap or a horizontal gesture (an app may react to it).
+     * A vertical scroll never sets it: its content runs into the blurred body along the band.
+     */
+    private static volatile long lastMotion = Long.MIN_VALUE / 2;
+    /**
+     * Movement (px) that classifies a gesture. Below the launcher's own touch slop (8 dp, ~28 px on
+     * the S25 Ultra), so a home-screen page is classified before it starts to follow the finger.
+     */
+    static final float SLOP_MOVE = 16f;
+    /** Gestures seen per kind since the last LENS_STATS (tap, vertical, horizontal). */
+    static final int[] gestures = new int[4];
+    /**
      * Whether the input hook is installed, and which receiver proved to see touches meant for other
      * apps. Only receivers that are not a SystemUI window's own (ViewRootImpl's) count at all: a touch
      * on a SystemUI window, wherever it lies, says nothing about the app below. The proof is a touch
@@ -57,12 +77,35 @@ public final class BackdropMotion {
         if (!monitorReceiver(receiverClass)) return;
         if (actionMasked == 0 && outsideSystemUi && !active()) monitor = new WeakReference<>(receiver);
         lastActive = now;
-        if (actionMasked == 0) { downX = rawX; downY = rawY; }
+        if (actionMasked == 0) { downX = rawX; downY = rawY; kind = PENDING; }
         boolean wasTouching = touching;
         touching = actionMasked != 1 && actionMasked != 3;
+        boolean turned = classify(actionMasked, rawX, rawY, now);
         // Cards with a band redraw now: the content behind them may move before their next capture.
-        if (actionMasked == 0 || (touching && !wasTouching)) notifyListeners();
+        if (actionMasked == 0 || (touching && !wasTouching) || turned) notifyListeners();
     }
+    /** Directional bookkeeping; returns whether the gesture just turned horizontal. */
+    private static boolean classify(int actionMasked, float rawX, float rawY, long now) {
+        int k = kind;
+        boolean turned = false;
+        if (actionMasked == 5 && k != HORIZONTAL) { k = HORIZONTAL; turned = true; gestures[HORIZONTAL]++; }
+        else if (actionMasked == 2 && k == PENDING && !Float.isNaN(downX)) {
+            float dx = Math.abs(rawX - downX), dy = Math.abs(rawY - downY);
+            if (Math.max(dx, dy) >= SLOP_MOVE) {
+                k = dx >= dy ? HORIZONTAL : VERTICAL;
+                turned = k == HORIZONTAL;
+                gestures[k]++;
+            }
+        }
+        kind = k;
+        if (k == HORIZONTAL && (actionMasked == 2 || actionMasked == 5)) lastMotion = now;
+        if (actionMasked == 1 || actionMasked == 3) {
+            if (k == PENDING) gestures[PENDING]++;
+            if (k != VERTICAL) lastMotion = now;
+        }
+        return turned;
+    }
+    static int kind() { return kind; }
     /** A receiver was disposed; if it was the proven monitor, the signal is gone. Returns whether it was. */
     public static boolean onDisposed(Object receiver) {
         WeakReference<Object> m = monitor;
@@ -73,6 +116,7 @@ public final class BackdropMotion {
     /** Test only: back to the state of a fresh process. */
     static void reset() {
         hooked = false; monitor = null; touching = false; lastActive = Long.MIN_VALUE / 2; downX = Float.NaN; downY = Float.NaN;
+        kind = NONE; lastMotion = Long.MIN_VALUE / 2; java.util.Arrays.fill(gestures, 0);
     }
 
     /** Runs {@code r} on the main thread whenever a touch starts; held weakly. */
@@ -97,9 +141,10 @@ public final class BackdropMotion {
     }
 
     /** Why a lens band may not show now, or null when it may. {@code card} is its screen rect. */
-    public static String block(long capturedAt, long now, Rect card, long maxAgeMs, long settleMs) {
+    public static String block(long capturedAt, long now, Rect card, long maxAgeMs, long settleMs, boolean directional) {
         boolean inCard = card != null && !Float.isNaN(downX)
                 && downX >= card.left - SLOP && downX <= card.right + SLOP && downY >= card.top - SLOP && downY <= card.bottom + SLOP;
+        if (directional) return blockDirectional(active(), touching, kind, lastMotion, inCard, capturedAt, now, maxAgeMs, settleMs);
         return block(active(), touching, lastActive, inCard, capturedAt, now, maxAgeMs, settleMs);
     }
     /**
@@ -107,8 +152,8 @@ public final class BackdropMotion {
      * motion, or with no signal, the capture loop is not asked for frames at all; once the backdrop
      * settles it is asked again, and the band returns from the first capture requested after that.
      */
-    public static boolean wantsFrames(Rect card, long now, long settleMs) {
-        return block(now, now, card, Long.MAX_VALUE / 4, settleMs) == null;
+    public static boolean wantsFrames(Rect card, long now, long settleMs, boolean directional) {
+        return block(now, now, card, Long.MAX_VALUE / 4, settleMs, directional) == null;
     }
 
     /**
@@ -134,6 +179,23 @@ public final class BackdropMotion {
         if (!active) return "noSignal";
         if (!gestureOnCard && (touching || now - lastActive < settleMs)) return "motion";
         if (!gestureOnCard && capturedAt < lastActive + settleMs) return "preSettle";
+        if (now - capturedAt > maxAgeMs) return "age";
+        return null;
+    }
+
+    /**
+     * debug.oulg.lensgate=directional: the band is cut only when the gesture may move the content
+     * under the pop-up sideways. A finger held still (tap, long press) and a vertical scroll keep it;
+     * a horizontal move or a second pointer cuts it at once, and a tap or horizontal gesture keeps it
+     * cut until settleMs after the lift. The direction of the finger is a proxy, not a measurement of
+     * the pixels behind the card: a horizontal carousel under a fixed header is still cut, and a
+     * vertical scroll still draws a capture one or two frames old along the band.
+     */
+    static String blockDirectional(boolean active, boolean touching, int kind, long lastMotion, boolean gestureOnCard,
+                                   long capturedAt, long now, long maxAgeMs, long settleMs) {
+        if (!active) return "noSignal";
+        if (!gestureOnCard && ((touching && kind == HORIZONTAL) || now - lastMotion < settleMs)) return "motion";
+        if (!gestureOnCard && capturedAt < lastMotion + settleMs) return "preSettle";
         if (now - capturedAt > maxAgeMs) return "age";
         return null;
     }
