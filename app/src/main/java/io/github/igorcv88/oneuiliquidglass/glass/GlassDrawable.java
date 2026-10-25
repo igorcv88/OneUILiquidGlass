@@ -166,7 +166,7 @@ public final class GlassDrawable extends Drawable {
             Rect bounds = getBounds(); rect.set(bounds);
             clip.reset(); clip.addRoundRect(rect, radii, Path.Direction.CW);
             canvas.clipPath(clip);
-            if (refract != null && drawSampled(canvas, bounds)) {
+            if (refract != null && backdrop instanceof SampledBackdrop && drawSampled(canvas, bounds)) {
                 if (backdrop instanceof HybridBackdrop) {
                     // The lens band is drawn; the body is the compositor blur: veil both alike.
                     fill.setColor(fillColor);
