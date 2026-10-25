@@ -27,9 +27,9 @@ final class VeilMath {
      * The material for a backdrop. On the theme's own side (a dark backdrop under light text, a
      * light one under dark text) the card keeps its native look with at most a small capped veil.
      * On the other side it changes style instead of being veiled grey: light glass ({@code lightGlass},
-     * white) with dark text over a light backdrop, dark glass ({@code darkGlass}) with light text over a
-     * dark one. Black at 25 % over white is #BFBFBF, grey under white text at ~1.8:1; the style
-     * change gives the text real contrast without darkening the glass.
+     * a light cool frost) with dark text over a light backdrop, dark glass ({@code darkGlass}) with
+     * light text over a dark one. Black at 25 % over white is #BFBFBF, grey under white text at
+     * ~1.8:1; the style change gives the text real contrast without a grey body.
      */
     static Material material(float luma, boolean wasLight, boolean lightText, float cap, float lift, float max,
                              float lo, float hi, int lightGlass, int darkGlass) {

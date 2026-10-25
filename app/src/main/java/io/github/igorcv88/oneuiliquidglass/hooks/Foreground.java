@@ -60,11 +60,43 @@ final class Foreground {
         @Override public void restore(Object saved) { i.setImageTintList((ColorStateList) saved); }
     }
 
-    /** swap false restores every view under {@code root}. Returns the views changed. */
-    static int apply(View root, boolean swap, boolean lightText) {
-        return root == null ? 0 : walk(root, swap, lightText);
+    /**
+     * swap false restores every view under {@code root}. Returns the views changed. {@code tracked},
+     * when given, is refilled with the views that carry the swapped tone after the walk, for
+     * {@link #drift}.
+     */
+    static int apply(View root, boolean swap, boolean lightText, java.util.List<View> tracked) {
+        if (tracked != null) tracked.clear();
+        return root == null ? 0 : walk(root, swap, lightText, tracked);
     }
-    private static int walk(View v, boolean swap, boolean lightText) {
+    /**
+     * Why the swapped tone of a card is no longer on screen, or null: a tracked view left the
+     * window (the notification was inflated again), or its colour is no longer the one it was given
+     * (SystemUI bound the content again and set its own colour). Cheap: one colour read per view,
+     * run on every pre-draw of a swapped card so a rebind is repaired before its next frame instead
+     * of up to SWAP_WALK_MS later (white text on light glass for ~450 ms on the device, 25/10).
+     */
+    static String drift(java.util.List<View> tracked) {
+        for (int i = 0; i < tracked.size(); i++) {
+            View v = tracked.get(i);
+            if (!v.isAttachedToWindow()) return "detached";
+            Rec r = swapped.get(v);
+            // Read in place (no Ink wrapper): this runs for every swapped view on every pre-draw.
+            if (r == null) return "rebind";
+            if (v instanceof TextView) { if (((TextView) v).getCurrentTextColor() != r.applied) return "rebind"; }
+            else if (v instanceof ImageView) {
+                ColorStateList tint = ((ImageView) v).getImageTintList();
+                if (tint == null || tint.getDefaultColor() != r.applied) return "rebind";
+            }
+        }
+        return null;
+    }
+    /** Whether a view swapped by this class shows a colour other than the one it was given. */
+    static boolean drifted(Ink ink, Map<Object, Rec> swapped) {
+        Rec r = swapped.get(ink.key());
+        return r == null || ink.color() != r.applied;
+    }
+    private static int walk(View v, boolean swap, boolean lightText, java.util.List<View> tracked) {
         int changed = 0;
         if (v instanceof TextView) {
             if (standard(v, false)) changed += ink(new Text((TextView) v), swap, lightText, swapped) ? 1 : 0;
@@ -73,13 +105,14 @@ final class Foreground {
             if (i.getImageTintList() == null) swapped.remove(v);
             else if (standard(v, true)) changed += ink(new Icon(i), swap, lightText, swapped) ? 1 : 0;
         }
+        if (tracked != null && swap && swapped.containsKey(v)) tracked.add(v);
         if (v instanceof ViewGroup) {
             ViewGroup g = (ViewGroup) v;
             for (int i = 0; i < g.getChildCount(); i++) {
                 View c = g.getChildAt(i);
                 // A group's child rows are cards of their own, with their own material.
                 if (c.getClass().getName().endsWith("ExpandableNotificationRow")) continue;
-                changed += walk(c, swap, lightText);
+                changed += walk(c, swap, lightText, tracked);
             }
         }
         return changed;

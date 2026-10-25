@@ -971,6 +971,25 @@ Source: the device handoff after PR #36 (log `01_conservative_log.txt`, capture 
 
 **Validation:** Gradle `testDebugUnitTest` (96 tests; new `ForegroundTest` including template scope, `EligibilityTest` pre-open binding, `VeilMathTest` style cases, `ToneGridTest` pre-open adoption), `lintDebug` (no new warning categories), `assembleDebug`. Not tested on the device.
 
+### Round 38: rebind repair, no restore between surfaces, light frost (2026-10-25)
+
+Source: device round of PR #37 (`OULG37_20261025_165840`, `04_transicoes.txt`; video 17:08:01 over a white page). Dark text on light glass was approved; the flicker and the too-white light glass were not.
+
+**Flicker, from the log (row `f959dce`, the pop-up that became a shade card):**
+- `17:03:08.946 TEXT_TONE swap=false views=43`, then `08.996 swap=true views=43`: between surfaces (heads-up animating away, shade not yet expanded) `tone()` fell to "any other surface" and restored the text, then the shade applied it again: a ~50 ms white flash.
+- `17:03:09.189 BACKGROUND_UPDATE` (SystemUI binds the row again and sets its own colours), `09.693 TEXT_TONE swap=true views=41`: 504 ms later, the `SWAP_WALK_MS` backstop. The video's ~450 ms of white text on the top card matches.
+
+**Changes.**
+- `Foreground.drift`: the views carrying the swapped tone are tracked; every pre-draw of a swapped card reads their colour (no allocation) and walks again at once when one left the window (`detached`) or shows a colour other than the one it was given (`rebind`). The 500 ms walk stays as a backstop for new views. `TEXT_REAPPLY reason=rebind|detached|style|restore|walk sinceLastWalk= surface= style= generation=` (rebind/detached always logged, the rest with trace).
+- Between surfaces on the unlocked shade bar state the material is held (no restore); restoring stays for the lockscreen and every path to the native background (`release`). A held pop-up veil reaches no shade card (own slot).
+- A card measured less than 1.5 s before a shade opening (the pop-up it was, a reopened shade) keeps that reading until the opening's capture lands (`source=held`) instead of going native and back.
+- Pop-ups entering are poked to redraw every 100 ms (1 s once still): the entrance animates RenderNode properties without drawing, and a measurement waited 1.2 s for an unrelated draw.
+- Light glass: region colour `lighttone` (default `b8c2ce`, a cool light grey) at `lightglass` (0.32), ~#E8ECEF over white (luma ~0.92), instead of white at 0.25; the thickness shadow on light glass is scaled by `lightedge` (2). `lighttone ffffff`, `lightglass 0.25`, `lightedge 1` restore round 37.
+
+**Not covered.** Openings with no pre-open capture and no recent reading can still draw the first frames native (`FIRST_VISIBLE_MATERIAL source=native`, prefetch landing 5-10 ms after the first pre-draw in gens 52/54). The tone of light glass is a device judgement.
+
+**Validation:** Gradle `testDebugUnitTest` (99 tests; new drift and light-tone cases), `lintDebug`, `assembleDebug`. Not tested on the device.
+
 ## Future work
 
 - **Separate blur for the notification center and the control center.** Theme Park and HomeUp set a single blur amount for both panels. The user runs 12 %: lower leaves the control center unreadable, higher over-blurs the notification list. A split needs its own investigation: find where SystemUI applies the panel blur, whether the two panels are separate blur regions or one window, and whether the module can own one of them.
