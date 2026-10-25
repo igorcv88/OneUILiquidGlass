@@ -89,6 +89,14 @@ public final class Tuning {
     /** Sheen at the top of LSPosed-only cards, fading to none at the bottom (debug.oulg.livesheen, 0.02). */
     public final float liveSheen;
     /**
+     * Captured lens band on LSPosed-only pop-ups (debug.oulg.livelens, default 1). It shows only while
+     * BackdropMotion knows the backdrop is still, from a capture taken after it settled and at most
+     * lensmaxage ms old (default 50); a touch outside the pop-up hides it until lenssettle ms
+     * (default 600) after the finger lifts. 0: the live material alone.
+     */
+    public final boolean liveLens;
+    public final int lensMaxAge, lensSettle;
+    /**
      * Lockscreen blur source with the compositor lens (debug.oulg.kgblurpath): 1 (default) draws
      * a BackgroundBlurDrawable inside the glass with the glass's own bounds; 0 installs the Samsung
      * blur on the view, whose region lagged the card and showed a stale texture during pull-downs.
@@ -218,6 +226,9 @@ public final class Tuning {
         liveShadeRadius = Math.round(clamp(number("liveshaderadius", LIVE_SHADE_RADIUS), 0f, 400f));
         liveOptics = clamp(number("liveoptics", 1f), 0f, 2f);
         liveSheen = clamp(number("livesheen", 0.02f), 0f, 0.15f);
+        liveLens = number("livelens", 1f) >= 1f;
+        lensMaxAge = Math.round(clamp(number("lensmaxage", 50f), 8f, 500f));
+        lensSettle = Math.round(clamp(number("lenssettle", 600f), 0f, 3000f));
         kgBlurPath = Math.round(clamp(number("kgblurpath", 1f), 0f, 1f));
         shadeBlurPath = Math.round(clamp(number("shadeblurpath", 1f), 0f, 1f));
         shadeFadeCut = clamp(number("shadefadecut", 0.5f), 0f, 1f);
@@ -277,7 +288,7 @@ public final class Tuning {
         return "backdrop=" + backdrop + " profile=" + profile + " lens=" + lens + " rimhz=" + rimHz + " rimblur=" + rimBlur
                 + " refract=" + refract + " ior=" + ior + " blur=" + blur + " sat=" + saturation
                 + " disp=" + dispersion + " hz=" + hz + " hzkg=" + keyguardHz + " tint=" + tintAlpha
-                + " semradius=" + semRadius + " semradiuslens=" + semRadiusLens + " sflens=" + sfLens + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " live=" + live + " liveradius=" + liveRadius + " liveshaderadius=" + liveShadeRadius + " liveoptics=" + liveOptics + " livesheen=" + liveSheen + " kgblurpath=" + kgBlurPath + " shadeblurpath=" + shadeBlurPath + " shadefadecut=" + shadeFadeCut + " kgblurradius=" + kgBlurRadius + " pillglass=" + pillGlass + " pillblur=" + pillBlur + " kgoptics=" + kgOptics + " huoptics=" + huOptics + " kglens=" + kgLens + " shadetone=" + shadeTone + " shadeveil=" + shadeVeil + " shadeadaptive=" + shadeAdaptive + " shadecap=" + shadeCap + " shadelift=" + shadeLift + " shadescaleveil=" + shadeScaleVeil + " sfoptics=" + sfOptics + " kgwinblur=" + kgWinBlur + " headergap=" + headerGap + " perf=" + perf + " trace=" + trace;
+                + " semradius=" + semRadius + " semradiuslens=" + semRadiusLens + " sflens=" + sfLens + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " live=" + live + " liveradius=" + liveRadius + " liveshaderadius=" + liveShadeRadius + " liveoptics=" + liveOptics + " livesheen=" + liveSheen + " livelens=" + liveLens + " lensmaxage=" + lensMaxAge + " lenssettle=" + lensSettle + " kgblurpath=" + kgBlurPath + " shadeblurpath=" + shadeBlurPath + " shadefadecut=" + shadeFadeCut + " kgblurradius=" + kgBlurRadius + " pillglass=" + pillGlass + " pillblur=" + pillBlur + " kgoptics=" + kgOptics + " huoptics=" + huOptics + " kglens=" + kgLens + " shadetone=" + shadeTone + " shadeveil=" + shadeVeil + " shadeadaptive=" + shadeAdaptive + " shadecap=" + shadeCap + " shadelift=" + shadeLift + " shadescaleveil=" + shadeScaleVeil + " sfoptics=" + sfOptics + " kgwinblur=" + kgWinBlur + " headergap=" + headerGap + " perf=" + perf + " trace=" + trace;
     }
 
     private static float clamp(float v, float lo, float hi) { return Float.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : lo; }

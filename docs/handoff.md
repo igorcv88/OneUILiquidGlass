@@ -2,6 +2,45 @@
 
 Documento para continuar o trabalho em outra conversa. Leia inteiro antes de mexer em qualquer coisa. O histórico técnico detalhado está em `docs/architecture.md`; as seções de 2026-10-16 cobrem a central de notificações.
 
+## 0r. Atualização (2026-10-25): lente com controle de latência no pop-up
+
+**Teste do usuário:**
+- com `backdrop=hybrid`, a refração na borda ficou próxima do módulo SF;
+- mas voltou o atraso atrás do pop-up ao arrastar as páginas do launcher.
+
+A captura sempre chega atrasada; o blur do corpo, não.
+
+**Mudança, no modo só-LSPosed** (o padrão, sem `hybrid`):
+- o pop-up mantém o corpo ao vivo e a borda de luz;
+- ganha a faixa refratada do `hybrid`, mas só quando o fundo está parado.
+
+**Sinal de movimento:** os toques que o SystemUI enxerga.
+- Ele só vale depois de um toque no meio da tela com a central fechada, o que prova o monitor de gestos da navegação por gestos.
+- Com navegação por botões, a faixa nunca aparece.
+
+**Regras da faixa:**
+- toque fora do pop-up: a faixa some no mesmo quadro, sem fade, e as capturas param;
+- volta 600 ms depois de soltar o dedo (`lenssettle`), em 180 ms;
+- só volta com uma captura pedida depois disso e com no máximo 50 ms de idade (`lensmaxage`);
+- tocar no próprio pop-up não esconde a faixa.
+
+**Sinal:**
+- só valem receptores que não são janela do SystemUI;
+- a prova é um toque no meio da tela com a central fechada;
+- ela some se esse receptor for descartado.
+
+**Falha da faixa:** `LENS_BAND_FAILED`; só a faixa sai, o blur e a borda continuam.
+
+**Limite:** movimento sem toque (vídeo, animação do app) só é barrado pela idade, então ali o atraso pode aparecer.
+
+**Diagnóstico:**
+- `LENS_STATS`: desenhos com pixels capturados, bloqueios por motivo e `requestToDraw` P50/P95/máx. Essa é a idade até o desenho, não até a tela.
+- `TOUCH_SIGNAL`, `LENS_BAND`.
+
+**Desligar:** `setprop debug.oulg.livelens 0`.
+
+**Validado:** `javac` e 73 testes JUnit. **Não testado no aparelho.**
+
 ## 0q. Atualização (2026-10-25): material do modo só-LSPosed, segunda passada
 
 **Relato (vídeo e log de 24/10):**
