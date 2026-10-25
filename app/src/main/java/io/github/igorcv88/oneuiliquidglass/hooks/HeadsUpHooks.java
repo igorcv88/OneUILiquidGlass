@@ -767,8 +767,11 @@ public final class HeadsUpHooks {
                 return;
             }
             boolean changedSource = !source.equals(toneSource);
+            boolean changedSurface = !SURFACE_SHADE.equals(toneSurface);
             if (first) shadeCards++;
             toneOpen = shadeOpens; toneSurface = SURFACE_SHADE; toneSource = source;
+            // The shade slot may hold an older veil than the one the pop-up slot had.
+            if (changedSurface) pushToneVeil();
             if (!Float.isNaN(luma)) setTone(luma, changedSource);
             if (changedSource) logTone("SHADE_TONE_APPLY", v, source, luma, grid != null && source.equals("grid") ? grid.bright(toneXy[1], toneXy[1] + v.getHeight()) : -1f,
                     " generation=" + shadeOpens + " tFromOpen=" + (android.os.SystemClock.uptimeMillis() - shadeOpenAt));
@@ -777,6 +780,8 @@ public final class HeadsUpHooks {
             long now = android.os.SystemClock.uptimeMillis();
             if (!SURFACE_POPUP.equals(toneSurface)) {
                 toneSurface = SURFACE_POPUP; popupMeasureAt = 0;
+                // The pop-up slot is empty or stale: write the current veil before any step from it.
+                pushToneVeil();
                 Float estimate = estimatedLuma();
                 toneSource = estimate == null ? "none" : "estimate";
                 if (estimate != null) setTone(estimate, true); else { applyMeasuredVeil(0); setHalo(0f); }
@@ -1034,7 +1039,9 @@ public final class HeadsUpHooks {
                             + (compBridge != null ? " drawableA=" + compBridge.drawable.getAlpha() : "");
                     if (!line.equals(lastTrace)) { lastTrace = line; FrameTrace.log("ROW_FRAME", v, line); }
                 }
-                if (!pill) tone(v);
+                // Only a card that draws glass takes a veil or a halo: with the module disabled, or a
+                // card on its native background, its text is left as SystemUI drew it.
+                if (!pill) { if (enabled && glass != null) tone(v); else setHalo(0f); }
                 boolean eligible = eligible();
                 View r = row.get();
                 Boolean headsUp = r == null ? null : Reflect.bool(r, "isHeadsUpState", "mIsHeadsUp");
