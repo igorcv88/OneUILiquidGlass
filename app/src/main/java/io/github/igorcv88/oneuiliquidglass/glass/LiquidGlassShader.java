@@ -11,6 +11,10 @@ package io.github.igorcv88.oneuiliquidglass.glass;
  * the side facing the light, a fainter cool run opposite, a damped lower edge, and a thickness
  * shadow that starts inside the outline rather than on it.</p>
  *
+ * <p>With live = 1 (LSPosed-only mode, a live compositor blur and no lens) edge() hands over to
+ * liveEdge(), a model without the uniform hairline: see its comment. decor then scales the whole
+ * term ({@link Tuning#liveOptics}).</p>
+ *
  * <p>hairGain scales the hairline and decor the lit runs and the thickness shadow (1 by default). A
  * card the compositor lights itself (sfhook profile 1) takes decor 0 and a thinner hairline, so its
  * rim is not lit twice.</p>
@@ -39,6 +43,8 @@ public final class LiquidGlassShader {
         uniform float shadow;
         uniform float hairGain;
         uniform float decor;
+        uniform float live;
+        uniform float sheen;
 
         float roundedBox(float2 p, float2 hs, float r) {
             float2 q = abs(p) - hs + r;
@@ -55,7 +61,48 @@ public final class LiquidGlassShader {
             float nl = length(n);
             return nl > 0.0001 ? n / nl : float2(0.0, -1.0);
         }
+        // LSPosed-only cards: the compositor gives a live blur and no lens, so the glass has to read
+        // from light alone. No term is uniform round the contour: a thin outline that is bright on
+        // the lit side and nearly gone opposite, a Fresnel lift that grows toward the outline, a
+        // specular glint where the outline faces the light, a fainter internal reflection opposite,
+        // a soft absorption ring inside the far side (the slab's thickness) and a faint sheen
+        // across the top. Light is added, absorption is the alpha, as in edge().
+        half4 liveEdge(float2 p, float2 hs, float d, float2 n) {
+            float depth = max(-d, 0.0);
+            float2 ld = normalize(light + float2(0.0001, 0.0));
+            float facing = dot(n, -ld);
+            float lit = smoothstep(-0.35, 1.0, facing);
+            float far = smoothstep(0.0, 1.0, -facing);
+            float b = max(bevel, 4.0);
+
+            float sigma = max(hair * 0.75, 1.1);
+            float contour = exp(-(depth * depth) / (2.0 * sigma * sigma));
+            float contourGain = 0.06 + 0.28 * lit * lit;
+
+            float fw = b * 0.60;
+            float ft = clamp(1.0 - depth / fw, 0.0, 1.0);
+            float fresnel = ft * ft * ft * (0.035 + 0.075 * lit);
+
+            float g = (depth - b * 0.22) / (b * 0.14);
+            float glint = exp(-g * g) * pow(max(facing, 0.0), 20.0) * 0.30;
+            float g2 = (depth - b * 0.34) / (b * 0.20);
+            float inner = exp(-g2 * g2) * pow(max(-facing, 0.0), 16.0) * 0.10;
+
+            float a = (depth - b * 0.60) / (b * 0.45);
+            float absorb = exp(-a * a) * far * far * 0.05;
+
+            float top = clamp((p.y + hs.y) / max(hs.y * 2.0, 1.0), 0.0, 1.0);
+            float sh = sheen * (1.0 - smoothstep(0.0, 0.65, top));
+
+            float3 cool = float3(0.95, 0.975, 1.0);
+            float3 added = cool * (contour * contourGain + fresnel + inner + sh) + float3(1.0, 0.995, 0.985) * glint;
+            added *= specular / 0.60 * decor;
+            return half4(half3(clamp(added, 0.0, 1.0)), half(clamp(absorb * shadow / 0.26 * decor, 0.0, 1.0)));
+        }
         half4 edge(float2 p, float2 hs, float d, float2 n) {
+            if (live > 0.5) {
+                return liveEdge(p, hs, d, n);
+            }
             float depth = max(-d, 0.0);
             float facing = dot(n, -normalize(light + float2(0.0001, 0.0)));
             float2 q = p / max(hs, float2(1.0, 1.0));

@@ -2,6 +2,39 @@
 
 Documento para continuar o trabalho em outra conversa. Leia inteiro antes de mexer em qualquer coisa. O histórico técnico detalhado está em `docs/architecture.md`; as seções de 2026-10-16 cobrem a central de notificações.
 
+## 0q. Atualização (2026-10-25): material do modo só-LSPosed, segunda passada
+
+**Relato (vídeo e log de 24/10):**
+- estável, e Wallet PASS no VD Google às 19:51:57;
+- mas tudo parecia uma placa fosca uniforme, e na central os cards se misturavam com o fundo.
+
+**Causas lidas no código:**
+- raio padrão de 180 px em todas as superfícies;
+- no tema escuro, véu de 8 % branco mais fill de 4 % preto, o que deixava o card no mesmo tom do blur da central;
+- a borda era a do caminho com módulo: uma linha fina em volta do contorno inteiro.
+
+**Mudanças (só no modo só-LSPosed):**
+- **Raio:**
+  - pop-up e tela de bloqueio 80 px (`debug.oulg.liveradius`);
+  - central 120 px (`debug.oulg.liveshaderadius`);
+  - ao mudar de superfície, o raio passa de um valor ao outro em 200 ms.
+- **Tema escuro:** véu de 11 % branco no pop-up e 14 % na central, sem fill escuro.
+- **Borda nova, só luz** (`liveEdge`):
+  - contorno forte do lado da luz e quase ausente do outro;
+  - Fresnel crescendo para a borda;
+  - brilho localizado no canto voltado para a luz e reflexo interno fraco no canto oposto;
+  - anel de absorção suave;
+  - brilho de 2 % no topo.
+- **Isto não é refração:** os pixels de trás não se deslocam. Prévia no host: `docs/img/live-edge-preview.jpg`.
+- **Diagnóstico:** `LIVE_STATE` por card, com superfície, raio pedido, véu e fill. `BLUR_CAPABILITY_CHANGED` só quando muda.
+
+**Ajustes ao vivo** (sem reiniciar nada):
+- `liveradius` e `liveshaderadius`: valores em px;
+- `liveoptics`: 0–2, ganho da borda;
+- `livesheen`: 0–0,15.
+
+**Validado:** `javac` e 62 testes JUnit. Gradle bloqueado de novo. **Não testado no aparelho.**
+
 ## 0p. Atualização (2026-10-24): modo só-LSPosed, sem módulo KernelSU
 
 **Ambiente novo do usuário:**

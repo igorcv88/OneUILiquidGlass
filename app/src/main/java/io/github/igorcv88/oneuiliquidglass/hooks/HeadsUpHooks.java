@@ -66,6 +66,8 @@ public final class HeadsUpHooks {
      * cards then take the Samsung blur for the rest of the process instead of the drawable path.
      */
     private boolean drawableUnavailable;
+    /** Last cross-window blur capability logged (BLUR_CAPABILITY_CHANGED), across all cards. */
+    private Boolean lastCapability;
     /** enabled == null: preferences unreadable, resolve through the module's ConfigProvider. */
     public HeadsUpHooks(ClassLoader loader, Boolean enabled) {
         this.loader = loader; this.enabled = Boolean.TRUE.equals(enabled); this.configPending = enabled == null;
@@ -688,7 +690,11 @@ public final class HeadsUpHooks {
                     blurEnabled = wm.isCrossWindowBlurEnabled();
                     blurListener = supported -> {
                         blurEnabled = supported;
-                        Probe.log("BLUR_CAPABILITY_CHANGED", "enabled=" + supported);
+                        // Every card has a listener: log once per change, not once per card.
+                        if (lastCapability == null || lastCapability != supported) {
+                            lastCapability = supported;
+                            Probe.log("BLUR_CAPABILITY_CHANGED", "enabled=" + supported);
+                        }
                         if (!supported && glassKind == Backdrop.Kind.COMPOSITOR && compBridge == null) release();
                         invalidate();
                     };
@@ -995,7 +1001,7 @@ public final class HeadsUpHooks {
                             : kind == Backdrop.Kind.SAMSUNG ? (semBridge = SemBlurBridge.create(v))
                             : BackgroundBlurBridge.create(v);
                 }
-                if (compBridge != null) SemBlurBridge.clearNative(v);
+                if (compBridge != null) { SemBlurBridge.clearNative(v); compBridge.setInvalidator(this::invalidate); }
                 if (compBridge != null && pill) compBridge.setPill(true);
                 // A new bridge takes the veil measured for this opening.
                 pushToneVeil();
@@ -1011,12 +1017,16 @@ public final class HeadsUpHooks {
             }
             boolean dark = (v.getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
             int fill = kind == Backdrop.Kind.SHARED ? (dark ? spec.shadeDarkFill : spec.shadeLightFill) : (dark ? spec.darkFill : spec.lightFill);
-            int tone = glass.hybrid() || kind == Backdrop.Kind.SAMSUNG || compBridge != null ? (dark ? spec.samsungDarkColor : spec.samsungLightColor)
+            boolean live = Tuning.get().live && compBridge != null;
+            if (live && dark) fill = 0;
+            int tone = live && dark ? (lensSurface() ? spec.liveDarkColor : spec.liveShadeDarkColor)
+                    : glass.hybrid() || kind == Backdrop.Kind.SAMSUNG || compBridge != null ? (dark ? spec.samsungDarkColor : spec.samsungLightColor)
                     : kind == Backdrop.Kind.SAMPLED ? (dark ? spec.captureDarkTint : spec.captureLightTint)
                     : dark ? spec.darkBlurColor : spec.lightBlurColor;
             glass.setPressed(pressed);
             refreshLens();
             glass.configure(original, shape(), fill, tone);
+            if (live) liveState(v, fill);
             if (lastFallback != null) { lastFallback = null; Probe.log("NATIVE_FALLBACK", "viewId=" + Integer.toHexString(System.identityHashCode(v)) + " reason=none"); }
             if (pill && !pillReported) {
                 pillReported = true;
@@ -1049,6 +1059,29 @@ public final class HeadsUpHooks {
             View r = row.get();
             if (r == null || Tuning.get().shadeBlur) return false;
             return Eligibility.sharedBackdrop(shadeExpanded, Reflect.bool(r, "isOnKeyguard", "mOnKeyguard"));
+        }
+        /** Whether the card is a pop-up or lockscreen card (lens surface) rather than a shade card. */
+        boolean lensSurface() {
+            View r = row.get();
+            return !pill && Eligibility.lens(barState, shadeExpanded, r == null ? null : Reflect.bool(r, "isOnKeyguard", "mOnKeyguard"));
+        }
+        /** Last LIVE_STATE line of this card; logged again only when the material it describes changes. */
+        String lastLiveState;
+        /**
+         * What an LSPosed-only card asks the compositor for: the surface, the radius and colour sent to
+         * the blur region, the fill, the cross-window capability (false on One UI 9 even when the blur
+         * renders). Fades are left out: they change every frame of an animation. It says what was requested, not what reached the screen.
+         */
+        void liveState(View v, int fill) {
+            int px = compBridge.requestedPx(), tint = compBridge.requestedTint();
+            String surface = pill ? "pill" : lensSurface() ? (barState != null && barState != Eligibility.BAR_SHADE ? "lockscreen" : "popup") : "shade";
+            String line = "surface=" + surface + " radius=" + px + " tint=" + Integer.toHexString(tint) + " fill=" + Integer.toHexString(fill)
+                    + " veil=" + Integer.toHexString(measuredVeil) + " crossBlur=" + blurEnabled;
+            if (line.equals(lastLiveState)) return;
+            lastLiveState = line;
+            Tuning t = Tuning.get();
+            Probe.log("LIVE_STATE", "viewId=" + Integer.toHexString(System.identityHashCode(v)) + " " + line
+                    + " live=" + t.live + " liveradius=" + t.liveRadius + " liveshaderadius=" + t.liveShadeRadius + " liveoptics=" + t.liveOptics);
         }
         void refreshLens() {
             View r = row.get();

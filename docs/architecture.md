@@ -844,6 +844,36 @@ The pre-change `auto` stays available as `debug.oulg.backdrop=hybrid`. With the 
 
 **Validation:** compiled with `javac` against `android.jar` (SDK 36) and the Xposed API; 62 JUnit tests pass, including `LiveModeTest` and `VeilRampTest`. Gradle lint and the APK build did not run in this session (Maven Central refused the requests); the release workflow runs both. Not tested on the device.
 
+### LSPosed-only material, second pass (2026-10-25)
+
+**Device report on the first live build** (video and log, 24/10): stable, Wallet PASS in VD Google at 19:51:57, but every card read as a uniformly frosted plate, and in the shade the cards merged with the blurred background. Log: `source=compositor optics=edge_shader`, every `debug.oulg.*` empty, `SHADE_TONE luma=0.01–0.11 veil=0` over a dark wallpaper.
+
+**Causes read from the code:**
+- the default radius was 180 px on every surface, so the backdrop kept no structure behind the card;
+- in the dark theme the region colour (8 % white) and fill (4 % black) left a shade card at the tone of the shade's own blur;
+- the edge was the module path's model (hairline round the whole contour), tuned to sit beside the compositor's lens.
+
+**Changes, LSPosed-only mode only** (`Tuning.live` and the drawable path; the module path is unchanged):
+- **Radius per surface:** pop-ups and lockscreen cards 80 px (`liveradius`), shade cards 120 px (`liveshaderadius`). `BackgroundBlurBridge.applyRadius` ramps a built card to a new radius over 200 ms, so a pop-up that opens the shade does not jump in blur.
+- **Dark theme:** region colour 11 % white for pop-ups and lockscreen cards, 14 % for shade cards, no dark fill. The light theme is unchanged.
+- **Edge:** `LiquidGlassShader.liveEdge()`, selected by the `live` uniform. Its terms:
+  - an outline whose gain goes from 0.06 opposite the light to 0.34 facing it;
+  - a Fresnel lift over 60 % of the bevel;
+  - a glint at the corner facing the light (`facing^20`) and a fainter internal reflection at the opposite corner;
+  - a soft absorption ring (alpha) on the far side;
+  - a top sheen (`livesheen`, 2 %).
+
+  `liveoptics` scales all of it. These terms shade the card; they do not displace backdrop pixels.
+- **Diagnostics:**
+  - `LIVE_STATE`: per card, logged when the surface, radius, tint, fill, veil or capability changes. It records what was requested from the compositor, not what reached the screen.
+  - `BLUR_CAPABILITY_CHANGED` is logged once per change instead of once per card listener.
+
+**Host preview:** `docs/img/live-edge-preview.jpg`. From top: light theme old edge, new edge; dark theme old, new. The shader source is converted to GLSL and rendered in WebGL over a synthetic blurred backdrop. Limits of this preview:
+- the same blur is shown inside and outside the card, so the radius change does not show;
+- the AGSL compiler on the device was not run.
+
+**Validation:** `javac` and 62 JUnit tests pass. Gradle lint and the APK build were blocked again by Maven Central. Not tested on the device.
+
 ## Future work
 
 - **Separate blur for the notification center and the control center.** Theme Park and HomeUp set a single blur amount for both panels. The user runs 12 %: lower leaves the control center unreadable, higher over-blurs the notification list. A split needs its own investigation: find where SystemUI applies the panel blur, whether the two panels are separate blur regions or one window, and whether the module can own one of them.
