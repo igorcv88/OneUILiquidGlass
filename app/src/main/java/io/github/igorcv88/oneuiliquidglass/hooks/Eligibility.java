@@ -71,4 +71,12 @@ public final class Eligibility {
         if (Boolean.TRUE.equals(keyguard)) return true;
         return Boolean.TRUE.equals(headsUp) && !Boolean.TRUE.equals(shadeExpanded);
     }
+    /**
+     * Whether a card's text may carry the module's tone (veil and halo) this frame: only while glass
+     * is drawn for it, the module is enabled, the card is eligible and its material has not failed.
+     * Anything else is the native background, whose text keeps SystemUI's own look.
+     */
+    public static boolean textTone(boolean enabled, boolean hasGlass, boolean glassFailed, boolean eligible) {
+        return enabled && hasGlass && !glassFailed && eligible;
+    }
 }

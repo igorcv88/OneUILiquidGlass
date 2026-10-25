@@ -15,11 +15,11 @@ Base: handoff do aparelho de 25/10 (DZIF). Cada mudança tem prop de reversão. 
 
 **Pop-up (P0-B).** O pop-up sobre app ganha véu próprio: estimativa no primeiro quadro, depois uma captura sob o card a cada 1 s enquanto visível. Slot separado: o véu da central nunca chega ao pop-up e vice-versa. Desligar: `debug.oulg.popuptone 0`.
 
-**Véu limitado + halo (P1-C).** O véu preto sobre app branco chegava a 0,42 (cinza-chumbo). Agora o limite é `debug.oulg.veilmax` (0,35); o que falta de contraste vira uma sombra suave (2,5 dp) atrás do texto branco/cinza do tema — texto colorido não recebe. Desligar o halo: `debug.oulg.texthalo 0`. Voltar ao véu antigo: `debug.oulg.veilmax 0.75`.
+**Véu limitado + halo (P1-C).** O véu preto sobre app branco chegava a 0,42 (cinza-chumbo). Agora o limite é `debug.oulg.veilmax` (0,35); o que falta de contraste vira uma sombra suave (2,5 dp) atrás do texto branco/cinza do tema — texto colorido não recebe. Desligar o halo: `debug.oulg.texthalo 0`. O halo só existe enquanto o card desenha vidro: ao voltar ao fundo nativo (oculto, inelegível, falha de desenho/composição, detach) `release()` devolve a sombra original do texto no mesmo quadro. Voltar ao véu antigo: `debug.oulg.veilmax 0.75`.
 
 **Glint (P1-D).** O arco curto dentro da quina superior esquerda tem ganho próprio no pop-up: `debug.oulg.liveglint` (0). Central e lockscreen continuam com 1. Contorno, Fresnel e faixa refratada inalterados. Comparar `0`, `0.10`, `0.25` no mesmo fundo.
 
-**Gate direcional (P1-E, experimental).** `debug.oulg.lensgate directional`: toque parado, pressão longa e rolagem vertical mantêm a faixa; movimento horizontal (classificado após 16 px, antes do slop do launcher) ou segundo dedo corta no mesmo quadro; após soltar um toque ou gesto horizontal, `lenssettle`. Padrão continua `conservative`. Limite: direção do dedo não prova movimento do conteúdo sob o pop-up (carrossel sob cabeçalho fixo ainda corta).
+**Gate direcional (P1-E, experimental).** `debug.oulg.lensgate directional`: toque parado, pressão longa e rolagem vertical mantêm a faixa; movimento horizontal (classificado após 16 px, antes do slop do launcher) ou segundo dedo corta no mesmo quadro; após soltar um toque ou gesto horizontal, `lenssettle`. Padrão continua `conservative`. Ao soltar um toque simples ainda há `lenssettle` (o app pode reagir ao toque); rever depois do teste físico. Limite: direção do dedo não prova movimento do conteúdo sob o pop-up (carrossel sob cabeçalho fixo ainda corta).
 
 **Padrões:** `lenssettle` 100 ms e `rimhz` 80 Hz (os valores escolhidos no aparelho), para sobreviver ao reboot.
 

@@ -829,9 +829,11 @@ public final class HeadsUpHooks {
             alpha = Math.round(alpha * 20f) / 20f;
             long now = android.os.SystemClock.uptimeMillis();
             if (alpha == haloAlpha && (alpha == 0f || now - haloAt < HALO_WALK_MS)) return;
-            haloAlpha = alpha; haloAt = now;
+            haloAt = now;
             try {
                 int changed = TextHalo.apply(row.get(), alpha, ShadeTone.lightText());
+                // Recorded only once the walk went through: a failed removal is retried.
+                haloAlpha = alpha;
                 if (changed > 0 && Probe.trace) Probe.log("TEXT_HALO", "rowId=" + Integer.toHexString(System.identityHashCode(row.get())) + " alpha=" + alpha + " views=" + changed);
             } catch (RuntimeException e) { Probe.error("TEXT_HALO_FAILED", e); }
         }
@@ -1039,10 +1041,14 @@ public final class HeadsUpHooks {
                             + (compBridge != null ? " drawableA=" + compBridge.drawable.getAlpha() : "");
                     if (!line.equals(lastTrace)) { lastTrace = line; FrameTrace.log("ROW_FRAME", v, line); }
                 }
-                // Only a card that draws glass takes a veil or a halo: with the module disabled, or a
-                // card on its native background, its text is left as SystemUI drew it.
-                if (!pill) { if (enabled && glass != null) tone(v); else setHalo(0f); }
                 boolean eligible = eligible();
+                // Only a card that draws glass this frame takes a veil or a halo: with the module
+                // disabled, or a card going back to its native background (ineligible, failed), its
+                // text is left as SystemUI drew it.
+                if (!pill) {
+                    if (Eligibility.textTone(enabled, glass != null, glass != null && glass.failed(), eligible)) tone(v);
+                    else setHalo(0f);
+                }
                 View r = row.get();
                 Boolean headsUp = r == null ? null : Reflect.bool(r, "isHeadsUpState", "mIsHeadsUp");
                 String reason = reason();
@@ -1408,6 +1414,9 @@ public final class HeadsUpHooks {
          * is handed back later if the card is shown without glass.
          */
         void release(boolean restore) {
+            // Every path to the native background (hidden, ineligible, failed draw or compose)
+            // passes here: the text gets its own shadow back in the same frame.
+            setHalo(0f);
             if (glass == null) return;
             // The blur guard also blocked calls aimed at the row while this material was managed.
             boolean compositor = glassKind == Backdrop.Kind.SAMSUNG || glass.hybrid() || compBridge != null;
