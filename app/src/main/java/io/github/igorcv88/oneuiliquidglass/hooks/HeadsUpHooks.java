@@ -1130,6 +1130,10 @@ public final class HeadsUpHooks {
         void setForeground(boolean swap) {
             long now = android.os.SystemClock.uptimeMillis();
             String reason = swap == swapped ? null : swap ? "style" : "restore";
+            // A child row that just got its own glass may still carry its group's swapped text
+            // (Foreground.ownsTone): restore it once, or it kept the group's tone on its own glass.
+            if (reason == null && !swap && inherited) reason = "inherited";
+            inherited = false;
             if (reason == null && swap) {
                 // Swapped already: walk again only if SystemUI changed a colour back (rebind) or
                 // replaced the views; the periodic walk stays as a backstop for new views.
@@ -1164,6 +1168,8 @@ public final class HeadsUpHooks {
         }
         int driftCount;
         long driftWindowAt;
+        /** Set when this row's glass is built: its text may carry its group's tone until the next setForeground. */
+        boolean inherited;
         /** Light glass: the edge's thickness shadow is drawn stronger (debug.oulg.lightedge) to define the card on white. */
         void setLightStyle(boolean on) { lightStyle = on; if (glass != null) glass.setLightStyle(on, lightEdge()); }
         /**
@@ -1613,6 +1619,7 @@ public final class HeadsUpHooks {
                 if (semBridge != null) semBridge.setSuspended(stacked);
                 glass = new GlassDrawable(backdrop, v.getResources().getDisplayMetrics().density, spec);
                 glass.setLightStyle(lightStyle, lightEdge());
+                inherited = true;
                 glassKind = kind;
                 glassSource = source;
                 glass.setCallback(v);
