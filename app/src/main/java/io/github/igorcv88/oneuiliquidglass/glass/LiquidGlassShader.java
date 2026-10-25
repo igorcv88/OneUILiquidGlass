@@ -45,6 +45,7 @@ public final class LiquidGlassShader {
         uniform float decor;
         uniform float live;
         uniform float sheen;
+        uniform float glintGain;
 
         float roundedBox(float2 p, float2 hs, float r) {
             float2 q = abs(p) - hs + r;
@@ -84,7 +85,9 @@ public final class LiquidGlassShader {
             float fresnel = ft * ft * ft * (0.035 + 0.075 * lit);
 
             float g = (depth - b * 0.22) / (b * 0.14);
-            float glint = exp(-g * g) * pow(max(facing, 0.0), 20.0) * 0.30;
+            // glintGain: the short arc ~0.22 bevel inside the lit corner read as a second rim (a
+            // bubble) on pop-ups; it is scaled per surface (debug.oulg.liveglint) without the contour.
+            float glint = exp(-g * g) * pow(max(facing, 0.0), 20.0) * 0.30 * glintGain;
             float g2 = (depth - b * 0.34) / (b * 0.20);
             float inner = exp(-g2 * g2) * pow(max(-facing, 0.0), 16.0) * 0.10;
 

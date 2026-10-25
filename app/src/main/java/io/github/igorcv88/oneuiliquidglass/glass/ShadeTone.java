@@ -4,26 +4,125 @@ import android.graphics.Bitmap;
 import android.graphics.Rect;
 import android.view.View;
 import java.lang.ref.WeakReference;
-import java.util.function.IntConsumer;
 import io.github.igorcv88.oneuiliquidglass.diagnostics.Probe;
 
 /**
- * Shade legibility measured once (debug.oulg.shadetone=3): one capture of what is behind the shade
- * window, the mean luminance under the card, and from it the veil the card keeps until the shade
- * closes. The compositor tag recomputed this every frame and was recognised on some frames only,
- * which flashed the cards in motion; a value measured once cannot.
+ * Backdrop legibility from a capture (debug.oulg.shadetone=3, debug.oulg.popuptone=1).
+ *
+ * <p>Shade: {@link #prefetch} takes one capture of everything behind the shade window as soon as
+ * the shade starts to open, before any card is visible, and reduces it to a {@link ToneGrid}; each
+ * card's veil comes from the bands under it. The compositor tag recomputed this every frame and was
+ * recognised on some frames only, which flashed the cards in motion; a capture taken once cannot.
+ * Earlier each card measured itself once it was shown, which left the veil of the previous opening
+ * on screen for 100-500 ms (device log, 25/10).</p>
+ *
+ * <p>Pop-up: {@link #measure} takes the mean luminance under the card.</p>
+ *
+ * <p>The veil is capped (debug.oulg.veilmax): a black veil strong enough to give white text full
+ * contrast over a white app turned shade cards lead grey, darker than the blur around them. What the
+ * cap leaves out is given to the text as a halo ({@link #haloFor}, TextHalo). The arithmetic is
+ * in {@link VeilMath}.</p>
  */
 public final class ShadeTone implements CaptureHub.Client {
     private final WeakReference<View> view;
-    private final IntConsumer result;
+    private final java.util.function.DoubleConsumer result;
     private boolean done;
 
-    private ShadeTone(View view, IntConsumer result) { this.view = new WeakReference<>(view); this.result = result; }
+    private ShadeTone(View view, java.util.function.DoubleConsumer result) { this.view = new WeakReference<>(view); this.result = result; }
 
-    /** Measures the backdrop under {@code card} once; {@code result} gets the veil colour on the main thread. */
-    public static void measure(View card, IntConsumer result) {
+    /** Measures the backdrop under {@code card} once; {@code result} gets its mean luma on the main thread. */
+    public static void measure(View card, java.util.function.DoubleConsumer result) {
         if (!CaptureHub.available()) { Probe.log("SHADE_TONE", "capture=unavailable"); return; }
         CaptureHub.register(new ShadeTone(card, result));
+    }
+
+    /**
+     * One capture of the whole backdrop behind {@code panel}'s window, reduced to luminance bands on
+     * a worker; {@code result} gets the grid on the main thread, or null when no capture can be taken
+     * (secure content, capture unavailable). The panel need not be shown yet: the capture is asked
+     * for on the first frame of the opening.
+     */
+    public static void prefetch(View panel, int generation, java.util.function.Consumer<ToneGrid> result) {
+        if (!CaptureHub.available()) { result.accept(null); return; }
+        CaptureHub.register(new Prefetch(panel, generation, result));
+    }
+    private static final class Prefetch implements CaptureHub.Client {
+        final WeakReference<View> panel;
+        final int generation;
+        final java.util.function.Consumer<ToneGrid> result;
+        /** A capture already in flight covers only the earlier clients (a pop-up's band): skip it. */
+        final long registeredAt = android.os.SystemClock.uptimeMillis();
+        boolean done;
+        Prefetch(View panel, int generation, java.util.function.Consumer<ToneGrid> result) {
+            this.panel = new WeakReference<>(panel); this.generation = generation; this.result = result;
+        }
+        @Override public View view() { return done ? null : panel.get(); }
+        @Override public int hz() { return 60; }
+        @Override public boolean evenHidden() { return true; }
+        @Override public void onUnavailable() {
+            if (done) return;
+            done = true;
+            CaptureHub.unregister(this);
+            result.accept(null);
+        }
+        @Override public void onFrame(CaptureHub.Frame frame) {
+            if (done || frame.capturedAt < registeredAt) return;
+            done = true;
+            CaptureHub.unregister(this);
+            frame.retain();
+            worker().post(() -> {
+                ToneGrid grid = grid(frame, generation);
+                MAIN.post(() -> { frame.release(); result.accept(grid); scheduleDrop(); });
+            });
+        }
+    }
+    private static android.os.Handler worker() {
+        if (worker == null) {
+            android.os.HandlerThread t = new android.os.HandlerThread("oulg-shadetone");
+            t.start();
+            worker = new android.os.Handler(t.getLooper());
+        }
+        return worker;
+    }
+    private static void scheduleDrop() { MAIN.removeCallbacks(DROP); MAIN.postDelayed(DROP, 1000); }
+    static final int BANDS = 32;
+    /** Luminance bands of the whole frame (screen coordinates), or null. Worker thread. */
+    private static ToneGrid grid(CaptureHub.Frame frame, int generation) {
+        try {
+            if (!software(frame)) return null;
+            int w = soft.getWidth(), h = soft.getHeight();
+            int bandPx = Math.max(1, (h + BANDS - 1) / BANDS);
+            int n = (h + bandPx - 1) / bandPx;
+            float[] mean = new float[n], p90 = new float[n];
+            int[] row = new int[w];
+            float[] samples = new float[(bandPx / 3 + 1) * (w / 3 + 1)];
+            for (int b = 0; b < n; b++) {
+                int count = 0;
+                for (int y = b * bandPx; y < Math.min(h, (b + 1) * bandPx); y += 3) {
+                    soft.getPixels(row, 0, w, 0, y, w, 1);
+                    for (int x = 0; x < w; x += 3) samples[count++] = luma(row[x]);
+                }
+                double sum = 0;
+                for (int i = 0; i < count; i++) sum += samples[i];
+                mean[b] = count == 0 ? 0f : (float) (sum / count);
+                java.util.Arrays.sort(samples, 0, count);
+                p90[b] = count == 0 ? 0f : samples[Math.min(count - 1, (int) (count * 0.9f))];
+            }
+            // Bands in screen px: the frame is the capture crop scaled by frame.scale.
+            return new ToneGrid(frame.crop.top, Math.max(1, Math.round(bandPx / frame.scale)), mean, p90, generation);
+        } catch (RuntimeException e) { Probe.error("SHADE_PREFETCH_FAILED", e); return null; }
+    }
+    private static float luma(int c) {
+        return (float) ((0.2126 * ((c >> 16) & 255) + 0.7152 * ((c >> 8) & 255) + 0.0722 * (c & 255)) / 255.0);
+    }
+    /** Keeps a software copy of the frame in {@link #soft}; false if it cannot. Worker thread. */
+    private static boolean software(CaptureHub.Frame frame) {
+        if (softOf != frame) {
+            if (soft != null) soft.recycle();
+            soft = frame.bitmap.isRecycled() ? null : frame.bitmap.copy(Bitmap.Config.ARGB_8888, false);
+            softOf = frame;
+        }
+        return soft != null;
     }
 
     @Override public View view() { return done ? null : view.get(); }
@@ -34,8 +133,7 @@ public final class ShadeTone implements CaptureHub.Client {
         if (done) return;
         done = true;
         CaptureHub.unregister(this);
-        MAIN.removeCallbacks(DROP);
-        MAIN.postDelayed(DROP, 1000);
+        scheduleDrop();
     }
     private static final android.os.Handler MAIN = new android.os.Handler(android.os.Looper.getMainLooper());
     private static android.os.Handler worker;
@@ -54,22 +152,12 @@ public final class ShadeTone implements CaptureHub.Client {
         int[] xy = new int[2];
         v.getLocationOnScreen(xy);
         Rect r = new Rect(xy[0], xy[1], xy[0] + v.getWidth(), xy[1] + v.getHeight());
-        String id = Integer.toHexString(System.identityHashCode(v));
         frame.retain();
-        if (worker == null) {
-            android.os.HandlerThread t = new android.os.HandlerThread("oulg-shadetone");
-            t.start();
-            worker = new android.os.Handler(t.getLooper());
-        }
-        worker.post(() -> {
+        worker().post(() -> {
             float luma = meanLuma(frame, r);
             MAIN.post(() -> {
                 frame.release();
-                if (luma < 0f) return;
-                int veil = veilFor(luma);
-                Probe.log("SHADE_TONE", "viewId=" + id + " luma=" + String.format(java.util.Locale.ROOT, "%.2f", luma)
-                        + " veil=" + Integer.toHexString(veil));
-                result.accept(veil);
+                if (luma >= 0f) result.accept(luma);
             });
         });
     }
@@ -80,12 +168,7 @@ public final class ShadeTone implements CaptureHub.Client {
     /** Mean luminance (0-1) of the frame under the screen rect r, or -1 if r lies outside it. Worker thread. */
     private static float meanLuma(CaptureHub.Frame frame, Rect r) {
         try {
-            if (softOf != frame) {
-                if (soft != null) soft.recycle();
-                soft = frame.bitmap.isRecycled() ? null : frame.bitmap.copy(Bitmap.Config.ARGB_8888, false);
-                softOf = frame;
-            }
-            if (soft == null) return -1f;
+            if (!software(frame)) return -1f;
             r = new Rect(r);
             if (!r.intersect(frame.crop)) return -1f;
             int x0 = Math.round((r.left - frame.crop.left) * frame.scale), y0 = Math.round((r.top - frame.crop.top) * frame.scale);
@@ -106,14 +189,20 @@ public final class ShadeTone implements CaptureHub.Client {
     /**
      * Light text: a black veil that brings the mean down to the cap (debug.oulg.shadecap); dark text:
      * a white veil that lifts it to the lift (debug.oulg.shadelift). A backdrop already on the right
-     * side of the knee gets no veil.
+     * side of the knee gets no veil. The alpha is capped at debug.oulg.veilmax.
      */
-    static int veilFor(float luma) {
+    public static int veilFor(float luma) {
         Tuning t = Tuning.get();
-        boolean lightText = SemBlurBridge.shadeStrength() < 0.65f;
-        float a = lightText ? (luma > t.shadeCap ? 1f - t.shadeCap / luma : 0f)
-                : (luma < t.shadeLift ? (t.shadeLift - luma) / Math.max(1e-3f, 1f - luma) : 0f);
-        int alpha = Math.round(255f * Math.max(0f, Math.min(0.75f, a)));
-        return (lightText ? 0x000000 : 0xffffff) | (alpha << 24);
+        boolean lightText = lightText();
+        return VeilMath.veil(VeilMath.need(luma, lightText, t.shadeCap, t.shadeLift), lightText, t.veilMax);
     }
+    /** Halo alpha (0-1) for the text of a card over {@code luma}; 0: none (debug.oulg.texthalo=0 too). */
+    public static float haloFor(float luma) {
+        Tuning t = Tuning.get();
+        if (!t.textHalo) return 0f;
+        return VeilMath.halo(VeilMath.need(luma, lightText(), t.shadeCap, t.shadeLift), t.veilMax);
+    }
+    /** Whether notification text is light (dark theme). */
+    public static boolean lightText() { return SemBlurBridge.shadeStrength() < 0.65f; }
+
 }

@@ -64,4 +64,16 @@ public final class EligibilityTest {
         assertTrue(Eligibility.lens(null, true, true));
         assertFalse(Eligibility.lens(null, true, false));
     }
+    @Test public void textToneOnlyWhileGlassIsDrawn() {
+        assertTrue(Eligibility.textTone(true, true, false, true));
+        // Module disabled with the hooks installed: native text.
+        assertFalse(Eligibility.textTone(false, true, false, true));
+        // Glass to native background: the material is still held for this frame but the card is
+        // no longer eligible (hidden, empty, failed) - no tone, the halo is removed.
+        assertFalse(Eligibility.textTone(true, true, false, false));
+        // The material failed to draw or compose (GlassDrawable.failed): it draws the native background.
+        assertFalse(Eligibility.textTone(true, true, true, true));
+        // No material yet: the tone is applied when it is built (material()).
+        assertFalse(Eligibility.textTone(true, false, false, true));
+    }
 }
