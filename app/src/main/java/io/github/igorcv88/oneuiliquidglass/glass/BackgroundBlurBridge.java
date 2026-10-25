@@ -121,12 +121,16 @@ public final class BackgroundBlurBridge implements Backdrop {
     /** The radius the region has now (-1 before the first build) and the ramp moving it. */
     private int shownPx = -1;
     private android.animation.ValueAnimator radiusRamp;
+    private int rampTarget = -1;
     private static final long RADIUS_RAMP_MS = 200;
     /**
      * A built card whose radius changes (a pop-up turning into a shade card, a tuning change) moves
      * to the new radius over RADIUS_RAMP_MS instead of in one frame, which read as a jump in blur.
      */
     private void applyRadius(int px) throws ReflectiveOperationException {
+        // Corner and tint updates arrive every frame of a transition: a ramp already heading for this
+        // radius keeps running, or the restarts would hold the radius at its start.
+        if (radiusRamp != null && radiusRamp.isRunning() && rampTarget == px) return;
         if (radiusRamp != null) { radiusRamp.cancel(); radiusRamp = null; }
         if (shownPx < 0 || shownPx == px || invalidator == null
                 || android.os.Looper.myLooper() != android.os.Looper.getMainLooper()) {
@@ -142,6 +146,7 @@ public final class BackgroundBlurBridge implements Backdrop {
             invalidator.run();
         });
         radiusRamp = a;
+        rampTarget = px;
         a.start();
     }
     /** The radius last requested from the compositor, for the LIVE_STATE snapshot. */
