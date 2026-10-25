@@ -1011,6 +1011,26 @@ Source: device round of PR #38 (`OULG38_20261025_174738`, video 17:51:47, screen
 
 **Validation:** Gradle `testDebugUnitTest` (103 tests; new redirect, scene and ramp cases), `lintDebug`, `assembleDebug`. Not tested on the device.
 
+### Round 40: system gestures and app transitions cut the band, faster pop-up re-measure, lockscreen restored, "+N" text (2026-10-25)
+
+Source: device video of PR #39 (18:45:08) and a lockscreen screenshot (18:46). The log sent was empty, so the shade's first-frame flash and the minimised group are only partly addressed.
+
+**From the video.**
+- White app to the home screen with a pop-up shown: the home swipe starts in the bottom strip and is vertical, so `directional` kept the band, which drew the stale white capture of the closing app as a white ring around a body that had already turned blue.
+- Launcher to Chrome: after the tap's 100 ms settle the band captured the launch animation, a dark ring around a white body; the text stayed white on white for ~270 ms because a still pop-up was measured once a second.
+- Lockscreen: a second arc inside the outline again. `liverim 2` and the darker region of round 39 were applied to every lens surface, the lockscreen included.
+- Shade over white: the collapsed group's "2 more notifications" text stays white on light glass.
+
+**Changes.**
+- `BackdropMotion`: a touch down in the bottom 4.5 % or the side 4 % of the screen (system gestures: home, recents, back) counts as horizontal from its down. A tap or a system gesture keeps the band cut for `lenstransition` (350 ms) beyond `lenssettle` after the lift (lastMotion in the future), for the app transition it may start; a plain horizontal swipe settles as before.
+- Pop-ups are measured every 100 ms for 1.5 s after any touch, not only while entering.
+- `livedarkalpha`, `livedarkfill` and `liverim` apply to pop-ups only; lockscreen cards are back to their look before round 39 (`liveDarkColor`, no fill, rim 1).
+- `Foreground`: a text view without id qualifies when it was inflated with SystemUI's own context (the row's package), which covers a group's "+N" overflow text; views of a RemoteViews layout are inflated with the app's context and still never qualify.
+
+**Not covered.** The shade's first-frame flash on every backdrop: without the log it is not attributed (candidates: the material rebuilt at each opening, the radius ramp from pop-up to shade, the first frames before the capture). If the minimised group's label is not the overflow text, `TEXT_TONE_DRIFT` / `TEXT_OUTSIDE` (trace) name it.
+
+**Validation:** Gradle `testDebugUnitTest` (106 tests; new system-gesture, transition-settle and no-id cases), `lintDebug`, `assembleDebug`. Not tested on the device.
+
 ## Future work
 
 - **Separate blur for the notification center and the control center.** Theme Park and HomeUp set a single blur amount for both panels. The user runs 12 %: lower leaves the control center unreadable, higher over-blurs the notification list. A split needs its own investigation: find where SystemUI applies the panel blur, whether the two panels are separate blur regions or one window, and whether the module can own one of them.

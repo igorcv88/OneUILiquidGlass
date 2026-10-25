@@ -74,10 +74,25 @@ public final class BackdropMotion {
      * point lies where no SystemUI window takes touches while the shade is closed.
      */
     public static void onTouch(Object receiver, String receiverClass, int actionMasked, float rawX, float rawY, long now, boolean outsideSystemUi) {
+        onTouch(receiver, receiverClass, actionMasked, rawX, rawY, now, outsideSystemUi, false, APP_TRANSITION_MS);
+    }
+    /**
+     * systemZone: the touch went down where the system's own gestures start (the bottom navigation
+     * strip, the side back-gesture edges). Such a gesture moves the whole app (home, recents, back)
+     * whatever the finger's direction: the home swipe is vertical, and in directional mode it left
+     * the band drawing a stale capture of the app being closed (a white ring around a pop-up that
+     * had already turned blue, device video 25/10). It counts as horizontal from its down.
+     * transitionMs: how much longer than lenssettle a tap or a system gesture keeps the band cut
+     * after the lift, for the app transition it may start (a launch animation ran ~350 ms and the
+     * band captured it as a dark ring).
+     */
+    public static void onTouch(Object receiver, String receiverClass, int actionMasked, float rawX, float rawY, long now,
+                               boolean outsideSystemUi, boolean systemZone, long transitionMs) {
         if (!monitorReceiver(receiverClass)) return;
         if (actionMasked == 0 && outsideSystemUi && !active()) monitor = new WeakReference<>(receiver);
         lastActive = now;
-        if (actionMasked == 0) { downX = rawX; downY = rawY; kind = PENDING; }
+        transition = transitionMs;
+        if (actionMasked == 0) { downX = rawX; downY = rawY; kind = systemZone ? HORIZONTAL : PENDING; system = systemZone; if (systemZone) gestures[HORIZONTAL]++; }
         boolean wasTouching = touching;
         touching = actionMasked != 1 && actionMasked != 3;
         boolean turned = classify(actionMasked, rawX, rawY, now);
@@ -101,10 +116,19 @@ public final class BackdropMotion {
         if (k == HORIZONTAL && (actionMasked == 2 || actionMasked == 5)) lastMotion = now;
         if (actionMasked == 1 || actionMasked == 3) {
             if (k == PENDING) gestures[PENDING]++;
-            if (k != VERTICAL) lastMotion = now;
+            // A tap or a system gesture may start an app transition: the band stays cut that much
+            // longer (lastMotion in the future). A plain horizontal swipe settles as before.
+            if (k == PENDING || system) lastMotion = now + transition;
+            else if (k != VERTICAL) lastMotion = now;
         }
         return turned;
     }
+    /** Extra settle after a tap or a system gesture (debug.oulg.lenstransition), and whether the gesture began in a system zone. */
+    static final long APP_TRANSITION_MS = 350;
+    private static volatile long transition = APP_TRANSITION_MS;
+    private static volatile boolean system;
+    /** Uptime of the last touch event seen (any receiver that counts), for callers that react to recent activity. */
+    public static long lastActive() { return lastActive; }
     static int kind() { return kind; }
     /** A receiver was disposed; if it was the proven monitor, the signal is gone. Returns whether it was. */
     public static boolean onDisposed(Object receiver) {
@@ -116,7 +140,7 @@ public final class BackdropMotion {
     /** Test only: back to the state of a fresh process. */
     static void reset() {
         hooked = false; monitor = null; touching = false; lastActive = Long.MIN_VALUE / 2; downX = Float.NaN; downY = Float.NaN;
-        kind = NONE; lastMotion = Long.MIN_VALUE / 2; java.util.Arrays.fill(gestures, 0);
+        kind = NONE; lastMotion = Long.MIN_VALUE / 2; java.util.Arrays.fill(gestures, 0); system = false; transition = APP_TRANSITION_MS;
     }
 
     /** Runs {@code r} on the main thread whenever a touch starts; held weakly. */

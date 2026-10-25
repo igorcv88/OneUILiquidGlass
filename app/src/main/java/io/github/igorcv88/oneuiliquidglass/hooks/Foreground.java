@@ -104,6 +104,7 @@ final class Foreground {
     static int apply(View root, boolean swap, boolean lightText, java.util.List<View> tracked) {
         if (tracked != null) tracked.clear();
         if (root == null) return 0;
+        host = root.getContext().getPackageName();
         applying = true;
         try { return walk(root, swap, lightText, tracked); } finally { applying = false; }
     }
@@ -218,16 +219,26 @@ final class Foreground {
     /** Whether a view is part of a standard template (see the class comment); icon: only the expand icon. */
     private static boolean standard(View v, boolean icon) {
         int id = v.getId();
-        if (id == View.NO_ID || (id >>> 24) == 0) return false;
+        if (id == View.NO_ID || (id >>> 24) == 0) {
+            // No id: SystemUI's own views (a group's "+N" overflow text, inflated with SystemUI's
+            // context) qualify; a RemoteViews layout is inflated with the app's context and does not.
+            if (icon) return false;
+            try { return standardNoId(v.getContext().getPackageName(), hostPackage(v)); } catch (RuntimeException e) { return false; }
+        }
         try {
             android.content.res.Resources r = v.getResources();
-            return standardId(r.getResourcePackageName(id), v.getContext().getPackageName(), icon ? r.getResourceEntryName(id) : null);
+            return standardId(r.getResourcePackageName(id), hostPackage(v), icon ? r.getResourceEntryName(id) : null);
         } catch (RuntimeException e) { return false; }
     }
     /**
      * pkg: the package of the view's id; host: SystemUI's package; entry: the id's name for an icon,
      * null for text. Framework and SystemUI ids only; an icon only when its name says expand.
      */
+    /** A view without id qualifies only when it was inflated with SystemUI's own context. */
+    static boolean standardNoId(String contextPkg, String host) { return host != null && host.equals(contextPkg); }
+    /** SystemUI's package, taken from the row each walk starts at (a SystemUI view; a child's context may be an app's). */
+    private static String host;
+    private static String hostPackage(View v) { return host; }
     static boolean standardId(String pkg, String host, String entry) {
         boolean ours = "android".equals(pkg) || (pkg != null && pkg.equals(host));
         if (!ours) return false;

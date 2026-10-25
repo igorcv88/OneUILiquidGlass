@@ -133,7 +133,9 @@ public final class BackdropMotionTest {
         BackdropMotion.onTouch(monitor, MONITOR, 1, 501, 1200, 1_510, true);
         // The lift may start an app transition: settle as before.
         assertEquals("motion", BackdropMotion.block(1_515, 1_520, null, AGE, SETTLE, true));
-        assertNull(BackdropMotion.block(2_115, 2_120, null, AGE, SETTLE, true));
+        // The lift may start an app transition: lenssettle plus the 350 ms transition allowance.
+        assertEquals("motion", BackdropMotion.block(2_115, 2_120, null, AGE, SETTLE, true));
+        assertNull(BackdropMotion.block(2_465, 2_470, null, AGE, SETTLE, true));
     }
     @Test public void directionalTreatsASecondPointerAsMotion() {
         BackdropMotion.reset(); BackdropMotion.setHooked();
@@ -152,5 +154,30 @@ public final class BackdropMotionTest {
         assertEquals(1, BackdropMotion.gestures[BackdropMotion.PENDING]);
         assertEquals(1, BackdropMotion.gestures[BackdropMotion.VERTICAL]);
         assertEquals(2, BackdropMotion.gestures[BackdropMotion.HORIZONTAL]);
+    }
+    /** The home swipe starts in the bottom strip and is vertical, but moves the whole app: cut like a horizontal one. */
+    @Test public void aSystemGestureIsCutWhateverItsDirection() {
+        BackdropMotion.reset(); BackdropMotion.setHooked();
+        Object monitor = new Object();
+        BackdropMotion.onTouch(monitor, MONITOR, 0, 500, 1200, 900, true);
+        BackdropMotion.onTouch(monitor, MONITOR, 1, 500, 1200, 950, true);
+        BackdropMotion.onTouch(monitor, MONITOR, 0, 540, 2300, 3_000, false, true, 350);
+        assertEquals("motion", BackdropMotion.block(3_000, 3_005, null, AGE, SETTLE, true));
+        for (int i = 1; i <= 10; i++) BackdropMotion.onTouch(monitor, MONITOR, 2, 540, 2300 - 60 * i, 3_000 + 8 * i, false, false, 350);
+        assertEquals(BackdropMotion.HORIZONTAL, BackdropMotion.kind());
+        BackdropMotion.onTouch(monitor, MONITOR, 1, 540, 1700, 3_100, false, false, 350);
+        // The app closes after the lift: cut for lenssettle + the transition allowance.
+        assertEquals("motion", BackdropMotion.block(3_900, 3_950, null, AGE, SETTLE, true));
+        assertNull(BackdropMotion.block(4_055, 4_060, null, AGE, SETTLE, true));
+    }
+    @Test public void aTapKeepsTheBandCutThroughTheAppTransitionItMayStart() {
+        BackdropMotion.reset(); BackdropMotion.setHooked();
+        Object monitor = new Object();
+        BackdropMotion.onTouch(monitor, MONITOR, 0, 500, 1200, 1_000, true, false, 350);
+        assertNull(BackdropMotion.block(1_000, 1_005, null, AGE, SETTLE, true));
+        BackdropMotion.onTouch(monitor, MONITOR, 1, 500, 1200, 1_080, true, false, 350);
+        assertEquals("motion", BackdropMotion.block(1_900, 1_950, null, AGE, SETTLE, true));
+        assertEquals("preSettle", BackdropMotion.block(2_020, 2_040, null, AGE, SETTLE, true));
+        assertNull(BackdropMotion.block(2_035, 2_050, null, AGE, SETTLE, true));
     }
 }

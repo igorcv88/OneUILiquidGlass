@@ -88,6 +88,8 @@ public final class HeadsUpHooks {
     private static final long PRE_OPEN_MAX_MS = 1500;
     /** How long after its finger lifts a gesture may still be the one opening the shade (a fling). */
     private static final long PRE_OPEN_LIFT_MS = 250;
+    /** Fractions of the screen where a touch down starts a system gesture: the bottom strip, each side edge. */
+    private static final float SYSTEM_BOTTOM = 0.045f, SYSTEM_SIDE = 0.04f;
     /** Fraction of the screen height from the top where a touch down may start a pull-down. */
     private static final float PRE_OPEN_EDGE = 0.06f;
     private final android.os.Handler main = new android.os.Handler(android.os.Looper.getMainLooper());
@@ -288,8 +290,11 @@ public final class HeadsUpHooks {
                     if (action == android.view.MotionEvent.ACTION_DOWN && m.getRawY() < h * PRE_OPEN_EDGE
                             && barState != null && barState == Eligibility.BAR_SHADE && !Boolean.TRUE.equals(shadeExpanded)) main.post(() -> preOpen(down));
                     boolean was = BackdropMotion.active();
+                    // The bottom navigation strip and the side back edges: system gestures that move the whole app.
+                    float w = android.content.res.Resources.getSystem().getDisplayMetrics().widthPixels;
+                    boolean systemZone = m.getRawY() > h * (1f - SYSTEM_BOTTOM) || m.getRawX() < w * SYSTEM_SIDE || m.getRawX() > w * (1f - SYSTEM_SIDE);
                     BackdropMotion.onTouch(p.thisObject, p.thisObject.getClass().getName(), m.getActionMasked(), m.getRawX(), m.getRawY(),
-                            android.os.SystemClock.uptimeMillis(), outside);
+                            android.os.SystemClock.uptimeMillis(), outside, systemZone, Tuning.get().lensTransition);
                     if (!was && BackdropMotion.active()) Probe.log("TOUCH_SIGNAL", "verified=true receiver=" + p.thisObject.getClass().getName());
                 }
             });
@@ -775,6 +780,8 @@ public final class HeadsUpHooks {
     private static final long HOLD_MS = 1500;
     /** While a pop-up enters, how often the backdrop under it is measured again. */
     private static final long POPUP_ENTER_MS = 100;
+    /** How long after the last touch a shown pop-up keeps measuring at POPUP_ENTER_MS. */
+    private static final long POPUP_ACTIVE_MS = 1500;
     private static final String SURFACE_SHADE = "shade", SURFACE_POPUP = "popup";
     /** The accumulated alpha of a view and its ancestors. */
     private static float shownAlpha(View v) {
@@ -920,7 +927,11 @@ public final class HeadsUpHooks {
             // While it enters (fading in, sliding down) the region under it is not yet the final one:
             // measure again every POPUP_ENTER_MS until it is opaque and still, then every second.
             boolean entering = popupMeasuredAlpha < 0.99f || Math.abs(toneXy[1] - popupMeasuredY) > 8;
-            long interval = entering ? POPUP_ENTER_MS : POPUP_MEASURE_MS;
+            // A touch in the last POPUP_ACTIVE_MS may have changed the app behind (home, an app
+            // launch): measure as often as while entering. Still for 1 s, the text stayed white on a
+            // white app for ~270 ms after a launch (device video, 25/10).
+            boolean active = now - BackdropMotion.lastActive() < POPUP_ACTIVE_MS;
+            long interval = entering || active ? POPUP_ENTER_MS : POPUP_MEASURE_MS;
             if (now - popupMeasureAt < interval) {
                 // Not due yet (the interval grew as the pop-up settled): keep the timer armed for the
                 // rest of it, or the loop would stop once no other draw comes.
@@ -1516,10 +1527,13 @@ public final class HeadsUpHooks {
             boolean dark = (v.getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
             int fill = kind == Backdrop.Kind.SHARED ? (dark ? spec.shadeDarkFill : spec.shadeLightFill) : (dark ? spec.darkFill : spec.lightFill);
             boolean live = Tuning.get().live && compBridge != null;
-            // Pop-ups and lockscreen cards in the dark theme: the region colour and the black fill of
-            // the look approved on 24/10 (livedarkalpha, livedarkfill); light glass keeps no fill.
-            if (live && dark) fill = lensSurface() && !lightStyle ? Tuning.get().liveDarkFill << 24 : 0;
-            int tone = live && dark ? (lensSurface() ? (Tuning.get().liveDarkAlpha << 24 | 0xffffff) : spec.liveShadeDarkColor)
+            // Pop-ups in the dark theme: the region colour and the black fill of the look approved on
+            // 24/10 (livedarkalpha, livedarkfill); light glass keeps no fill. Lockscreen cards keep the
+            // look approved before round 39 (liveDarkColor, no fill): applied there too, the darker
+            // body and the doubled contour brought the second arc back (device screenshot, 25/10).
+            boolean popup = popupSurface();
+            if (live && dark) fill = popup && !lightStyle ? Tuning.get().liveDarkFill << 24 : 0;
+            int tone = live && dark ? (popup ? (Tuning.get().liveDarkAlpha << 24 | 0xffffff) : lensSurface() ? spec.liveDarkColor : spec.liveShadeDarkColor)
                     : glass.hybrid() || kind == Backdrop.Kind.SAMSUNG || compBridge != null ? (dark ? spec.samsungDarkColor : spec.samsungLightColor)
                     : kind == Backdrop.Kind.SAMPLED ? (dark ? spec.captureDarkTint : spec.captureLightTint)
                     : dark ? spec.darkBlurColor : spec.lightBlurColor;
@@ -1532,7 +1546,7 @@ public final class HeadsUpHooks {
             glass.configure(original, shape(), fill, tone);
             if (live) {
                 glass.setGlint(popupSurface() ? Tuning.get().liveGlint : !lensSurface() ? Tuning.get().shadeGlint : 1f);
-                glass.setRimGain(lensSurface() ? Tuning.get().liveRim : 1f);
+                glass.setRimGain(popup ? Tuning.get().liveRim : 1f);
                 updateLens(v); liveState(v, fill);
             }
             if (lastFallback != null) { lastFallback = null; Probe.log("NATIVE_FALLBACK", "viewId=" + Integer.toHexString(System.identityHashCode(v)) + " reason=none"); }
