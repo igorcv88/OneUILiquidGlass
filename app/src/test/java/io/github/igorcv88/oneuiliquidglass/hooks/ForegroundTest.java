@@ -108,4 +108,31 @@ public final class ForegroundTest {
         // A view this class no longer tracks counts as drift (it must be walked again).
         assertTrue(Foreground.drifted(title, m));
     }
+    /** SystemUI writes a colour on a swapped view: redirected in the same call, never fought a frame later. */
+    @Test public void aColourWriteOnASwappedViewIsRedirected() {
+        Map<Object, Foreground.Rec> m = new HashMap<>();
+        Fake title = new Fake(0xffffffff);
+        Foreground.ink(title, true, true, m);
+        // The theme's white again (rebind, animated group title): the mirrored tone is set instead.
+        Integer to = Foreground.redirect(title, 0xffffffff, m, c -> "csl:" + Integer.toHexString(c));
+        assertEquals(Integer.valueOf(0xff000000), to);
+        // A light grey becomes the new original; restoring gives it back.
+        to = Foreground.redirect(title, 0xffd0d0d0, m, c -> "csl:" + Integer.toHexString(c));
+        assertEquals(Integer.valueOf(0xff2f2f2f), to);
+        title.color = to;
+        Foreground.ink(title, false, true, m);
+        assertEquals(0xffd0d0d0, title.color);
+    }
+    @Test public void writesThatNeedNoRedirectPassThrough() {
+        Map<Object, Foreground.Rec> m = new HashMap<>();
+        Fake title = new Fake(0xffffffff), other = new Fake(0xffffffff);
+        Foreground.ink(title, true, true, m);
+        // Not swapped by this class.
+        assertNull(Foreground.redirect(other, 0xffffffff, m, c -> c));
+        // Already the swapped tone.
+        assertNull(Foreground.redirect(title, 0xff000000, m, c -> c));
+        // An accent colour: the view is released, the write goes through.
+        assertNull(Foreground.redirect(title, 0xff3d7bff, m, c -> c));
+        assertTrue(m.isEmpty());
+    }
 }

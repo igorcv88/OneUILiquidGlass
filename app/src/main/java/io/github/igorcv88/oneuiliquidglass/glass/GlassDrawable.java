@@ -124,6 +124,9 @@ public final class GlassDrawable extends Drawable {
     /** Gain of the lit-corner glint in the LSPosed-only edge model (1: unchanged); see liveEdge(). */
     private float glint = 1f;
     public void setGlint(float g) { if (glint != g) { glint = g; invalidateSelf(); } }
+    /** Gain of the outer contour line in the LSPosed-only edge model (1: unchanged). */
+    private float rimGain = 1f;
+    public void setRimGain(float g) { if (rimGain != g) { rimGain = g; invalidateSelf(); } }
     /** Light glass (ShadeTone light style): the thickness shadow is scaled by debug.oulg.lightedge. */
     private boolean lightStyle;
     public void setLightStyle(boolean on) { if (lightStyle != on) { lightStyle = on; invalidateSelf(); } }
@@ -238,6 +241,7 @@ public final class GlassDrawable extends Drawable {
         s.setFloatUniform("live", live ? 1f : 0f);
         s.setFloatUniform("sheen", live ? t.liveSheen : 0f);
         s.setFloatUniform("glintGain", live ? glint : 1f);
+        s.setFloatUniform("rimGain", live ? rimGain : 1f);
     }
     /**
      * False until the first frame arrives; the caller then draws veil and edge alone.
