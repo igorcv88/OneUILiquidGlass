@@ -2,6 +2,49 @@
 
 Documento para continuar o trabalho em outra conversa. Leia inteiro antes de mexer em qualquer coisa. O histórico técnico detalhado está em `docs/architecture.md`; as seções de 2026-10-16 cobrem a central de notificações.
 
+## 0s. Atualização (2026-10-25): rodada 36 — tom desde o primeiro quadro, contraste do pop-up, véu limitado, glint, gate direcional
+
+Base: handoff do aparelho de 25/10 (DZIF). Cada mudança tem prop de reversão. **Não testado no aparelho.**
+
+**Central (P0-A).** Antes, cada card só media o véu depois de visível; o véu da abertura anterior aparecia por 100–491 ms. Agora:
+- no primeiro quadro da abertura (`expandedHeight > 0.5`) começa uma geração e é pedida **uma** captura do fundo inteiro atrás da janela da central, antes de ela ficar visível;
+- a captura vira 32 faixas de luminância (`ToneGrid`); cada card lê as faixas sob sua posição atual;
+- resposta de geração antiga ou que chegue com a central fechada é descartada;
+- até a captura chegar: estimativa pela aparência da barra de status do app (`STATUSBAR_TONE`); sem ela, o véu anterior, como antes;
+- card ainda aparecendo (alpha < 0,5) recebe o véu novo sem rampa.
+
+**Pop-up (P0-B).** O pop-up sobre app ganha véu próprio: estimativa no primeiro quadro, depois uma captura sob o card a cada 1 s enquanto visível. Slot separado: o véu da central nunca chega ao pop-up e vice-versa. Desligar: `debug.oulg.popuptone 0`.
+
+**Véu limitado + halo (P1-C).** O véu preto sobre app branco chegava a 0,42 (cinza-chumbo). Agora o limite é `debug.oulg.veilmax` (0,35); o que falta de contraste vira uma sombra suave (2,5 dp) atrás do texto branco/cinza do tema — texto colorido não recebe. Desligar o halo: `debug.oulg.texthalo 0`. Voltar ao véu antigo: `debug.oulg.veilmax 0.75`.
+
+**Glint (P1-D).** O arco curto dentro da quina superior esquerda tem ganho próprio no pop-up: `debug.oulg.liveglint` (0). Central e lockscreen continuam com 1. Contorno, Fresnel e faixa refratada inalterados. Comparar `0`, `0.10`, `0.25` no mesmo fundo.
+
+**Gate direcional (P1-E, experimental).** `debug.oulg.lensgate directional`: toque parado, pressão longa e rolagem vertical mantêm a faixa; movimento horizontal (classificado após 16 px, antes do slop do launcher) ou segundo dedo corta no mesmo quadro; após soltar um toque ou gesto horizontal, `lenssettle`. Padrão continua `conservative`. Limite: direção do dedo não prova movimento do conteúdo sob o pop-up (carrossel sob cabeçalho fixo ainda corta).
+
+**Padrões:** `lenssettle` 100 ms e `rimhz` 80 Hz (os valores escolhidos no aparelho), para sobreviver ao reboot.
+
+**Logs novos:** `STATUSBAR_TONE`, `SHADE_OPEN_BEGIN`, `SHADE_PREFETCH` (`tFromOpen`, `earlyDraws`), `SHADE_TONE_APPLY` (`source=estimate|cached|grid`, `luma`, `lumaP90`, `veil`, `halo`), `SHADE_OPEN_END`, `POPUP_CONTRAST`; `LENS_STATS` agora traz `gate=` e `gestures=`.
+
+**Teste no aparelho (um cenário por vez):**
+1. central: app preto → app branco → app colorido, incluindo puxão parcial e cancelamento; conferir `SHADE_PREFETCH state=sample` com `tFromOpen` baixo e `earlyDraws` próximo de 0;
+2. pop-up sobre página branca e sobre fundo escuro/colorido (`POPUP_CONTRAST`);
+3. quina superior esquerda com `liveglint` 0 / 0.10 / 0.25;
+4. home lateral, toque/seleção de texto, carrossel e rolagem vertical com `lensgate` conservative e directional (`LENS_STATS gestures=`).
+
+```sh
+su -c 'grep -E "STATUSBAR_TONE|SHADE_OPEN|SHADE_PREFETCH|SHADE_TONE_APPLY|POPUP_CONTRAST|LENS_STATS" /sdcard/Download/oulg36_log.txt | tail -120'
+```
+
+**Reverter só esta rodada por prop:**
+
+```sh
+su -c 'setprop debug.oulg.veilmax 0.75; setprop debug.oulg.texthalo 0; setprop debug.oulg.popuptone 0; setprop debug.oulg.liveglint 1; setprop debug.oulg.lensgate conservative'
+```
+
+(A medição antecipada da central não tem prop própria; `debug.oulg.shadetone` diferente de 3 desliga todo o tom adaptativo.)
+
+**Validado:** Gradle `testDebugUnitTest` (87 testes), `lintDebug` (sem categorias novas de aviso) e `assembleDebug`. AGSL só compila no aparelho.
+
 ## 0r. Atualização (2026-10-25): lente com controle de latência no pop-up
 
 **Teste do usuário:**

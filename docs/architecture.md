@@ -912,6 +912,36 @@ The pre-change `auto` stays available as `debug.oulg.backdrop=hybrid`. With the 
 
 The draw path, the hub and the hooks need an Android runtime and are not covered by these tests. Gradle is blocked here. Not tested on the device.
 
+### DZIF round 36: first-frame tone, pop-up contrast, capped veil, glint, directional gate (2026-10-25)
+
+Source: the device handoff of 25/10 (props `lenssettle=100`, `lensmaxage=50`, `rimhz=80`; log `oulg35_on_log.txt`; a pop-up over a white page; a video of the shade opened over the beach wallpaper and then over a white page). Five changes, each reversible by a prop.
+
+**Shade tone from the first frame (P0-A).**
+- Cause: each card measured its veil in `onPreDraw` only once `v.isShown()`, and `ShadeTone.onFrame` checked `isShown()` again. The previous opening's veil (`measuredVeil` persists) stayed on screen until then: 100 ms and 491 ms after `SHADE expanded=true` in the log. The video shows the beach-time veil on the first frames over the white page, then a jump.
+- Now the first frame of an opening (`setExpandedHeightInternal`, `expandedHeight > 0.5`) starts a generation (`shadeOpens`). `ShadeTone.prefetch` asks `CaptureHub` for one capture of the whole backdrop behind the shade window at once. The panel view anchors it; it need not be shown yet (`Client.evenHidden`). A frame requested before the prefetch registered (a pop-up band's crop) is skipped.
+- A worker reduces the frame to 32 horizontal bands, mean and 90th-percentile luma (`ToneGrid`). Each card reads the bands under its current screen rows, weighted by overlap, every pre-draw. Sliding over a band boundary changes the luma continuously; steps below 4/255 alpha are ignored, steps up to 24/255 apply directly, larger ones and source changes go through `applyMeasuredVeil` (ramp on a visible card, at once on a hidden one or one whose accumulated alpha is below 0.5).
+- A result for an older generation or one that lands after the shade closed is dropped (`SHADE_PREFETCH state=cancel`).
+- Before it lands: an estimate from the status-bar appearance the app set (hook on `LightBarController[Impl].onStatusBarAppearanceChanged`, `APPEARANCE_LIGHT_STATUS_BARS` of the top region, recorded only with the shade closed over an app): luma 0.92 for dark icons, 0.08 otherwise. Without the hook or a value, the card keeps the veil it had, as before.
+- Limit: the capture still lands a few frames after the first frame of the gesture; the estimate covers those frames and can be wrong (a light header over a dark page).
+
+**Pop-up contrast (P0-B).** LSPosed-only pop-ups over an app (`popupSurface()`) take a veil from the same functions: the estimate on the first frame (also applied when the drawable bridge is built, before its first draw), then `ShadeTone.measure` under the card every 1000 ms while shown. The veil has its own slot in `BackgroundBlurBridge` (`setPopupVeil`), so a shade veil never reaches a lens card and a pop-up veil never reaches a shade or lockscreen card. `debug.oulg.popuptone=0` turns it off.
+
+**Capped veil and text halo (P1-C).**
+- Cause: with `shadecap=0.55`, a white app (luma 0.95) asked for 0.42 black, which replaced the region tint: lead grey, darker than the shade around the cards.
+- The veil alpha is capped at `debug.oulg.veilmax` (0.35; 0.75 restores the earlier cap). The shortfall (`need - cap`, when above 0.02) becomes a halo alpha of 0.30 + 1.6 x shortfall, at most 0.70 (`VeilMath`).
+- `TextHalo` gives that halo as a 2.5 dp shadow behind text of the theme's text tone only (light greys in the dark theme, dark greys otherwise), never accent text or text that already has a shadow, and not into a group's child rows. It changes the inflated views, not the RemoteViews; removal restores each view's own shadow. Views are walked again every 500 ms while the halo is on (re-inflation). `debug.oulg.texthalo=0` turns it off.
+- Trade-off: below the earlier cap, legibility over a white app depends on the halo. Its look is a device judgement.
+
+**Pop-up glint (P1-D).** `liveEdge()` multiplies `glint` (the arc ~0.22 bevel inside the lit corner, `pow(facing, 20)`) by a new `glintGain` uniform: `debug.oulg.liveglint` (0) on pop-ups, 1 elsewhere. Contour, Fresnel, inner reflection and the lens band are unchanged. Whether the glint alone made the "second arc" is unproven; colour at the corner over a colourful page can also come from the band's dispersion.
+
+**Directional lens gate (P1-E).** `debug.oulg.lensgate=directional` (default `conservative`, unchanged). `BackdropMotion` classifies each gesture once the pointer moves 16 px from the down point (below the launcher's 8 dp touch slop): `HORIZONTAL` if |dx| >= |dy|, else `VERTICAL`; a second pointer counts as horizontal. `blockDirectional` cuts the band while a horizontal gesture is under way and for `lenssettle` after the lift of a tap or horizontal gesture; a finger at rest and a vertical scroll keep it. The finger's direction is a proxy: a carousel under a fixed header is still cut, and a vertical scroll still draws a capture one or two frames old along the band. `LENS_STATS` reports the gate and the gestures per kind.
+
+**Defaults:** `lenssettle` 100 ms (was 600) and `rimhz` 80 Hz (was 60), the values chosen on the device, so the profile survives a reboot.
+
+**Telemetry:** `STATUSBAR_TONE hooked=|lightTop=`, `SHADE_OPEN_BEGIN generation= adaptive= lightTop=`, `SHADE_PREFETCH state=sample|cancel|unavailable tFromOpen= earlyDraws=`, `SHADE_TONE_APPLY source=estimate|cached|grid luma= lumaP90= veil= halo= alpha= tFromOpen=`, `SHADE_OPEN_END cards= earlyDraws= sampled=`, `POPUP_CONTRAST source=estimate|none|sample`, `TEXT_HALO` (trace only). `earlyDraws` counts visible card draws before the capture landed.
+
+**Validation:** Gradle `testDebugUnitTest` (87 JUnit tests, new: `VeilMathTest`, `ToneGridTest`, `TextHaloTest`, directional cases in `BackdropMotionTest`), `lintDebug` (no new warning categories) and `assembleDebug` pass. AGSL is compiled on the device only; the hooks, the capture and the halo need the device. Not tested on the device.
+
 ## Future work
 
 - **Separate blur for the notification center and the control center.** Theme Park and HomeUp set a single blur amount for both panels. The user runs 12 %: lower leaves the control center unreadable, higher over-blurs the notification list. A split needs its own investigation: find where SystemUI applies the panel blur, whether the two panels are separate blur regions or one window, and whether the module can own one of them.
