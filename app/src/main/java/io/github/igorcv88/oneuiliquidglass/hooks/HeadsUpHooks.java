@@ -536,9 +536,19 @@ public final class HeadsUpHooks {
                 + " age=" + (now - grid.takenAt) + " earlyDraws=" + shadeEarlyDraws + " top=" + grid.top + " band=" + grid.band
                 + " scene=" + (shadeScene ? "light" : "dark") + " sceneLuma=" + String.format(java.util.Locale.ROOT, "%.2f", whole));
         if (Probe.trace && shadeScene) {
-            // Theme-tone labels outside the rows (the minimized group's title, section headers).
+            // Theme-tone labels outside the rows (the minimized group's title, section headers),
+            // once the shade has finished opening, when the shelf and the group headers are shown.
             View pv = panelView == null ? null : panelView.get();
-            if (pv != null) for (String d : Foreground.survey(pv.getRootView(), ShadeTone.lightText(), 20)) Probe.log("TEXT_OUTSIDE", d);
+            int gen = shadeOpens;
+            if (pv != null) pv.postDelayed(() -> {
+                if (gen != shadeOpens || !Boolean.TRUE.equals(shadeExpanded)) return;
+                for (String d : Foreground.survey(pv.getRootView(), ShadeTone.lightText(), 30)) Probe.log("TEXT_OUTSIDE", d);
+                for (State st : new ArrayList<>(states.values())) {
+                    View r = st.row.get();
+                    if (r != null && r.isShown()) for (String d : Foreground.rowSurvey(r, ShadeTone.lightText(), 20))
+                        Probe.log("TEXT_ROW", "rowId=" + Integer.toHexString(System.identityHashCode(r)) + " pill=" + st.pill + " " + d);
+                }
+            }, 700);
         }
         for (State st : new ArrayList<>(states.values())) st.invalidate();
     }
@@ -866,6 +876,20 @@ public final class HeadsUpHooks {
             }
         }
         int toneErrors;
+        /**
+         * The notification shelf in the expanded shade ("N more notifications" under a collapsed
+         * stack) is not a row and keeps SystemUI's own blur, but sits among the cards: its text
+         * follows the shade's scene, so it turns dark with them over a light app instead of staying
+         * white (device video, 25/10). Restored when the shade closes or the scene is native.
+         */
+        void shelfTone() {
+            try {
+                Tuning t = Tuning.get();
+                boolean on = enabled && t.textSwap && t.shadeAdaptive && Boolean.TRUE.equals(shadeExpanded) && barState != null
+                        && barState == Eligibility.BAR_SHADE && shadeScene != null && shadeScene == ShadeTone.lightText();
+                setForeground(on);
+            } catch (RuntimeException | LinkageError e) { if (toneErrors++ < 5) Probe.error("SHELF_TONE_FAILED", e); }
+        }
         void tone(View v) {
             Tuning t = Tuning.get();
             if (t.shadeAdaptive && Boolean.TRUE.equals(shadeExpanded) && barState != null && barState == Eligibility.BAR_SHADE) { shadeTone(v); return; }
@@ -1310,7 +1334,7 @@ public final class HeadsUpHooks {
                 if (!pill) {
                     if (Eligibility.textTone(enabled, glass != null, glass != null && glass.failed(), eligible)) safeTone(v);
                     else setForeground(false);
-                }
+                } else shelfTone();
                 View r = row.get();
                 Boolean headsUp = r == null ? null : Reflect.bool(r, "isHeadsUpState", "mIsHeadsUp");
                 String reason = reason();
@@ -1549,8 +1573,14 @@ public final class HeadsUpHooks {
             // look approved before round 39 (liveDarkColor, no fill): applied there too, the darker
             // body and the doubled contour brought the second arc back (device screenshot, 25/10).
             boolean popup = popupSurface();
-            if (live && dark) fill = popup && !lightStyle ? Tuning.get().liveDarkFill << 24 : 0;
-            int tone = live && dark ? (popup ? (Tuning.get().liveDarkAlpha << 24 | 0xffffff) : lensSurface() ? spec.liveDarkColor : spec.liveShadeDarkColor)
+            // Lockscreen cards (dark theme) take the pop-up's scheme with their own values: a
+            // clearer, darker body and a brighter outer line (kgdarkalpha, kgdarkfill, kgrim), with
+            // the corner glint lowered (kgglint): at glint 1 the brighter rim of round 39 showed the
+            // second arc again. The user found them milky next to the wallpaper (25/10).
+            boolean lock = !popup && !pill && lensSurface();
+            Tuning tn = Tuning.get();
+            if (live && dark) fill = popup && !lightStyle ? tn.liveDarkFill << 24 : lock ? tn.kgDarkFill << 24 : 0;
+            int tone = live && dark ? (popup ? (tn.liveDarkAlpha << 24 | 0xffffff) : lock ? (tn.kgDarkAlpha << 24 | 0xffffff) : spec.liveShadeDarkColor)
                     : glass.hybrid() || kind == Backdrop.Kind.SAMSUNG || compBridge != null ? (dark ? spec.samsungDarkColor : spec.samsungLightColor)
                     : kind == Backdrop.Kind.SAMPLED ? (dark ? spec.captureDarkTint : spec.captureLightTint)
                     : dark ? spec.darkBlurColor : spec.lightBlurColor;
@@ -1562,8 +1592,8 @@ public final class HeadsUpHooks {
             nativeTint = semAlpha >= 0 && (compBridge != null || semBridge != null) ? (tone & 0x00ffffff) | (semAlpha << 24) : tone;
             glass.configure(original, shape(), fill, tone);
             if (live) {
-                glass.setGlint(popupSurface() ? Tuning.get().liveGlint : !lensSurface() ? Tuning.get().shadeGlint : 1f);
-                glass.setRimGain(popup ? Tuning.get().liveRim : 1f);
+                glass.setGlint(popup ? tn.liveGlint : lock ? tn.kgGlint : !lensSurface() ? tn.shadeGlint : 1f);
+                glass.setRimGain(popup ? tn.liveRim : lock ? tn.kgRim : 1f);
                 updateLens(v); liveState(v, fill);
             }
             if (lastFallback != null) { lastFallback = null; Probe.log("NATIVE_FALLBACK", "viewId=" + Integer.toHexString(System.identityHashCode(v)) + " reason=none"); }
