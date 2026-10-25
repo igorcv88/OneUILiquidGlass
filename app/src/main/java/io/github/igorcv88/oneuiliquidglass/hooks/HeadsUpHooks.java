@@ -1009,8 +1009,9 @@ public final class HeadsUpHooks {
         /** The card's native region colour (what a veil of 0 shows), for the ramp's endpoints. */
         int nativeTint;
         void flushPendingSwap() {
+            // No glass check: material() applies a tone before assigning glass, and release() and
+            // setNative() already drop the pending swap and the ramp that would flush it.
             if (pendingSwap == null) return;
-            if (glass == null) { pendingSwap = null; return; }
             boolean s = pendingSwap, l = pendingLight;
             pendingSwap = null;
             setForeground(s); setLightStyle(l);
@@ -1524,7 +1525,10 @@ public final class HeadsUpHooks {
                     : dark ? spec.darkBlurColor : spec.lightBlurColor;
             glass.setPressed(pressed);
             refreshLens();
-            nativeTint = tone;
+            // What the region actually shows for a veil of 0: the bridges replace the alpha when
+            // debug.oulg.semalpha is set, and the ramp must start or end on that colour.
+            int semAlpha = Tuning.get().semAlpha;
+            nativeTint = semAlpha >= 0 && (compBridge != null || semBridge != null) ? (tone & 0x00ffffff) | (semAlpha << 24) : tone;
             glass.configure(original, shape(), fill, tone);
             if (live) {
                 glass.setGlint(popupSurface() ? Tuning.get().liveGlint : !lensSurface() ? Tuning.get().shadeGlint : 1f);
