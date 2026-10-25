@@ -62,6 +62,8 @@ public final class HeadsUpHooks {
      * its first frame (ShadeTone.prefetch); null until it lands, and for any other generation.
      */
     private ToneGrid shadeGrid;
+    /** The current opening's scene: its whole backdrop read as light; null until its capture lands. */
+    private Boolean shadeScene;
     /** Uptime of the current opening's first frame, and its counters for SHADE_OPEN_END. */
     private long shadeOpenAt;
     private int shadeCards, shadeEarlyDraws;
@@ -217,6 +219,7 @@ public final class HeadsUpHooks {
         WindowSurvey.installWindowHook();
         installBlurGuard();
         installTouchSignal();
+        installTextColorGuard();
         // Shade state is only known once SystemUI constructs the controller, after this point.
         Probe.log("READY", "mode=" + (enabled ? "glass" : "probe") + " drawHook=" + drawHook + " shadeHook=" + shadeHook + " samsungBlur=" + samsungBlur);
         if (enabled && (!drawHook || !shadeHook)) Probe.log("GLASS_UNAVAILABLE", "drawHook=" + drawHook + " shadeHook=" + shadeHook);
@@ -226,6 +229,43 @@ public final class HeadsUpHooks {
      * BackdropMotion, which hides the captured lens band of LSPosed-only pop-ups while the content
      * behind them may move. Observation only: the event is not changed or consumed.
      */
+    /**
+     * Colour writes on views whose tone the module swapped (Foreground.redirect): SystemUI sets a
+     * notification's text colour on bind, in the heads-up-to-shade transformation and, for one group
+     * row, on every frame. Redirected in the same call instead of repaired a frame later. Only views
+     * the module swapped (a lookup in a map that is empty while nothing is swapped) are affected;
+     * every other call passes untouched.
+     */
+    private void installTextColorGuard() {
+        try {
+            Set<?> text = XposedBridge.hookAllMethods(android.widget.TextView.class, "setTextColor", new XC_MethodHook() {
+                @Override protected void beforeHookedMethod(MethodHookParam p) {
+                    if (Foreground.applying || !Foreground.tracking() || p.args.length != 1) return;
+                    try {
+                        Object a = p.args[0];
+                        if (a instanceof Integer) {
+                            Integer c = Foreground.interceptColor((android.widget.TextView) p.thisObject, (Integer) a);
+                            if (c != null) p.args[0] = c;
+                        } else if (a instanceof android.content.res.ColorStateList) {
+                            android.content.res.ColorStateList c = Foreground.interceptList((View) p.thisObject, (android.content.res.ColorStateList) a);
+                            if (c != null) p.args[0] = c;
+                        }
+                    } catch (RuntimeException | LinkageError e) { Probe.error("TEXT_GUARD_FAILED", e); }
+                }
+            });
+            Set<?> tint = XposedBridge.hookAllMethods(android.widget.ImageView.class, "setImageTintList", new XC_MethodHook() {
+                @Override protected void beforeHookedMethod(MethodHookParam p) {
+                    if (Foreground.applying || !Foreground.tracking() || p.args.length != 1) return;
+                    try {
+                        if (!(p.args[0] instanceof android.content.res.ColorStateList)) return;
+                        android.content.res.ColorStateList c = Foreground.interceptList((View) p.thisObject, (android.content.res.ColorStateList) p.args[0]);
+                        if (c != null) p.args[0] = c;
+                    } catch (RuntimeException | LinkageError e) { Probe.error("TEXT_GUARD_FAILED", e); }
+                }
+            });
+            Probe.log("TEXT_GUARD", "textHooks=" + text.size() + " tintHooks=" + tint.size());
+        } catch (RuntimeException | LinkageError e) { Probe.error("TEXT_GUARD_INSTALL_FAILED", e); }
+    }
     private void installTouchSignal() {
         try {
             Class<?> receiver = Class.forName("android.view.InputEventReceiver");
@@ -482,8 +522,19 @@ public final class HeadsUpHooks {
     private void adoptGrid(ToneGrid grid, String state) {
         shadeGrid = grid;
         long now = android.os.SystemClock.uptimeMillis();
+        // One decision for the whole stack (the scene); a card only departs from it where its own
+        // bands are clearly light or dark (VeilMath.classify).
+        Tuning t = Tuning.get();
+        float whole = grid.whole();
+        shadeScene = whole >= (t.styleLo + t.styleHi) * 0.5f;
         Probe.log("SHADE_PREFETCH", "generation=" + grid.generation + " state=" + state + " tFromOpen=" + (now - shadeOpenAt)
-                + " age=" + (now - grid.takenAt) + " earlyDraws=" + shadeEarlyDraws + " top=" + grid.top + " band=" + grid.band);
+                + " age=" + (now - grid.takenAt) + " earlyDraws=" + shadeEarlyDraws + " top=" + grid.top + " band=" + grid.band
+                + " scene=" + (shadeScene ? "light" : "dark") + " sceneLuma=" + String.format(java.util.Locale.ROOT, "%.2f", whole));
+        if (Probe.trace && shadeScene) {
+            // Theme-tone labels outside the rows (the minimized group's title, section headers).
+            View pv = panelView == null ? null : panelView.get();
+            if (pv != null) for (String d : Foreground.survey(pv.getRootView(), ShadeTone.lightText(), 20)) Probe.log("TEXT_OUTSIDE", d);
+        }
         for (State st : new ArrayList<>(states.values())) st.invalidate();
     }
     /**
@@ -495,7 +546,7 @@ public final class HeadsUpHooks {
      */
     private void beginShadeTone(Object controller) {
         int generation = shadeOpens;
-        shadeGrid = null; shadeOpenAt = android.os.SystemClock.uptimeMillis(); shadeCards = 0; shadeEarlyDraws = 0;
+        shadeGrid = null; shadeScene = null; shadeOpenAt = android.os.SystemClock.uptimeMillis(); shadeCards = 0; shadeEarlyDraws = 0;
         Tuning t = Tuning.get();
         boolean adaptive = t.shadeAdaptive && barState != null && barState == Eligibility.BAR_SHADE;
         ToneGrid pre = preGrid;
@@ -527,7 +578,8 @@ public final class HeadsUpHooks {
     private void endShadeTone() {
         if (shadeOpenAt == 0) return;
         Probe.log("SHADE_OPEN_END", "generation=" + shadeOpens + " durationMs=" + (android.os.SystemClock.uptimeMillis() - shadeOpenAt)
-                + " cards=" + shadeCards + " earlyDraws=" + shadeEarlyDraws + " sampled=" + (shadeGrid != null));
+                + " cards=" + shadeCards + " earlyDraws=" + shadeEarlyDraws + " sampled=" + (shadeGrid != null)
+                + " intercepted=" + Foreground.interceptions());
         shadeGrid = null; shadeOpenAt = 0;
     }
     private void installShade() {
@@ -714,6 +766,11 @@ public final class HeadsUpHooks {
     /** How often a shown pop-up measures the backdrop under it again (the app may scroll or change). */
     private static final long POPUP_MEASURE_MS = 1000;
     private static final long SWAP_WALK_MS = 500;
+    /** More than CONTEST_DRIFTS drift repairs of one card within CONTEST_WINDOW_MS: a writer is contesting the colour. */
+    private static final int CONTEST_DRIFTS = 6;
+    private static final long CONTEST_WINDOW_MS = 500;
+    /** View descriptions already logged as TEXT_TONE_DRIFT (class and id only). */
+    private final Set<String> driftLogged = new java.util.HashSet<>();
     /** How recent a card's last measurement must be to stand for it at the start of a shade opening. */
     private static final long HOLD_MS = 1500;
     /** While a pop-up enters, how often the backdrop under it is measured again. */
@@ -850,7 +907,7 @@ public final class HeadsUpHooks {
         void popupTone(View v) {
             long now = android.os.SystemClock.uptimeMillis();
             if (!SURFACE_POPUP.equals(toneSurface)) {
-                toneSurface = SURFACE_POPUP; popupMeasureAt = 0; popupMeasuredAlpha = 0f;
+                toneSurface = SURFACE_POPUP; popupMeasureAt = 0; popupMeasuredAlpha = 0f; popupScene = null;
                 // The pop-up slot is empty or stale: write the current veil before any step from it.
                 pushToneVeil();
                 toneSource = "native";
@@ -899,38 +956,64 @@ public final class HeadsUpHooks {
         /** The theme's own look: no veil, no swapped text; the hysteresis starts on the theme's side. */
         void setNative() {
             lightBackdrop = !ShadeTone.lightText();
+            // At once, never ramped: a ramp would replay the previous opening's (or surface's) veil
+            // for VEIL_RAMP_MS on a card that is starting over. Its pending text swap goes with it.
+            pendingSwap = null;
+            if (veilRamp != null) { veilRamp.cancel(); veilRamp = null; }
             setForeground(false);
             setLightStyle(false);
-            // At once, never ramped: a ramp would replay the previous opening's (or surface's) veil
-            // for VEIL_RAMP_MS on a card that is starting over.
-            if (veilRamp != null) { veilRamp.cancel(); veilRamp = null; }
             if (measuredVeil != 0) { measuredVeil = 0; pushToneVeil(); invalidate(); }
             styleChanged("native");
         }
         /**
-         * Moves the card to the material for {@code luma}. A small veil step (the card sliding over
-         * the next band) applies directly; a change of source or style, or a large step, goes through
-         * applyMeasuredVeil, which ramps between veils of one colour on a visible card and switches at
-         * once otherwise (light glass and a black veil never ramp through grey).
+         * Moves the card to the material for {@code luma}. A small veil step of one colour (the card
+         * sliding over the next band) applies directly, text included; any other change goes
+         * through applyMeasuredVeil, which ramps between the two region colours on a visible card
+         * (from the native tint when there was no veil) and switches at once on a hidden one. When
+         * the text tone changes with it, the swap waits for the ramp's midpoint, where the glass is
+         * between the two looks.
          */
         void setTone(float luma, boolean transition) {
-            io.github.igorcv88.oneuiliquidglass.glass.Material m = ShadeTone.materialFor(luma, lightBackdrop);
+            boolean shade = SURFACE_SHADE.equals(toneSurface);
+            io.github.igorcv88.oneuiliquidglass.glass.Material m = ShadeTone.materialFor(luma, shade ? shadeScene : popupScene);
             lightBackdrop = m.light;
+            if (!shade) popupScene = m.light;
             toneAt = android.os.SystemClock.uptimeMillis();
-            setForeground(m.swap);
-            setLightStyle(m.swap && m.light);
             styleChanged(m.style());
             int veil = m.veil;
-            if (veil == measuredVeil) return;
+            boolean swapLight = m.swap && m.light;
             int da = Math.abs((veil >>> 24) - (measuredVeil >>> 24));
             boolean sameColour = veil == 0 || measuredVeil == 0 || (veil & 0x00ffffff) == (measuredVeil & 0x00ffffff);
-            if (!transition && sameColour && da < 4) return;
-            if (!transition && sameColour && da <= 24) {
-                if (veilRamp != null) { veilRamp.cancel(); veilRamp = null; }
-                measuredVeil = veil; pushToneVeil(); invalidate();
+            if (veil == measuredVeil || (!transition && sameColour && da < 4 && m.swap == swapped)) {
+                if (pendingSwap == null) { setForeground(m.swap); setLightStyle(swapLight); }
                 return;
             }
+            // A ramp still running ends here (applying its own pending swap) before this one starts.
+            if (veilRamp != null) { veilRamp.cancel(); veilRamp = null; }
+            if (!transition && sameColour && da <= 24 && m.swap == swapped) {
+                measuredVeil = veil; pushToneVeil(); invalidate();
+                setForeground(m.swap); setLightStyle(swapLight);
+                return;
+            }
+            if (m.swap != swapped) { pendingSwap = m.swap; pendingLight = swapLight; }
+            else { setForeground(m.swap); setLightStyle(swapLight); }
             applyMeasuredVeil(veil);
+            // No ramp was started (a hidden card, no bridge): the text follows at once.
+            if (veilRamp == null) flushPendingSwap();
+        }
+        /** The text tone a running ramp applies at its midpoint (null: none pending). */
+        Boolean pendingSwap;
+        boolean pendingLight;
+        /** The pop-up's scene: its previous reading of the same backdrop; null at the start of a pop-up. */
+        Boolean popupScene;
+        /** The card's native region colour (what a veil of 0 shows), for the ramp's endpoints. */
+        int nativeTint;
+        void flushPendingSwap() {
+            if (pendingSwap == null) return;
+            if (glass == null) { pendingSwap = null; return; }
+            boolean s = pendingSwap, l = pendingLight;
+            pendingSwap = null;
+            setForeground(s); setLightStyle(l);
         }
         void styleChanged(String style) {
             if (style.equals(loggedStyle)) return;
@@ -950,6 +1033,17 @@ public final class HeadsUpHooks {
                 // Swapped already: walk again only if SystemUI changed a colour back (rebind) or
                 // replaced the views; the periodic walk stays as a backstop for new views.
                 reason = Foreground.drift(swappedViews);
+                if (reason != null && !reason.equals("detached")) {
+                    String d = Foreground.describe(Foreground.lastDrift);
+                    if (driftLogged.size() < 40 && driftLogged.add(d)) Probe.log("TEXT_TONE_DRIFT", "rowId=" + Integer.toHexString(System.identityHashCode(row.get())) + " " + d);
+                    // Repaired every frame means a writer the colour guard does not see: stop
+                    // fighting it for CONTEST_MS instead of a walk per frame.
+                    if (now - driftWindowAt > CONTEST_WINDOW_MS) { driftWindowAt = now; driftCount = 0; }
+                    if (++driftCount > CONTEST_DRIFTS) {
+                        if (driftCount == CONTEST_DRIFTS + 1) Probe.log("TEXT_CONTESTED", "rowId=" + Integer.toHexString(System.identityHashCode(row.get())) + " " + d);
+                        reason = null;
+                    }
+                }
                 if (reason == null && now - swapAt >= SWAP_WALK_MS) reason = "walk";
             }
             if (reason == null) return;
@@ -967,6 +1061,8 @@ public final class HeadsUpHooks {
                 }
             } catch (RuntimeException e) { Probe.error("TEXT_TONE_FAILED", e); }
         }
+        int driftCount;
+        long driftWindowAt;
         /** Light glass: the edge's thickness shadow is drawn stronger (debug.oulg.lightedge) to define the card on white. */
         void setLightStyle(boolean on) { lightStyle = on; if (glass != null) glass.setLightStyle(on); }
         boolean lightStyle;
@@ -995,7 +1091,7 @@ public final class HeadsUpHooks {
             measuredVeil = veil;
             if (veilRamp != null) { veilRamp.cancel(); veilRamp = null; }
             View v = background.get();
-            int[] ends = io.github.igorcv88.oneuiliquidglass.glass.VeilRamp.ends(from, veil);
+            int[] ends = io.github.igorcv88.oneuiliquidglass.glass.VeilRamp.ends(from, veil, nativeTint);
             // A card still fading in (the shade's first frames) takes the new veil at once: a ramp
             // would only replay the old veil under the fade.
             if (ends == null || v == null || !v.isShown() || shownAlpha(v) < 0.5f || (compBridge == null && semBridge == null)) {
@@ -1003,9 +1099,13 @@ public final class HeadsUpHooks {
             }
             android.animation.ValueAnimator a = android.animation.ValueAnimator.ofArgb(ends[0], ends[1]);
             a.setDuration(VEIL_RAMP_MS);
-            a.addUpdateListener(an -> { pushToneVeil((Integer) an.getAnimatedValue()); invalidate(); });
+            a.addUpdateListener(an -> {
+                pushToneVeil((Integer) an.getAnimatedValue());
+                if (an.getAnimatedFraction() >= 0.5f) flushPendingSwap();
+                invalidate();
+            });
             a.addListener(new android.animation.AnimatorListenerAdapter() {
-                @Override public void onAnimationEnd(android.animation.Animator an) { pushToneVeil(); invalidate(); }
+                @Override public void onAnimationEnd(android.animation.Animator an) { pushToneVeil(); flushPendingSwap(); invalidate(); }
             });
             veilRamp = a;
             a.start();
@@ -1415,16 +1515,20 @@ public final class HeadsUpHooks {
             boolean dark = (v.getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
             int fill = kind == Backdrop.Kind.SHARED ? (dark ? spec.shadeDarkFill : spec.shadeLightFill) : (dark ? spec.darkFill : spec.lightFill);
             boolean live = Tuning.get().live && compBridge != null;
-            if (live && dark) fill = 0;
-            int tone = live && dark ? (lensSurface() ? spec.liveDarkColor : spec.liveShadeDarkColor)
+            // Pop-ups and lockscreen cards in the dark theme: the region colour and the black fill of
+            // the look approved on 24/10 (livedarkalpha, livedarkfill); light glass keeps no fill.
+            if (live && dark) fill = lensSurface() && !lightStyle ? Tuning.get().liveDarkFill << 24 : 0;
+            int tone = live && dark ? (lensSurface() ? (Tuning.get().liveDarkAlpha << 24 | 0xffffff) : spec.liveShadeDarkColor)
                     : glass.hybrid() || kind == Backdrop.Kind.SAMSUNG || compBridge != null ? (dark ? spec.samsungDarkColor : spec.samsungLightColor)
                     : kind == Backdrop.Kind.SAMPLED ? (dark ? spec.captureDarkTint : spec.captureLightTint)
                     : dark ? spec.darkBlurColor : spec.lightBlurColor;
             glass.setPressed(pressed);
             refreshLens();
+            nativeTint = tone;
             glass.configure(original, shape(), fill, tone);
             if (live) {
                 glass.setGlint(popupSurface() ? Tuning.get().liveGlint : !lensSurface() ? Tuning.get().shadeGlint : 1f);
+                glass.setRimGain(lensSurface() ? Tuning.get().liveRim : 1f);
                 updateLens(v); liveState(v, fill);
             }
             if (lastFallback != null) { lastFallback = null; Probe.log("NATIVE_FALLBACK", "viewId=" + Integer.toHexString(System.identityHashCode(v)) + " reason=none"); }
@@ -1549,7 +1653,10 @@ public final class HeadsUpHooks {
          */
         void release(boolean restore) {
             // Every path to the native background (hidden, ineligible, failed draw or compose)
-            // passes here: the text gets its own colours back in the same frame.
+            // passes here: the text gets its own colours back in the same frame. A ramp still running
+            // must not apply its pending swap to a card that is going native.
+            pendingSwap = null;
+            if (veilRamp != null) { veilRamp.cancel(); veilRamp = null; }
             setForeground(false);
             if (glass == null) return;
             // The blur guard also blocked calls aimed at the row while this material was managed.

@@ -188,19 +188,19 @@ public final class ShadeTone implements CaptureHub.Client {
     }
 
     /**
-     * The material for a backdrop of mean {@code luma}; {@code wasLight} is the card's last reading
-     * (hysteresis). See {@link VeilMath#material}: native look with a veil capped at debug.oulg.veilmax
+     * The material for a backdrop of mean {@code luma}; {@code scene} is the decision for the scene the
+     * card is in (null: none yet), see {@link VeilMath#classify}. See {@link VeilMath#material}: native look with a veil capped at debug.oulg.veilmax
      * on the theme's side, light or dark glass with swapped text on the other (debug.oulg.stylelo,
      * stylehi, lightglass).
      */
-    public static Material materialFor(float luma, boolean wasLight) {
+    public static Material materialFor(float luma, Boolean scene) {
         Tuning t = Tuning.get();
         if (!t.textSwap) {
-            boolean light = VeilMath.lightBackdrop(wasLight, luma, t.styleLo, t.styleHi);
+            boolean light = VeilMath.classify(luma, scene, t.styleLo, t.styleHi);
             return new Material(VeilMath.veil(VeilMath.need(luma, lightText(), t.shadeCap, t.shadeLift), lightText(), t.veilMax), false, light);
         }
         int lightGlass = Math.round(255f * t.lightGlass) << 24 | t.lightTone;
-        return VeilMath.material(luma, wasLight, lightText(), t.shadeCap, t.shadeLift, t.veilMax, t.styleLo, t.styleHi,
+        return VeilMath.material(luma, scene, lightText(), t.shadeCap, t.shadeLift, t.veilMax, t.styleLo, t.styleHi,
                 lightGlass, DARK_GLASS);
     }
     /** Dark glass under light text in the light theme: the dark theme's pop-up colour (GlassSpec.liveDarkColor). */

@@ -46,6 +46,7 @@ public final class LiquidGlassShader {
         uniform float live;
         uniform float sheen;
         uniform float glintGain;
+        uniform float rimGain;
 
         float roundedBox(float2 p, float2 hs, float r) {
             float2 q = abs(p) - hs + r;
@@ -78,7 +79,8 @@ public final class LiquidGlassShader {
 
             float sigma = max(hair * 0.75, 1.1);
             float contour = exp(-(depth * depth) / (2.0 * sigma * sigma));
-            float contourGain = 0.06 + 0.28 * lit * lit;
+            // rimGain: the outer line alone (debug.oulg.liverim), independent of Fresnel and glint.
+            float contourGain = (0.06 + 0.28 * lit * lit) * rimGain;
 
             float fw = b * 0.60;
             float ft = clamp(1.0 - depth / fw, 0.0, 1.0);

@@ -24,6 +24,8 @@ public final class ToneGrid {
 
     /** Mean luma under the screen rows [y0, y1), each band weighted by its overlap; -1 if none. */
     public float luma(int y0, int y1) { return over(mean, y0, y1); }
+    /** Mean luma of the whole capture: the scene the shade's cards are in. */
+    public float whole() { return over(mean, top, top + band * mean.length); }
     /** The same for the bands' 90th percentile (bright spots under the text), for the log. */
     public float bright(int y0, int y1) { return over(p90, y0, y1); }
 

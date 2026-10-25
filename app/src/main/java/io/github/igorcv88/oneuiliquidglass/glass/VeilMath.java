@@ -16,12 +16,17 @@ final class VeilMath {
         return (lightText ? 0x000000 : 0xffffff) | (alpha << 24);
     }
     /**
-     * Whether the backdrop counts as light, with hysteresis: a card that reads it as light keeps
-     * doing so until the luma falls to {@code lo}, a card that reads it as dark until it reaches
-     * {@code hi}. A mixed backdrop near one threshold then does not flip the style frame by frame.
+     * Light or dark backdrop for one card. A clearly light (>= hi) or dark (<= lo) luma decides by
+     * itself; between the thresholds the card follows {@code scene}, the decision for the scene it
+     * is in (the shade's whole backdrop, or the pop-up's previous reading of the same backdrop), or
+     * the midpoint when there is none. Round 37 kept the hysteresis per card across openings: the
+     * same luma 0.52 read native in one opening and light in the next, and neighbouring cards in
+     * one stack disagreed (device log 25/10).
      */
-    static boolean lightBackdrop(boolean wasLight, float luma, float lo, float hi) {
-        return wasLight ? luma > lo : luma >= hi;
+    static boolean classify(float luma, Boolean scene, float lo, float hi) {
+        if (luma >= hi) return true;
+        if (luma <= lo) return false;
+        return scene != null ? scene : luma >= (lo + hi) * 0.5f;
     }
     /**
      * The material for a backdrop. On the theme's own side (a dark backdrop under light text, a
@@ -31,9 +36,9 @@ final class VeilMath {
      * light text over a dark one. Black at 25 % over white is #BFBFBF, grey under white text at
      * ~1.8:1; the style change gives the text real contrast without a grey body.
      */
-    static Material material(float luma, boolean wasLight, boolean lightText, float cap, float lift, float max,
+    static Material material(float luma, Boolean scene, boolean lightText, float cap, float lift, float max,
                              float lo, float hi, int lightGlass, int darkGlass) {
-        boolean light = lightBackdrop(wasLight, luma, lo, hi);
+        boolean light = classify(luma, scene, lo, hi);
         if (light == lightText) return new Material(light ? lightGlass : darkGlass, true, light);
         return new Material(veil(need(luma, lightText, cap, lift), lightText, max), false, light);
     }

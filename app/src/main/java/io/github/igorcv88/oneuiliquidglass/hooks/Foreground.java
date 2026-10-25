@@ -29,7 +29,43 @@ final class Foreground {
     static final class Rec {
         Object saved;
         int applied;
+        /** The theme's text tone when the view was swapped (what a colour set later is compared with). */
+        boolean lightText;
         Rec(Object saved) { this.saved = saved; }
+    }
+    /** Set while this class changes colours itself: its own calls pass the interception untouched. */
+    static boolean applying;
+    /** Colour sets on swapped views redirected since the last read (interceptions()). */
+    private static int intercepted;
+    static int interceptions() { int n = intercepted; intercepted = 0; return n; }
+    /** Whether any view carries a swapped tone (the hooks' fast path). */
+    static boolean tracking() { return !swapped.isEmpty(); }
+    /**
+     * TextView.setTextColor / ImageView.setImageTintList on a view this class swapped, from SystemUI
+     * (a rebind, a heads-up-to-shade transformation, an animated group title). Without this the
+     * module repaired the colour in the next pre-draw and SystemUI set its own again in the next
+     * frame: one view of a group row was "repaired" every 16 ms (device log, 25/10), and whichever
+     * write came last was on screen. Now a colour of the theme's tone is taken as the new original
+     * and the mirrored one is set instead, in the same call; any other colour (an accent) releases
+     * the view. Returns the colour to set instead, or null to let the call through.
+     */
+    static Integer redirect(Object key, int color, Map<Object, Rec> swapped, java.util.function.IntFunction<Object> saver) {
+        Rec r = swapped.get(key);
+        if (r == null || color == r.applied) return null;
+        if (!themeTone(color, r.lightText)) { swapped.remove(key); return null; }
+        r.saved = saver.apply(color);
+        r.applied = mirror(color);
+        intercepted++;
+        return r.applied;
+    }
+    static Integer interceptColor(TextView t, int color) {
+        return redirect(t, color, swapped, ColorStateList::valueOf);
+    }
+    /** A list set on a swapped view: its default colour decides; the original list is what gets restored. */
+    static ColorStateList interceptList(View v, ColorStateList list) {
+        if (list == null) return null;
+        Integer c = redirect(v, list.getDefaultColor(), swapped, x -> list);
+        return c == null ? null : ColorStateList.valueOf(c);
     }
     /** One view's tone; a seam so the bookkeeping runs without Android in tests. */
     interface Ink {
@@ -67,7 +103,39 @@ final class Foreground {
      */
     static int apply(View root, boolean swap, boolean lightText, java.util.List<View> tracked) {
         if (tracked != null) tracked.clear();
-        return root == null ? 0 : walk(root, swap, lightText, tracked);
+        if (root == null) return 0;
+        applying = true;
+        try { return walk(root, swap, lightText, tracked); } finally { applying = false; }
+    }
+    /** The view the last drift() found, for TEXT_TONE_DRIFT (class and id name only). */
+    static View lastDrift;
+    /** Class, id name and parent class of a view, never its text. */
+    static String describe(View v) {
+        if (v == null) return "null";
+        String id = "none";
+        try { if (v.getId() != View.NO_ID) id = v.getResources().getResourcePackageName(v.getId()) + ":" + v.getResources().getResourceEntryName(v.getId()); }
+        catch (RuntimeException ignored) { }
+        android.view.ViewParent p = v.getParent();
+        return "class=" + v.getClass().getName() + " id=" + id + " parent=" + (p == null ? "null" : p.getClass().getSimpleName());
+    }
+    /**
+     * Text views under {@code root} that are not inside a notification row and show the theme's
+     * text tone: where a label outside the rows (the minimized group's title, a section header)
+     * lives, for a trace-only TEXT_OUTSIDE survey. At most {@code max} entries; no text.
+     */
+    static java.util.List<String> survey(View root, boolean lightText, int max) {
+        java.util.List<String> out = new java.util.ArrayList<>();
+        surveyWalk(root, lightText, max, out);
+        return out;
+    }
+    private static void surveyWalk(View v, boolean lightText, int max, java.util.List<String> out) {
+        if (out.size() >= max || v.getVisibility() != View.VISIBLE) return;
+        if (v.getClass().getName().endsWith("ExpandableNotificationRow")) return;
+        if (v instanceof TextView && themeTone(((TextView) v).getCurrentTextColor(), lightText)) out.add(describe(v));
+        if (v instanceof ViewGroup) {
+            ViewGroup g = (ViewGroup) v;
+            for (int i = 0; i < g.getChildCount(); i++) surveyWalk(g.getChildAt(i), lightText, max, out);
+        }
     }
     /**
      * Why the swapped tone of a card is no longer on screen, or null: a tracked view left the
@@ -79,6 +147,7 @@ final class Foreground {
     static String drift(java.util.List<View> tracked) {
         for (int i = 0; i < tracked.size(); i++) {
             View v = tracked.get(i);
+            lastDrift = v;
             if (!v.isAttachedToWindow()) return "detached";
             Rec r = swapped.get(v);
             // Read in place (no Ink wrapper): this runs for every swapped view on every pre-draw.
@@ -89,6 +158,7 @@ final class Foreground {
                 if (tint == null || tint.getDefaultColor() != r.applied) return "rebind";
             }
         }
+        lastDrift = null;
         return null;
     }
     /** Whether a view swapped by this class shows a colour other than the one it was given. */
@@ -140,6 +210,7 @@ final class Foreground {
         }
         if (r == null) { r = new Rec(ink.save()); swapped.put(ink.key(), r); }
         else r.saved = ink.save();
+        r.lightText = lightText;
         r.applied = mirror(now);
         ink.set(r.applied);
         return true;

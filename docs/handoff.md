@@ -2,6 +2,33 @@
 
 Documento para continuar o trabalho em outra conversa. Leia inteiro antes de mexer em qualquer coisa. O histórico técnico detalhado está em `docs/architecture.md`; as seções de 2026-10-16 cobrem a central de notificações.
 
+## 0v. Atualização (2026-10-25): rodada 39 — cores interceptadas, uma cena por pilha, rampas a partir do tint nativo, visual de 24/10 no pop-up
+
+Base: rodada física do PR #38 (`OULG38_20261025_174738`, vídeo 17:51:47, prints de 24/10 e 25/10, E0–E4). **Não testado no aparelho.**
+
+**O que os logs mostram:**
+- Linha `c9ee378` (um grupo: dois fundos) com `TEXT_REAPPLY reason=rebind views=1` a cada 16–19 ms: o SystemUI escreve uma cor de texto todo quadro e o módulo corrigia no pré-desenho seguinte. Ganha quem escreve por último. É compatível com o título "Minimizados", mas o log não identifica a view.
+- `tint=1b8c2ce`: a rampa partia de uma região quase transparente em vez do tint nativo, um quadro de "card sumindo".
+- `luma=0.52` dava nativo numa abertura e claro na outra: a histerese por card atravessava aberturas, e cards da mesma pilha discordavam.
+- O print de 24/10 23:40 é anterior à faixa refratada (PR #35) e, pelo horário, ao clareamento do tema escuro (PR #34): região `0x14ffffff` + 4 % de preto, contra `0x1cffffff` sem preto depois. `liveoptics` era 1; 0,5 reduz à metade também a linha externa.
+
+**Correções:**
+- **Cor interceptada:** `setTextColor`/`setImageTintList` são interceptados no SystemUI só para as views que o módulo trocou. Uma cor do tom do tema vira o novo original e o tom espelhado é aplicado na mesma chamada; cor de destaque libera a view. Acaba a disputa quadro a quadro. `SHADE_OPEN_END intercepted=` conta.
+- **Reserva com guarda:** mais de 6 reparos em 500 ms param as varreduras (`TEXT_CONTESTED`); `TEXT_TONE_DRIFT` identifica classe e id da view (sem texto). Com `trace=1`, numa cena clara, `TEXT_OUTSIDE` lista textos fora das linhas: é onde aparecerá o "Minimizados" se não estiver dentro de uma linha.
+- **Uma cena por pilha:** luma ≥ 0,62 é claro e ≤ 0,48 é escuro para qualquer card; entre os dois, o card segue a cena (a central inteira decide uma vez por captura; o pop-up segue sua leitura anterior). Nada passa de uma abertura para outra.
+- **Rampa contínua:** parte do tint nativo e também anima entre cores diferentes (vidro claro ↔ nativo). O texto troca na metade da rampa.
+- **Pop-up e lockscreen (tema escuro):** região `livedarkalpha` 20 (`0x14ffffff`) + preenchimento preto `livedarkfill` 10 (4 %, nenhum no vidro claro), e linha externa com ganho próprio `liverim` 2, independente de `liveoptics`.
+
+**Props novas:** `livedarkalpha`, `livedarkfill`, `liverim`. Estado do PR #38: `setprop debug.oulg.livedarkalpha 28; setprop debug.oulg.livedarkfill 0; setprop debug.oulg.liverim 1`.
+
+**Teste (um vídeo, como no handoff):** pop-up em branco → wallpaper azul → escuro → branco sem fechar; abrir a central com o grupo "Minimizados" recolhido; alternar branco ↔ escuro e reabrir; expandir o grupo. Para a óptica, mesmo wallpaper de 24/10, comparar `livelens 0` e `1`.
+
+```sh
+su -c 'grep -E "TEXT_GUARD|TEXT_TONE_DRIFT|TEXT_CONTESTED|TEXT_OUTSIDE|SHADE_PREFETCH|SHADE_OPEN_END|MATERIAL_STYLE|POPUP_CONTRAST" /sdcard/Download/oulg39_log.txt | tail -150'
+```
+
+**Validado:** Gradle `testDebugUnitTest` (103), `lintDebug`, `assembleDebug`.
+
 ## 0u. Atualização (2026-10-25): rodada 38 — fim do piscar do texto, vidro claro menos branco
 
 Base: rodada física do PR #37 (`OULG37_20261025_165840`, vídeo 17:08). **Não testado no aparelho.**

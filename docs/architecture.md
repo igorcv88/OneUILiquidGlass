@@ -990,6 +990,27 @@ Source: device round of PR #37 (`OULG37_20261025_165840`, `04_transicoes.txt`; v
 
 **Validation:** Gradle `testDebugUnitTest` (99 tests; new drift and light-tone cases), `lintDebug`, `assembleDebug`. Not tested on the device.
 
+### Round 39: colour writes intercepted, one scene per stack, ramps from the native tint, 24/10 pop-up look (2026-10-25)
+
+Source: device round of PR #38 (`OULG38_20261025_174738`, video 17:51:47, screenshots of the pop-up on 24/10 23:40 and 25/10 18:06, E0-E4).
+
+**From the logs.**
+- Row `c9ee378` (a group row: two backgrounds, radii 108 and 0) logged `TEXT_REAPPLY reason=rebind views=1` every 16-19 ms: SystemUI writes one text colour on every frame and the module repaired it on the next pre-draw. Whichever write came last was on screen. The "Minimised" group title fits (white or out of step), but its identity is not in the log.
+- `LIVE_STATE ... tint=1b8c2ce`: `VeilRamp` stood the native look in by the other veil at alpha 1, so a ramp from native to light glass started from a nearly clear region instead of the native tint.
+- `luma=0.52` read native in generation 12 and light in generation 14: the per-card hysteresis carried over openings, and cards of one stack disagreed.
+- The 24/10 screenshot predates the lens band (PR #35, 25/10 03:55 UTC) and, by its time (02:40 UTC), most likely the dark-theme lift (PR #34, 01:41 UTC): region 0x14ffffff with a 4 % black fill, versus 0x1cffffff and no fill since. `liveoptics` was 1 then; 0.5 now halves the outer line with the rest.
+
+**Changes.**
+- `Foreground` colour guard: `TextView.setTextColor` and `ImageView.setImageTintList` are hooked (before) in SystemUI. A write on a view the module swapped is redirected in the same call: a colour of the theme's tone becomes the new original and the mirrored one is set; an accent releases the view. Other views pass untouched (the map is empty while nothing is swapped). The module's own writes bypass it. `SHADE_OPEN_END intercepted=` counts them.
+- Drift repair stays as a backstop, with a contest guard: more than 6 repairs of one card within 500 ms stop the per-frame walks (`TEXT_CONTESTED`); `TEXT_TONE_DRIFT` logs once per view class and id (never text). With trace, a light scene logs theme-tone text views outside the rows (`TEXT_OUTSIDE`), where a label like "Minimised" lives if it is not in a row.
+- Scene classification (`VeilMath.classify`): luma >= `stylehi` is light and <= `stylelo` is dark for any card; between them a card follows its scene. The shade's scene is decided once per capture from the whole backdrop (`SHADE_PREFETCH scene= sceneLuma=`). A pop-up's scene is its previous reading in the same pop-up. No memory crosses openings or pop-ups.
+- `VeilRamp.ends(from, to, nativeTint)`: a veil of 0 is the card's native tint, and colours of different RGB ramp too (light glass and the native tint are both light). The text swap waits for the ramp's midpoint (`pendingSwap`). A card going native or released drops a pending swap.
+- Pop-ups and lockscreen cards in the dark theme: region `livedarkalpha` (20, i.e. 0x14ffffff) and fill `livedarkfill` (10, i.e. 4 % black; none on light glass). The outer contour has its own gain `liverim` (2 on pop-up and lockscreen, 1 on shade cards).
+
+**Not covered.** Whether the lens band adds to the milky look is not separated from the region colour; `livelens 0` vs `1` on the same wallpaper answers it. A label outside the rows is found by `TEXT_OUTSIDE`, not yet recoloured.
+
+**Validation:** Gradle `testDebugUnitTest` (103 tests; new redirect, scene and ramp cases), `lintDebug`, `assembleDebug`. Not tested on the device.
+
 ## Future work
 
 - **Separate blur for the notification center and the control center.** Theme Park and HomeUp set a single blur amount for both panels. The user runs 12 %: lower leaves the control center unreadable, higher over-blurs the notification list. A split needs its own investigation: find where SystemUI applies the panel blur, whether the two panels are separate blur regions or one window, and whether the module can own one of them.
