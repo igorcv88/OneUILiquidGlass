@@ -73,9 +73,19 @@ public final class HeadsUpHooks {
      */
     private ToneGrid preGrid;
     private long preRequestAt;
+    /**
+     * The touch gesture a pre-open capture belongs to (MotionEvent.getDownTime, the same for every
+     * receiver that sees it), and the current gesture: its down time, whether it lifted and when.
+     * A capture is adopted only by an opening that this same gesture drives (Eligibility.preOpenValid).
+     */
+    private long preGesture, preGridGesture;
+    private volatile long gestureDown = Long.MIN_VALUE, gestureUpAt;
+    private volatile boolean gestureUp;
     /** The shade panel view (NotificationPanelViewController.mView), the anchor of pre-open captures. */
     private WeakReference<View> panelView;
     private static final long PRE_OPEN_MAX_MS = 1500;
+    /** How long after its finger lifts a gesture may still be the one opening the shade (a fling). */
+    private static final long PRE_OPEN_LIFT_MS = 250;
     /** Fraction of the screen height from the top where a touch down may start a pull-down. */
     private static final float PRE_OPEN_EDGE = 0.06f;
     private final android.os.Handler main = new android.os.Handler(android.os.Looper.getMainLooper());
@@ -229,8 +239,14 @@ public final class HeadsUpHooks {
                     float h = android.content.res.Resources.getSystem().getDisplayMetrics().heightPixels;
                     boolean outside = barState != null && barState == Eligibility.BAR_SHADE && !Boolean.TRUE.equals(shadeExpanded)
                             && m.getRawY() > h * 0.30f && m.getRawY() < h * 0.80f;
-                    if (m.getActionMasked() == android.view.MotionEvent.ACTION_DOWN && m.getRawY() < h * PRE_OPEN_EDGE
-                            && barState != null && barState == Eligibility.BAR_SHADE && !Boolean.TRUE.equals(shadeExpanded)) main.post(HeadsUpHooks.this::preOpen);
+                    int action = m.getActionMasked();
+                    long down = m.getDownTime();
+                    if (action == android.view.MotionEvent.ACTION_DOWN && down != gestureDown) { gestureDown = down; gestureUp = false; }
+                    else if ((action == android.view.MotionEvent.ACTION_UP || action == android.view.MotionEvent.ACTION_CANCEL) && down == gestureDown && !gestureUp) {
+                        gestureUp = true; gestureUpAt = android.os.SystemClock.uptimeMillis();
+                    }
+                    if (action == android.view.MotionEvent.ACTION_DOWN && m.getRawY() < h * PRE_OPEN_EDGE
+                            && barState != null && barState == Eligibility.BAR_SHADE && !Boolean.TRUE.equals(shadeExpanded)) main.post(() -> preOpen(down));
                     boolean was = BackdropMotion.active();
                     BackdropMotion.onTouch(p.thisObject, p.thisObject.getClass().getName(), m.getActionMasked(), m.getRawX(), m.getRawY(),
                             android.os.SystemClock.uptimeMillis(), outside);
@@ -436,25 +452,32 @@ public final class HeadsUpHooks {
     /**
      * A touch down at the top edge with the shade closed over an app: a pull-down may follow. The
      * backdrop is captured now, ~100 ms before the shade's first frame, so cards are born in the right
-     * style. On the main thread; at most one request per 300 ms.
+     * style. On the main thread; one request per gesture, bound to it.
      */
-    private void preOpen() {
+    private void preOpen(long gesture) {
         Tuning t = Tuning.get();
         if (!enabled || !t.shadeAdaptive || barState == null || barState != Eligibility.BAR_SHADE || Boolean.TRUE.equals(shadeExpanded)) return;
-        long now = android.os.SystemClock.uptimeMillis();
-        if (now - preRequestAt < 300) return;
+        if (gesture == preGesture || gesture != gestureDown) return;
         View anchor = panelView == null ? null : panelView.get();
         if (anchor == null || !anchor.isAttachedToWindow()) return;
-        preRequestAt = now;
+        long requested = android.os.SystemClock.uptimeMillis();
+        preGesture = gesture; preRequestAt = requested;
+        // A newer gesture's capture replaces an older one that was never adopted.
+        preGrid = null;
         ShadeTone.prefetch(anchor, -1, grid -> {
-            if (grid == null) return;
-            // Opened while the capture was in flight: the current opening adopts it if it has none yet.
-            if (Boolean.TRUE.equals(shadeExpanded) && shadeOpenAt >= preRequestAt && (shadeGrid == null || shadeGrid.generation != shadeOpens)) {
-                adoptGrid(grid.forGeneration(shadeOpens), "preopen");
+            if (grid == null || gesture != preGesture) return;
+            // Opened by this gesture while the capture was in flight: adopted if the opening has none yet.
+            if (Boolean.TRUE.equals(shadeExpanded)) {
+                if (shadeOpenAt >= requested && (shadeGrid == null || shadeGrid.generation != shadeOpens) && preValid(gesture, grid))
+                    adoptGrid(grid.forGeneration(shadeOpens), "preopen");
                 return;
             }
-            if (!Boolean.TRUE.equals(shadeExpanded)) preGrid = grid;
+            preGrid = grid; preGridGesture = gesture;
         });
+    }
+    private boolean preValid(long gesture, ToneGrid grid) {
+        long now = android.os.SystemClock.uptimeMillis();
+        return Eligibility.preOpenValid(gesture, gestureDown, gestureUp, now - gestureUpAt, now - grid.takenAt, PRE_OPEN_LIFT_MS, PRE_OPEN_MAX_MS);
     }
     private void adoptGrid(ToneGrid grid, String state) {
         shadeGrid = grid;
@@ -478,9 +501,10 @@ public final class HeadsUpHooks {
         ToneGrid pre = preGrid;
         preGrid = null;
         long preAge = pre == null ? -1 : shadeOpenAt - pre.takenAt;
-        Probe.log("SHADE_OPEN_BEGIN", "generation=" + generation + " adaptive=" + adaptive + " preAge=" + preAge);
+        boolean preOk = pre != null && preValid(preGridGesture, pre);
+        Probe.log("SHADE_OPEN_BEGIN", "generation=" + generation + " adaptive=" + adaptive + " preAge=" + preAge + " preValid=" + preOk);
         if (!adaptive) return;
-        if (pre != null && preAge <= PRE_OPEN_MAX_MS) { adoptGrid(pre.forGeneration(generation), "preopen"); return; }
+        if (preOk) { adoptGrid(pre.forGeneration(generation), "preopen"); return; }
         Object panel = Reflect.read(controller, "mView");
         View anchor = panel instanceof View && ((View) panel).isAttachedToWindow() ? (View) panel : null;
         for (State state : new ArrayList<>(states.values())) {
@@ -798,8 +822,10 @@ public final class HeadsUpHooks {
         void firstVisible(View v) {
             if (firstVisibleOpen == shadeOpens || !v.isShown() || shownAlpha(v) <= 0.01f) return;
             firstVisibleOpen = shadeOpens;
+            // Recorded at pre-draw: the material this card's next draw is built with, not proof of
+            // which frame reached the display (RenderThread and the compositor follow).
             logTone("FIRST_VISIBLE_MATERIAL", v, String.valueOf(toneSource), Float.NaN, -1f,
-                    " generation=" + shadeOpens + " tFromOpen=" + (android.os.SystemClock.uptimeMillis() - shadeOpenAt));
+                    " generation=" + shadeOpens + " tFromOpen=" + (android.os.SystemClock.uptimeMillis() - shadeOpenAt) + " at=preDraw");
         }
         void popupTone(View v) {
             long now = android.os.SystemClock.uptimeMillis();
@@ -842,7 +868,10 @@ public final class HeadsUpHooks {
         void setNative() {
             lightBackdrop = !ShadeTone.lightText();
             setForeground(false);
-            if (measuredVeil != 0) applyMeasuredVeil(0);
+            // At once, never ramped: a ramp would replay the previous opening's (or surface's) veil
+            // for VEIL_RAMP_MS on a card that is starting over.
+            if (veilRamp != null) { veilRamp.cancel(); veilRamp = null; }
+            if (measuredVeil != 0) { measuredVeil = 0; pushToneVeil(); invalidate(); }
             styleChanged("native");
         }
         /**

@@ -12,9 +12,9 @@ Base: handoff pós-PR #36 (log conservative, captura `82192.png`, vídeos). **N�
 - **Fundo do lado do tema** (escuro no tema escuro): visual nativo, véu pequeno limitado a `veilmax` (padrão 0,25).
 - **Fundo do lado oposto** (claro no tema escuro): **vidro claro** (branco 25 %, o véu do próprio tema claro Samsung) **com texto escuro**. No tema claro sobre fundo escuro, o inverso.
 - **Histerese por card:** claro a partir de `stylehi` 0,62, volta a escuro em `stylelo` 0,48.
-- **Troca do texto:** só cinzas do tom do tema são espelhados (branco → preto, cinza claro → cinza escuro, alpha mantido). Texto colorido, spans, ícones de app e ações não mudam. Restaurado em todo caminho para o fundo nativo, como o halo era.
+- **Troca do texto:** só views dos templates padrão (ids do framework `android` ou do SystemUI; ícone só o de expandir). Layouts `RemoteViews` personalizados têm ids do app e nunca são tocados. Dentro disso, só cinzas do tom do tema são espelhados (branco → preto, cinza claro → cinza escuro, alpha mantido). Texto colorido, spans, ícones de app e ações não mudam. Restaurado em todo caminho para o fundo nativo, como o halo era.
 - **Halo removido. Estimativa pela barra de status removida.**
-- **Primeiro quadro da central:** sem dados, visual nativo (sobre branco: card claro cujo texto escurece quando a captura chega, sem passar por cinza). Um toque nos 6 % superiores da tela com a central fechada já pede a captura; uma abertura em até 1,5 s usa essa captura no primeiro quadro. Os 616 ms vinham do `CaptureHub` dormindo 500 ms; agora um cliente novo é atendido na hora.
+- **Primeiro quadro da central:** sem dados, visual nativo (sobre branco: card claro cujo texto escurece quando a captura chega, sem passar por cinza). Um toque nos 6 % superiores da tela com a central fechada já pede a captura, vinculada a esse gesto: só a abertura feita pelo mesmo gesto (dedo ainda na tela ou solto há no máximo 250 ms) e com captura de até 1,5 s a usa; qualquer outro toque no meio invalida. O visual nativo é aplicado na hora, sem rampa do véu anterior. Os 616 ms vinham do `CaptureHub` dormindo 500 ms; agora um cliente novo é atendido na hora.
 - **Pop-up:** nativo no primeiro quadro; captura a cada 100 ms enquanto entra (alpha < 0,99 ou ainda se movendo), depois a cada 1 s. A faixa refratada usa a mesma cor da região do corpo: acaba o anel claro em volta do miolo cinza.
 - **Glint:** `liveglint` 0,10 (aprovado) e novo `shadeglint` 0,10 na central; lockscreen continua 1.
 - **Gate:** `lensgate` padrão agora é `directional`.
@@ -37,7 +37,9 @@ su -c 'setprop debug.oulg.textswap 0; setprop debug.oulg.shadeglint 1; setprop d
 
 (`textswap 0` volta ao véu preto limitado a `veilmax`, sem halo.)
 
-**Validado:** Gradle `testDebugUnitTest` (94), `lintDebug`, `assembleDebug`.
+**Limite do log:** `FIRST_VISIBLE_MATERIAL` é registrado no pré-desenho (`at=preDraw`): diz com que material o próximo desenho é feito, não prova qual quadro chegou ao display.
+
+**Validado:** Gradle `testDebugUnitTest` (96), `lintDebug`, `assembleDebug`.
 
 ## 0s. Atualização (2026-10-25): rodada 36 — tom desde o primeiro quadro, contraste do pop-up, véu limitado, glint, gate direcional
 

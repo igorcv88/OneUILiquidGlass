@@ -11,9 +11,11 @@ import java.util.WeakHashMap;
 /**
  * The text and icon tone of a card that changed material style (ShadeTone.materialFor): over light
  * glass the theme's light text turns dark, over dark glass the theme's dark text turns light. Only
- * views of the theme's text tone change (near-neutral greys: primary, secondary, time, the expand
- * chevron when it is tinted); accent text, coloured spans, app icons and action colours are left
- * alone. Each grey is mirrored (255 - value, alpha kept), so the primary/secondary hierarchy holds.
+ * views of the standard templates change: text views whose id belongs to the framework ("android",
+ * the notification templates) or to SystemUI, and the expand icon; a custom RemoteViews layout
+ * carries the app's ids (or none) and is never touched. Among those, only the theme's text tone
+ * (near-neutral greys: primary, secondary, time) changes; accent text, coloured spans, app icons
+ * and action colours are left alone. Each grey is mirrored (255 - value, alpha kept), so the primary/secondary hierarchy holds.
  * Applied to the inflated views, never the RemoteViews; switching back restores each view's own
  * colours. A view whose content set a new colour since is taken as it is. Main thread only.
  *
@@ -64,11 +66,12 @@ final class Foreground {
     }
     private static int walk(View v, boolean swap, boolean lightText) {
         int changed = 0;
-        if (v instanceof TextView) changed += ink(new Text((TextView) v), swap, lightText, swapped) ? 1 : 0;
-        else if (v instanceof ImageView && (((ImageView) v).getImageTintList() != null || swapped.containsKey(v))) {
+        if (v instanceof TextView) {
+            if (standard(v, false)) changed += ink(new Text((TextView) v), swap, lightText, swapped) ? 1 : 0;
+        } else if (v instanceof ImageView && (((ImageView) v).getImageTintList() != null || swapped.containsKey(v))) {
             ImageView i = (ImageView) v;
-            if (i.getImageTintList() != null) changed += ink(new Icon(i), swap, lightText, swapped) ? 1 : 0;
-            else swapped.remove(v);
+            if (i.getImageTintList() == null) swapped.remove(v);
+            else if (standard(v, true)) changed += ink(new Icon(i), swap, lightText, swapped) ? 1 : 0;
         }
         if (v instanceof ViewGroup) {
             ViewGroup g = (ViewGroup) v;
@@ -107,6 +110,24 @@ final class Foreground {
         r.applied = mirror(now);
         ink.set(r.applied);
         return true;
+    }
+    /** Whether a view is part of a standard template (see the class comment); icon: only the expand icon. */
+    private static boolean standard(View v, boolean icon) {
+        int id = v.getId();
+        if (id == View.NO_ID || (id >>> 24) == 0) return false;
+        try {
+            android.content.res.Resources r = v.getResources();
+            return standardId(r.getResourcePackageName(id), v.getContext().getPackageName(), icon ? r.getResourceEntryName(id) : null);
+        } catch (RuntimeException e) { return false; }
+    }
+    /**
+     * pkg: the package of the view's id; host: SystemUI's package; entry: the id's name for an icon,
+     * null for text. Framework and SystemUI ids only; an icon only when its name says expand.
+     */
+    static boolean standardId(String pkg, String host, String entry) {
+        boolean ours = "android".equals(pkg) || (pkg != null && pkg.equals(host));
+        if (!ours) return false;
+        return entry == null || entry.toLowerCase(java.util.Locale.ROOT).contains("expand");
     }
     /** The grey on the other side of the scale, alpha kept: white to black, a light grey to a dark one. */
     static int mirror(int c) {

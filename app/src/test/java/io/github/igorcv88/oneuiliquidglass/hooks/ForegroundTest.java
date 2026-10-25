@@ -78,4 +78,17 @@ public final class ForegroundTest {
         assertEquals(0xffd0d0d0, body.color);
         assertTrue(m.isEmpty());
     }
+    @Test public void onlyStandardTemplateViewsAreEligible() {
+        String host = "com.android.systemui";
+        assertTrue(Foreground.standardId("android", host, null));
+        assertTrue(Foreground.standardId(host, host, null));
+        // A custom RemoteViews layout carries the app's ids.
+        assertFalse(Foreground.standardId("com.whatsapp", host, null));
+        assertFalse(Foreground.standardId(null, host, null));
+        // Icons: only the expand chevron, never an app or action icon.
+        assertTrue(Foreground.standardId("android", host, "expand_button_icon"));
+        assertFalse(Foreground.standardId("android", host, "icon"));
+        assertFalse(Foreground.standardId("android", host, "right_icon"));
+        assertFalse(Foreground.standardId("com.whatsapp", host, "expand_more"));
+    }
 }

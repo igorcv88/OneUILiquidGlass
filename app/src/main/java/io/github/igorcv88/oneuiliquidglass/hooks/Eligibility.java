@@ -79,4 +79,14 @@ public final class Eligibility {
     public static boolean textTone(boolean enabled, boolean hasGlass, boolean glassFailed, boolean eligible) {
         return enabled && hasGlass && !glassFailed && eligible;
     }
+    /**
+     * Whether a pre-open capture may stand for the backdrop of a shade opening: it was taken for the
+     * gesture that is the current one (no touch went down since), that gesture is still down or
+     * lifted at most liftMs ago (a fling), and the capture is at most maxAgeMs old. A tap at the top
+     * followed by an app switch and a launcher pull-down, or a cancelled pull followed by a new one,
+     * gets a fresh capture.
+     */
+    public static boolean preOpenValid(long gridGesture, long currentGesture, boolean lifted, long liftedAgo, long ageMs, long liftMs, long maxAgeMs) {
+        return gridGesture == currentGesture && (!lifted || liftedAgo <= liftMs) && ageMs >= 0 && ageMs <= maxAgeMs;
+    }
 }
