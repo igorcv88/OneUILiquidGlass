@@ -99,7 +99,9 @@ public final class BackgroundBlurBridge implements Backdrop {
             if (pill) px = t.pillBlur;
             int profile = pill || (scaled && !lens) ? -1 : SemBlurBridge.tagProfile(lens, keyguard);
             tagSent = profile;
-            int veil = pill ? 0 : SemBlurBridge.shadeVeil(lens, keyguard, scaled, toneVeil);
+            // A pop-up over an app (lens, not the lockscreen) takes its measured veil too (popuptone).
+            int veil = pill ? 0 : lens ? (!keyguard && t.live && t.popupTone && (popupVeil >>> 24) > 0 ? popupVeil : 0)
+                    : SemBlurBridge.shadeVeil(lens, keyguard, scaled, toneVeil);
             if (veil != 0) tint = veil;
             tl = SemBlurBridge.cornerTag(tl, profile); tr = SemBlurBridge.cornerTag(tr, profile);
             bl = SemBlurBridge.cornerTag(bl, profile); br = SemBlurBridge.cornerTag(br, profile);
@@ -160,7 +162,14 @@ public final class BackgroundBlurBridge implements Backdrop {
     private boolean scaled;
     /** The tag profile the last build sent (-1: none), for the trace. */
     public int tagSent = -1;
-    /** The veil ShadeTone measured for this card (0: none yet). */
+    /** The veil measured for this card as a pop-up over an app (0: none); see ShadeTone. */
+    private int popupVeil;
+    public void setPopupVeil(int veil) throws ReflectiveOperationException {
+        if (popupVeil == veil) return;
+        popupVeil = veil;
+        if (built) update(lastPx, lastTint, lastRadii);
+    }
+    /** The veil ShadeTone measured for this card as a shade card (0: none yet). */
     private int toneVeil;
     public void setToneVeil(int veil) throws ReflectiveOperationException {
         if (toneVeil == veil) return;

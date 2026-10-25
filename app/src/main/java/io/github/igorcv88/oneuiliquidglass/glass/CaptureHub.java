@@ -73,6 +73,11 @@ public final class CaptureHub {
         void onFrame(Frame frame);
         /** Capture became unusable (secure content, failures): the client should be replaced. */
         void onUnavailable();
+        /**
+         * Captured even while its view is not shown (attached is enough): a one-shot measurement
+         * asked for on the first frame of the shade opening, before its window is made visible.
+         */
+        default boolean evenHidden() { return false; }
     }
 
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
@@ -108,7 +113,7 @@ public final class CaptureHub {
             Client c = clients.get(i).get();
             View v = c == null ? null : c.view();
             if (v == null || !v.isAttachedToWindow()) { clients.remove(i); continue; }
-            if (v.isShown()) shown.add(c);
+            if (v.isShown() || c.evenHidden()) shown.add(c);
         }
         if (clients.isEmpty()) {
             ticking = false; stats.flush("idle");
