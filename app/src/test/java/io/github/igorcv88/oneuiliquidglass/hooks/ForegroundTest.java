@@ -135,4 +135,11 @@ public final class ForegroundTest {
         assertNull(Foreground.redirect(title, 0xff3d7bff, m, c -> c));
         assertTrue(m.isEmpty());
     }
+    /** A group's "+N" overflow text has no id: it qualifies when SystemUI inflated it, never in an app's layout. */
+    @Test public void viewsWithoutIdQualifyOnlyFromSystemUi() {
+        String host = "com.android.systemui";
+        assertTrue(Foreground.standardNoId(host, host));
+        assertFalse(Foreground.standardNoId("com.whatsapp", host));
+        assertFalse(Foreground.standardNoId(host, null));
+    }
 }

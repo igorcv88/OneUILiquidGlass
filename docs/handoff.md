@@ -2,6 +2,34 @@
 
 Documento para continuar o trabalho em outra conversa. Leia inteiro antes de mexer em qualquer coisa. O histórico técnico detalhado está em `docs/architecture.md`; as seções de 2026-10-16 cobrem a central de notificações.
 
+## 0w. Atualização (2026-10-25): rodada 40 — gestos do sistema e abertura de app cortam a faixa, lockscreen restaurada
+
+Base: vídeo do PR #39 (18:45:08) e print da lockscreen (18:46). O log enviado estava vazio. **Não testado no aparelho.**
+
+**O vídeo mostrou:**
+- Pop-up, app branco → home: o gesto de home começa embaixo e é vertical, então o `directional` mantinha a faixa com a captura velha do app fechando, um anel branco em volta do corpo já azul.
+- Launcher → Chrome: depois dos 100 ms do toque, a faixa capturou a animação de abertura, um anel escuro; o texto ficou branco sobre branco ~270 ms porque o pop-up parado só era medido a cada 1 s.
+- Lockscreen: o `liverim 2` e o tom escuro do #39 foram aplicados também nela, e voltou o segundo arco.
+- Central em branco: "2 more notifications" do grupo recolhido com texto branco.
+
+**Correções:**
+- Toque que começa na faixa inferior (4,5 %) ou nas bordas laterais (4 %) é gesto do sistema e corta a faixa desde o início. Depois de um toque simples ou de um gesto do sistema, a faixa fica cortada `lenstransition` (350 ms) além do `lenssettle`. Swipe horizontal normal continua com 100 ms.
+- Pop-up é medido a cada 100 ms por 1,5 s depois de qualquer toque.
+- `livedarkalpha`, `livedarkfill` e `liverim` valem só para o pop-up; a lockscreen volta ao visual anterior ao #39.
+- Texto sem id inflado pelo próprio SystemUI (o "+N" do grupo) agora troca de tom; layouts `RemoteViews` de apps continuam intocados.
+
+**Prop nova:** `lenstransition` (ms). `setprop debug.oulg.lenstransition 0` volta ao comportamento do #39.
+
+**Em aberto (precisa do log):** a piscada ao abrir a central em qualquer fundo, e o título "Minimizados" se não for o texto "+N".
+
+```sh
+su -c 'setprop debug.oulg.trace 1; logcat -c'
+# reproduzir
+su -c 'logcat -d -v threadtime -s OULG > /sdcard/Download/oulg40_log.txt; ls -la /sdcard/Download/oulg40_log.txt'
+```
+
+**Validado:** Gradle `testDebugUnitTest` (106), `lintDebug`, `assembleDebug`.
+
 ## 0v. Atualização (2026-10-25): rodada 39 — cores interceptadas, uma cena por pilha, rampas a partir do tint nativo, visual de 24/10 no pop-up
 
 Base: rodada física do PR #38 (`OULG38_20261025_174738`, vídeo 17:51:47, prints de 24/10 e 25/10, E0–E4). **Não testado no aparelho.**
