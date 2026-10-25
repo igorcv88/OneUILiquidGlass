@@ -100,7 +100,7 @@ public final class Tuning {
     /**
      * Captured lens band on LSPosed-only pop-ups (debug.oulg.livelens, default 1). It shows only while
      * BackdropMotion knows the backdrop is still, from a capture taken after it settled and at most
-     * lensmaxage ms old (default 50); a touch outside the pop-up hides it until lenssettle ms
+     * lensmaxage ms old (default 40); a touch outside the pop-up hides it until lenssettle ms
      * (default 100, the value chosen on the device on 25/10; was 600) after the finger lifts.
      * 0: the live material alone.
      */
@@ -271,7 +271,8 @@ public final class Tuning {
         String b = prop("backdrop", "auto");
         backdrop = b.equals("grid") || b.equals("off") || b.equals("capture") || b.equals("hybrid") ? b : "auto";
         profile = prop("profile", "lens").equals("snell") ? "snell" : "lens";
-        lens = clamp(number("lens", 0.30f), 0f, 0.45f);
+        // 0.24: chosen on the device on 25/10 (was 0.30); a smaller shift makes a late capture less visible.
+        lens = clamp(number("lens", 0.24f), 0f, 0.45f);
         refract = clamp(number("refract", 1f), 0f, 6f);
         // 80 Hz: the rate chosen on the device with the lens band (25/10); was 60.
         rimHz = Math.round(clamp(number("rimhz", 80f), 1f, 120f));
@@ -301,7 +302,8 @@ public final class Tuning {
         liveGlint = clamp(number("liveglint", 0.10f), 0f, 1f);
         shadeGlint = clamp(number("shadeglint", 0.10f), 0f, 1f);
         liveLens = number("livelens", 1f) >= 1f;
-        lensMaxAge = Math.round(clamp(number("lensmaxage", 50f), 8f, 500f));
+        // 40 ms: chosen on the device on 25/10 (was 50).
+        lensMaxAge = Math.round(clamp(number("lensmaxage", 40f), 8f, 500f));
         lensSettle = Math.round(clamp(number("lenssettle", 100f), 0f, 3000f));
         lensTransition = Math.round(clamp(number("lenstransition", 350f), 0f, 1500f));
         lensGate = prop("lensgate", "directional").equals("conservative") ? "conservative" : "directional";
