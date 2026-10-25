@@ -129,6 +129,29 @@ final class Foreground {
         surveyWalk(root, lightText, max, out);
         return out;
     }
+    /**
+     * Every text view in a row (or the shelf), with whether this class would touch it and why not:
+     * class, id, colour, standard-template test, theme-tone test, swapped now. Trace only; no text.
+     */
+    static java.util.List<String> rowSurvey(View root, boolean lightText, int max) {
+        java.util.List<String> out = new java.util.ArrayList<>();
+        host = root.getContext().getPackageName();
+        rowSurveyWalk(root, root, lightText, max, out);
+        return out;
+    }
+    private static void rowSurveyWalk(View root, View v, boolean lightText, int max, java.util.List<String> out) {
+        if (out.size() >= max) return;
+        if (v != root && v.getClass().getName().endsWith("ExpandableNotificationRow")) return;
+        if (v instanceof TextView) {
+            int c = ((TextView) v).getCurrentTextColor();
+            out.add(describe(v) + " color=" + Integer.toHexString(c) + " vis=" + v.getVisibility() + " standard=" + standard(v, false)
+                    + " themeTone=" + themeTone(c, lightText) + " swapped=" + swapped.containsKey(v));
+        }
+        if (v instanceof ViewGroup) {
+            ViewGroup g = (ViewGroup) v;
+            for (int i = 0; i < g.getChildCount(); i++) rowSurveyWalk(root, g.getChildAt(i), lightText, max, out);
+        }
+    }
     private static void surveyWalk(View v, boolean lightText, int max, java.util.List<String> out) {
         if (out.size() >= max || v.getVisibility() != View.VISIBLE) return;
         if (v.getClass().getName().endsWith("ExpandableNotificationRow")) return;
