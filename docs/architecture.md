@@ -942,6 +942,35 @@ Source: the device handoff of 25/10 (props `lenssettle=100`, `lensmaxage=50`, `r
 
 **Validation:** Gradle `testDebugUnitTest` (87 JUnit tests, new: `VeilMathTest`, `ToneGridTest`, `TextHaloTest`, directional cases in `BackdropMotionTest`), `lintDebug` (no new warning categories) and `assembleDebug` pass. AGSL is compiled on the device only; the hooks, the capture and the halo need the device. Not tested on the device.
 
+### Round 37: material style instead of a grey veil, no glyph halo, pre-open capture (2026-10-25)
+
+Source: the device handoff after PR #36 (log `01_conservative_log.txt`, capture `82192.png`, videos of the shade and of a pop-up over a white page). Round 36 was installed and ran; its look was rejected.
+
+**What the device showed.**
+- `SHADE_TONE_APPLY source=grid luma=0.98 veil=59000000 halo=0.45`: the module itself put 35 % black over a white app. Black at 25 % over white is #BFBFBF, grey under white text at ~1.8:1, so no `veilmax` value is both light and legible. The glyph halo (`TEXT_HALO views=29`) read as a dirty double outline.
+- `STATUSBAR_TONE lightTop=false` over a white page (Chrome's dark toolbar in the dark theme): the first-frame estimate was wrong, and the cards turned from light to grey when the capture landed.
+- The first shade capture of one opening landed after 616 ms: `CaptureHub` sleeps 500 ms between ticks while no client is shown, and a new client waited for that tick.
+- Pop-up: the first sample (alpha 0, the card still above its final place) read 0.30-0.32, the right one (0.91) came with the 1 s timer. The lens band kept the plain tint around a darkened body: a light ring around a grey core.
+
+**Material style (`VeilMath.material`, `ShadeTone.materialFor`).** On the theme's own side (dark backdrop under light text, or the reverse) the card keeps its native look with at most a small veil capped at `veilmax` (now 0.25). On the far side it changes style: over a light backdrop in the dark theme, light glass (`lightglass`, white at 0.25, Samsung's own light-theme veil) with dark text; over a dark backdrop in the light theme, dark glass (0x1cffffff) with light text. The backdrop counts as light from `stylehi` (0.62) and as dark again from `stylelo` (0.48), per card, so a mixed backdrop near a threshold does not flip. `textswap=0` keeps the veil-only behaviour.
+
+**Foreground swap (`Foreground`, replaces `TextHalo`).** Views of the theme's text tone (near-neutral greys) get the mirrored grey (255 - value, alpha kept), so the primary/secondary hierarchy survives; icons only when tinted through `imageTintList` (the expand chevron); accent text, coloured spans, app icons and actions are untouched, as are a group's child rows. A view whose content set a new colour since is taken as the new original (swapped again if it is of the theme tone, released otherwise); restoring skips a view whose colour the content changed. It is undone on every path to the native background (`release`, ineligible, module disabled), as the halo was.
+
+**First frame.**
+- No estimate: until a capture lands, cards show the theme's native look. Over a white app in the dark theme that is a light card whose text turns dark when the capture lands, instead of a light card turning grey.
+- Pre-open capture: a touch down in the top 6 % of the screen with the shade closed over an app asks for a capture at once (`preOpen`, at most one per 300 ms). An opening within 1.5 s adopts it on its first frame (`SHADE_PREFETCH state=preopen age=`); one that opens while it is in flight adopts it when it lands. Openings without a touch at the top (a launcher gesture) still capture on their first frame.
+- `CaptureHub.register` now runs a tick at once.
+
+**Pop-up.** Native on its first frame; a capture under the card every 100 ms while it enters (alpha below 0.99 or moved more than 8 px since the last measurement), then every 1 s. The lens band takes the body's region colour (`BackgroundBlurBridge.requestedTint`), so rim and body read as one glass.
+
+**Glint and gate.** `liveglint` defaults to 0.10 (approved on the pop-up); shade cards get `shadeglint` (0.10); lockscreen stays 1. `lensgate` defaults to `directional`, the policy preferred on the device.
+
+**Telemetry.** `MATERIAL_STYLE from= to= source= alpha= tFromOpen=`, `FIRST_VISIBLE_MATERIAL source= style= tFromOpen=`, `SHADE_PREFETCH state=preopen|sample age=`, `SHADE_OPEN_BEGIN preAge=`, `POPUP_CONTRAST source=native|sample style= age= measuredAlpha=`, `TEXT_TONE` (trace). `STATUSBAR_TONE` and `TEXT_HALO` are gone.
+
+**Not covered.** Text drawn by custom RemoteViews in their own colours stays as the app set it, which can be light text on light glass (it was equally unreadable on the grey veil). Icons tinted by colour filter rather than `imageTintList` keep their tone. The 710 ms between capture and application in round 36's slow opening is not explained by those logs; `FIRST_VISIBLE_MATERIAL` now records what each card first showed.
+
+**Validation:** Gradle `testDebugUnitTest` (94 tests; new `ForegroundTest`, `VeilMathTest` style cases, `ToneGridTest` pre-open adoption), `lintDebug` (no new warning categories), `assembleDebug`. Not tested on the device.
+
 ## Future work
 
 - **Separate blur for the notification center and the control center.** Theme Park and HomeUp set a single blur amount for both panels. The user runs 12 %: lower leaves the control center unreadable, higher over-blurs the notification list. A split needs its own investigation: find where SystemUI applies the panel blur, whether the two panels are separate blur regions or one window, and whether the module can own one of them.

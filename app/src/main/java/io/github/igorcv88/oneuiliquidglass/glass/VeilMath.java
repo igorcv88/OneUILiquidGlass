@@ -16,12 +16,25 @@ final class VeilMath {
         return (lightText ? 0x000000 : 0xffffff) | (alpha << 24);
     }
     /**
-     * The contrast the capped veil leaves out goes to the text: none below the cap, then from 0.30
-     * alpha rising with the shortfall, at most 0.70.
+     * Whether the backdrop counts as light, with hysteresis: a card that reads it as light keeps
+     * doing so until the luma falls to {@code lo}, a card that reads it as dark until it reaches
+     * {@code hi}. A mixed backdrop near one threshold then does not flip the style frame by frame.
      */
-    static float halo(float need, float max) {
-        float shortfall = need - Math.min(0.75f, max);
-        if (shortfall <= 0.02f) return 0f;
-        return Math.min(0.70f, 0.30f + 1.6f * shortfall);
+    static boolean lightBackdrop(boolean wasLight, float luma, float lo, float hi) {
+        return wasLight ? luma > lo : luma >= hi;
+    }
+    /**
+     * The material for a backdrop. On the theme's own side (a dark backdrop under light text, a
+     * light one under dark text) the card keeps its native look with at most a small capped veil.
+     * On the other side it changes style instead of being veiled grey: light glass ({@code lightGlass},
+     * white) with dark text over a light backdrop, dark glass ({@code darkGlass}) with light text over a
+     * dark one. Black at 25 % over white is #BFBFBF, grey under white text at ~1.8:1; the style
+     * change gives the text real contrast without darkening the glass.
+     */
+    static Material material(float luma, boolean wasLight, boolean lightText, float cap, float lift, float max,
+                             float lo, float hi, int lightGlass, int darkGlass) {
+        boolean light = lightBackdrop(wasLight, luma, lo, hi);
+        if (light == lightText) return new Material(light ? lightGlass : darkGlass, true, light);
+        return new Material(veil(need(luma, lightText, cap, lift), lightText, max), false, light);
     }
 }

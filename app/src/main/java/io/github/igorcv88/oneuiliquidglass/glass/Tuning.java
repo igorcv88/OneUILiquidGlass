@@ -186,13 +186,21 @@ public final class Tuning {
     /** Darkest mean backdrop luminance a dark-text shade card shows (debug.oulg.shadelift, 0.45). */
     public final float shadeLift;
     /**
-     * Highest alpha of the measured veil, shade cards and pop-ups (debug.oulg.veilmax, default 0.35,
-     * 0.75 restores the earlier cap). Over a white app the full veil (0.42 black at shadecap 0.55)
-     * turned shade cards lead grey; the contrast above the cap goes to a text halo instead.
+     * Highest alpha of the measured veil on the theme's own side, shade cards and pop-ups
+     * (debug.oulg.veilmax, default 0.25, the strength preferred on the device; 0.75 is the cap before
+     * round 36). Over a white app the full veil turned shade cards lead grey.
      */
     public final float veilMax;
-    /** Halo behind light (or dark) notification text when the veil is capped (debug.oulg.texthalo, 1). */
-    public final boolean textHalo;
+    /**
+     * Material style thresholds on the backdrop's mean luma (debug.oulg.stylelo / stylehi, defaults
+     * 0.48 / 0.62): a card reads the backdrop as light from stylehi up and as dark again from stylelo
+     * down. On the theme's far side it takes light (or dark) glass with swapped text instead of a veil.
+     */
+    public final float styleLo, styleHi;
+    /** White alpha of light glass (debug.oulg.lightglass, default 0.25, Samsung's own light-theme veil). */
+    public final float lightGlass;
+    /** Light or dark glass with swapped text on the theme's far side (debug.oulg.textswap, default 1; 0: veil only). */
+    public final boolean textSwap;
     /**
      * LSPosed-only pop-ups take a veil measured from the backdrop under them, as shade cards do
      * (debug.oulg.popuptone, default 1; 0: the plain tint, white text over a white app).
@@ -281,8 +289,11 @@ public final class Tuning {
         shadeAdaptive = tone == 3;
         shadeCap = clamp(number("shadecap", 0.55f), 0.2f, 1f);
         shadeLift = clamp(number("shadelift", 0.45f), 0f, 0.8f);
-        veilMax = clamp(number("veilmax", 0.35f), 0f, 0.75f);
-        textHalo = number("texthalo", 1f) >= 1f;
+        veilMax = clamp(number("veilmax", 0.25f), 0f, 0.75f);
+        styleHi = clamp(number("stylehi", 0.62f), 0.3f, 1f);
+        styleLo = Math.min(styleHi, clamp(number("stylelo", 0.48f), 0.2f, 1f));
+        lightGlass = clamp(number("lightglass", 0.25f), 0f, 0.6f);
+        textSwap = number("textswap", 1f) >= 1f;
         popupTone = number("popuptone", 1f) >= 1f;
         shadeScaleVeil = Math.round(Math.max(0f, Math.min(255f, number("shadescaleveil", 115f))));
         sfOptics = Math.round(clamp(number("sf.optics", 0f), 0f, 1000f));
@@ -326,7 +337,7 @@ public final class Tuning {
         return "backdrop=" + backdrop + " profile=" + profile + " lens=" + lens + " rimhz=" + rimHz + " rimblur=" + rimBlur
                 + " refract=" + refract + " ior=" + ior + " blur=" + blur + " sat=" + saturation
                 + " disp=" + dispersion + " hz=" + hz + " hzkg=" + keyguardHz + " tint=" + tintAlpha
-                + " semradius=" + semRadius + " semradiuslens=" + semRadiusLens + " sflens=" + sfLens + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " live=" + live + " liveradius=" + liveRadius + " liveshaderadius=" + liveShadeRadius + " liveoptics=" + liveOptics + " livesheen=" + liveSheen + " liveglint=" + liveGlint + " shadeglint=" + shadeGlint + " livelens=" + liveLens + " lensmaxage=" + lensMaxAge + " lenssettle=" + lensSettle + " lensgate=" + lensGate + " kgblurpath=" + kgBlurPath + " shadeblurpath=" + shadeBlurPath + " shadefadecut=" + shadeFadeCut + " kgblurradius=" + kgBlurRadius + " pillglass=" + pillGlass + " pillblur=" + pillBlur + " kgoptics=" + kgOptics + " huoptics=" + huOptics + " kglens=" + kgLens + " shadetone=" + shadeTone + " shadeveil=" + shadeVeil + " shadeadaptive=" + shadeAdaptive + " shadecap=" + shadeCap + " shadelift=" + shadeLift + " veilmax=" + veilMax + " texthalo=" + textHalo + " popuptone=" + popupTone + " shadescaleveil=" + shadeScaleVeil + " sfoptics=" + sfOptics + " kgwinblur=" + kgWinBlur + " headergap=" + headerGap + " perf=" + perf + " trace=" + trace;
+                + " semradius=" + semRadius + " semradiuslens=" + semRadiusLens + " sflens=" + sfLens + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " live=" + live + " liveradius=" + liveRadius + " liveshaderadius=" + liveShadeRadius + " liveoptics=" + liveOptics + " livesheen=" + liveSheen + " liveglint=" + liveGlint + " shadeglint=" + shadeGlint + " livelens=" + liveLens + " lensmaxage=" + lensMaxAge + " lenssettle=" + lensSettle + " lensgate=" + lensGate + " kgblurpath=" + kgBlurPath + " shadeblurpath=" + shadeBlurPath + " shadefadecut=" + shadeFadeCut + " kgblurradius=" + kgBlurRadius + " pillglass=" + pillGlass + " pillblur=" + pillBlur + " kgoptics=" + kgOptics + " huoptics=" + huOptics + " kglens=" + kgLens + " shadetone=" + shadeTone + " shadeveil=" + shadeVeil + " shadeadaptive=" + shadeAdaptive + " shadecap=" + shadeCap + " shadelift=" + shadeLift + " veilmax=" + veilMax + " stylelo=" + styleLo + " stylehi=" + styleHi + " lightglass=" + lightGlass + " textswap=" + textSwap + " popuptone=" + popupTone + " shadescaleveil=" + shadeScaleVeil + " sfoptics=" + sfOptics + " kgwinblur=" + kgWinBlur + " headergap=" + headerGap + " perf=" + perf + " trace=" + trace;
     }
 
     private static float clamp(float v, float lo, float hi) { return Float.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : lo; }

@@ -20,8 +20,9 @@ import io.github.igorcv88.oneuiliquidglass.diagnostics.Probe;
  *
  * <p>The veil is capped (debug.oulg.veilmax): a black veil strong enough to give white text full
  * contrast over a white app turned shade cards lead grey, darker than the blur around them. What the
- * cap leaves out is given to the text as a halo ({@link #haloFor}, TextHalo). The arithmetic is
- * in {@link VeilMath}.</p>
+ * cap would leave out is not faked with a shadow on each glyph: on the far side of the theme the card
+ * changes style instead, light glass with dark text over a light app ({@link #materialFor}). The
+ * arithmetic is in {@link VeilMath}.</p>
  */
 public final class ShadeTone implements CaptureHub.Client {
     private final WeakReference<View> view;
@@ -109,7 +110,7 @@ public final class ShadeTone implements CaptureHub.Client {
                 p90[b] = count == 0 ? 0f : samples[Math.min(count - 1, (int) (count * 0.9f))];
             }
             // Bands in screen px: the frame is the capture crop scaled by frame.scale.
-            return new ToneGrid(frame.crop.top, Math.max(1, Math.round(bandPx / frame.scale)), mean, p90, generation);
+            return new ToneGrid(frame.crop.top, Math.max(1, Math.round(bandPx / frame.scale)), mean, p90, generation, frame.capturedAt);
         } catch (RuntimeException e) { Probe.error("SHADE_PREFETCH_FAILED", e); return null; }
     }
     private static float luma(int c) {
@@ -187,21 +188,23 @@ public final class ShadeTone implements CaptureHub.Client {
     }
 
     /**
-     * Light text: a black veil that brings the mean down to the cap (debug.oulg.shadecap); dark text:
-     * a white veil that lifts it to the lift (debug.oulg.shadelift). A backdrop already on the right
-     * side of the knee gets no veil. The alpha is capped at debug.oulg.veilmax.
+     * The material for a backdrop of mean {@code luma}; {@code wasLight} is the card's last reading
+     * (hysteresis). See {@link VeilMath#material}: native look with a veil capped at debug.oulg.veilmax
+     * on the theme's side, light or dark glass with swapped text on the other (debug.oulg.stylelo,
+     * stylehi, lightglass).
      */
-    public static int veilFor(float luma) {
+    public static Material materialFor(float luma, boolean wasLight) {
         Tuning t = Tuning.get();
-        boolean lightText = lightText();
-        return VeilMath.veil(VeilMath.need(luma, lightText, t.shadeCap, t.shadeLift), lightText, t.veilMax);
+        if (!t.textSwap) {
+            boolean light = VeilMath.lightBackdrop(wasLight, luma, t.styleLo, t.styleHi);
+            return new Material(VeilMath.veil(VeilMath.need(luma, lightText(), t.shadeCap, t.shadeLift), lightText(), t.veilMax), false, light);
+        }
+        int lightGlass = Math.round(255f * t.lightGlass) << 24 | 0xffffff;
+        return VeilMath.material(luma, wasLight, lightText(), t.shadeCap, t.shadeLift, t.veilMax, t.styleLo, t.styleHi,
+                lightGlass, DARK_GLASS);
     }
-    /** Halo alpha (0-1) for the text of a card over {@code luma}; 0: none (debug.oulg.texthalo=0 too). */
-    public static float haloFor(float luma) {
-        Tuning t = Tuning.get();
-        if (!t.textHalo) return 0f;
-        return VeilMath.halo(VeilMath.need(luma, lightText(), t.shadeCap, t.shadeLift), t.veilMax);
-    }
+    /** Dark glass under light text in the light theme: the dark theme's pop-up colour (GlassSpec.liveDarkColor). */
+    static final int DARK_GLASS = 0x1cffffff;
     /** Whether notification text is light (dark theme). */
     public static boolean lightText() { return SemBlurBridge.shadeStrength() < 0.65f; }
 

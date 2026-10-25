@@ -6,7 +6,7 @@ import static org.junit.Assert.*;
 public final class ToneGridTest {
     // Four bands of 100 px from y = 0: dark, dark, white, white.
     private static ToneGrid grid() {
-        return new ToneGrid(0, 100, new float[] {0.1f, 0.1f, 0.9f, 0.9f}, new float[] {0.2f, 0.3f, 1f, 1f}, 7);
+        return new ToneGrid(0, 100, new float[] {0.1f, 0.1f, 0.9f, 0.9f}, new float[] {0.2f, 0.3f, 1f, 1f}, 7, 1_000);
     }
     @Test public void aCardReadsTheBandsItCovers() {
         assertEquals(0.1f, grid().luma(0, 200), 1e-6f);
@@ -29,4 +29,10 @@ public final class ToneGridTest {
         assertEquals(1f, grid().bright(390, 450), 1e-6f);
     }
     @Test public void carriesItsGeneration() { assertEquals(7, grid().generation); }
+    @Test public void aPreOpenCaptureIsAdoptedWithItsAge() {
+        ToneGrid pre = new ToneGrid(0, 100, new float[] {0.9f}, new float[] {1f}, -1, 500).forGeneration(12);
+        assertEquals(12, pre.generation);
+        assertEquals(500, pre.takenAt);
+        assertEquals(0.9f, pre.luma(0, 100), 0f);
+    }
 }

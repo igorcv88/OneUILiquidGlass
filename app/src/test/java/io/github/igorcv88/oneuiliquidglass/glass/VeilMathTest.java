@@ -4,32 +4,47 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public final class VeilMathTest {
-    private static final float CAP = 0.55f, LIFT = 0.45f;
-    @Test public void aDarkBackdropUnderLightTextNeedsNothing() {
-        assertEquals(0f, VeilMath.need(0.10f, true, CAP, LIFT), 0f);
-        assertEquals(0, VeilMath.veil(0f, true, 0.35f));
-        assertEquals(0f, VeilMath.halo(0f, 0.35f), 0f);
+    private static final float CAP = 0.55f, LIFT = 0.45f, LO = 0.48f, HI = 0.62f;
+    private static final int LIGHT = 0x40ffffff, DARK = 0x1cffffff;
+    private static Material m(float luma, boolean wasLight, boolean lightText) {
+        return VeilMath.material(luma, wasLight, lightText, CAP, LIFT, 0.25f, LO, HI, LIGHT, DARK);
     }
-    @Test public void aWhiteBackdropIsCappedAndTheRestGoesToTheText() {
-        float need = VeilMath.need(0.95f, true, CAP, LIFT);
-        assertEquals(0.42f, need, 0.01f);
-        // The earlier cap (0.75) let the full 0.42 black through: lead grey on a white app.
-        assertEquals(0x6b000000, VeilMath.veil(need, true, 0.75f));
-        assertEquals(0x59000000, VeilMath.veil(need, true, 0.35f));
-        assertEquals(0f, VeilMath.halo(need, 0.75f), 0f);
-        float halo = VeilMath.halo(need, 0.35f);
-        assertTrue(halo > 0.35f && halo < 0.50f);
+    @Test public void aDarkBackdropUnderLightTextKeepsTheNativeLook() {
+        Material d = m(0.10f, false, true);
+        assertEquals(0, d.veil);
+        assertFalse(d.swap);
+        assertFalse(d.light);
+        assertEquals("native", d.style());
     }
-    @Test public void haloIsBounded() {
-        assertEquals(0.70f, VeilMath.halo(1f, 0f), 0f);
-        // A shortfall within 0.02 of the cap is not worth a halo.
-        assertEquals(0f, VeilMath.halo(0.36f, 0.35f), 0f);
+    @Test public void aWhiteBackdropUnderLightTextTakesLightGlassNotAGreyVeil() {
+        Material w = m(0.95f, false, true);
+        assertEquals(LIGHT, w.veil);
+        assertTrue(w.swap);
+        assertEquals("light", w.style());
     }
-    @Test public void darkTextGetsAWhiteVeilOverADarkBackdrop() {
-        float need = VeilMath.need(0.05f, false, CAP, LIFT);
-        assertTrue(need > 0.4f);
-        assertEquals(0xffffff, VeilMath.veil(need, false, 0.35f) & 0xffffff);
-        assertEquals(Math.round(255 * 0.35f), VeilMath.veil(need, false, 0.35f) >>> 24);
-        assertEquals(0f, VeilMath.need(0.80f, false, CAP, LIFT), 0f);
+    @Test public void hysteresisHoldsTheStyleBetweenTheThresholds() {
+        assertFalse(m(0.55f, false, true).light);
+        assertTrue(m(0.55f, true, true).light);
+        assertTrue(m(0.49f, true, true).light);
+        assertFalse(m(0.48f, true, true).light);
+        assertTrue(m(0.62f, false, true).light);
+    }
+    @Test public void theNativeSideVeilStaysSmallAndCapped() {
+        Material mid = m(0.60f, false, true);
+        assertFalse(mid.swap);
+        int a = mid.veil >>> 24;
+        assertTrue(a > 0 && a <= Math.round(255 * 0.25f));
+        assertEquals(0, mid.veil & 0xffffff);
+        assertEquals(0x59000000, VeilMath.veil(0.42f, true, 0.35f));
+        assertEquals(0x40000000, VeilMath.veil(0.42f, true, 0.25f));
+    }
+    @Test public void darkTextOverADarkBackdropTakesDarkGlass() {
+        Material d = m(0.10f, true, false);
+        assertFalse(d.light);
+        assertTrue(d.swap);
+        assertEquals(DARK, d.veil);
+        Material l = m(0.90f, false, false);
+        assertFalse(l.swap);
+        assertEquals(0, l.veil);
     }
 }
