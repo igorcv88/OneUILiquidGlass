@@ -123,6 +123,8 @@ public final class GlassDrawable extends Drawable {
     }
     /** Gain of the lit-corner glint in the LSPosed-only edge model (1: unchanged); see liveEdge(). */
     private float glint = 1f;
+    private boolean edgeEnabled = true;
+    public void setEdgeEnabled(boolean enabled) { if (edgeEnabled != enabled) { edgeEnabled = enabled; invalidateSelf(); } }
     public void setGlint(float g) { if (glint != g) { glint = g; invalidateSelf(); } }
     /** Gain of the outer contour line in the LSPosed-only edge model (1: unchanged). */
     private float rimGain = 1f;
@@ -242,13 +244,13 @@ public final class GlassDrawable extends Drawable {
         // LSPosed-only cards over the live drawable blur take the light-only edge model.
         Tuning t = Tuning.get();
         boolean live = t.live && backdrop instanceof BackgroundBlurBridge;
-        s.setFloatUniform("hairGain", 1f);
-        s.setFloatUniform("decor", live ? t.liveOptics : 1f);
+        s.setFloatUniform("hairGain", edgeEnabled ? 1f : 0f);
+        s.setFloatUniform("decor", edgeEnabled ? (live ? t.liveOptics : 1f) : 0f);
         s.setFloatUniform("live", live ? 1f : 0f);
-        s.setFloatUniform("sheen", live ? t.liveSheen : 0f);
+        s.setFloatUniform("sheen", edgeEnabled && live ? t.liveSheen : 0f);
         s.setFloatUniform("glintGain", live ? glint : 1f);
         s.setFloatUniform("rimGain", live ? rimGain : 1f);
-        s.setFloatUniform("outline", live ? outline : 0f);
+        s.setFloatUniform("outline", edgeEnabled && live ? outline : 0f);
     }
     /**
      * False until the first frame arrives; the caller then draws veil and edge alone.

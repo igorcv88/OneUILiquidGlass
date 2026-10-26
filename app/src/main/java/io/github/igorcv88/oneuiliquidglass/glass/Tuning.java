@@ -303,6 +303,7 @@ public final class Tuning {
     private static Tuning cached;
     private static long readAt;
     private static String lastLogged;
+    private static long configRevision = -1;
 
     private Tuning() {
         String b = prop("backdrop", "auto");
@@ -414,8 +415,8 @@ public final class Tuning {
 
     public static Tuning get() {
         long now = SystemClock.uptimeMillis();
-        if (cached == null || now - readAt > 1000) {
-            cached = new Tuning(); readAt = now;
+        if (cached == null || now - readAt > 1000 || configRevision != io.github.igorcv88.oneuiliquidglass.config.ConfigClient.revision()) {
+            cached = new Tuning(); readAt = now; configRevision = io.github.igorcv88.oneuiliquidglass.config.ConfigClient.revision();
             String line = cached.toString();
             if (!line.equals(lastLogged)) { lastLogged = line; generation++; Probe.log("TUNING", line); }
         }
@@ -444,6 +445,8 @@ public final class Tuning {
     }
 
     private static String prop(String key, String fallback) {
+        String override = io.github.igorcv88.oneuiliquidglass.config.ConfigClient.override(key);
+        if (override != null) return override;
         try {
             Class<?> props = Class.forName("android.os.SystemProperties");
             Object v = props.getMethod("get", String.class, String.class).invoke(null, "debug.oulg." + key, fallback);

@@ -111,26 +111,16 @@ public final class HeadsUpHooks {
         this.loader = loader; this.enabled = Boolean.TRUE.equals(enabled); this.configPending = enabled == null;
     }
     private void resolveConfig(android.content.Context context) {
-        if (!configPending) return;
-        configPending = false;
-        android.content.ContentResolver resolver = context.getContentResolver();
-        android.os.Handler main = new android.os.Handler(android.os.Looper.getMainLooper());
-        // Cross-process query may start the module app; keep it off SystemUI's main thread.
-        new Thread(() -> {
-            Boolean value = null;
-            try (android.database.Cursor c = resolver.query(android.net.Uri.parse("content://" + Config.AUTHORITY), null, null, null, null)) {
-                if (c != null && c.moveToFirst()) value = c.getInt(0) != 0;
-            } catch (RuntimeException e) { Probe.error("CONFIG_PROVIDER_FAILED", e); }
-            Boolean result = value;
-            main.post(() -> {
-                Probe.log("CONFIG_PROVIDER", "enabled=" + result);
-                if (Boolean.TRUE.equals(result)) {
-                    enabled = true;
-                    for (State state : new ArrayList<>(states.values())) state.invalidate();
-                }
-            });
-        }, "oulg-config").start();
+        io.github.igorcv88.oneuiliquidglass.config.ConfigClient.start(context, value -> {
+            enabled = value;
+            if (!shadeConfigEnabled()) { panelDim(false); restoreHeader(); orphanTone(); }
+            for (State state : new ArrayList<>(states.values())) {
+                if (!enabled || !state.surfaceEnabled()) state.release();
+                state.invalidate();
+            }
+        });
     }
+
     private Class<?> resolve(String name) {
         Class<?> c;
         try { c = Class.forName(name, false, loader); }
@@ -512,9 +502,13 @@ public final class HeadsUpHooks {
      * backdrop is captured now, ~100 ms before the shade's first frame, so cards are born in the right
      * style. On the main thread; one request per gesture, bound to it.
      */
+    private boolean shadeConfigEnabled() {
+        return enabled && io.github.igorcv88.oneuiliquidglass.config.ConfigClient.flag("surface.shade.enabled")
+                && io.github.igorcv88.oneuiliquidglass.config.ConfigClient.flag("surface.shade.feature.tonemap.enabled");
+    }
     private void preOpen(long gesture) {
         Tuning t = Tuning.get();
-        if (!enabled || !t.shadeAdaptive || barState == null || barState != Eligibility.BAR_SHADE || Boolean.TRUE.equals(shadeExpanded)) return;
+        if (!shadeConfigEnabled() || !t.shadeAdaptive || barState == null || barState != Eligibility.BAR_SHADE || Boolean.TRUE.equals(shadeExpanded)) return;
         if (gesture == preGesture || gesture != gestureDown) return;
         View anchor = panelView == null ? null : panelView.get();
         if (anchor == null || !anchor.isAttachedToWindow()) return;
@@ -571,7 +565,7 @@ public final class HeadsUpHooks {
         // Rows bound or shown after the capture (a group minimised meanwhile) get the same pass.
         if (anchor != null) for (long delay : new long[] { 300, 1000 })
             anchor.postDelayed(() -> { if (gen == shadeOpens) orphanTone(); }, delay);
-        panelDim(enabled && Tuning.get().textSwap && shadeScene && ShadeTone.lightText());
+        panelDim(shadeConfigEnabled() && Tuning.get().textSwap && shadeScene && ShadeTone.lightText());
     }
     /** Rows given the scene's text tone by orphanTone, restored when the shade closes. */
     private final java.util.Set<State> orphans = Collections.newSetFromMap(new WeakHashMap<>());
@@ -583,7 +577,7 @@ public final class HeadsUpHooks {
      */
     private void orphanTone() {
         if (shadeScene == null || !Boolean.TRUE.equals(shadeExpanded)) return;
-        boolean swap = enabled && Tuning.get().textSwap && shadeScene == ShadeTone.lightText();
+        boolean swap = shadeConfigEnabled() && Tuning.get().textSwap && shadeScene == ShadeTone.lightText();
         int n = 0;
         for (State st : new ArrayList<>(states.values())) {
             View r = st.row.get();
@@ -640,7 +634,7 @@ public final class HeadsUpHooks {
     private void headerTone(ToneGrid grid) {
         restoreHeader();
         View pv = panelView == null ? null : panelView.get();
-        if (pv == null || !Tuning.get().headerTone || !Tuning.get().textSwap) return;
+        if (pv == null || !shadeConfigEnabled() || !Tuning.get().headerTone || !Tuning.get().textSwap) return;
         View root = pv.getRootView();
         java.util.List<View> found = new ArrayList<>();
         int top = Integer.MAX_VALUE, bottom = Integer.MIN_VALUE;
@@ -1011,12 +1005,13 @@ public final class HeadsUpHooks {
         void shelfTone() {
             try {
                 Tuning t = Tuning.get();
-                boolean on = enabled && t.textSwap && t.shadeAdaptive && Boolean.TRUE.equals(shadeExpanded) && barState != null
+                boolean on = enabled && surfaceEnabled() && feature("tonemap") && t.textSwap && t.shadeAdaptive && Boolean.TRUE.equals(shadeExpanded) && barState != null
                         && barState == Eligibility.BAR_SHADE && shadeScene != null && shadeScene == ShadeTone.lightText();
                 setForeground(on);
             } catch (RuntimeException | LinkageError e) { if (toneErrors++ < 5) Probe.error("SHELF_TONE_FAILED", e); }
         }
         void tone(View v) {
+            if (!surfaceEnabled() || !feature("tonemap")) { setNative(); return; }
             Tuning t = Tuning.get();
             if (t.shadeAdaptive && Boolean.TRUE.equals(shadeExpanded) && barState != null && barState == Eligibility.BAR_SHADE) { shadeTone(v); return; }
             // The compositor-lens mode (sfrefract) draws through the Samsung blur: the pop-up's text
@@ -1500,7 +1495,7 @@ public final class HeadsUpHooks {
                 toneHeadsUp = headsUp;
                 if (!pill) {
                     if (Eligibility.textTone(enabled, glass != null, glass != null && glass.failed(), eligible)) safeTone(v);
-                    else if (Tuning.get().orphanDraw && enabled && Boolean.TRUE.equals(shadeExpanded) && shadeScene != null && toneOpen != shadeOpens
+                    else if (Tuning.get().orphanDraw && surfaceEnabled() && feature("tonemap") && enabled && Boolean.TRUE.equals(shadeExpanded) && shadeScene != null && toneOpen != shadeOpens
                             && barState != null && barState == Eligibility.BAR_SHADE) {
                         // A row with no card of its own (a minimised group's) takes the scene's tone at
                         // its own first draw: orphanTone only reaches rows shown when the capture
@@ -1511,7 +1506,7 @@ public final class HeadsUpHooks {
                     }
                     // A row drawn inside its group's glass (orphanTone) keeps the scene's tone: this
                     // restore undid it at the next traversal, and round 43's walk from the group too.
-                    else setForeground(orphans.contains(this) && enabled && Boolean.TRUE.equals(shadeExpanded) && shadeScene != null
+                    else setForeground(feature("tonemap") && surfaceEnabled() && orphans.contains(this) && enabled && Boolean.TRUE.equals(shadeExpanded) && shadeScene != null
                             && shadeScene == ShadeTone.lightText());
                 } else shelfTone();
                 String reason = reason();
@@ -1553,11 +1548,14 @@ public final class HeadsUpHooks {
             finally { Perf.end(Perf.PREDRAW, started); }
             return true;
         }
+        String configSurface() { return pill || !popupSurface() && lensSurface() ? "keyguard" : popupSurface() ? "headsup" : "shade"; }
+        boolean surfaceEnabled() { return io.github.igorcv88.oneuiliquidglass.config.ConfigClient.flag("surface." + configSurface() + ".enabled"); }
+        boolean feature(String name) { return io.github.igorcv88.oneuiliquidglass.config.ConfigClient.flag("surface." + configSurface() + ".feature." + name + ".enabled"); }
         boolean eligible() {
             View v = background.get(), r = row.get();
             if (v == null || r == null || failed || !drawHook || !v.isShown() || v.getWidth() <= 0 || v.getHeight() <= 0) return false;
             if (pill && !pillSurface()) return false;
-            return Eligibility.glass(enabled, v.isAttachedToWindow(), v.isHardwareAccelerated());
+            return Eligibility.glass(enabled && surfaceEnabled(), v.isAttachedToWindow(), v.isHardwareAccelerated());
         }
         /** Diagnostic mirror of eligible() plus the compositor capability checked in material(). */
         String reason() {
@@ -1605,7 +1603,7 @@ public final class HeadsUpHooks {
          */
         boolean sampledRow() {
             View r = row.get(), v = background.get();
-            if (r == null || v == null || sharedBackdrop()) return false;
+            if (r == null || v == null || sharedBackdrop() || !feature("lens")) return false;
             String mode = Tuning.get().backdrop;
             if (mode.equals("off") || !GlassDrawable.refractionAvailable()) return false;
             // The compositor refracts these cards itself: keep the live Samsung blur, no capture.
@@ -1763,6 +1761,7 @@ public final class HeadsUpHooks {
                     : glass.hybrid() || kind == Backdrop.Kind.SAMSUNG || compBridge != null ? (dark ? spec.samsungDarkColor : spec.samsungLightColor)
                     : kind == Backdrop.Kind.SAMPLED ? (dark ? spec.captureDarkTint : spec.captureLightTint)
                     : dark ? spec.darkBlurColor : spec.lightBlurColor;
+            glass.setEdgeEnabled(feature("edge"));
             glass.setPressed(pressed);
             refreshLens();
             // What the region actually shows for a veil of 0: the bridges replace the alpha when
@@ -1771,7 +1770,7 @@ public final class HeadsUpHooks {
             nativeTint = semAlpha >= 0 && (compBridge != null || semBridge != null) ? (tone & 0x00ffffff) | (semAlpha << 24) : tone;
             glass.configure(original, shape(), fill, tone);
             if (live) {
-                glass.setGlint(popup ? tn.liveGlint : lock ? tn.kgGlint : !lensSurface() ? tn.shadeGlint : 1f);
+                glass.setGlint(!feature("glint") ? 0f : popup ? tn.liveGlint : lock ? tn.kgGlint : !lensSurface() ? tn.shadeGlint : 1f);
                 glass.setRimGain(popup ? tn.liveRim : lock ? tn.kgRim : 1f);
                 updateLens(v); liveState(v, fill);
             }
@@ -1805,7 +1804,7 @@ public final class HeadsUpHooks {
         /** See {@link Eligibility#sharedBackdrop}. */
         boolean sharedBackdrop() {
             View r = row.get();
-            if (r == null || Tuning.get().shadeBlur) return false;
+            if (r == null || Tuning.get().shadeBlur && feature("per_card_blur")) return false;
             return Eligibility.sharedBackdrop(shadeExpanded, Reflect.bool(r, "isOnKeyguard", "mOnKeyguard"));
         }
         /** Whether the card is a pop-up or lockscreen card (lens surface) rather than a shade card. */
@@ -1824,7 +1823,7 @@ public final class HeadsUpHooks {
             View r = row.get();
             Boolean keyguard = r == null ? null : Reflect.bool(r, "isOnKeyguard", "mOnKeyguard");
             Boolean headsUp = r == null ? null : Reflect.bool(r, "isHeadsUpState", "mIsHeadsUp");
-            boolean want = Tuning.get().liveLens && !pill && !Boolean.TRUE.equals(keyguard)
+            boolean want = feature("lens") && Tuning.get().liveLens && !pill && !Boolean.TRUE.equals(keyguard)
                     && barState != null && barState == Eligibility.BAR_SHADE
                     && Eligibility.captureSurface(headsUp, keyguard, shadeExpanded)
                     && CaptureHub.available() && GlassDrawable.lensAvailable() && !glass.lensUnavailable();
@@ -1866,7 +1865,7 @@ public final class HeadsUpHooks {
             Boolean keyguard = Reflect.bool(r, "isOnKeyguard", "mOnKeyguard");
             // The pill is plain light glass: no lens, no compositor material.
             boolean kgSurface = !pill && Eligibility.keyguardOptics(barState, Reflect.bool(r, "isHeadsUpState", "mIsHeadsUp"));
-            boolean lens = !pill && Eligibility.lens(barState, shadeExpanded, keyguard);
+            boolean lens = feature("lens") && !pill && Eligibility.lens(barState, shadeExpanded, keyguard);
             // The edge shader steps back only for a card the compositor demonstrably lights: profile
             // 1 requested, a tag that survives every program (radius and shape), and a library whose
             // profile-1 optics are confirmed (debug.oulg.sf.optics). Otherwise it keeps its lighting.

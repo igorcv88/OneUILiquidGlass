@@ -20,6 +20,7 @@ LIB=$LIBDIR/liboulg_sf.so
 INJ=$BIN/oulg_inject
 LOG=$BIN/inject.log
 SELFLOG=$BIN/selftest.log
+PROCDIR=${OULG_PROC:-/proc}
 SRC=${OULG_SRC:-$(cd "$(dirname "$0")" && pwd)}
 
 out() { echo "$1=$2"; }
@@ -30,21 +31,34 @@ sf_pid() { pidof surfaceflinger | cut -d ' ' -f 1; }
 
 [ "$(id -u)" = 0 ] || die 2 "not_root"
 
+legacy_conflict() {
+    for module in /data/adb/modules/oulg_sf /data/adb/modules_update/oulg_sf; do
+        [ -d "$module" ] && [ ! -e "$module/disable" ] && [ ! -e "$module/remove" ] && return 0
+    done
+    return 1
+}
+
 fingerprint_ok() {
     fp="$(getprop ro.build.fingerprint)"
     [ -n "$fp" ] && [ -f "$SRC/allowed_fingerprints" ] && grep -v '^#' "$SRC/allowed_fingerprints" | grep -qxF "$fp"
 }
-# The bundle's files match its own manifest.
+# Reject incomplete/malformed manifests instead of comparing two empty strings as equal.
+match_sha() {
+    expected="$(prop "$2" "$3")"
+    [ "${#expected}" -eq 64 ] || return 1
+    case "$expected" in *[!0-9a-f]*) return 1;; esac
+    [ -f "$1" ] && [ "$(sha "$1")" = "$expected" ]
+}
 bundle_ok() {
     [ -f "$SRC/live.prop" ] || return 1
-    [ "$(sha "$SRC/oulg_inject")" = "$(prop sha256_inject "$SRC/live.prop")" ] || return 1
-    [ "$(sha "$SRC/liboulg_sf.so")" = "$(prop sha256_lib "$SRC/live.prop")" ] || return 1
+    match_sha "$SRC/oulg_inject" sha256_inject "$SRC/live.prop" || return 1
+    match_sha "$SRC/liboulg_sf.so" sha256_lib "$SRC/live.prop" || return 1
+    match_sha "$SRC/oulg-live.sh" sha256_helper "$SRC/live.prop" || return 1
 }
-# The installed files match the manifest written at install.
 installed_ok() {
     [ -f "$BIN/live.prop" ] || return 1
-    [ "$(sha "$INJ")" = "$(prop sha256_inject "$BIN/live.prop")" ] || return 1
-    [ "$(sha "$LIB")" = "$(prop sha256_lib "$BIN/live.prop")" ] || return 1
+    match_sha "$INJ" sha256_inject "$BIN/live.prop" || return 1
+    match_sha "$LIB" sha256_lib "$BIN/live.prop" || return 1
 }
 selftest_ok() { [ -x "$INJ" ] && [ -f "$LIB" ] && "$INJ" --lib "$LIB" --stamp-status >/dev/null 2>&1; }
 
@@ -52,6 +66,7 @@ cmd="$1"
 case "$cmd" in
 status)
     out helper 1
+    legacy_conflict && out legacy_conflict 1 || out legacy_conflict 0
     out fingerprint "$(getprop ro.build.fingerprint)"
     fingerprint_ok && out fingerprint_ok 1 || out fingerprint_ok 0
     bundle_ok && out bundled_ok 1 || out bundled_ok 0
@@ -75,7 +90,11 @@ status)
     out sf_pid "$p"
     # The library file as installed now: after a reinstall the running compositor still maps the
     # old inode, which /proc shows as "(deleted)"; that is not the current library.
-    if [ -n "$p" ] && grep "$LIB" "/proc/$p/maps" 2>/dev/null | grep -qv "(deleted)"; then out sf_loaded 1; else out sf_loaded 0; fi
+    inode="$(stat -c '%i' "$LIB" 2>/dev/null)"
+    if [ -n "$p" ] && [ -n "$inode" ] && awk -v file="$LIB" -v inode="$inode" '
+        NF == 6 && $6 == file && ("i" $5) == ("i" inode) { found = 1; exit }
+        END { exit !found }
+    ' "$PROCDIR/$p/maps" 2>/dev/null; then out sf_loaded 1; else out sf_loaded 0; fi
     [ "$(getprop debug.oulg.sf.norewrite)" = 1 ] && out sf_rewrite 0 || out sf_rewrite 1
     out sf_optics "$(getprop debug.oulg.sf.optics)"
     out sfrefract "$(getprop debug.oulg.sfrefract)"
@@ -83,6 +102,7 @@ status)
     ;;
 install)
     fingerprint_ok || die 2 "fingerprint_not_allowed"
+    legacy_conflict && die 2 "legacy_module_active_disable_it_and_reboot_first"
     bundle_ok || die 2 "bundle_corrupt"
     mkdir -p "$BIN" || die 1 "mkdir_failed"
     # New files are written beside the old ones and renamed over them: surfaceflinger keeps the
@@ -112,6 +132,7 @@ restart)
     mode="$2"
     case "$mode" in rewrite|dump) ;; *) die 2 "usage_restart_rewrite_or_dump" ;; esac
     fingerprint_ok || die 2 "fingerprint_not_allowed"
+    legacy_conflict && die 2 "legacy_module_active_disable_it_and_reboot_first"
     installed_ok || die 2 "not_installed"
     selftest_ok || die 2 "selftest_required"
     if [ "$mode" = dump ]; then setprop debug.oulg.sf.norewrite 1; else setprop debug.oulg.sf.norewrite ""; fi

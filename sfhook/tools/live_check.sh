@@ -29,21 +29,36 @@ cp live/oulg-live.sh live/allowed_fingerprints "$T/bundle/"
 manifest() {
   { echo "version=$1"; echo "versionCode=$2"
     echo "sha256_inject=$(sha256sum "$T/bundle/oulg_inject" | cut -d ' ' -f 1)"
+    echo "sha256_helper=$(sha256sum "$T/bundle/oulg-live.sh" | cut -d ' ' -f 1)"
     echo "sha256_lib=$(sha256sum "$T/bundle/liboulg_sf.so" | cut -d ' ' -f 1)"; } > "$T/bundle/live.prop"
 }
 manifest v0.21.0 22
-run() { PATH="$T/stub:$PATH" OULG_BIN="$T/bin" OULG_LIBDIR="$T/lib" OULG_STAMP="$T/stamp" sh "$T/bundle/oulg-live.sh" "$@"; }
+run() { PATH="$T/stub:$PATH" OULG_BIN="$T/bin" OULG_LIBDIR="$T/lib" OULG_STAMP="$T/stamp" OULG_PROC="$T/proc" sh "$T/bundle/oulg-live.sh" "$@"; }
 # /proc/<pid>/maps of the stand-in surfaceflinger.
 expect() { echo "$1" | grep -qx "$2" || { echo "FAIL: expected $2 in:"; echo "$1"; exit 1; }; }
 s="$(run status)"; expect "$s" "update_needed=1"; expect "$s" "installed_ok=0"; expect "$s" "fingerprint_ok=1"
 expect "$(run install)" "install=ok"
 s="$(run status)"; expect "$s" "update_needed=0"; expect "$s" "selftest_ok=0"; expect "$s" "installed_version=v0.21.0"
+mkdir -p "$T/proc/4242"
+inode="$(stat -c '%i' "$T/lib/liboulg_sf.so")"
+printf '1000-2000 r-xp 00000000 00:01 %s %s\n' "$inode" "$T/lib/liboulg_sf.so" > "$T/proc/4242/maps"
+expect "$(run status)" "sf_loaded=1"
+printf '1000-2000 r-xp 00000000 00:01 %s %s (deleted)\n' "$inode" "$T/lib/liboulg_sf.so" > "$T/proc/4242/maps"
+expect "$(run status)" "sf_loaded=0"
+printf '1000-2000 r-xp 00000000 00:01 0 %s\n' "$T/lib/liboulg_sf.so" > "$T/proc/4242/maps"
+expect "$(run status)" "sf_loaded=0"
 expect "$(run selftest)" "selftest=ok"
 s="$(run status)"; expect "$s" "selftest_ok=1"
 # A corrupt bundle is refused; the installed copy is untouched.
 echo tampered >> "$T/bundle/liboulg_sf.so"
 set +e; o="$(run install)"; rc=$?; set -e
 [ $rc -eq 2 ] || { echo "FAIL: corrupt bundle rc=$rc"; exit 1; }; expect "$o" "error=bundle_corrupt"
+cp "$T/bundle/live.prop" "$T/manifest.good"
+printf 'version=invalid\n' > "$T/bundle/live.prop"
+set +e; o="$(run install)"; rc=$?; set -e
+[ $rc -eq 2 ] || { echo "FAIL: malformed manifest rc=$rc"; exit 1; }
+expect "$o" "error=bundle_corrupt"
+cp "$T/manifest.good" "$T/bundle/live.prop"
 # A new library version: update needed, installed by rename (a new inode).
 echo "lib v2" > "$T/bundle/liboulg_sf.so"; manifest v0.22.0 23
 old_inode="$(ls -i "$T/lib/liboulg_sf.so" | cut -d ' ' -f 1)"
@@ -52,6 +67,15 @@ expect "$(run install)" "install=ok"
 new_inode="$(ls -i "$T/lib/liboulg_sf.so" | cut -d ' ' -f 1)"
 [ "$old_inode" != "$new_inode" ] || { echo "FAIL: library overwritten in place"; exit 1; }
 expect "$(run status)" "update_needed=0"
+cp "$T/bundle/live.prop" "$T/manifest.good2"
+sed 's/^sha256_helper=.*/sha256_helper=0000000000000000000000000000000000000000000000000000000000000000/' "$T/manifest.good2" > "$T/bundle/live.prop"
+set +e; o="$(run install)"; rc=$?; set -e
+[ $rc -eq 2 ] || { echo "FAIL: helper hash mismatch rc=$rc"; exit 1; }; expect "$o" "error=bundle_corrupt"
+cp "$T/manifest.good2" "$T/bundle/live.prop"
+printf '1000-2000 r-xp 00000000 00:01 %s %s.backup\n' "$new_inode" "$T/lib/liboulg_sf.so" > "$T/proc/4242/maps"
+expect "$(run status)" "sf_loaded=0"
+printf '1000-2000 r-xp 00000000 00:01 %s %s\n' "$new_inode" "$T/lib/liboulg_sf.so" > "$T/proc/4242/maps"
+expect "$(run status)" "sf_loaded=1"
 set +e; o="$(run restart now)"; rc=$?; set -e
 [ $rc -eq 2 ] || { echo "FAIL: bad restart mode rc=$rc"; exit 1; }
 expect "$(run uninstall)" "uninstall=ok"

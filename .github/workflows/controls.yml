@@ -1,0 +1,39 @@
+name: Controls panel checks
+on:
+  pull_request:
+  push:
+    branches: ["work/**"]
+permissions:
+  contents: read
+jobs:
+  android-and-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Android SDK
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;35.0.0"
+      - name: Registry generation and distribution contracts
+        run: |
+          python3 tools/generate-settings.py
+          git diff --exit-code -- app/src/main/java/io/github/igorcv88/oneuiliquidglass/config/SettingsRegistry.java
+          python3 tools/test-distribution.py
+          sh sfhook/tools/live_check.sh
+      - name: Android checks
+        run: ./gradlew testDebugUnitTest lintDebug assembleDebug
+      - name: Shader checks
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y glslang-tools
+          sh sfhook/tools/check.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: controls-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
