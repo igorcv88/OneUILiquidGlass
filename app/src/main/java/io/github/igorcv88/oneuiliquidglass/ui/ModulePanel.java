@@ -1,6 +1,7 @@
 package io.github.igorcv88.oneuiliquidglass.ui;
 
 import android.app.*;
+import android.view.View;
 import android.widget.*;
 
 import io.github.igorcv88.oneuiliquidglass.live.*;
@@ -14,25 +15,36 @@ import java.util.function.Consumer;
 public final class ModulePanel {
     private final Activity activity;
     private final SfLiveController controller;
+    private final RootAccess root;
+    private TextView rootStatus;
+    private Button grant;
+    private boolean light;
     private final Consumer<String> copy;
     private TextView status;
     private Button primary, refresh, log, uninstall, recompile;
 
-    public ModulePanel(Activity activity, SfLiveController controller, Consumer<String> copy) {
+    public ModulePanel(
+            Activity activity,
+            SfLiveController controller,
+            RootAccess root,
+            Consumer<String> copy) {
         this.activity = activity;
         this.controller = controller;
+        this.root = root;
         this.copy = copy;
     }
 
     public void attach(LinearLayout parent, boolean light, int ink, int muted, int card) {
+        this.light = light;
         LinearLayout panel = new LinearLayout(activity);
         panel.setOrientation(LinearLayout.VERTICAL);
         int pad = (int) (16 * activity.getResources().getDisplayMetrics().density);
         panel.setPadding(pad, pad, pad, pad);
-        panel.setBackgroundColor(card);
+        panel.setBackground(UiStyle.pane(activity, light, true, 24));
+        UiStyle.space(panel, 16);
         parent.addView(panel);
         TextView title = new TextView(activity);
-        title.setText("Refração SurfaceFlinger");
+        title.setText("Refração dinâmica");
         title.setTextSize(20);
         title.setTextColor(ink);
         panel.addView(title);
@@ -40,23 +52,52 @@ public final class ModulePanel {
         intro.setTextColor(muted);
         intro.setTextSize(13);
         intro.setText(
-                "Os binários desta versão estão no APK. Sem download, ZIP ou flash de módulo."
-                    + " Somente verificar, instalar, testar e reiniciar pelo helper exigem SU para"
-                    + " este APK. Nenhum root é pedido ao abrir a tela.");
+                "Ative a lente real das notificações pelo SurfaceFlinger. O componente já está no"
+                    + " APK. A instalação e a injeção exigem root; o reinício só acontece após sua"
+                    + " confirmação.");
         panel.addView(intro);
+        rootStatus = new TextView(activity);
+        rootStatus.setTextColor(muted);
+        panel.addView(rootStatus);
+        grant =
+                add(
+                        panel,
+                        "Conceder / verificar acesso root",
+                        () ->
+                                root.check(
+                                        ok -> {
+                                            if (ok) controller.status();
+                                        }));
         status = new TextView(activity);
         status.setTextColor(ink);
         status.setTextSize(13);
         status.setTextIsSelectable(true);
         panel.addView(status);
-        primary = add(panel, "Verificar SurfaceFlinger / autorizar SU", this::primary);
-        refresh = add(panel, "Atualizar estado (SU)", controller::status);
-        recompile = add(panel, "Reiniciar para recompilar SF (avançado)", this::confirmRestart);
-        log = add(panel, "Mostrar log do helper", controller::log);
-        add(panel, "Copiar estado / log", () -> copy.accept(describe(controller.model())));
+        primary = add(panel, "Injetar refração no SurfaceFlinger", this::primary);
+        primary.setEnabled(false);
+        UiStyle.button(primary, light, true);
+        Button expand = add(panel, "⌄  Detalhes e manutenção", () -> {});
+        LinearLayout details = new LinearLayout(activity);
+        details.setOrientation(LinearLayout.VERTICAL);
+        details.setVisibility(View.GONE);
+        panel.addView(details);
+        expand.setOnClickListener(
+                v -> {
+                    boolean open = details.getVisibility() != View.VISIBLE;
+                    details.setVisibility(open ? View.VISIBLE : View.GONE);
+                    expand.setText(open ? "⌃  Recolher detalhes" : "⌄  Detalhes e manutenção");
+                });
+        TextView protocol = new TextView(activity);
+        protocol.setTextColor(muted);
+        protocol.setTextIsSelectable(true);
+        details.addView(protocol);
+        refresh = add(details, "Atualizar estado (SU)", controller::status);
+        recompile = add(details, "Reiniciar para recompilar SF (avançado)", this::confirmRestart);
+        log = add(details, "Mostrar log do helper", controller::log);
+        add(details, "Copiar estado / log", () -> copy.accept(describe(controller.model())));
         uninstall =
                 add(
-                        panel,
+                        details,
                         "Remover arquivos da injeção",
                         () ->
                                 new AlertDialog.Builder(activity)
@@ -73,59 +114,77 @@ public final class ModulePanel {
                                                 "Remover",
                                                 (d, w) -> controller.uninstallConfirmed())
                                         .show());
-        controller.listen(
-                model -> {
-                    status.setText(describe(model));
+        Runnable update =
+                () -> {
+                    SfLiveController.Model model = controller.model();
                     SfLive.State state = SfLive.state(model.status);
-                    primary.setEnabled(
-                            model.bundled
-                                    && !model.busy
-                                    && !(state == SfLive.State.UNSUPPORTED)
-                                    && !"0".equals(model.status.get("bundled_ok"))
-                                    && !"1".equals(model.status.get("legacy_conflict")));
+                    boolean su = root.granted() && "1".equals(model.status.get("helper"));
+                    boolean compatible =
+                            SfControlPolicy.prepare(
+                                    root.granted(), model.bundled, model.busy, model.status);
+                    rootStatus.setText(root.message());
+                    grant.setEnabled(!root.busy() && !model.busy);
+                    grant.setText(
+                            root.granted()
+                                    ? "Root autorizado · verificar novamente"
+                                    : "Conceder / verificar acesso root");
+                    primary.setEnabled(compatible);
+                    refresh.setEnabled(root.granted() && model.bundled && !model.busy);
+                    log.setEnabled(su && !model.busy);
+                    uninstall.setEnabled(su && !model.busy);
                     recompile.setEnabled(
-                            model.bundled
-                                    && !model.busy
-                                    && "1".equals(model.status.get("fingerprint_ok"))
-                                    && "1".equals(model.status.get("bundled_ok"))
-                                    && "1".equals(model.status.get("installed_ok"))
-                                    && !"1".equals(model.status.get("legacy_conflict"))
-                                    && "1".equals(model.status.get("selftest_ok"))
-                                    && "0".equals(model.status.get("update_needed")));
-                    refresh.setEnabled(model.bundled && !model.busy);
-                    log.setEnabled(model.bundled && !model.busy);
-                    uninstall.setEnabled(model.bundled && !model.busy);
-                    if (!model.bundled) {
-                        primary.setText("Bundle indisponível neste APK");
-                        return;
-                    }
-                    if (model.busy) {
-                        primary.setText("Aguarde…");
-                        return;
-                    }
-                    switch (state) {
-                        case UPDATE:
-                            primary.setText("Instalar / atualizar e executar selftest");
-                            break;
-                        case SELFTEST:
-                            primary.setText("Executar selftest");
-                            break;
-                        case RESTART:
-                            primary.setText("Ativar refração · reiniciar SF e zygote");
-                            break;
-                        case LOADED:
-                            primary.setText(
-                                    active(model.status)
-                                            ? "Biblioteca atual carregada · verificar"
-                                            : "Ativar refração · reiniciar SF e zygote");
-                            break;
-                        case UNSUPPORTED:
-                            primary.setText("Firmware fora da allowlist");
-                            break;
-                        default:
-                            primary.setText("Verificar SurfaceFlinger / autorizar SU");
-                    }
-                });
+                            SfControlPolicy.restart(
+                                    root.granted(), model.bundled, model.busy, model.status));
+                    protocol.setText(describe(model));
+                    String next;
+                    if (!model.bundled) next = "Componente indisponível neste APK";
+                    else if (model.busy) next = "Verificando / preparando…";
+                    else if (!su) next = "Injetar refração · conceda root primeiro";
+                    else
+                        switch (state) {
+                            case UPDATE:
+                                next = "1. Instalar refração e testar";
+                                break;
+                            case SELFTEST:
+                                next = "1. Testar componente de refração";
+                                break;
+                            case RESTART:
+                                next = "2. Injetar e ativar refração";
+                                break;
+                            case LOADED:
+                                next =
+                                        active(model.status)
+                                                ? "Biblioteca carregada · verificar estado"
+                                                : "2. Injetar e ativar refração";
+                                break;
+                            case UNSUPPORTED:
+                                next = "Firmware incompatível";
+                                break;
+                            default:
+                                next = "Injetar refração · verificar root";
+                        }
+                    primary.setText(next);
+                    status.setText(
+                            model.busy
+                                    ? model.message
+                                    : !su
+                                            ? "Botão bloqueado até confirmar acesso SU. Nenhuma"
+                                                    + " injeção foi iniciada."
+                                            : state == SfLive.State.RESTART
+                                                    ? "Pronto para injetar. A próxima etapa pede"
+                                                            + " confirmação de reinício."
+                                                    : state == SfLive.State.LOADED
+                                                            ? "Biblioteca mapeada. A execução"
+                                                                    + " óptica do shader ainda"
+                                                                    + " precisa ser verificada."
+                                                            : state == SfLive.State.UNSUPPORTED
+                                                                    ? "O firmware não está na lista"
+                                                                            + " de compatibilidade."
+                                                                    : model.message);
+                    status.setPadding(0, UiStyle.dp(activity, 10), 0, UiStyle.dp(activity, 10));
+                };
+        controller.listen(model -> update.run());
+        root.listen(update);
     }
 
     private boolean active(Map<String, String> status) {
@@ -134,7 +193,10 @@ public final class ModulePanel {
 
     private void primary() {
         SfLiveController.Model model = controller.model();
-        if (model.busy || !model.bundled) return;
+        if (model.busy
+                || !model.bundled
+                || !root.granted()
+                || !"1".equals(model.status.get("helper"))) return;
         switch (SfLive.state(model.status)) {
             case UPDATE:
             case SELFTEST:
@@ -155,6 +217,9 @@ public final class ModulePanel {
     }
 
     private void confirmRestart() {
+        SfLiveController.Model model = controller.model();
+        if (!SfControlPolicy.restart(root.granted(), model.bundled, model.busy, model.status))
+            return;
         EditText input = new EditText(activity);
         input.setHint("Digite REINICIAR");
         AlertDialog dialog =
@@ -193,7 +258,8 @@ public final class ModulePanel {
     private Button add(LinearLayout panel, String title, Runnable action) {
         Button b = new Button(activity);
         b.setText(title);
-        b.setAllCaps(false);
+        UiStyle.button(b, light, false);
+        UiStyle.space(b, 4);
         b.setOnClickListener(v -> action.run());
         panel.addView(b);
         return b;

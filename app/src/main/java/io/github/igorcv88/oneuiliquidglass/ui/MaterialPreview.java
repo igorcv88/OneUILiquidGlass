@@ -58,12 +58,14 @@ public final class MaterialPreview extends View {
 
     private float n(String key, float fallback) {
         try {
-            return Float.parseFloat(
-                    values.getOrDefault(
-                            key,
-                            SettingsRegistry.get(key) == null
-                                    ? Float.toString(fallback)
-                                    : SettingsRegistry.get(key).defaultValue));
+            float value =
+                    Float.parseFloat(
+                            values.getOrDefault(
+                                    key,
+                                    SettingsRegistry.get(key) == null
+                                            ? Float.toString(fallback)
+                                            : SettingsRegistry.get(key).defaultValue));
+            return Float.isFinite(value) ? value : fallback;
         } catch (RuntimeException e) {
             return fallback;
         }
@@ -79,7 +81,9 @@ public final class MaterialPreview extends View {
         if (getWidth() < 1 || getHeight() < 1) return;
         if (background == null) createBackdrop();
         canvas.save();
-        canvas.scale(getWidth() / 600f, getHeight() / 390f);
+        float scale = Math.min(getWidth() / 600f, getHeight() / 390f);
+        canvas.translate((getWidth() - 600 * scale) / 2, (getHeight() - 390 * scale) / 2);
+        canvas.scale(scale, scale);
         canvas.drawBitmap(background, 0, 0, null);
         if (surface.equals("keyguard")) {
             text(canvas, "09:41", 36, 61, 42, light ? 0xff253340 : 0xffedf6ff);
