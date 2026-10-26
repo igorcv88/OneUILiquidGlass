@@ -1,0 +1,3 @@
+# ro.build.fingerprint values the live route was validated on, one per line (read with getprop on
+# the device, never derived from a firmware name). Same list as module/customize.sh.
+samsung/pa3qxxx/pa3q:17/CP2A.260605.016/S938BXXUCDZIF_OXMCDZIF:user/release-keys

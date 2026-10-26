@@ -21,10 +21,10 @@
 
 One UI Liquid Glass is an independent **LSPosed module** for Samsung's notification surfaces: detailed heads-up pop-ups, lockscreen notification cards and the expanded notification shade. It preserves SystemUI's native content and interaction while changing the cards' backdrop and glass material. Brief/Edge Lighting pop-ups and the music player are outside the current scope.
 
-The project consists of two separately installable components:
+The release is a single APK:
 
-- **APK:** hooks SystemUI, composes the glass material and edge lighting, and draws live backdrop blur. It works without the SurfaceFlinger add-on.
-- **Optional KernelSU module:** patches a copy of SurfaceFlinger for the supported firmware to enable live edge refraction and per-surface layered blur. The APK falls back to its own optics without it.
+- **LSPosed module:** hooks SystemUI, composes the glass material and edge lighting, and draws live backdrop blur. It works without the SurfaceFlinger add-on.
+- **Optional SurfaceFlinger live lens:** the APK carries an injector and a compositor library (`assets/sfhook/`) that load into a freshly restarted SurfaceFlinger with `ptrace`, without a mount, a patched binary or a change to `/system`, for live edge refraction on the supported firmware. Root (KernelSU) is required for it; nothing persists past a reboot. See [docs/sf-live-app.md](docs/sf-live-app.md).
 
 > [!IMPORTANT]
 > This is an experimental module for a specific Samsung firmware family, **not a general-purpose Android theme**. It is not affiliated with Samsung or Google. Back up before enabling the optional SurfaceFlinger component, and follow the firmware and recovery requirements below.
@@ -51,9 +51,9 @@ The optical material and the real refraction path are different. APK-only edge h
 - Tested/developed for **Galaxy S25 Ultra SM-S938B**, Android 17 / **One UI 9**. Development was based on `S938BXXUCZZIC`; `S938BXXUCDZIF` is recognized by the optional installer, but matching framework files do **not** substitute for physical APK validation.
 - **LSPosed API 93+**, with scope limited to **System UI** (`com.android.systemui`).
 - **Detailed** notification pop-up style. Brief pop-ups/Edge Lighting are not hooked.
-- **Optional compositor lens only:** KernelSU plus an overlay metamodule for `/system`; the firmware fingerprint must pass [the installer allowlist](sfhook/module/customize.sh). The installer does not support Magisk.
+- **Optional compositor lens only:** root (KernelSU); the firmware fingerprint must be on [the live allowlist](sfhook/live/allowed_fingerprints) (S938BXXUCDZIF). It injects code into SurfaceFlinger and restarts the userspace; it can affect system stability and integrity-sensitive configurations.
 
-The optional module was designed around [Meta-OverlayFSX (ViPER-safe fork)](https://github.com/igorcv88/Meta-Overlayfsx-ViPER-safe) or [upstream Meta-OverlayFSX](https://github.com/RipperHybrid/meta-overlayfsx). It modifies the mounted SurfaceFlinger execution path and has a boot watchdog; it can also affect system stability and integrity-sensitive configurations.
+The legacy KernelSU module (`sfhook/module/`, a patched SurfaceFlinger mounted through an overlay metamodule) is no longer published.
 
 ## Installation
 
@@ -69,7 +69,7 @@ Download the binaries only from [GitHub Releases](https://github.com/igorcv88/On
 
 4. Use the app's test-notification button to inspect the visual result. The current button schedules a BigText notification after five seconds; the proposed larger test with action buttons is described in the handoff.
 
-For the **optional compositor refraction**, install the compatible KernelSU metamodule first and reboot; then install `OneUILiquidGlass-SurfaceFlinger-<version>.zip` in KernelSU and **reboot again**. Restarting only SurfaceFlinger after installation will not mount the patched binary. The service script enables `debug.oulg.sfrefract=1` at boot unless that property is explicitly set to 0.
+For the **optional compositor refraction**, the app installs the bundled binaries, runs a self-test in a throwaway process and then restarts the userspace with the library loaded into SurfaceFlinger (root helper `oulg-live.sh`, [docs/sf-live-app.md](docs/sf-live-app.md)). It is redone after every reboot.
 
 You can verify that the native library loaded with:
 
@@ -113,8 +113,8 @@ The [property catalog](docs/PROPERTY_CATALOG_2026-10-26.md) enumerates every cur
 - **No heads-up:** verify Detailed pop-up mode, channel importance, notification permission and Do Not Disturb before treating it as a hook failure.
 - **Blur fallback:** find `BLUR_DRAWABLE_FALLBACK`, `DECISION`, `TUNING` in `logcat -s OULG`.
 - **Diagnostics:** set `debug.oulg.trace=1` for extra traces; `debug.oulg.perf=1` enables hook timings. Turn them off after testing.
-- **Compositor failure:** the KernelSU module has a watchdog that disables the add-on after repeated SurfaceFlinger startup failure within its recovery window. If necessary, disable/remove that KernelSU module and reboot.
-- **Uninstall:** remove the optional KernelSU module and reboot before uninstalling the APK.
+- **Compositor failure:** a reboot always returns to the stock SurfaceFlinger; the live lens is never loaded at boot.
+- **Uninstall:** run the helper's `uninstall` (from the app) and reboot before uninstalling the APK.
 
 ## Build and release
 
@@ -124,20 +124,21 @@ The [property catalog](docs/PROPERTY_CATALOG_2026-10-26.md) enumerates every cur
 ./gradlew testDebugUnitTest lintDebug assembleDebug
 ```
 
-**KernelSU module:** Android NDK r29 (`29.0.14206865`).
+**SurfaceFlinger live bundle:** Android NDK r29 (`29.0.14206865`). Run before Gradle so the APK carries `assets/sfhook/`; a build without it works, with the feature unavailable.
 
 ```sh
 ANDROID_NDK=/path/to/ndk sfhook/build.sh
+sh sfhook/tools/live_check.sh
 ```
 
 For a shader rewrite check, compile `sfhook/tools/refract_check.c` and validate generated `mod_*` shader files with `glslangValidator`.
 
-The [release workflow](.github/workflows/release.yml) is dispatched manually on `main`; a change to `.github/release-trigger` on `main` can dispatch it through the [trigger workflow](.github/workflows/trigger-release.yml). It tags `v0.1.N`, builds/tests/lints the APK, signs releases using repository secrets, builds the KernelSU ZIP and publishes checksums with the two files.
+The [release workflow](.github/workflows/release.yml) is dispatched manually on `main`; a change to `.github/release-trigger` on `main` can dispatch it through the [trigger workflow](.github/workflows/trigger-release.yml). It tags `v0.1.N`, builds the SurfaceFlinger live bundle, builds/tests/lints the APK (checking that it carries the bundle), signs it using repository secrets and publishes the APK as the only asset; its SHA-256 is in the release notes.
 
 ## Repository layout
 
 - `app/`: LSPosed module, `MainActivity`, config provider, notification hooks, optics and live property parser (`glass/Tuning.java`).
-- `sfhook/`: optional KernelSU compositor library, shader rewrite and boot watchdog.
+- `sfhook/`: compositor library and shader rewrite, the `ptrace` injector (`inject.c`), the live bundle's root helper and version (`live/`), and the legacy KernelSU module (`module/`, unpublished).
 - `docs/`: architecture, design handoff, property catalog, validation and previous investigations.
 - `.github/assets/`: project icon and banner.
 
