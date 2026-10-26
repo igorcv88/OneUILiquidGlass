@@ -1038,6 +1038,13 @@ Source: device video of PR #39 (18:45:08) and a lockscreen screenshot (18:46). T
 - Header: `header_clock`, `header_date` and `shade_carrier_text` follow the backdrop band under them at each shade capture and are restored on close (`HEADER_TONE`, off with `headertone 0`). `clear_all` and `noti_setting` sit on their own pills and are left.
 - Light glass (shade and pop-up) is the light theme's own card: white (`lighttone ffffff`) at `lightglass` 0.75, with the 1x thickness shadow (`lightedge` 1). The grey `b8c2ce` at 0.32 sat darker than the white app behind it (luma ~220 over ~235); the light theme's card sits above it (~250 over ~236), which is what reads as a card floating over the app (device screenshots, light vs dark theme, 26/10). Its end is marked by a brighter edge, light bent round the outer contour (`lightoutline` 0.8, shader `outline`: a bright contour all round plus a stronger Fresnel lift), on light glass and on the light theme's own shade and pop-up cards; the lockscreen is unchanged. `lighttone b8c2ce; lightglass 0.32; lightedge 2; lightoutline 0` restore round 41.
 
+### Round 43: one luminosity per stack, minimised group child, header from the scene (2026-10-26)
+
+- Shade cards take their material from the whole screen's mean (`ToneGrid.whole()`), not their own band: over a colourful wallpaper the card under a white cloud was veiled darker than the others (device frame, 26/10). Each card's colour still comes from the live blur behind it. `shadelocal 1` measures each card's band again.
+- The header follows the same scene reading: the band under it read 0.34 over a white app while the header animated in.
+- In the open shade a child row owns its tone only if its own card took this opening's tone (`toneOpen == shadeOpens`): a minimised group's child kept its glass, its background was not drawn, so its tone never ran and `app_name_text` stayed white (oulg42).
+- The grey shade in oulg42 was the device's own props: `lightglass 0.32`, `lighttone b8c2ce`, `lightedge 2` were set explicitly (the round-41 restore command) and override the new defaults; the shade cards showed `veil=52b8c2ce`.
+
 ## Future work
 
 - **Separate blur for the notification center and the control center.** Theme Park and HomeUp set a single blur amount for both panels. The user runs 12 %: lower leaves the control center unreadable, higher over-blurs the notification list. A split needs its own investigation: find where SystemUI applies the panel blur, whether the two panels are separate blur regions or one window, and whether the module can own one of them.

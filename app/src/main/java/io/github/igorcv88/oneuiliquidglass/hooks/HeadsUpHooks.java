@@ -224,8 +224,14 @@ public final class HeadsUpHooks {
         installTextColorGuard();
         // A child row with its own glass keeps its own tone; one drawn inside its group's card
         // (no glass of its own) is walked with the group's.
+        // In the open shade a child owns its tone only if its own card took this opening's tone: a
+        // minimised group's child kept its glass but its background is not drawn, so its tone never
+        // ran and its text stayed white on the group's light glass (TEXT_ROW app_name_text
+        // ffffffff swapped=false, device log 26/10).
         Foreground.ownsTone = child -> {
-            for (State st : states.values()) if (st.row.get() == child && st.glass != null) return true;
+            boolean shade = Boolean.TRUE.equals(shadeExpanded);
+            for (State st : states.values())
+                if (st.row.get() == child && st.glass != null && (!shade || st.toneOpen == shadeOpens)) return true;
             return false;
         };
         // Shade state is only known once SystemUI constructs the controller, after this point.
@@ -584,7 +590,9 @@ public final class HeadsUpHooks {
             top = Math.min(top, xy[1]); bottom = Math.max(bottom, xy[1] + v.getHeight());
         }
         if (found.isEmpty() || bottom <= top) { Probe.log("HEADER_TONE", "views=" + found.size() + " state=skip"); return; }
-        float luma = grid.luma(top, bottom);
+        // The scene's decision, like the cards: the band under the header read 0.34 over a white
+        // app (the header animating in from above the screen, device log 26/10).
+        float luma = Tuning.get().shadeLocal ? grid.luma(top, bottom) : grid.whole();
         boolean light = ShadeTone.lightBackdrop(luma, shadeScene);
         boolean swap = light == ShadeTone.lightText();
         int changed = 0;
@@ -962,7 +970,11 @@ public final class HeadsUpHooks {
             ToneGrid grid = shadeGrid;
             if (grid != null && grid.generation == shadeOpens) {
                 v.getLocationOnScreen(toneXy);
-                luma = grid.luma(toneXy[1], toneXy[1] + v.getHeight());
+                // One luminosity for the whole stack, from the whole screen: a card under a white
+                // patch of the wallpaper (a cloud) was veiled darker than the rest (device frame,
+                // 26/10). Each card's colour still comes from the live blur behind it.
+                // debug.oulg.shadelocal=1 measures each card's own band again.
+                luma = Tuning.get().shadeLocal ? grid.luma(toneXy[1], toneXy[1] + v.getHeight()) : grid.whole();
                 if (luma < 0f) return;
                 source = "grid";
             } else if (first && toneAt > 0 && android.os.SystemClock.uptimeMillis() - toneAt <= HOLD_MS) {
