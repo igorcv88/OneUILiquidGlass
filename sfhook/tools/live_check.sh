@@ -1,0 +1,59 @@
+#!/bin/sh
+# Host check of sfhook/live/oulg-live.sh: the Android commands it calls are stubbed, the injector is a
+# shell stand-in, and the target directories are temporary. Walks status -> install -> selftest ->
+# status -> reinstall over a "loaded" library -> uninstall and checks the key=value answers.
+set -e
+cd "$(dirname "$0")/.."
+T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
+mkdir -p "$T/stub" "$T/bundle" "$T/bin" "$T/lib" "$T/proc"
+FP="samsung/pa3qxxx/pa3q:17/CP2A.260605.016/S938BXXUCDZIF_OXMCDZIF:user/release-keys"
+cat > "$T/stub/getprop" <<S
+#!/bin/sh
+case "\$1" in ro.build.fingerprint) echo "$FP";; *) cat "$T/prop_\$1" 2>/dev/null;; esac
+S
+cat > "$T/stub/setprop" <<S
+#!/bin/sh
+printf '%s' "\$2" > "$T/prop_\$1"
+S
+printf '#!/bin/sh\necho 0\n' > "$T/stub/id"
+printf '#!/bin/sh\nexit 0\n' > "$T/stub/chcon"
+printf '#!/bin/sh\necho 4242\n' > "$T/stub/pidof"
+chmod +x "$T/stub/"*
+# Injector stand-in: a selftest writes the stamp; --stamp-status checks it.
+cat > "$T/bundle/oulg_inject" <<S
+#!/bin/sh
+case "\$*" in *--selftest*) echo ok > "$T/stamp"; exit 0;; *--stamp-status*) [ -f "$T/stamp" ];; *) exit 0;; esac
+S
+echo "lib v1" > "$T/bundle/liboulg_sf.so"
+cp live/oulg-live.sh live/allowed_fingerprints "$T/bundle/"
+manifest() {
+  { echo "version=$1"; echo "versionCode=$2"
+    echo "sha256_inject=$(sha256sum "$T/bundle/oulg_inject" | cut -d ' ' -f 1)"
+    echo "sha256_lib=$(sha256sum "$T/bundle/liboulg_sf.so" | cut -d ' ' -f 1)"; } > "$T/bundle/live.prop"
+}
+manifest v0.21.0 22
+run() { PATH="$T/stub:$PATH" OULG_BIN="$T/bin" OULG_LIBDIR="$T/lib" OULG_STAMP="$T/stamp" sh "$T/bundle/oulg-live.sh" "$@"; }
+# /proc/<pid>/maps of the stand-in surfaceflinger.
+expect() { echo "$1" | grep -qx "$2" || { echo "FAIL: expected $2 in:"; echo "$1"; exit 1; }; }
+s="$(run status)"; expect "$s" "update_needed=1"; expect "$s" "installed_ok=0"; expect "$s" "fingerprint_ok=1"
+expect "$(run install)" "install=ok"
+s="$(run status)"; expect "$s" "update_needed=0"; expect "$s" "selftest_ok=0"; expect "$s" "installed_version=v0.21.0"
+expect "$(run selftest)" "selftest=ok"
+s="$(run status)"; expect "$s" "selftest_ok=1"
+# A corrupt bundle is refused; the installed copy is untouched.
+echo tampered >> "$T/bundle/liboulg_sf.so"
+set +e; o="$(run install)"; rc=$?; set -e
+[ $rc -eq 2 ] || { echo "FAIL: corrupt bundle rc=$rc"; exit 1; }; expect "$o" "error=bundle_corrupt"
+# A new library version: update needed, installed by rename (a new inode).
+echo "lib v2" > "$T/bundle/liboulg_sf.so"; manifest v0.22.0 23
+old_inode="$(ls -i "$T/lib/liboulg_sf.so" | cut -d ' ' -f 1)"
+expect "$(run status)" "update_needed=1"
+expect "$(run install)" "install=ok"
+new_inode="$(ls -i "$T/lib/liboulg_sf.so" | cut -d ' ' -f 1)"
+[ "$old_inode" != "$new_inode" ] || { echo "FAIL: library overwritten in place"; exit 1; }
+expect "$(run status)" "update_needed=0"
+set +e; o="$(run restart now)"; rc=$?; set -e
+[ $rc -eq 2 ] || { echo "FAIL: bad restart mode rc=$rc"; exit 1; }
+expect "$(run uninstall)" "uninstall=ok"
+expect "$(run status)" "installed_ok=0"
+echo "live helper: all checks passed"

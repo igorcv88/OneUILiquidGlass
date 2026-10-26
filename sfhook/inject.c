@@ -13,6 +13,11 @@
 //   --selftest     the whole injection into a throwaway child (/system/bin/sleep) instead of
 //                  surfaceflinger: nothing is stopped or restarted. Run it before --restart.
 //   --version      the commit it was built from
+//   --stamp-status whether a passing --selftest of this injector with this library is on record
+//                  (exit 0) or not (exit 1); nothing else is done
+//   --sfrefract    with --restart: debug.oulg.sfrefract=1 once surfaceflinger loaded the library
+//                  (before the zygote restart, so the new SystemUI tags its cards), cleared if the
+//                  injection failed: the app never enters compositor mode without the library
 //   --probe        read-only check on the running surfaceflinger: PTRACE_SEIZE and an immediate
 //                  detach (the process is never stopped), its linker and entry, the library's label
 //   --restart      stop surfaceflinger, start it, inject into the new one, and restart the zygote
@@ -582,12 +587,14 @@ static int selftest(const char *lib) {
 
 int main(int argc, char **argv) {
     const char *lib = NULL, *log = NULL;
-    int restart = 0, clear = 0, probe = 0, self = 0, timeout = 120;
+    int restart = 0, clear = 0, probe = 0, self = 0, stamp = 0, mark = 0, timeout = 120;
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--lib") && i + 1 < argc) lib = argv[++i];
         else if (!strcmp(argv[i], "--restart")) restart = 1;
         else if (!strcmp(argv[i], "--probe")) probe = 1;
         else if (!strcmp(argv[i], "--selftest")) self = 1;
+        else if (!strcmp(argv[i], "--stamp-status")) stamp = 1;
+        else if (!strcmp(argv[i], "--sfrefract")) mark = 1;
         else if (!strcmp(argv[i], "--version")) { printf("oulg_inject %s\n", OULG_VERSION); return RC_OK; }
         else if (!strcmp(argv[i], "--clear-cache")) clear = 1;
         else if (!strcmp(argv[i], "--daemon") && i + 1 < argc) log = argv[++i];
@@ -596,6 +603,12 @@ int main(int argc, char **argv) {
     }
     if (!lib || lib[0] != '/') { fprintf(stderr, "--lib needs an absolute path\n"); return 2; }
     if (access(lib, R_OK) != 0) { fprintf(stderr, "cannot read %s: %s\n", lib, strerror(errno)); return 2; }
+    if (stamp) {
+        int ok = selftest_passed(lib);
+        printf("selftest_stamp=%s\n", ok ? "match" : access(SELFTEST_STAMP, F_OK) == 0 ? "stale" : "missing");
+        return ok ? RC_OK : RC_FAIL;
+    }
+    if (mark && !restart) { fprintf(stderr, "--sfrefract only goes with --restart\n"); return RC_USAGE; }
     if (!probe && !self && !selftest_passed(lib)) {
         fprintf(stderr, "injecting needs a passing --selftest of this injector (%s) with this library first\n", OULG_VERSION);
         return 2;
@@ -633,6 +646,8 @@ int main(int argc, char **argv) {
     // --restart: the sequence of handoff.md (stop surfaceflinger, start it, zygote 3 s later). A
     // restart of surfaceflinger alone left the device 4-5 min on "Powered by Android" until a
     // watchdog restarted the zygote; with the zygote restarted at once it took ~20 s.
+    // --sfrefract: cleared first, so it reads 1 only after this restart's injection succeeded.
+    if (mark) __system_property_set("debug.oulg.sfrefract", "");
     if (restart) {
         pid_t running = old;
         if (__system_property_set("ctl.stop", "surfaceflinger") != 0) { say("setprop ctl.stop failed"); return 1; }
@@ -676,6 +691,7 @@ int main(int argc, char **argv) {
     if (!pid) { if (restart) restart_zygote(started); return 1; }
     int rc = inject_into(pid, lib);
     if (!restart) return rc;
+    if (mark) say("debug.oulg.sfrefract %s", __system_property_set("debug.oulg.sfrefract", rc == RC_OK ? "1" : "") == 0 ? (rc == RC_OK ? "set to 1" : "cleared") : "not written");
     // The zygote is restarted whatever the injection did: without it the device hangs on the boot
     // animation. If that restart takes surfaceflinger down again, the new one is injected too.
     restart_zygote(started);
@@ -684,6 +700,8 @@ int main(int argc, char **argv) {
     // Only after a clean injection: a failed one is not retried on the new process.
     if (again && rc == 0) { say("surfaceflinger restarted with the zygote"); rc = inject_into(again, lib); }
     else if (again) say("surfaceflinger restarted with the zygote; previous injection failed, not retried");
+    // A surfaceflinger that came back without the library must not leave the app in compositor mode.
+    if (mark && again && rc != RC_OK) say("debug.oulg.sfrefract %s", __system_property_set("debug.oulg.sfrefract", "") == 0 ? "cleared" : "not cleared");
     else say("surfaceflinger pid=%d kept through the zygote restart", pid);
     return rc;
 }
