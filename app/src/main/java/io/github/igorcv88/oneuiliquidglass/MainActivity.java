@@ -735,7 +735,7 @@ public final class MainActivity extends Activity {
                     "Ativar",
                     repo.desired(spec).equals("1"),
                     on -> {
-                        saveInline(spec, on ? "1" : "0", status);
+                        if (!saveInline(spec, on ? "1" : "0", status)) renderRows();
                         if (preview != null) preview.bind(values());
                         value.setText(repo.desired(spec) + "  ·  padrão " + spec.defaultValue);
                     });
@@ -786,11 +786,11 @@ public final class MainActivity extends Activity {
         row.addView(divider, new LinearLayout.LayoutParams(-1, dp(1)));
     }
 
-    private void saveInline(SettingSpec spec, String value, TextView status) {
+    private boolean saveInline(SettingSpec spec, String value, TextView status) {
         if (repo.conflict(spec)) {
             status.setText("Conflito com Terminal · abra os detalhes para recarregar");
             toast("O Terminal alterou este valor. Abra os detalhes antes de salvar.");
-            return;
+            return false;
         }
         try {
             repo.save(spec, value);
@@ -801,8 +801,10 @@ public final class MainActivity extends Activity {
                             : "Salvo · enviado ao vivo para SystemUI");
             status.setTextColor(sf ? 0xffed938d : muted);
             updateApplicationStatus();
+            return true;
         } catch (IllegalArgumentException e) {
             status.setText(e.getMessage());
+            return false;
         }
     }
 

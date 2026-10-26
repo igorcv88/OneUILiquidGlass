@@ -228,6 +228,7 @@ public final class FloatingGlassNav extends LinearLayout {
             invalidate();
         }
         if (e.getActionMasked() == MotionEvent.ACTION_UP) {
+            performClick();
             choose(Math.round(bubble));
             dragging = false;
         }
@@ -236,6 +237,12 @@ public final class FloatingGlassNav extends LinearLayout {
             dragging = false;
             invalidate();
         }
+        return true;
+    }
+
+    @Override
+    public boolean performClick() {
+        super.performClick();
         return true;
     }
 
