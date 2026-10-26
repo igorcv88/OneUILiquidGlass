@@ -84,6 +84,12 @@ public final class CaptureHub {
          * refracted band.
          */
         default float scale() { return SCALE; }
+        /** Wants a region signature of each capture it is shown (debug.oulg.lensgate=region). */
+        default boolean region() { return false; }
+        /** Two consecutive signatures; previous is null for the first. Main thread. */
+        default void onRegion(RegionDiff.Signature previous, RegionDiff.Signature next) { }
+        /** The readback behind the signatures failed; no more will come until SystemUI restarts. */
+        default void onRegionFailed() { }
     }
 
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
@@ -255,6 +261,96 @@ public final class CaptureHub {
         Frame previous = latest;
         latest = frame;
         if (previous != null) previous.supersede();
+        region(frame);
+    }
+
+    /**
+     * debug.oulg.lensgate=region: a software copy of the capture, reduced to a RegionDiff signature
+     * on its own worker so the capture loop never waits for it. A capture that arrives while the
+     * previous one is still being read is skipped: verdicts then compare non-consecutive captures,
+     * which still sees a change. The readback goes through the RenderThread (a 0.5 shade capture
+     * took 55-100 ms on the shade worker, 25/10); REGION_STATS logs what it costs here.
+     */
+    private static Handler regionWorker;
+    private static boolean regionBusy, regionBroken;
+    private static RegionDiff.Signature lastSignature;
+    private static final RegionStats regionStats = new RegionStats();
+    private static void region(Frame frame) {
+        if (regionBroken || frame.scale < SCALE) return;
+        boolean wanted = false;
+        for (WeakReference<Client> ref : clients) {
+            Client c = ref.get();
+            View v = c == null ? null : c.view();
+            if (v != null && v.isShown() && c.region()) { wanted = true; break; }
+        }
+        if (!wanted) { lastSignature = null; return; }
+        if (regionBusy) { regionStats.skipped++; return; }
+        if (regionWorker == null) {
+            HandlerThread t = new HandlerThread("oulg-region");
+            t.start();
+            regionWorker = new Handler(t.getLooper());
+        }
+        regionBusy = true;
+        frame.retain();
+        regionWorker.post(() -> {
+            long t0 = SystemClock.elapsedRealtimeNanos();
+            RegionDiff.Signature sig = null;
+            RuntimeException error = null;
+            Bitmap soft = null;
+            try {
+                soft = frame.bitmap.isRecycled() ? null : frame.bitmap.copy(Bitmap.Config.ARGB_8888, false);
+                if (soft != null) {
+                    int w = soft.getWidth(), h = soft.getHeight();
+                    int[] px = new int[w * h];
+                    soft.getPixels(px, 0, w, 0, 0, w, h);
+                    sig = RegionDiff.signature(px, w, h, frame.crop.left, frame.crop.top, frame.scale, frame.capturedAt);
+                }
+            } catch (RuntimeException e) { error = e; }
+            finally { if (soft != null) soft.recycle(); }
+            double ms = (SystemClock.elapsedRealtimeNanos() - t0) / 1e6;
+            RegionDiff.Signature next = sig; RuntimeException err = error;
+            MAIN.post(() -> regionDone(frame, next, err, ms));
+        });
+    }
+    private static void regionDone(Frame frame, RegionDiff.Signature next, RuntimeException error, double ms) {
+        regionBusy = false;
+        frame.release();
+        if (error != null) {
+            regionBroken = true;
+            Probe.error("REGION_READBACK_FAILED", error);
+            for (WeakReference<Client> ref : new ArrayList<>(clients)) { Client c = ref.get(); if (c != null) c.onRegionFailed(); }
+            return;
+        }
+        if (next == null) return;
+        regionStats.add(ms);
+        RegionDiff.Signature previous = lastSignature;
+        lastSignature = next;
+        for (WeakReference<Client> ref : new ArrayList<>(clients)) {
+            Client c = ref.get();
+            if (c != null && c.region()) c.onRegion(previous, next);
+        }
+    }
+    /** Region verdicts from a client, counted into REGION_STATS. */
+    static void noteRegion(int verdict) { regionStats.verdicts[verdict]++; }
+
+    /** Readback cost and verdicts of the region gate, logged every 240 readbacks. */
+    private static final class RegionStats {
+        final List<Double> ms = new ArrayList<>();
+        final int[] verdicts = new int[3];
+        int skipped;
+        void add(double v) {
+            ms.add(v);
+            if (ms.size() >= 240) {
+                List<Double> sorted = new ArrayList<>(ms);
+                Collections.sort(sorted);
+                Probe.log("REGION_STATS", "readbacks=" + sorted.size() + " skipped=" + skipped
+                        + " readbackP50=" + fmt(sorted.get(sorted.size() / 2)) + " readbackP95=" + fmt(sorted.get((int) (sorted.size() * 0.95)))
+                        + " readbackMax=" + fmt(sorted.get(sorted.size() - 1))
+                        + " still=" + verdicts[RegionDiff.STILL] + " changed=" + verdicts[RegionDiff.CHANGED] + " unknown=" + verdicts[RegionDiff.UNKNOWN]);
+                ms.clear(); skipped = 0; java.util.Arrays.fill(verdicts, 0);
+            }
+        }
+        static String fmt(double v) { return String.format(java.util.Locale.ROOT, "%.2f", v); }
     }
 
     private static void notifyUnavailable() {

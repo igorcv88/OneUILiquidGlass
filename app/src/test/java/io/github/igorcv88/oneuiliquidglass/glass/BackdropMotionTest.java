@@ -180,4 +180,36 @@ public final class BackdropMotionTest {
         assertEquals("preSettle", BackdropMotion.block(2_020, 2_040, null, AGE, SETTLE, true));
         assertNull(BackdropMotion.block(2_035, 2_050, null, AGE, SETTLE, true));
     }
+
+    // lensgate=region. Arguments: active, touching, kind, lastMotion, onCard, near, capturedAt, now, maxAge, settle, changedAt, verifiedAt.
+    private static final long NEVER = Long.MIN_VALUE / 2;
+    @Test public void regionGateIgnoresAGestureAwayFromTheCard() {
+        // A horizontal swipe on a carousel mid-screen, under way: the band stays while the cells behind the card hold still.
+        assertNull(BackdropMotion.blockRegion(true, true, BackdropMotion.HORIZONTAL, 10_000, false, false, 10_000, 10_010, AGE, 100, NEVER, 10_000));
+        // The same swipe near the card is cut as in the directional gate.
+        assertEquals("motion", BackdropMotion.blockRegion(true, true, BackdropMotion.HORIZONTAL, 10_000, false, true, 10_000, 10_010, AGE, 100, NEVER, 10_000));
+    }
+    @Test public void regionGateCutsOnAChangeBehindTheCardUntilItSettles() {
+        assertEquals("regionMotion", BackdropMotion.blockRegion(true, false, BackdropMotion.NONE, NEVER, false, false, 10_050, 10_060, AGE, 100, 10_000, 10_050));
+        assertEquals("regionMotion", BackdropMotion.blockRegion(true, false, BackdropMotion.NONE, NEVER, false, false, 10_099, 10_110, AGE, 100, 10_000, 10_099));
+        assertNull(BackdropMotion.blockRegion(true, false, BackdropMotion.NONE, NEVER, false, false, 10_100, 10_110, AGE, 100, 10_000, 10_100));
+    }
+    @Test public void regionGateWaitsForAVerdictAndForTheSignal() {
+        // The verdict lags more than maxAge behind the capture: not drawn, a slow readback never trails.
+        assertEquals("regionPending", BackdropMotion.blockRegion(true, false, BackdropMotion.NONE, NEVER, false, false, 10_100, 10_110, AGE, 100, NEVER, 10_049));
+        assertNull(BackdropMotion.blockRegion(true, false, BackdropMotion.NONE, NEVER, false, false, 10_100, 10_110, AGE, 100, NEVER, 10_050));
+        assertEquals("noSignal", BackdropMotion.blockRegion(false, false, BackdropMotion.NONE, NEVER, false, false, 10_100, 10_110, AGE, 100, NEVER, 10_100));
+        assertEquals("age", BackdropMotion.blockRegion(true, false, BackdropMotion.NONE, NEVER, false, false, 10_100, 10_151, AGE, 100, NEVER, 10_100));
+    }
+    @Test public void regionGateKeepsCapturingThroughATouchAwayFromTheCard() {
+        BackdropMotion.reset(); BackdropMotion.setHooked();
+        Object monitor = new Object();
+        // Proven monitor, then a horizontal swipe mid-screen (card is null here: the stubbed Rect
+        // cannot be built on the JVM, and a null card counts as near, so this checks the near path).
+        BackdropMotion.onTouch(monitor, MONITOR, 0, 500, 1200, 1_000, true);
+        BackdropMotion.onTouch(monitor, MONITOR, 2, 560, 1202, 1_010, true);
+        assertFalse(BackdropMotion.wantsFramesRegion(null, 1_010, 100));
+        BackdropMotion.onTouch(monitor, MONITOR, 1, 600, 1202, 1_020, true);
+        assertTrue(BackdropMotion.wantsFramesRegion(null, 1_121, 100));
+    }
 }
