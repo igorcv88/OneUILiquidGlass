@@ -15,7 +15,8 @@
 //   --restart      stop surfaceflinger, start it, inject into the new one, and restart the zygote
 //                  3 s after the start (restarts the whole userspace)
 //   --clear-cache  delete skia_shaders/egl_shaders first, so programs are compiled from source
-//   --daemon LOG   detach from the calling shell (and its app cgroup, killed with the userspace)
+//   --daemon LOG   detach from the calling shell; with --restart it must leave the app cgroup too
+//                  (verified in /proc/self/cgroup) or nothing is restarted
 #define _GNU_SOURCE
 #include <dirent.h>
 #include <elf.h>
@@ -246,19 +247,46 @@ static int remote_call(pid_t pid, const struct user_pt_regs *base, uintptr_t fn,
     return 1;
 }
 
+/** Whether this process is out of every app cgroup (no "/uid_" in /proc/self/cgroup); logs them. */
+static int out_of_app_cgroup(void) {
+    FILE *f = fopen("/proc/self/cgroup", "r");
+    if (!f) { say("cgroup: /proc/self/cgroup unreadable"); return 0; }
+    char line[256];
+    int ok = 1;
+    while (fgets(line, sizeof line, f)) {
+        line[strcspn(line, "\n")] = 0;
+        say("cgroup: %s", line);
+        if (strstr(line, "/uid_")) ok = 0;
+    }
+    fclose(f);
+    return ok;
+}
+
 static void daemonize(const char *log) {
     pid_t p = fork();
     if (p < 0) exit(1);
     if (p > 0) { printf("daemon pid=%d log=%s\n", p, log); exit(0); }
     setsid();
     signal(SIGHUP, SIG_IGN);
-    // Out of the calling app's cgroup: restarting the userspace kills every process in it.
-    int fd = open("/sys/fs/cgroup/cgroup.procs", O_WRONLY | O_CLOEXEC);
-    if (fd >= 0) { char b[16]; int n = snprintf(b, sizeof b, "%d", getpid()); write(fd, b, (size_t) n); close(fd); }
-    fd = open(log, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
+    int fd = open(log, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
     if (fd >= 0) { dup2(fd, 1); dup2(fd, 2); close(fd); }
     int nul = open("/dev/null", O_RDONLY);
     if (nul >= 0) { dup2(nul, 0); close(nul); }
+}
+/**
+ * Out of the calling app's cgroup: restarting the userspace kills every process in it, and an
+ * injector killed after stopping surfaceflinger would leave the zygote unrestarted.
+ */
+static int leave_app_cgroup(void) {
+    int fd = open("/sys/fs/cgroup/cgroup.procs", O_WRONLY | O_CLOEXEC);
+    if (fd < 0) say("cgroup: open /sys/fs/cgroup/cgroup.procs failed: %s", strerror(errno));
+    else {
+        char b[16];
+        int n = snprintf(b, sizeof b, "%d", getpid());
+        if (write(fd, b, (size_t) n) != n) say("cgroup: move to the root cgroup failed: %s", strerror(errno));
+        close(fd);
+    }
+    return out_of_app_cgroup();
 }
 
 /** Polls every interval_us: 100 us while racing to the entry point, slower when only watching. */
@@ -277,13 +305,29 @@ static void restart_zygote(double started) {
     say("ctl.restart zygote %s", __system_property_set("ctl.restart", "zygote") == 0 ? "sent" : "FAILED");
 }
 
+/**
+ * Lets a stopped pid go. intact: its code and registers are back as they were. A process that is
+ * not intact, or that cannot be detached (it would stay stopped while this injector runs on), is
+ * killed instead, so init starts a clean surfaceflinger.
+ */
+static int release_target(pid_t pid, int intact) {
+    if (intact && ptrace(PTRACE_DETACH, pid, NULL, NULL) == 0) return 1;
+    if (intact) say("PTRACE_DETACH failed: %s", strerror(errno));
+    say("killing pid %d: it cannot be left running as it is; init starts a clean surfaceflinger", pid);
+    kill(pid, SIGKILL);
+    return 0;
+}
+
 static int inject_into(pid_t pid, const char *lib, int late) {
     if (ptrace(PTRACE_SEIZE, pid, NULL, NULL) != 0) { say("PTRACE_SEIZE failed: %s (SELinux or DEFEX; check dmesg | grep avc)", strerror(errno)); return 1; }
-    ptrace(PTRACE_INTERRUPT, pid, NULL, NULL);
-    int st;
-    if (waitpid(pid, &st, __WALL) != pid || !WIFSTOPPED(st)) { say("no stop after interrupt (0x%x)", st); return 1; }
+    int st = 0;
+    if (ptrace(PTRACE_INTERRUPT, pid, NULL, NULL) != 0 || waitpid(pid, &st, __WALL) != pid || !WIFSTOPPED(st)) {
+        // Not stopped: it cannot be detached; the kernel detaches it when this injector exits.
+        say("no stop after interrupt (0x%x, %s)", st, strerror(errno));
+        return 1;
+    }
     struct user_pt_regs regs;
-    if (!get_regs(pid, &regs)) { say("GETREGSET failed: %s", strerror(errno)); ptrace(PTRACE_DETACH, pid, NULL, NULL); return 1; }
+    if (!get_regs(pid, &regs)) { say("GETREGSET failed: %s", strerror(errno)); release_target(pid, 1); return 1; }
     struct module lk = {0, 0}, exe = {0, 0};
     char linker[256] = "";
     int have_linker = linker_path(pid, linker, sizeof linker) && find_module(pid, "/linker64", &lk);
@@ -291,39 +335,43 @@ static int inject_into(pid_t pid, const char *lib, int late) {
     uintptr_t entry = auxv_entry(pid);
     int in_linker = have_linker && regs.pc >= lk.start && regs.pc < lk.end, threads = thread_count(pid);
     say("stopped pc=0x%llx linker=%s [%lx-%lx] in_linker=%d threads=%d entry=0x%lx", (unsigned long long) regs.pc, linker, lk.start, lk.end, in_linker, threads, entry);
-    if (!have_linker || !entry) { say("linker or entry not found; detaching"); ptrace(PTRACE_DETACH, pid, NULL, NULL); return 1; }
+    if (!have_linker || !entry) { say("linker or entry not found; detaching"); release_target(pid, 1); return 1; }
     // One thread: still linking, running library constructors, or early in main(). A breakpoint
     // on the entry is reached only in the first two cases; it is removed again if it is not.
     if (threads == 1) {
         errno = 0;
         long orig = ptrace(PTRACE_PEEKTEXT, pid, (void *) entry, NULL);
-        if (errno) { say("PEEKTEXT entry failed: %s", strerror(errno)); ptrace(PTRACE_DETACH, pid, NULL, NULL); return 1; }
+        if (errno) { say("PEEKTEXT entry failed: %s", strerror(errno)); release_target(pid, 1); return 1; }
         long trap = (long) (((unsigned long) orig & ~0xffffffffUL) | BRK0);
-        if (ptrace(PTRACE_POKETEXT, pid, (void *) entry, (void *) trap) != 0) { say("POKETEXT entry failed: %s", strerror(errno)); ptrace(PTRACE_DETACH, pid, NULL, NULL); return 1; }
+        if (ptrace(PTRACE_POKETEXT, pid, (void *) entry, (void *) trap) != 0) { say("POKETEXT entry failed: %s", strerror(errno)); release_target(pid, 1); return 1; }
         int hit = run_until(pid, SIGTRAP, now_ms() + 3000);
+        int stopped = hit;
         if (!hit && kill(pid, 0) == 0) {
             // Past the entry already, still running: stop it to take the breakpoint out.
-            ptrace(PTRACE_INTERRUPT, pid, NULL, NULL);
-            waitpid(pid, &st, __WALL);
+            stopped = ptrace(PTRACE_INTERRUPT, pid, NULL, NULL) == 0 && waitpid(pid, &st, __WALL) == pid && WIFSTOPPED(st);
         }
-        ptrace(PTRACE_POKETEXT, pid, (void *) entry, (void *) orig);
-        if (!hit) { say("missed: entry breakpoint not reached in 3 s; removed, detached (retry)"); ptrace(PTRACE_DETACH, pid, NULL, NULL); return 3; }
-        if (!get_regs(pid, &regs) || regs.pc != entry) { say("trapped away from the entry (pc=0x%llx); detaching", (unsigned long long) regs.pc); ptrace(PTRACE_DETACH, pid, NULL, NULL); return 1; }
+        if (!stopped) { say("cannot stop the process to remove the breakpoint"); release_target(pid, 0); return 1; }
+        // The breakpoint must be gone, read back, before the process may run on.
+        errno = 0;
+        int restored = ptrace(PTRACE_POKETEXT, pid, (void *) entry, (void *) orig) == 0
+                && ptrace(PTRACE_PEEKTEXT, pid, (void *) entry, NULL) == orig && errno == 0;
+        if (!restored) { say("restoring the entry instruction failed: %s", strerror(errno)); release_target(pid, 0); return 1; }
+        if (!hit) { say("missed: entry breakpoint not reached in 3 s; removed (read back), detached (retry)"); return release_target(pid, 1) ? 3 : 1; }
+        if (!get_regs(pid, &regs) || regs.pc != entry) { say("trapped away from the entry (pc=0x%llx); detaching", (unsigned long long) regs.pc); release_target(pid, 1); return 1; }
         say("at entry point");
     } else if (!late) {
-        say("missed: surfaceflinger already runs %d threads; detached untouched (retry, or --late)", threads);
-        ptrace(PTRACE_DETACH, pid, NULL, NULL);
-        return 3;
+        say("missed: surfaceflinger already runs %d threads; detaching it untouched (retry, or --late)", threads);
+        return release_target(pid, 1) ? 3 : 1;
     } else {
         say("late injection at pc=0x%llx (a lock held here would deadlock surfaceflinger)", (unsigned long long) regs.pc);
     }
     uintptr_t dlopen_off = elf_symbol(linker, "__loader_dlopen"), dlerror_off = elf_symbol(linker, "__loader_dlerror");
-    if (!dlopen_off) { say("__loader_dlopen not found in %s; detaching", linker); ptrace(PTRACE_DETACH, pid, NULL, NULL); return 1; }
+    if (!dlopen_off) { say("__loader_dlopen not found in %s; detaching", linker); release_target(pid, 1); return 1; }
     struct user_pt_regs saved = regs, call = regs;
     // Scratch below the stack pointer, 16-byte aligned; the path sits above the callee's frame area.
     call.sp = (regs.sp - 0x2000) & ~(uint64_t) 0xf;
     uintptr_t path_at = call.sp + 0x1000;
-    if (!poke(pid, path_at, lib, strlen(lib) + 1)) { say("writing the path failed: %s", strerror(errno)); ptrace(PTRACE_DETACH, pid, NULL, NULL); return 1; }
+    if (!poke(pid, path_at, lib, strlen(lib) + 1)) { say("writing the path failed: %s", strerror(errno)); release_target(pid, 1); return 1; }
     uintptr_t handle = 0;
     // caller = the entry point: the library joins surfaceflinger's own linker namespace.
     int ok = remote_call(pid, &call, lk.start + dlopen_off, path_at, 2 /* RTLD_NOW */, entry, &handle);
@@ -332,11 +380,16 @@ static int inject_into(pid_t pid, const char *lib, int late) {
         uintptr_t msg = 0;
         if (remote_call(pid, &call, lk.start + dlerror_off, 0, 0, 0, &msg) && msg) peek_string(pid, msg, err, sizeof err);
     }
-    if (!set_regs(pid, &saved)) say("restoring registers failed: %s", strerror(errno));
-    ptrace(PTRACE_DETACH, pid, NULL, NULL);
-    if (!ok) { say("dlopen call failed; surfaceflinger may crash and restart"); return 1; }
+    // A call that faulted leaves the process stopped in an unknown state: it is not let run.
+    struct user_pt_regs back;
+    int intact = ok && set_regs(pid, &saved) && get_regs(pid, &back) && back.pc == saved.pc && back.sp == saved.sp;
+    if (!ok) say("the remote call did not return cleanly");
+    else if (!intact) say("restoring registers failed: %s", strerror(errno));
+    if (!release_target(pid, intact)) return 1;
     if (!handle) { say("dlopen returned NULL: %s", err[0] ? err : "(no dlerror)"); return 1; }
-    say("INJECTED handle=0x%lx; detached. Check: logcat -s OULG_SF", handle);
+    // dlopen succeeded, nothing more: whether the GOT was hooked, the renderer is GLES and the
+    // rewrite runs is in logcat -s OULG_SF (GOT_DONE, SRC, REWRITE) and the shader dump.
+    say("DLOPEN_OK handle=0x%lx; detached. Not yet proof of interception: check logcat -s OULG_SF for GOT_DONE", handle);
     return 0;
 }
 
@@ -355,8 +408,10 @@ int main(int argc, char **argv) {
     }
     if (!lib || lib[0] != '/') { fprintf(stderr, "--lib needs an absolute path\n"); return 2; }
     if (access(lib, R_OK) != 0) { fprintf(stderr, "cannot read %s: %s\n", lib, strerror(errno)); return 2; }
+    if (restart && !log) { fprintf(stderr, "--restart needs --daemon LOG: the restart kills the calling shell\n"); return 2; }
     if (log) daemonize(log);
     t0 = now_ms();
+    if (restart && !leave_app_cgroup()) { say("still in an app cgroup: refusing to restart (this injector would die with the userspace)"); return 1; }
     pid_t old = find_sf(0);
     say("lib=%s running surfaceflinger pid=%d", lib, old);
     if (probe) {
@@ -370,24 +425,53 @@ int main(int argc, char **argv) {
         say("maps readable=%d linker=%s entry=0x%lx __loader_dlopen=0x%lx __loader_dlerror=0x%lx threads=%d", have, linker,
             auxv_entry(old), have ? elf_symbol(linker, "__loader_dlopen") : 0, have ? elf_symbol(linker, "__loader_dlerror") : 0, thread_count(old));
         if (ptrace(PTRACE_SEIZE, old, NULL, NULL) != 0) { say("PTRACE_SEIZE refused: %s (check dmesg | grep -i avc)", strerror(errno)); return 1; }
-        ptrace(PTRACE_DETACH, old, NULL, NULL);
-        say("PTRACE_SEIZE allowed; detached without stopping it");
+        // PTRACE_DETACH needs a ptrace-stop: the main thread is stopped for the detach alone.
+        double s0 = now_ms();
+        int st = 0;
+        if (ptrace(PTRACE_INTERRUPT, old, NULL, NULL) != 0 || waitpid(old, &st, __WALL) != old || !WIFSTOPPED(st)) {
+            say("PTRACE_SEIZE allowed, but no ptrace-stop (%s); detached by the kernel when this probe exits", strerror(errno));
+            return 1;
+        }
+        if (ptrace(PTRACE_DETACH, old, NULL, NULL) != 0) { say("PTRACE_DETACH failed: %s; detached by the kernel when this probe exits", strerror(errno)); return 1; }
+        say("PTRACE_SEIZE allowed; main thread stopped %.2f ms and detached (PTRACE_DETACH returned 0)", now_ms() - s0);
         return 0;
     }
     // --restart: the sequence of handoff.md (stop surfaceflinger, start it, zygote 3 s later). A
     // restart of surfaceflinger alone left the device 4-5 min on "Powered by Android" until a
     // watchdog restarted the zygote; with the zygote restarted at once it took ~20 s.
     if (restart) {
+        pid_t running = old;
         if (__system_property_set("ctl.stop", "surfaceflinger") != 0) { say("setprop ctl.stop failed"); return 1; }
         double stop_deadline = now_ms() + 10000;
         while (find_sf(0) && now_ms() < stop_deadline) usleep(1000);
-        say("surfaceflinger stopped=%d", find_sf(0) == 0);
-        old = find_sf(0);
+        if (find_sf(0)) {
+            // Not stopped: nothing is cleared or injected. The service is asked to run; if it stops
+            // late and init starts a new one, the zygote gets its restart as in a normal one.
+            // A stop that completes later would leave no compositor: for 30 s, a missing
+            // surfaceflinger is started again, and a new one gets the zygote restart.
+            say("surfaceflinger did not stop within 10 s; aborting, no cache cleared, no injection");
+            double until = now_ms() + 30000, last_start = 0;
+            for (;;) {
+                pid_t cur = find_sf(0);
+                if (cur && cur != running) { say("surfaceflinger came back as pid=%d", cur); restart_zygote(now_ms()); break; }
+                if (!cur && now_ms() - last_start > 1000) {
+                    say("surfaceflinger absent; ctl.start %s", __system_property_set("ctl.start", "surfaceflinger") == 0 ? "sent" : "FAILED");
+                    last_start = now_ms();
+                }
+                if (now_ms() > until) { say(cur == running ? "surfaceflinger pid=%d still running; nothing changed" : "surfaceflinger still absent after 30 s (pid %d stopped)", running); break; }
+                usleep(10000);
+            }
+            return 1;
+        }
+        say("surfaceflinger stopped");
+        old = 0;
     }
     if (clear) {
-        unlink(CACHE_DIR "skia_shaders");
-        unlink(CACHE_DIR "egl_shaders");
-        say("shader caches deleted");
+        static const char *caches[] = { CACHE_DIR "skia_shaders", CACHE_DIR "egl_shaders" };
+        for (int i = 0; i < 2; i++) {
+            if (unlink(caches[i]) == 0) say("deleted %s", caches[i]);
+            else say("not deleted %s: %s", caches[i], strerror(errno));
+        }
     }
     double started = now_ms();
     if (restart) {
@@ -403,7 +487,9 @@ int main(int argc, char **argv) {
     restart_zygote(started);
     // A surfaceflinger the zygote restarts is caught at 100 us too: the race is the same.
     pid_t again = wait_new_sf(pid, now_ms() + 30000, 100);
-    if (again) { say("surfaceflinger restarted with the zygote"); rc = inject_into(again, lib, late); }
+    // Only after a clean injection: a failed one is not retried on the new process.
+    if (again && rc == 0) { say("surfaceflinger restarted with the zygote"); rc = inject_into(again, lib, late); }
+    else if (again) say("surfaceflinger restarted with the zygote; previous injection failed, not retried");
     else say("surfaceflinger pid=%d kept through the zygote restart", pid);
     return rc;
 }

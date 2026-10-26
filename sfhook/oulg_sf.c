@@ -11,6 +11,7 @@
 #include <fcntl.h>
 #include <pthread.h>
 #include <stdint.h>
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -59,6 +60,41 @@ static void *resolve(const char *name, void *ours) {
 // never executable.
 struct got_hook { const char *name; void *ours; void **real; int patched; };
 static struct got_hook hooks[2];
+/** Entries replaced in surfaceflinger's own executable, where DZIF's RenderEngine imports both. */
+static int main_patched;
+
+/** PROT_* of the mapping holding addr, from /proc/self/maps, or -1. */
+static int page_prot(uintptr_t addr) {
+    FILE *f = fopen("/proc/self/maps", "re");
+    if (!f) return -1;
+    char line[512];
+    int prot = -1;
+    while (prot < 0 && fgets(line, sizeof line, f)) {
+        uintptr_t a, b;
+        char perms[5];
+        if (sscanf(line, "%" SCNxPTR "-%" SCNxPTR " %4s", &a, &b, perms) != 3 || addr < a || addr >= b) continue;
+        prot = (perms[0] == 'r' ? PROT_READ : 0) | (perms[1] == 'w' ? PROT_WRITE : 0) | (perms[2] == 'x' ? PROT_EXEC : 0);
+    }
+    fclose(f);
+    return prot;
+}
+/**
+ * Writes one GOT slot. The page keeps exactly the protection it had: a writable page is written as
+ * it is, a read-only one (RELRO) is opened for the write and given its old protection back. An
+ * executable page is not touched (it would need execmod), nor one whose protection is unknown.
+ */
+static int write_slot(void **slot, void *value) {
+    long page = sysconf(_SC_PAGESIZE);
+    uintptr_t pg = (uintptr_t) slot & ~(uintptr_t) (page - 1);
+    int prot = page_prot((uintptr_t) slot);
+    if (prot < 0 || (prot & PROT_EXEC)) return 0;
+    if (prot & PROT_WRITE) { *slot = value; return 1; }
+    if (mprotect((void *) pg, (size_t) page, prot | PROT_WRITE) != 0) return 0;
+    *slot = value;
+    if (mprotect((void *) pg, (size_t) page, prot) != 0)
+        __android_log_print(ANDROID_LOG_WARN, TAG, "GOT page %p left writable: restoring protection failed", (void *) pg);
+    return 1;
+}
 static int patch_object(struct dl_phdr_info *info, size_t size, void *self) {
     (void) size;
     if (info->dlpi_name && (strstr(info->dlpi_name, "liboulg_sf") || strstr(info->dlpi_name, "/libEGL") || strstr(info->dlpi_name, "/libGLES")))
@@ -85,7 +121,7 @@ static int patch_object(struct dl_phdr_info *info, size_t size, void *self) {
         }
     }
     if (!symtab || !strtab) return 0;
-    long page = sysconf(_SC_PAGESIZE);
+    int is_main = info->dlpi_name && (info->dlpi_name[0] == 0 || strstr(info->dlpi_name, "/bin/surfaceflinger"));
     for (int t = 0; t < 2; t++) {
         if (!rel[t]) continue;
         for (size_t k = 0; k < relsz[t] / sizeof(ElfW(Rela)); k++) {
@@ -96,15 +132,14 @@ static int patch_object(struct dl_phdr_info *info, size_t size, void *self) {
                 if (strcmp(name, hooks[h].name) != 0) continue;
                 void **slot = (void **) (info->dlpi_addr + rel[t][k].r_offset);
                 if (*slot == hooks[h].ours) continue;
-                if (*slot && !*hooks[h].real) *hooks[h].real = *slot;
-                uintptr_t pg = (uintptr_t) slot & ~(uintptr_t) (page - 1);
-                if (mprotect((void *) pg, (size_t) page, PROT_READ | PROT_WRITE) != 0) {
-                    __android_log_print(ANDROID_LOG_WARN, TAG, "GOT %s in %s: mprotect failed", name, info->dlpi_name);
+                void *was = *slot;
+                if (!write_slot(slot, hooks[h].ours)) {
+                    __android_log_print(ANDROID_LOG_WARN, TAG, "GOT %s in %s: not writable (protection %d)", name, info->dlpi_name, page_prot((uintptr_t) slot));
                     continue;
                 }
-                *slot = hooks[h].ours;
-                mprotect((void *) pg, (size_t) page, PROT_READ);
+                if (was && !*hooks[h].real) *hooks[h].real = was;
                 hooks[h].patched++;
+                if (is_main) main_patched++;
                 __android_log_print(ANDROID_LOG_INFO, TAG, "GOT %s patched in %s", name, info->dlpi_name && info->dlpi_name[0] ? info->dlpi_name : "(main)");
             }
         }
@@ -117,7 +152,10 @@ __attribute__((constructor)) static void loaded(void) {
     hooks[0] = (struct got_hook) { "glShaderSource", (void *) glShaderSource, (void **) &real_shader_source, 0 };
     hooks[1] = (struct got_hook) { "eglGetProcAddress", (void *) eglGetProcAddress, (void **) &real_get_proc, 0 };
     dl_iterate_phdr(patch_object, NULL);
-    __android_log_print(ANDROID_LOG_INFO, TAG, "GOT_DONE glShaderSource=%d eglGetProcAddress=%d", hooks[0].patched, hooks[1].patched);
+    // Objects loaded later are not walked. On DZIF the executable itself imports both functions
+    // (dzif-port.md), and it is loaded before the entry point; main=0 means that did not hold.
+    __android_log_print(main_patched ? ANDROID_LOG_INFO : ANDROID_LOG_WARN, TAG, "GOT_DONE glShaderSource=%d eglGetProcAddress=%d main=%d",
+                        hooks[0].patched, hooks[1].patched, main_patched);
 }
 
 static uint64_t fnv1a(const char *s, size_t n) {
