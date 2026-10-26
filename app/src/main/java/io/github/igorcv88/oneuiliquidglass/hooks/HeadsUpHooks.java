@@ -1484,7 +1484,10 @@ public final class HeadsUpHooks {
                 // text is left as SystemUI drew it.
                 if (!pill) {
                     if (Eligibility.textTone(enabled, glass != null, glass != null && glass.failed(), eligible)) safeTone(v);
-                    else setForeground(false);
+                    // A row drawn inside its group's glass (orphanTone) keeps the scene's tone: this
+                    // restore undid it at the next traversal, and round 43's walk from the group too.
+                    else setForeground(orphans.contains(this) && enabled && Boolean.TRUE.equals(shadeExpanded) && shadeScene != null
+                            && shadeScene == ShadeTone.lightText());
                 } else shelfTone();
                 View r = row.get();
                 Boolean headsUp = r == null ? null : Reflect.bool(r, "isHeadsUpState", "mIsHeadsUp");
