@@ -39,7 +39,7 @@ Estética do novo aplicativo:
 - Dark por padrão, claro suportado, base azul-noturno/cinza-neutro, texto com contraste nativo, acentos ciano e lilás do novo ícone; evitar cards com vidro em cada linha.
 - Glass só onde ajuda: cabeçalho, seletor flutuante de superfícies, área do preview e poucos controles ativos. Restante usa materiais sólidos e divisores suaves.
 - Pílulas de seleção, controles agrupados em cards discretos, headings curtos, switches tipo Material 3/One UI, sliders com valor numérico editável, unidade e explicação “menos ↔ mais”.
-- Animação breve em transição de preview, sem uma bolha excessivamente luminosa ou contorno branco contínuo. Ícone já existe em `.github/assets/oneui-liquid-glass-icon.png`, recurso Android em `app/src/main/res/drawable-nodpi/oulg_launcher.png`.
+- Animação breve em transição de preview, sem uma bolha excessivamente luminosa ou contorno branco contínuo. Ícone já existe em `.github/assets/oneui-liquid-glass-icon.png`, recurso Android adaptativo em `app/src/main/res/drawable/oulg_launcher.xml` (foreground `drawable-nodpi/oulg_launcher_foreground.png`, monochrome `drawable/oulg_launcher_monochrome.xml`).
 - Reaproveitar padrões de organização e explicações do WaEnhancer. Não copiar classes do renderer do WhatsApp, assets de terceiros ou dependências sem necessidade. A UI nova pode usar Material Components com Views/RecyclerView (mínimo risco para o projeto Java) ou solução equivalente após verificação do build.
 
 ## Arquitetura de telas
@@ -198,7 +198,7 @@ Portar código do OneMate/WhatsApp, implementar Brief/Edge Lighting, mexer no mu
 ## Handoff de arte/README já executado
 
 - Arte raster original: `.github/assets/oneui-liquid-glass-icon.png`.
-- Ícone para o APK: `app/src/main/res/drawable-nodpi/oulg_launcher.png`; `AndroidManifest.xml` aponta `android:icon` e `android:roundIcon` para ele.
+- Ícone para o APK: adaptativo, `app/src/main/res/drawable/oulg_launcher.xml` (fundo em gradiente, foreground gerado de `.github/assets/oneui-liquid-glass-icon.png`, camada monochrome); `AndroidManifest.xml` aponta `android:icon` e `android:roundIcon` para ele. Ícone pequeno da notificação de teste: `drawable/oulg_notification.xml`.
 - Banner: `.github/assets/oneui-liquid-glass-banner.png`, gerado do `.svg` fonte com o ícone no lado esquerdo.
 - README no estilo do WaEnhancer Community: banner centrado, badges automáticas de release/build/downloads/stars/forks, status, instalação, features, troubleshooting, build e links para estes handoffs.
 

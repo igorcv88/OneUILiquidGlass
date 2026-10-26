@@ -1078,6 +1078,16 @@ Source: device video of PR #39 (18:45:08) and a lockscreen screenshot (18:46). T
 - `popuplock` (default 1): a pop-up is measured when it arrives and keeps that tone while shown, whatever moves behind it; each new heads-up arrival of the row measures again (`popupArrival`, counted before the tone so its first frame is not the previous arrival's). 0: measured every second and after touches, as before. The shade already decides once per opening (one scene per generation).
 - `orphandraw` (default 1): a row with no card of its own in the open shade (a minimised group's) takes the scene's text tone at its own pre-draw. `orphanTone` reached only rows shown when the capture landed; the minimised rows appeared later and stayed white until its 300 ms pass (device, 26/10).
 
+### Round 49: app badges and untinted app icons in the text tone; adaptive launcher icon (2026-10-26)
+
+- Device screenshot (light glass, dark theme, 26/10): WhatsApp's app badge in the corner of the sender's avatar stayed white. Two gaps in `Foreground.glyph`: only `android:icon` was looked at, and an icon with a template colour (`getOriginalIconColor`, the notification's `setColor`, green for WhatsApp) was taken as tinted and released as an accent, unsampled, even when the drawable shown is the app's own untinted icon.
+- Now also taken: any framework or SystemUI `CachingIconView` / `NotificationRowIconView` whose id is not a large icon (`right_icon`, `left_icon`, `conversation_icon`, avatar, picture, the badge's `_bg` and ring). Avatars and photos still fail the content tests (no monochrome layer, not one neutral colour).
+- The template colour counts only while the drawable carries a colour filter (or did, before ours replaced it); otherwise the icon is sampled or its monochrome layer used, as an app icon.
+- Not verified: the view that draws One UI's badge and the disc behind it. `ICON_TONE` now logs the view's id and parent (`describe`), so a trace names it if this round does not reach it.
+- The module's own launcher icon was a square opaque PNG, drawn as a square in the notification. It is now an adaptive icon (`drawable/oulg_launcher.xml`): a radial-gradient background, the glass cards un-blended from the PNG's dark field as the foreground, and a monochrome layer (the same two cards and three lines), which `Foreground.glyph` uses over light glass. The test notification's small icon is that glyph (`drawable/oulg_notification.xml`) instead of `ic_dialog_info`.
+
+**Validation:** Gradle `testDebugUnitTest` (111 tests; new icon-view and untinted cases), `lintDebug`, `assembleDebug`. Icon layers checked in a browser render. Not tested on the device.
+
 ## Future work
 
 - **Separate blur for the notification center and the control center.** Theme Park and HomeUp set a single blur amount for both panels. The user runs 12 %: lower leaves the control center unreadable, higher over-blurs the notification list. A split needs its own investigation: find where SystemUI applies the panel blur, whether the two panels are separate blur regions or one window, and whether the module can own one of them.

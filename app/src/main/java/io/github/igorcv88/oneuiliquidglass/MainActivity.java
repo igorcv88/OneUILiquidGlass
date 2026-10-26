@@ -47,7 +47,7 @@ public final class MainActivity extends Activity {
             manager.createNotificationChannel(new NotificationChannel("heads-up-test-v1", "Heads-up test", NotificationManager.IMPORTANCE_HIGH));
             new Handler(Looper.getMainLooper()).postDelayed(() -> manager.notify(101,
                     new Notification.Builder(this, "heads-up-test-v1")
-                        .setSmallIcon(android.R.drawable.ic_dialog_info)
+                        .setSmallIcon(R.drawable.oulg_notification)
                         .setContentTitle("Liquid Glass test")
                         .setContentText("Expand, move and dismiss this notification.")
                         .setStyle(new Notification.BigTextStyle().bigText("This is a real notification. Test expansion, QS, keyboard, rotation and dismissal over light and dark app content."))

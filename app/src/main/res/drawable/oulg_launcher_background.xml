@@ -1,0 +1,5 @@
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- The dark field of oulg_launcher.png: lighter navy at the centre, near black at the edges. -->
+    <gradient android:type="radial" android:gradientRadius="76dp" android:centerX="0.5" android:centerY="0.5"
+        android:startColor="#FF0C1B3E" android:centerColor="#FF040B24" android:endColor="#FF01030F" />
+</shape>

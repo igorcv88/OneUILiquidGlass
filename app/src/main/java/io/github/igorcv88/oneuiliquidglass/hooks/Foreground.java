@@ -111,23 +111,51 @@ final class Foreground {
     }
     private static final WeakHashMap<ImageView, Glyph> glyphs = new WeakHashMap<>();
     private static int glyphLogged;
-    /** Whether {@code v} is a notification template's icon (android:icon), debug.oulg.icontone on. */
+    /**
+     * Whether {@code v} is a notification template's app or small icon, debug.oulg.icontone on: the
+     * framework's android:icon, or a framework/SystemUI icon view (CachingIconView,
+     * NotificationRowIconView) that is not a large icon. A conversation's app badge sits in the
+     * corner of the sender's avatar and stayed white on light glass (WhatsApp, device screenshot
+     * 26/10): it is an icon view of its own, which the id test alone may miss.
+     */
     private static boolean smallIcon(View v) {
         int id = v.getId();
         if (id == View.NO_ID || (id >>> 24) == 0 || !io.github.igorcv88.oneuiliquidglass.glass.Tuning.get().iconTone) return false;
         try {
             android.content.res.Resources r = v.getResources();
-            return smallIconId(r.getResourcePackageName(id), r.getResourceEntryName(id));
+            String pkg = r.getResourcePackageName(id), entry = r.getResourceEntryName(id);
+            if (smallIconId(pkg, entry)) return true;
+            String cls = v.getClass().getSimpleName();
+            return iconView(cls) && ("android".equals(pkg) || (pkg != null && pkg.equals(host))) && !largeIconId(entry);
         } catch (RuntimeException e) { return false; }
     }
     static boolean smallIconId(String pkg, String entry) { return "android".equals(pkg) && "icon".equals(entry); }
+    /** The template classes that show an app or small icon. */
+    static boolean iconView(String simpleName) {
+        return "CachingIconView".equals(simpleName) || "NotificationRowIconView".equals(simpleName);
+    }
+    /** Ids of the views that show a notification's own picture (large icon, avatar), never its app icon. */
+    static boolean largeIconId(String entry) {
+        if (entry == null) return true;
+        String e = entry.toLowerCase(java.util.Locale.ROOT);
+        if (e.contains("badge")) return e.endsWith("_bg") || e.contains("ring");
+        return e.contains("right_icon") || e.contains("left_icon") || e.contains("large") || e.contains("avatar") || e.contains("picture")
+                || e.equals("conversation_icon") || e.contains("profile");
+    }
     /**
      * The glyph colour the template gave a monochrome small icon: its tint list, or CachingIconView's
      * original icon colour (the template tints the drawable with a colour filter); null otherwise.
      */
-    private static Integer glyphColor(ImageView v) {
+    private static Integer glyphColor(ImageView v, Glyph g) {
         ColorStateList tint = v.getImageTintList();
         if (tint != null) return tint.getDefaultColor();
+        android.graphics.drawable.Drawable d = v.getDrawable();
+        android.graphics.ColorFilter f = d == null ? null : d.getColorFilter();
+        // The template's colour counts only while the drawable carries its filter (or did, before ours):
+        // an app icon shown instead of the small icon keeps the notification's colour as its original
+        // colour without being tinted, and that accent (WhatsApp's green) released the icon unsampled.
+        boolean ours = g != null && f != null && f == g.applied;
+        if (untinted(f != null, ours, g != null && g.saved != null)) return null;
         try {
             java.lang.reflect.Method m = Reflect.method(v.getClass(), "getOriginalIconColor");
             if (m == null) return null;
@@ -135,6 +163,10 @@ final class Foreground {
             // Notification.COLOR_INVALID (1): no colour, the app's own icon is shown.
             return c instanceof Integer && (Integer) c != 1 ? (Integer) c : null;
         } catch (ReflectiveOperationException | RuntimeException e) { return null; }
+    }
+    /** Whether a drawable without a tint list shows no template colour: no filter, or only ours over none. */
+    static boolean untinted(boolean filtered, boolean ours, boolean hadFilter) {
+        return !filtered || (ours && !hadFilter);
     }
     /** lightGlyph() per drawable: its colour, or 0 when it is not a one-colour glyph. */
     private static final WeakHashMap<android.graphics.drawable.Drawable, Integer> sampled = new WeakHashMap<>();
@@ -214,7 +246,7 @@ final class Foreground {
             return true;
         }
         android.graphics.drawable.Drawable d = v.getDrawable();
-        Integer c = d == null ? null : glyphColor(v);
+        Integer c = d == null ? null : glyphColor(v, g);
         if (g != null && g.current(v)) {
             // The template recoloured the icon in place (an accent tint): released, as text is.
             if (c != null && !themeTone(c, lightText)) { glyphs.remove(v); restore(v, g); }
@@ -226,7 +258,7 @@ final class Foreground {
             if (mono == null) c = lightGlyph(d);
         }
         if (io.github.igorcv88.oneuiliquidglass.diagnostics.Probe.trace && glyphLogged++ < 60)
-            io.github.igorcv88.oneuiliquidglass.diagnostics.Probe.log("ICON_TONE", "view=" + v.getClass().getSimpleName()
+            io.github.igorcv88.oneuiliquidglass.diagnostics.Probe.log("ICON_TONE", describe(v)
                     + " drawable=" + (d == null ? "null" : d.getClass().getSimpleName()) + " tint=" + (v.getImageTintList() != null)
                     + " glyph=" + (c == null ? "none" : Integer.toHexString(c)) + " mono=" + (mono != null)
                     + " bg=" + (v.getBackground() == null ? "null" : v.getBackground().getClass().getSimpleName()));
