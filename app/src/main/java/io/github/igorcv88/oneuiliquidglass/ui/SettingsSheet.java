@@ -18,6 +18,7 @@ public final class SettingsSheet extends Dialog {
     private final SettingSpec spec;
     private final Runnable saved;
     private EditText input;
+    private final boolean light;
     private MaterialPreview preview;
 
     public SettingsSheet(
@@ -33,6 +34,7 @@ public final class SettingsSheet extends Dialog {
         this.repo = repo;
         this.spec = spec;
         this.saved = saved;
+        this.light = light;
         preview = new MaterialPreview(activity);
         preview.surface = surface;
         preview.light = light;
@@ -43,7 +45,7 @@ public final class SettingsSheet extends Dialog {
         TextView v = new TextView(activity);
         v.setText(text);
         v.setTextSize(size);
-        v.setTextColor(0xffeaf1fa);
+        v.setTextColor(light ? 0xff182538 : 0xffeaf1fa);
         v.setPadding(0, 10, 0, 10);
         return v;
     }
@@ -51,6 +53,8 @@ public final class SettingsSheet extends Dialog {
     private void button(LinearLayout root, String title, Runnable action) {
         Button b = new Button(activity);
         b.setText(title);
+        UiStyle.button(b, light, true);
+        UiStyle.space(b, 4);
         b.setOnClickListener(v -> action.run());
         root.addView(b);
     }
@@ -63,7 +67,7 @@ public final class SettingsSheet extends Dialog {
         root.setOrientation(LinearLayout.VERTICAL);
         int pad = (int) (22 * activity.getResources().getDisplayMetrics().density);
         root.setPadding(pad, pad, pad, pad);
-        root.setBackgroundColor(0xff172333);
+        root.setBackground(UiStyle.pane(activity, light, false, 26));
         scroll.addView(root);
         setContentView(scroll);
         root.addView(label(spec.title, 23));
@@ -94,7 +98,7 @@ public final class SettingsSheet extends Dialog {
                                 + " "
                                 + spec.unit
                                 + " · "
-                                + spec.applyMode
+                                + ControlLayout.application(spec)
                                 + "\nSuperfícies: "
                                 + spec.surfaceScope
                                 + " · "
@@ -130,7 +134,7 @@ public final class SettingsSheet extends Dialog {
             return;
         }
         input = new EditText(activity);
-        input.setTextColor(Color.WHITE);
+        input.setTextColor(light ? 0xff182538 : Color.WHITE);
         input.setSingleLine(true);
         input.setText(repo.desired(spec));
         input.setContentDescription("Valor desejado em " + spec.unit);
@@ -141,13 +145,9 @@ public final class SettingsSheet extends Dialog {
                             | android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL
                             | android.text.InputType.TYPE_NUMBER_FLAG_SIGNED);
             SeekBar slider = new SeekBar(activity);
-            slider.setMax(1000);
-            double initial = spec.min;
-            try {
-                initial = Double.parseDouble(repo.desired(spec));
-            } catch (NumberFormatException ignored) {
-            }
-            slider.setProgress((int) (1000 * (initial - spec.min) / (spec.max - spec.min)));
+            UiStyle.slider(slider, light);
+            slider.setMax(ControlLayout.steps(spec));
+            slider.setProgress(ControlLayout.progress(spec, repo.desired(spec)));
             slider.setContentDescription(spec.title + " · menor a maior");
             root.addView(slider);
             root.addView(
@@ -160,20 +160,15 @@ public final class SettingsSheet extends Dialog {
 
                         public void onProgressChanged(SeekBar s, int p, boolean user) {
                             if (!user) return;
-                            double value = spec.min + (spec.max - spec.min) * p / 1000d;
-                            value = Math.round(value / spec.step) * spec.step;
-                            if (spec.key.equals("kglens") && value < .1) value = -1;
-                            String text =
-                                    spec.type == SettingSpec.Type.INT
-                                            ? Long.toString(Math.round(value))
-                                            : String.format(java.util.Locale.ROOT, "%.2f", value);
+                            String text = ControlLayout.at(spec, p);
                             input.setText(text);
                         }
                     });
         } else if (spec.type == SettingSpec.Type.BOOLEAN) {
             Switch toggle = new Switch(activity);
             toggle.setText("Ativar");
-            toggle.setTextColor(Color.WHITE);
+            toggle.setTextColor(light ? 0xff182538 : Color.WHITE);
+            UiStyle.toggle(toggle, light);
             toggle.setChecked(input.getText().toString().equals("1"));
             toggle.setOnCheckedChangeListener((v, on) -> input.setText(on ? "1" : "0"));
             root.addView(toggle);
@@ -208,10 +203,11 @@ public final class SettingsSheet extends Dialog {
             for (String hex : new String[] {"ffffff", "b8c2ce", "c8e9ef", "c6b7ed"}) {
                 Button b = new Button(activity);
                 b.setText("●");
+                UiStyle.button(b, light, false);
                 b.setTextColor(Color.parseColor("#" + hex));
                 b.setContentDescription("Cor " + hex);
                 b.setOnClickListener(v -> input.setText(hex));
-                swatches.addView(b, new LinearLayout.LayoutParams(0, 48, 1));
+                swatches.addView(b, new LinearLayout.LayoutParams(0, UiStyle.dp(activity, 48), 1));
             }
         }
         input.addTextChangedListener(
