@@ -146,4 +146,19 @@ public final class ForegroundTest {
         assertFalse(Foreground.standardNoId("com.whatsapp", host));
         assertFalse(Foreground.standardNoId(host, null));
     }
+    private static int[] icon(int glyph, int coveredOf100) {
+        int[] px = new int[100];
+        for (int i = 0; i < 100; i++) px[i] = i < coveredOf100 ? glyph : 0x00000000;
+        return px;
+    }
+    @Test public void aWhiteGlyphOnTransparencyIsOneColour() {
+        assertEquals(0xfff0f0f0, Foreground.oneColourGlyph(icon(0xfff0f0f0, 30)));
+    }
+    @Test public void aFullColourOrOpaqueIconIsNot() {
+        int[] colour = icon(0xffffffff, 30);
+        for (int i = 0; i < 10; i++) colour[i] = 0xffe53935; // a red third of the glyph
+        assertEquals(0, Foreground.oneColourGlyph(colour));
+        assertEquals(0, Foreground.oneColourGlyph(icon(0xffffffff, 100))); // no transparency: a squircle icon
+        assertEquals(0, Foreground.oneColourGlyph(icon(0xffffffff, 1)));   // almost nothing drawn
+    }
 }

@@ -88,16 +88,30 @@ final class Foreground {
         @Override public Object save() { return t.getTextColors(); }
         @Override public void restore(Object saved) { if (saved instanceof ColorStateList) t.setTextColor((ColorStateList) saved); reshadow(t); }
     }
-    /** A notification's small icon given the swapped tone: its drawable, the filter it had, and ours. */
+    /**
+     * A notification icon given the swapped tone. Either its own drawable carries our filter
+     * ({@code original} null; {@code saved} is the filter it had), or a monochrome layer replaced it
+     * ({@code original} is the drawable to put back). The disc behind it is hidden ({@code bg},
+     * {@code bgAlpha}).
+     */
     private static final class Glyph {
-        final android.graphics.drawable.Drawable drawable;
+        final android.graphics.drawable.Drawable shown, original;
         final android.graphics.ColorFilter saved, applied;
-        Glyph(android.graphics.drawable.Drawable d, android.graphics.ColorFilter saved, android.graphics.ColorFilter applied) {
-            drawable = d; this.saved = saved; this.applied = applied;
+        final android.graphics.drawable.Drawable bg;
+        final int bgAlpha;
+        Glyph(android.graphics.drawable.Drawable shown, android.graphics.drawable.Drawable original, android.graphics.ColorFilter saved,
+              android.graphics.ColorFilter applied, android.graphics.drawable.Drawable bg, int bgAlpha) {
+            this.shown = shown; this.original = original; this.saved = saved; this.applied = applied; this.bg = bg; this.bgAlpha = bgAlpha;
+        }
+        /** Whether the view still shows what this record applied. */
+        boolean current(ImageView v) {
+            android.graphics.drawable.Drawable d = v.getDrawable();
+            return d == shown && d.getColorFilter() == applied;
         }
     }
     private static final WeakHashMap<ImageView, Glyph> glyphs = new WeakHashMap<>();
-    /** Whether {@code v} is a notification template's small icon (android:icon), debug.oulg.icontone on. */
+    private static int glyphLogged;
+    /** Whether {@code v} is a notification template's icon (android:icon), debug.oulg.icontone on. */
     private static boolean smallIcon(View v) {
         int id = v.getId();
         if (id == View.NO_ID || (id >>> 24) == 0 || !io.github.igorcv88.oneuiliquidglass.glass.Tuning.get().iconTone) return false;
@@ -108,52 +122,144 @@ final class Foreground {
     }
     static boolean smallIconId(String pkg, String entry) { return "android".equals(pkg) && "icon".equals(entry); }
     /**
-     * The glyph colour the template gave the small icon: its tint list, or CachingIconView's
-     * original icon colour (the template tints the drawable with a colour filter); null for an app's
-     * full-colour icon, which has neither and is never touched.
+     * The glyph colour the template gave a monochrome small icon: its tint list, or CachingIconView's
+     * original icon colour (the template tints the drawable with a colour filter); null otherwise.
      */
     private static Integer glyphColor(ImageView v) {
         ColorStateList tint = v.getImageTintList();
         if (tint != null) return tint.getDefaultColor();
         try {
             Object c = v.getClass().getMethod("getOriginalIconColor").invoke(v);
-            // Notification.COLOR_INVALID (1): no colour, a full-colour icon.
+            // Notification.COLOR_INVALID (1): no colour, the app's own icon is shown.
             return c instanceof Integer && (Integer) c != 1 ? (Integer) c : null;
         } catch (ReflectiveOperationException | RuntimeException e) { return null; }
     }
+    /** lightGlyph() per drawable: its colour, or 0 when it is not a one-colour glyph. */
+    private static final WeakHashMap<android.graphics.drawable.Drawable, Integer> sampled = new WeakHashMap<>();
+    private static final int SAMPLE = 24;
     /**
-     * A small icon's monochrome glyph follows the text's tone: light grey glyphs (Gmail, Chrome,
-     * GitHub, ChatGPT, Termux) read as nearly invisible on light glass in the dark theme (device
-     * screenshot, 26/10). The template's glyph colour is mirrored onto the drawable as a filter,
-     * over whichever way the template tinted it; restore gives the drawable its own filter back. A
-     * new drawable (a rebind) is taken by the next walk. Full-colour app icons have no glyph colour
-     * and are left as they are.
+     * The colour of an app icon drawn as one neutral colour on transparency (an icon pack's white
+     * glyph without a background), or null: such an icon is the app's own icon, not a tinted small
+     * icon, so the template gives it no glyph colour (device: Termux, ChatGPT, Gmail with an Icon
+     * Pack Studio pack stayed white on light glass, 26/10). Full-colour icons fail the test.
+     */
+    private static Integer lightGlyph(android.graphics.drawable.Drawable d) {
+        Integer known = sampled.get(d);
+        if (known != null) return known == 0 ? null : known;
+        int found = 0;
+        try {
+            android.graphics.Bitmap b = android.graphics.Bitmap.createBitmap(SAMPLE, SAMPLE, android.graphics.Bitmap.Config.ARGB_8888);
+            android.graphics.Rect bounds = d.copyBounds();
+            d.setBounds(0, 0, SAMPLE, SAMPLE);
+            d.draw(new android.graphics.Canvas(b));
+            d.setBounds(bounds);
+            int[] px = new int[SAMPLE * SAMPLE];
+            b.getPixels(px, 0, SAMPLE, 0, 0, SAMPLE, SAMPLE);
+            b.recycle();
+            found = oneColourGlyph(px);
+        } catch (RuntimeException e) { found = 0; }
+        sampled.put(d, found);
+        return found == 0 ? null : found;
+    }
+    /**
+     * The mean colour of a glyph image (ARGB pixels), or 0 unless it is one neutral colour on
+     * transparency: at least 15 % of it transparent, 3-85 % covered, and nine covered pixels in ten
+     * within 40 of grey and of the mean's lightness.
+     */
+    static int oneColourGlyph(int[] px) {
+        int covered = 0, clear = 0;
+        long r = 0, g = 0, b = 0;
+        for (int c : px) {
+            int a = c >>> 24;
+            if (a < 26) { clear++; continue; }
+            if (a < 128) continue;
+            covered++; r += (c >> 16) & 255; g += (c >> 8) & 255; b += c & 255;
+        }
+        int n = px.length;
+        if (covered < n * 3 / 100 || covered > n * 85 / 100 || clear < n * 15 / 100) return 0;
+        int mr = (int) (r / covered), mg = (int) (g / covered), mb = (int) (b / covered);
+        int ml = (mr * 2126 + mg * 7152 + mb * 722) / 10000, odd = 0;
+        for (int c : px) {
+            if ((c >>> 24) < 128) continue;
+            int cr = (c >> 16) & 255, cg = (c >> 8) & 255, cb = c & 255;
+            int max = Math.max(cr, Math.max(cg, cb)), min = Math.min(cr, Math.min(cg, cb));
+            int l = (cr * 2126 + cg * 7152 + cb * 722) / 10000;
+            if (max - min > 40 || Math.abs(l - ml) > 40) odd++;
+        }
+        if (odd * 10 > covered) return 0;
+        return 0xff000000 | mr << 16 | mg << 8 | mb;
+    }
+    /**
+     * A notification icon drawn in the theme's text tone follows the text's swapped tone: over light
+     * glass in the dark theme, light glyphs read as nearly invisible (device screenshots, 26/10).
+     * <ul>
+     * <li>a monochrome small icon (tinted by the template) takes the mirrored colour as a filter;</li>
+     * <li>an app icon with a monochrome layer (AdaptiveIconDrawable#getMonochrome) is replaced by
+     * that layer in the swapped tone;</li>
+     * <li>an app icon drawn as one light colour on transparency (an icon pack's glyph) is filtered
+     * like a small icon.</li>
+     * </ul>
+     * The light disc behind the icon is hidden while it is swapped. Restore puts back the filter,
+     * the drawable and the disc; a new drawable (a rebind) is taken by the next walk. Full-colour
+     * app icons and avatars are left as they are.
      */
     static boolean glyph(ImageView v, boolean swap, boolean lightText) {
         Glyph g = glyphs.get(v);
-        android.graphics.drawable.Drawable d = v.getDrawable();
         if (!swap) {
             if (g == null) return false;
             glyphs.remove(v);
-            if (d != g.drawable || d.getColorFilter() != g.applied) return false;
-            d.setColorFilter(g.saved);
+            restore(v, g);
             return true;
         }
+        if (g != null && g.current(v)) return false;
+        android.graphics.drawable.Drawable d = v.getDrawable();
+        android.graphics.drawable.Drawable mono = null;
         Integer c = d == null ? null : glyphColor(v);
-        if (c == null || !themeTone(c, lightText)) {
-            if (g != null) { glyphs.remove(v); if (d == g.drawable && d.getColorFilter() == g.applied) d.setColorFilter(g.saved); }
+        if (d != null && c == null) {
+            if (d instanceof android.graphics.drawable.AdaptiveIconDrawable) mono = ((android.graphics.drawable.AdaptiveIconDrawable) d).getMonochrome();
+            if (mono == null) c = lightGlyph(d);
+        }
+        if (io.github.igorcv88.oneuiliquidglass.diagnostics.Probe.trace && glyphLogged++ < 60)
+            io.github.igorcv88.oneuiliquidglass.diagnostics.Probe.log("ICON_TONE", "view=" + v.getClass().getSimpleName()
+                    + " drawable=" + (d == null ? "null" : d.getClass().getSimpleName()) + " tint=" + (v.getImageTintList() != null)
+                    + " glyph=" + (c == null ? "none" : Integer.toHexString(c)) + " mono=" + (mono != null)
+                    + " bg=" + (v.getBackground() == null ? "null" : v.getBackground().getClass().getSimpleName()));
+        int target;
+        if (mono != null) target = lightText ? 0xff000000 : 0xffffffff;
+        else if (c != null && themeTone(c, lightText)) target = mirror(c);
+        else {
+            if (g != null) { glyphs.remove(v); restore(v, g); }
             return false;
         }
-        if (g != null && g.drawable == d && d.getColorFilter() == g.applied) return false;
-        // Its own state: the drawable may share a constant state (and paint) with the status bar's.
-        d = d.mutate();
-        // Not our filter (returned above): the template's current one, possibly a newer colour than
-        // the one saved, is what restore gives back.
-        android.graphics.ColorFilter saved = d.getColorFilter();
-        android.graphics.ColorFilter applied = new android.graphics.PorterDuffColorFilter(mirror(c), android.graphics.PorterDuff.Mode.SRC_IN);
-        d.setColorFilter(applied);
-        glyphs.put(v, new Glyph(d, saved, applied));
+        // A disc hidden by a stale record keeps that record's alpha to give back.
+        android.graphics.drawable.Drawable bg = v.getBackground();
+        int bgAlpha = g != null && g.bg == bg ? g.bgAlpha : bg != null ? bg.getAlpha() : 255;
+        android.graphics.ColorFilter applied = new android.graphics.PorterDuffColorFilter(target, android.graphics.PorterDuff.Mode.SRC_IN);
+        Glyph next;
+        if (mono != null) {
+            android.graphics.drawable.Drawable.ConstantState cs = mono.getConstantState();
+            android.graphics.drawable.Drawable m = (cs != null ? cs.newDrawable(v.getResources()) : mono).mutate();
+            m.setColorFilter(applied);
+            v.setImageDrawable(m);
+            next = new Glyph(m, d, null, applied, bg, bgAlpha);
+        } else {
+            // Its own state: the drawable may share a constant state (and paint) with the status bar's.
+            // Not our filter (returned above): the template's current one is what restore gives back.
+            d = d.mutate();
+            android.graphics.ColorFilter saved = d.getColorFilter();
+            d.setColorFilter(applied);
+            next = new Glyph(d, null, saved, applied, bg, bgAlpha);
+        }
+        if (bg != null) bg.mutate().setAlpha(0);
+        glyphs.put(v, next);
         return true;
+    }
+    private static void restore(ImageView v, Glyph g) {
+        if (g.current(v)) {
+            if (g.original != null) v.setImageDrawable(g.original);
+            else g.shown.setColorFilter(g.saved);
+        }
+        if (g.bg != null && v.getBackground() == g.bg && g.bg.getAlpha() == 0) g.bg.setAlpha(g.bgAlpha);
     }
     /** Shadows taken off swapped text: radius, dx, dy and colour, given back with the text's colour. */
     private static final WeakHashMap<TextView, float[]> shadows = new WeakHashMap<>();
