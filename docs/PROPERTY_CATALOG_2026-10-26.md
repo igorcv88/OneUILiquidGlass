@@ -2,7 +2,9 @@
 
 **Fonte:** `app/src/main/java/io/github/igorcv88/oneuiliquidglass/glass/Tuning.java`, `sfhook/oulg_sf.c`, `sfhook/refract.h`, `sfhook/module/service.sh` no commit-base `11e1f3e6f2220c1eb6c7831cdf61279a981dcc03`. Inventário para a refatoração da interface, não captura do estado efetivo do aparelho.
 
-**Abrangência:** 73 chaves parseadas em Java (incluindo `sf.optics`), 25 mencionadas no leitor da biblioteca C (incluindo a mesma `sf.optics`), **97 propriedades distintas**. O módulo também tem um controle global `glass/enabled` nas SharedPreferences, fora de `debug.oulg.*`. As configurações independentes de perfil, as condições de ativação, os comandos de teste e as ações de recuperação também devem aparecer no APK.
+**Atualização de integração (main após #57):** `lensregiondiff`/gate `region` foram removidos; `popuplock` e `orphandraw` foram adicionados. O inventário ativo agora tem 98 propriedades. O interruptor `sfrefract` pertence ao helper live e não pode ser persistido pela ponte do APK.
+
+**Abrangência:** 74 chaves parseadas em Java (incluindo `sf.optics`), 25 mencionadas no leitor da biblioteca C (incluindo a mesma `sf.optics`), **98 propriedades distintas**. O módulo também tem um controle global `glass/enabled` nas SharedPreferences, fora de `debug.oulg.*`. As configurações independentes de perfil, as condições de ativação, os comandos de teste e as ações de recuperação também devem aparecer no APK.
 
 Prefixo omitido nas tabelas: cada entrada abaixo significa `debug.oulg.<chave>`. **L:** `Tuning` atualiza aproximadamente a cada 1 s dentro de SystemUI, mas algumas mudanças exigem recriação de material/invalidação de View. **C:** SurfaceFlinger lê ao compilar shader; mudar `setprop` não recompila o shader existente. **R:** leitura de estado; não oferecer escrita normal. Padrões são do código, não do telefone, do serviço de boot nem dos overrides do usuário.
 
@@ -27,8 +29,7 @@ Prefixo omitido nas tabelas: cada entrada abaixo significa `debug.oulg.<chave>`.
 | `lensmaxage` | 40 | inteiro 8–500 ms | Idade máxima do quadro usado na lente capturada |
 | `lenssettle` | 100 | inteiro 0–3000 ms | Tempo de espera após toque/gesto |
 | `lenstransition` | 350 | inteiro 0–1500 ms | Janela extra após gesto que pode iniciar uma transição |
-| `lensgate` | `directional` | enum `directional/conservative/region` | Corte por gesto; `region` experimental, com fallback direcional |
-| `lensregiondiff` | 2 | 0.5–64 (luma 0–255) | Limiar para comparar blocos da região capturada |
+| `lensgate` | `directional` | enum `directional/conservative` | Corte por gesto; antigo `region` foi removido e cai no direcional |
 
 Dependências: `liveblur=1` só ativa `live` se `sfrefract=0` e `backdrop=auto`. `livelens` só é relevante nesse caminho. `profile/lens/refract/ior/disp` podem ficar sem efeito no modo compositor; mostrar estado **inativo por dependência**, jamais fingir aplicação.
 
@@ -89,6 +90,8 @@ O interruptor `sfrefract` **não comprova** que o binário nativo foi carregado:
 | `textswap` | 1 | booleano | Troca cor do texto em material claro/escuro oposto ao tema |
 | `headertone` | 1 | booleano | Ajusta relógio/data/operadora da central ao fundo |
 | `icontone` | 1 | booleano | Ajusta ícone monocromático da notificação ao texto |
+| `popuplock` | 1 | booleano | Trava o estilo/contraste do pop-up na decisão inicial, inclusive no compositor |
+| `orphandraw` | 1 | booleano | Aplica o tom das linhas minimizadas já no primeiro desenho da central |
 | `popuptone` | 1 | booleano | Véu medido do backdrop do pop-up APK-only |
 | `shadescaleveil` | 115 | inteiro 0–255 | Véu de fallback quando shade card é escalado |
 | `shadelocal` | 0 | booleano | Mede a faixa de cada card no lugar do fundo inteiro |

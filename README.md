@@ -31,7 +31,7 @@ The release is a single APK:
 
 ## Project status
 
-**Beta.** The current APK includes an Experimental glass toggle and a test-notification button. Most optical controls are currently exposed through the `debug.oulg.*` properties via Termux/root, not as APK sliders.
+**Beta, controls panel under review.** The APK includes searchable typed controls, synthetic previews, independent surface switches, reversible presets and real test notifications with actions. The SurfaceFlinger button uses the bundled SfLive helper: status → install/selftest → explicit restart confirmation. Native parameters remain manual/pending recompilation; see [implementation and device-QA status](docs/CONTROLS_IMPLEMENTATION_2026-10-26.md).
 
 A grouped settings interface with per-surface previews, switches and a realistic expanded test notification is **planned**, not yet implemented. See the [UI refactor handoff](docs/HANDOFF_APP_REFACTOR_2026-10-26.md) and the [full property catalog](docs/PROPERTY_CATALOG_2026-10-26.md) for the implementation contract.
 

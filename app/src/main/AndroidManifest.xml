@@ -1,6 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <application android:icon="@drawable/oulg_launcher" android:roundIcon="@drawable/oulg_launcher" android:label="One UI Liquid Glass" android:theme="@android:style/Theme.Material.NoActionBar" android:allowBackup="false" android:supportsRtl="true">
+    <application android:icon="@drawable/oulg_launcher" android:roundIcon="@drawable/oulg_launcher" android:label="One UI Liquid Glass" android:theme="@style/AppTheme" android:allowBackup="false" android:supportsRtl="true">
         <meta-data android:name="xposedmodule" android:value="true" />
         <meta-data android:name="xposeddescription" android:value="Samsung heads-up compositor glass and firmware diagnostics" />
         <meta-data android:name="xposedminversion" android:value="93" />
@@ -8,6 +8,8 @@
         <meta-data android:name="xposedscope" android:resource="@array/xposed_scope" />
         <!-- SystemUI reads the switch here when LSPosed does not redirect the preferences file. -->
         <provider android:name=".ConfigProvider" android:authorities="io.github.igorcv88.oneuiliquidglass.config" android:exported="true" />
+        <receiver android:name=".ConfigReadReceiver" android:exported="true" android:permission="android.permission.STATUS_BAR" />
+        <receiver android:name=".TestNotificationReceiver" android:exported="false" />
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
         </activity>

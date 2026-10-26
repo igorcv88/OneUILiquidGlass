@@ -34,3 +34,7 @@ google-services.json
 *.hprof
 
 .claude/settings.local.json
+
+
+# Python host verification caches
+__pycache__/
