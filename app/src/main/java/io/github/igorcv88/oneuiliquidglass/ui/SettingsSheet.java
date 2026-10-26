@@ -60,7 +60,7 @@ public final class SettingsSheet extends Dialog {
         super.onCreate(state);
         ScrollView scroll = new ScrollView(activity);
         LinearLayout root = new LinearLayout(activity);
-        root.setOrientation(1);
+        root.setOrientation(LinearLayout.VERTICAL);
         int pad = (int) (22 * activity.getResources().getDisplayMetrics().density);
         root.setPadding(pad, pad, pad, pad);
         root.setBackgroundColor(0xff172333);

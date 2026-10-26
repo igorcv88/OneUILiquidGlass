@@ -26,7 +26,7 @@ public final class ModulePanel {
 
     public void attach(LinearLayout parent, boolean light, int ink, int muted, int card) {
         LinearLayout panel = new LinearLayout(activity);
-        panel.setOrientation(1);
+        panel.setOrientation(LinearLayout.VERTICAL);
         int pad = (int) (16 * activity.getResources().getDisplayMetrics().density);
         panel.setPadding(pad, pad, pad, pad);
         panel.setBackgroundColor(card);

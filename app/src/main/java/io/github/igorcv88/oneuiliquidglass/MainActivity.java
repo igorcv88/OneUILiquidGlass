@@ -127,7 +127,7 @@ public final class MainActivity extends Activity {
         bg = light ? 0xffedf1f7 : 0xff101722;
         card = light ? 0xfff9fbff : 0xff1a2535;
         root = new LinearLayout(this);
-        root.setOrientation(1);
+        root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(bg);
         root.setOnApplyWindowInsetsListener(
                 (v, insets) -> {
@@ -168,7 +168,7 @@ public final class MainActivity extends Activity {
 
     private LinearLayout column() {
         LinearLayout l = new LinearLayout(this);
-        l.setOrientation(1);
+        l.setOrientation(LinearLayout.VERTICAL);
         return l;
     }
 
