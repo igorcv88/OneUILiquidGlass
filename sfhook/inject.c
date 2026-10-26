@@ -12,8 +12,8 @@
 // Usage: oulg_inject --lib PATH [--probe] [--restart] [--clear-cache] [--late] [--daemon LOG] [--timeout S]
 //   --probe        read-only check on the running surfaceflinger: PTRACE_SEIZE and an immediate
 //                  detach (the process is never stopped), its linker and entry, the library's label
-//   --restart      record the running surfaceflinger, then setprop ctl.restart surfaceflinger
-//                  (restarts the whole userspace) and inject into the new one
+//   --restart      stop surfaceflinger, start it, inject into the new one, and restart the zygote
+//                  3 s after the start (restarts the whole userspace)
 //   --clear-cache  delete skia_shaders/egl_shaders first, so programs are compiled from source
 //   --daemon LOG   detach from the calling shell (and its app cgroup, killed with the userspace)
 #define _GNU_SOURCE
@@ -261,56 +261,23 @@ static void daemonize(const char *log) {
     if (nul >= 0) { dup2(nul, 0); close(nul); }
 }
 
-int main(int argc, char **argv) {
-    const char *lib = NULL, *log = NULL;
-    int restart = 0, clear = 0, late = 0, probe = 0, timeout = 120;
-    for (int i = 1; i < argc; i++) {
-        if (!strcmp(argv[i], "--lib") && i + 1 < argc) lib = argv[++i];
-        else if (!strcmp(argv[i], "--restart")) restart = 1;
-        else if (!strcmp(argv[i], "--probe")) probe = 1;
-        else if (!strcmp(argv[i], "--clear-cache")) clear = 1;
-        else if (!strcmp(argv[i], "--late")) late = 1;
-        else if (!strcmp(argv[i], "--daemon") && i + 1 < argc) log = argv[++i];
-        else if (!strcmp(argv[i], "--timeout") && i + 1 < argc) timeout = atoi(argv[++i]);
-        else { fprintf(stderr, "unknown argument %s\n", argv[i]); return 2; }
-    }
-    if (!lib || lib[0] != '/') { fprintf(stderr, "--lib needs an absolute path\n"); return 2; }
-    if (access(lib, R_OK) != 0) { fprintf(stderr, "cannot read %s: %s\n", lib, strerror(errno)); return 2; }
-    if (log) daemonize(log);
-    t0 = now_ms();
-    pid_t old = find_sf(0);
-    say("lib=%s running surfaceflinger pid=%d", lib, old);
-    if (probe) {
-        char label[256] = "";
-        ssize_t n = getxattr(lib, "security.selinux", label, sizeof label - 1);
-        say("lib label=%s", n > 0 ? label : "(unreadable)");
-        if (!old) { say("no surfaceflinger running"); return 1; }
-        char linker[256] = "";
-        struct module lk = {0, 0};
-        int have = linker_path(old, linker, sizeof linker) && find_module(old, "/linker64", &lk);
-        say("maps readable=%d linker=%s entry=0x%lx __loader_dlopen=0x%lx __loader_dlerror=0x%lx threads=%d", have, linker,
-            auxv_entry(old), have ? elf_symbol(linker, "__loader_dlopen") : 0, have ? elf_symbol(linker, "__loader_dlerror") : 0, thread_count(old));
-        if (ptrace(PTRACE_SEIZE, old, NULL, NULL) != 0) { say("PTRACE_SEIZE refused: %s (check dmesg | grep -i avc)", strerror(errno)); return 1; }
-        ptrace(PTRACE_DETACH, old, NULL, NULL);
-        say("PTRACE_SEIZE allowed; detached without stopping it");
-        return 0;
-    }
-    if (clear) {
-        unlink(CACHE_DIR "skia_shaders");
-        unlink(CACHE_DIR "egl_shaders");
-        say("shader caches deleted");
-    }
-    if (restart) {
-        if (__system_property_set("ctl.restart", "surfaceflinger") != 0) { say("setprop ctl.restart failed"); return 1; }
-        say("ctl.restart surfaceflinger sent");
-    }
-    pid_t pid = 0;
-    double deadline = now_ms() + timeout * 1e3;
+/** Polls every interval_us: 100 us while racing to the entry point, slower when only watching. */
+static pid_t wait_new_sf(pid_t old, double deadline, useconds_t interval_us) {
+    pid_t pid;
     while (!(pid = find_sf(old))) {
-        if (now_ms() > deadline) { say("no new surfaceflinger within %d s", timeout); return 1; }
-        usleep(100);
+        if (now_ms() > deadline) { say("no new surfaceflinger in time"); return 0; }
+        usleep(interval_us);
     }
     say("new surfaceflinger pid=%d", pid);
+    return pid;
+}
+static void restart_zygote(double started) {
+    double wait = started + 3000 - now_ms();
+    if (wait > 0) usleep((useconds_t) (wait * 1000));
+    say("ctl.restart zygote %s", __system_property_set("ctl.restart", "zygote") == 0 ? "sent" : "FAILED");
+}
+
+static int inject_into(pid_t pid, const char *lib, int late) {
     if (ptrace(PTRACE_SEIZE, pid, NULL, NULL) != 0) { say("PTRACE_SEIZE failed: %s (SELinux or DEFEX; check dmesg | grep avc)", strerror(errno)); return 1; }
     ptrace(PTRACE_INTERRUPT, pid, NULL, NULL);
     int st;
@@ -371,4 +338,72 @@ int main(int argc, char **argv) {
     if (!handle) { say("dlopen returned NULL: %s", err[0] ? err : "(no dlerror)"); return 1; }
     say("INJECTED handle=0x%lx; detached. Check: logcat -s OULG_SF", handle);
     return 0;
+}
+
+int main(int argc, char **argv) {
+    const char *lib = NULL, *log = NULL;
+    int restart = 0, clear = 0, late = 0, probe = 0, timeout = 120;
+    for (int i = 1; i < argc; i++) {
+        if (!strcmp(argv[i], "--lib") && i + 1 < argc) lib = argv[++i];
+        else if (!strcmp(argv[i], "--restart")) restart = 1;
+        else if (!strcmp(argv[i], "--probe")) probe = 1;
+        else if (!strcmp(argv[i], "--clear-cache")) clear = 1;
+        else if (!strcmp(argv[i], "--late")) late = 1;
+        else if (!strcmp(argv[i], "--daemon") && i + 1 < argc) log = argv[++i];
+        else if (!strcmp(argv[i], "--timeout") && i + 1 < argc) timeout = atoi(argv[++i]);
+        else { fprintf(stderr, "unknown argument %s\n", argv[i]); return 2; }
+    }
+    if (!lib || lib[0] != '/') { fprintf(stderr, "--lib needs an absolute path\n"); return 2; }
+    if (access(lib, R_OK) != 0) { fprintf(stderr, "cannot read %s: %s\n", lib, strerror(errno)); return 2; }
+    if (log) daemonize(log);
+    t0 = now_ms();
+    pid_t old = find_sf(0);
+    say("lib=%s running surfaceflinger pid=%d", lib, old);
+    if (probe) {
+        char label[256] = "";
+        ssize_t n = getxattr(lib, "security.selinux", label, sizeof label - 1);
+        say("lib label=%s", n > 0 ? label : "(unreadable)");
+        if (!old) { say("no surfaceflinger running"); return 1; }
+        char linker[256] = "";
+        struct module lk = {0, 0};
+        int have = linker_path(old, linker, sizeof linker) && find_module(old, "/linker64", &lk);
+        say("maps readable=%d linker=%s entry=0x%lx __loader_dlopen=0x%lx __loader_dlerror=0x%lx threads=%d", have, linker,
+            auxv_entry(old), have ? elf_symbol(linker, "__loader_dlopen") : 0, have ? elf_symbol(linker, "__loader_dlerror") : 0, thread_count(old));
+        if (ptrace(PTRACE_SEIZE, old, NULL, NULL) != 0) { say("PTRACE_SEIZE refused: %s (check dmesg | grep -i avc)", strerror(errno)); return 1; }
+        ptrace(PTRACE_DETACH, old, NULL, NULL);
+        say("PTRACE_SEIZE allowed; detached without stopping it");
+        return 0;
+    }
+    // --restart: the sequence of handoff.md (stop surfaceflinger, start it, zygote 3 s later). A
+    // restart of surfaceflinger alone left the device 4-5 min on "Powered by Android" until a
+    // watchdog restarted the zygote; with the zygote restarted at once it took ~20 s.
+    if (restart) {
+        if (__system_property_set("ctl.stop", "surfaceflinger") != 0) { say("setprop ctl.stop failed"); return 1; }
+        double stop_deadline = now_ms() + 10000;
+        while (find_sf(0) && now_ms() < stop_deadline) usleep(1000);
+        say("surfaceflinger stopped=%d", find_sf(0) == 0);
+        old = find_sf(0);
+    }
+    if (clear) {
+        unlink(CACHE_DIR "skia_shaders");
+        unlink(CACHE_DIR "egl_shaders");
+        say("shader caches deleted");
+    }
+    double started = now_ms();
+    if (restart) {
+        if (__system_property_set("ctl.start", "surfaceflinger") != 0) { say("setprop ctl.start failed"); return 1; }
+        say("ctl.start surfaceflinger sent");
+    }
+    pid_t pid = wait_new_sf(old, now_ms() + timeout * 1e3, 100);
+    if (!pid) { if (restart) restart_zygote(started); return 1; }
+    int rc = inject_into(pid, lib, late);
+    if (!restart) return rc;
+    // The zygote is restarted whatever the injection did: without it the device hangs on the boot
+    // animation. If that restart takes surfaceflinger down again, the new one is injected too.
+    restart_zygote(started);
+    // A surfaceflinger the zygote restarts is caught at 100 us too: the race is the same.
+    pid_t again = wait_new_sf(pid, now_ms() + 30000, 100);
+    if (again) { say("surfaceflinger restarted with the zygote"); rc = inject_into(again, lib, late); }
+    else say("surfaceflinger pid=%d kept through the zygote restart", pid);
+    return rc;
 }
