@@ -1092,7 +1092,9 @@ public final class HeadsUpHooks {
             if (!shade) popupScene = m.light;
             toneAt = android.os.SystemClock.uptimeMillis();
             styleChanged(m.style());
-            int veil = m.veil;
+            // A glass style replaces the tint; in the shade the native side's legibility veil darkens
+            // it instead (the pop-up's look is left as approved, 26/10).
+            int veil = m.swap || !shade ? m.veil : ShadeTone.overNative(m.veil, nativeTint);
             boolean swapLight = m.swap && m.light;
             int da = Math.abs((veil >>> 24) - (measuredVeil >>> 24));
             boolean sameColour = veil == 0 || measuredVeil == 0 || (veil & 0x00ffffff) == (measuredVeil & 0x00ffffff);

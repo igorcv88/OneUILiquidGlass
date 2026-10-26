@@ -213,6 +213,14 @@ public final class ShadeTone implements CaptureHub.Client {
         return VeilMath.material(luma, scene, lightText(), t.shadeCap, t.shadeLift, t.veilMax, t.styleLo, t.styleHi,
                 lightGlass, DARK_GLASS);
     }
+    /**
+     * A native-side veil laid over the card's native tint instead of replacing it: the veil
+     * replaced the tint, so a 2-7 % black veil dropped the native frost and the card read much
+     * darker than its neighbours with no veil (oulg42, 26/10). 0 stays 0 (the tint itself).
+     */
+    public static int overNative(int veil, int nativeTint) {
+        return veil == 0 || nativeTint == 0 ? veil : VeilMath.over(veil, nativeTint);
+    }
     /** Whether a backdrop of mean {@code luma} reads as light in {@code scene} (see {@link VeilMath#classify}). */
     public static boolean lightBackdrop(float luma, Boolean scene) {
         Tuning t = Tuning.get();

@@ -69,4 +69,13 @@ public final class VeilMathTest {
         assertTrue(b > r);
         assertTrue(luma > 191 / 255f + 0.1f);
     }
+    @Test public void aSmallBlackVeilDarkensTheNativeTintInsteadOfReplacingIt() {
+        int nativeTint = 0x2effffff;
+        int v = VeilMath.over(0x12000000, nativeTint);
+        // More opaque than either, still mostly the native frost's white, not near-transparent black.
+        assertTrue((v >>> 24) > 0x2e);
+        assertTrue((v & 255) > 150);
+        assertEquals(nativeTint, VeilMath.over(0, nativeTint));
+        assertEquals(0x80000000, VeilMath.over(0x80000000, 0));
+    }
 }

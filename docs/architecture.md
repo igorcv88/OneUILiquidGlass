@@ -1041,6 +1041,7 @@ Source: device video of PR #39 (18:45:08) and a lockscreen screenshot (18:46). T
 ### Round 43: one luminosity per stack, minimised group child, header from the scene (2026-10-26)
 
 - Shade cards take their material from the whole screen's mean (`ToneGrid.whole()`), not their own band: over a colourful wallpaper the card under a white cloud was veiled darker than the others (device frame, 26/10). Each card's colour still comes from the live blur behind it. `shadelocal 1` measures each card's band again.
+- A shade card's native-side legibility veil is laid over its native tint (`VeilMath.over`) instead of replacing it: the replacement dropped the native frost, so a 2-7 % black veil made one card read much darker than its neighbours with none (oulg42: generations 7, 9, 10, 12, only the card under the wallpaper's bright patch, `lumaP90` 0.73-0.83, got `veil` 0x02-0x12). Glass styles still replace the tint; the pop-up is unchanged.
 - The header follows the same scene reading: the band under it read 0.34 over a white app while the header animated in.
 - In the open shade a child row owns its tone only if its own card took this opening's tone (`toneOpen == shadeOpens`): a minimised group's child kept its glass, its background was not drawn, so its tone never ran and `app_name_text` stayed white (oulg42).
 - The grey shade in oulg42 was the device's own props: `lightglass 0.32`, `lighttone b8c2ce`, `lightedge 2` were set explicitly (the round-41 restore command) and override the new defaults; the shade cards showed `veil=52b8c2ce`.
