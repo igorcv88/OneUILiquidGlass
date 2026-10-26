@@ -431,8 +431,9 @@ static int inject_attached(pid_t pid, const char *lib, int late, int can_interru
         // in the target ran (no lock taken, no memory changed); that process is put back as it was.
         int clean = fault == fn;
         say("remote call failed at pc=0x%lx (%s)", fault, clean ? "its first instruction: nothing ran" : "inside the target, or no stop");
-        if (clean && restore_regs(pid, &saved) && release_target(pid, 1)) say("process restored and released untouched");
-        else if (!clean) release_target(pid, 0);
+        // release_target kills on a failed detach; a failed restore is killed here.
+        if (clean && restore_regs(pid, &saved)) { if (release_target(pid, 1)) say("process restored and released untouched"); }
+        else release_target(pid, 0);
         return RC_CALL_FAULT;
     }
     if (!release_target(pid, restore_regs(pid, &saved))) return RC_FAIL;
