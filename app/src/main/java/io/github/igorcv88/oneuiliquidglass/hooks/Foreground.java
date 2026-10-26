@@ -1,6 +1,7 @@
 package io.github.igorcv88.oneuiliquidglass.hooks;
 
 import android.content.res.ColorStateList;
+import android.graphics.Color;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
@@ -54,7 +55,7 @@ final class Foreground {
     static Integer redirect(Object key, int color, Map<Object, Rec> swapped, java.util.function.IntFunction<Object> saver) {
         Rec r = swapped.get(key);
         if (r == null || color == r.applied) return null;
-        if (!themeTone(color, r.lightText)) { swapped.remove(key); return null; }
+        if (!themeTone(color, r.lightText)) { swapped.remove(key); if (key instanceof TextView) reshadow((TextView) key); return null; }
         r.saved = saver.apply(color);
         r.applied = mirror(color);
         intercepted++;
@@ -83,9 +84,30 @@ final class Foreground {
         Text(TextView t) { this.t = t; }
         @Override public Object key() { return t; }
         @Override public int color() { return t.getCurrentTextColor(); }
-        @Override public void set(int color) { t.setTextColor(color); }
+        @Override public void set(int color) { t.setTextColor(color); unshadow(t); }
         @Override public Object save() { return t.getTextColors(); }
-        @Override public void restore(Object saved) { if (saved instanceof ColorStateList) t.setTextColor((ColorStateList) saved); }
+        @Override public void restore(Object saved) { if (saved instanceof ColorStateList) t.setTextColor((ColorStateList) saved); reshadow(t); }
+    }
+    /** Shadows taken off swapped text: radius, dx, dy and colour, given back with the text's colour. */
+    private static final WeakHashMap<TextView, float[]> shadows = new WeakHashMap<>();
+    /**
+     * A label drawn with a dark shadow for white text (a group's name over the shade) kept that
+     * shadow once its text turned dark: a dark halo behind dark letters, which read as blurred
+     * (device screenshot, 26/10). The shadow is taken off while the text carries the swapped tone.
+     */
+    static void unshadow(TextView t) {
+        if (t.getShadowRadius() <= 0f || Color.alpha(t.getShadowColor()) == 0) return;
+        // A shadow SystemUI set again (a rebind) is taken off too; the first one is what comes back.
+        if (!shadows.containsKey(t)) shadows.put(t, new float[] { t.getShadowRadius(), t.getShadowDx(), t.getShadowDy(), Float.intBitsToFloat(t.getShadowColor()) });
+        t.setShadowLayer(0f, 0f, 0f, Color.TRANSPARENT);
+    }
+    /** The shadow follows the swap: off while the view carries the swapped tone, back otherwise. */
+    private static void shadowFor(TextView t, boolean swap) {
+        if (swap && swapped.containsKey(t)) unshadow(t); else if (!swapped.containsKey(t)) reshadow(t);
+    }
+    static void reshadow(TextView t) {
+        float[] s = shadows.remove(t);
+        if (s != null) t.setShadowLayer(s[0], s[1], s[2], Float.floatToRawIntBits(s[3]));
     }
     /** Only icons tinted through imageTintList: the expand chevron and similar glyphs, never app icons. */
     private static final class Icon implements Ink {
@@ -140,6 +162,7 @@ final class Foreground {
             for (View v : views) {
                 if (!(v instanceof TextView)) continue;
                 changed += ink(new Text((TextView) v), swap, lightText, swapped) ? 1 : 0;
+                shadowFor((TextView) v, swap);
                 if (tracked != null && swap && swapped.containsKey(v)) tracked.add(v);
             }
         } finally { applying = false; }
@@ -209,7 +232,10 @@ final class Foreground {
     private static int walk(View v, boolean swap, boolean lightText, java.util.List<View> tracked) {
         int changed = 0;
         if (v instanceof TextView) {
-            if (standard(v, false)) changed += ink(new Text((TextView) v), swap, lightText, swapped) ? 1 : 0;
+            if (standard(v, false)) {
+                changed += ink(new Text((TextView) v), swap, lightText, swapped) ? 1 : 0;
+                shadowFor((TextView) v, swap);
+            }
         } else if (v instanceof ImageView && (((ImageView) v).getImageTintList() != null || swapped.containsKey(v))) {
             ImageView i = (ImageView) v;
             if (i.getImageTintList() == null) swapped.remove(v);
