@@ -132,7 +132,7 @@ ANDROID_NDK=/path/to/ndk sfhook/build.sh
 
 For a shader rewrite check, compile `sfhook/tools/refract_check.c` and validate generated `mod_*` shader files with `glslangValidator`.
 
-The [release workflow](.github/workflows/release.yml) runs on `main` or via manual dispatch/trigger. It tags `v0.1.N`, builds/tests/lints the APK, signs releases using repository secrets, builds the KernelSU ZIP and publishes checksums with the two files.
+The [release workflow](.github/workflows/release.yml) is dispatched manually on `main`; a change to `.github/release-trigger` on `main` can dispatch it through the [trigger workflow](.github/workflows/trigger-release.yml). It tags `v0.1.N`, builds/tests/lints the APK, signs releases using repository secrets, builds the KernelSU ZIP and publishes checksums with the two files.
 
 ## Repository layout
 
