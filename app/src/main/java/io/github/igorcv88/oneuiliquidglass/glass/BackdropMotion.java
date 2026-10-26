@@ -166,7 +166,8 @@ public final class BackdropMotion {
 
     /** Why a lens band may not show now, or null when it may. {@code card} is its screen rect. */
     public static String block(long capturedAt, long now, Rect card, long maxAgeMs, long settleMs, boolean directional) {
-        boolean inCard = inCard(card);
+        boolean inCard = card != null && !Float.isNaN(downX)
+                && downX >= card.left - SLOP && downX <= card.right + SLOP && downY >= card.top - SLOP && downY <= card.bottom + SLOP;
         if (directional) return blockDirectional(active(), touching, kind, lastMotion, inCard, capturedAt, now, maxAgeMs, settleMs);
         return block(active(), touching, lastActive, inCard, capturedAt, now, maxAgeMs, settleMs);
     }
@@ -177,51 +178,6 @@ public final class BackdropMotion {
      */
     public static boolean wantsFrames(Rect card, long now, long settleMs, boolean directional) {
         return block(now, now, card, Long.MAX_VALUE / 4, settleMs, directional) == null;
-    }
-
-    /**
-     * debug.oulg.lensgate=region. A touch cuts the band only when it may move what is right behind
-     * the card: a system gesture (home, back), or a gesture that went down within NEAR px above or
-     * below the card; those follow the directional rules. Anything else (a carousel or the keyboard
-     * mid-screen, a tap on an app) is left to the captures themselves: the band is cut while the
-     * cells behind the card differ between consecutive captures ({@link RegionDiff}), and returns
-     * only from a capture requested settleMs after the last change. A capture whose region verdict
-     * lags more than maxAgeMs behind it is not drawn (regionPending): a slow readback shows as a
-     * missing band, never as a trail. The first moving capture is still drawn before its verdict.
-     * changedAt / verifiedAt: capturedAt of the last capture that differed from its predecessor, and
-     * of the last one compared at all.
-     */
-    public static String blockRegion(long capturedAt, long now, Rect card, long maxAgeMs, long settleMs, long changedAt, long verifiedAt) {
-        boolean inCard = inCard(card);
-        boolean near = system || near(card);
-        return blockRegion(active(), touching, kind, lastMotion, inCard, near, capturedAt, now, maxAgeMs, settleMs, changedAt, verifiedAt);
-    }
-    /** Region gate: captures are wanted unless a gesture near the card (or a system one) cuts the band. */
-    public static boolean wantsFramesRegion(Rect card, long now, long settleMs) {
-        if (!active()) return false;
-        if (!(system || near(card))) return true;
-        return blockDirectional(true, touching, kind, lastMotion, inCard(card), now, now, Long.MAX_VALUE / 4, settleMs) == null;
-    }
-    /** Screen px above and below the card within which a gesture's down point counts as behind it. */
-    static final int NEAR = 160;
-    private static boolean inCard(Rect card) {
-        return card != null && !Float.isNaN(downX)
-                && downX >= card.left - SLOP && downX <= card.right + SLOP && downY >= card.top - SLOP && downY <= card.bottom + SLOP;
-    }
-    private static boolean near(Rect card) {
-        return card == null || Float.isNaN(downY) || (downY >= card.top - NEAR && downY <= card.bottom + NEAR);
-    }
-    static String blockRegion(boolean active, boolean touching, int kind, long lastMotion, boolean gestureOnCard, boolean gestureNear,
-                              long capturedAt, long now, long maxAgeMs, long settleMs, long changedAt, long verifiedAt) {
-        if (!active) return "noSignal";
-        if (gestureNear) {
-            String b = blockDirectional(true, touching, kind, lastMotion, gestureOnCard, capturedAt, now, maxAgeMs, settleMs);
-            if (b != null) return b;
-        }
-        if (capturedAt < changedAt + settleMs) return "regionMotion";
-        if (capturedAt - verifiedAt > maxAgeMs) return "regionPending";
-        if (now - capturedAt > maxAgeMs) return "age";
-        return null;
     }
 
     /**

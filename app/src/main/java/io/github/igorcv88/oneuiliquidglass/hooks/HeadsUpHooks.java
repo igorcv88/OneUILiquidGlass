@@ -1810,19 +1810,12 @@ public final class HeadsUpHooks {
             // capture during motion or without a verified signal.
             int[] xy = new int[2];
             android.graphics.Rect card = new android.graphics.Rect();
-            // lensgate=region keeps capturing through touches away from the card: the captures
-            // themselves decide (RegionDiff). Its readback failing falls back to directional.
-            CaptureBackdrop[] band = new CaptureBackdrop[1];
-            if (want) glass.setLens(band[0] = new CaptureBackdrop(v, false, () -> {
+            if (want) glass.setLens(new CaptureBackdrop(v, false, () -> {
                 v.getLocationOnScreen(xy);
                 card.set(xy[0], xy[1], xy[0] + v.getWidth(), xy[1] + v.getHeight());
                 Tuning t = Tuning.get();
-                long now = android.os.SystemClock.uptimeMillis();
-                boolean wants = band[0] != null && band[0].regionGate()
-                        ? BackdropMotion.wantsFramesRegion(card, now, t.lensSettle)
-                        : BackdropMotion.wantsFrames(card, now, t.lensSettle, t.lensDirectional() || t.lensRegion());
-                return wants ? t.rimHz : 0;
-            }, () -> Tuning.get().lensRegion()));
+                return BackdropMotion.wantsFrames(card, android.os.SystemClock.uptimeMillis(), t.lensSettle, t.lensDirectional()) ? t.rimHz : 0;
+            }));
             else glass.dropLens();
             Probe.log("LENS_BAND", "viewId=" + Integer.toHexString(System.identityHashCode(v)) + " on=" + glass.hasLens()
                     + " signal=" + BackdropMotion.active());
