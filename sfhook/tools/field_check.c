@@ -10,13 +10,13 @@
 //  - the body blur radius rises monotonically from 0 at the rim to the core radius;
 //  - the clip program's geometry (centre and half size rebuilt from uinnerRect and uradiusPlusHalf)
 //    is the FillRRect program's, and both decode the same strength and profile from the corner tag;
-//  - both profiles share the lens: only the body radius differs between them.
+//  - profile 1 keeps its slab refraction field; gradient changes the blur only.
 // Build: cc -O2 -o fc field_check.c -lm
 #include <math.h>
 #include <stdio.h>
 
 // OULG_PROFILES_DEFAULT; profile 1 also caps its body radius (v0.16).
-static const double CORES[2] = {48.0, 80.0}, RAMPS[2] = {1.5, 1.5}, CCAP1 = 62.0;
+static const double CORES[2] = {48.0, 80.0}, RAMPS[2] = {1.5, 1.5}, CCAP1 = 52.0;
 static double brMax(int pf) { return pf ? fmin(CORES[1], CCAP1) : CORES[0]; }
 
 static double clampd(double v, double lo, double hi) { return v < lo ? lo : v > hi ? hi : v; }
@@ -33,7 +33,14 @@ static void field(double qx, double qy, double hx, double hy, double r, double k
     double bevel = clampd(r * 0.42, 16, 56);
     double depth = r - l - fmin(fmax(wx, wy), 0);
     *br = CORES[pf] * smoothstepd(0.25 * bevel, RAMPS[pf] * bevel, depth);
-    if (pf) *br = fmin(*br, CCAP1);
+    if (pf) {
+        double start = fmax(8.0, 0.25 * bevel);
+        double u = clampd((depth - start) / (fmax(start + 1, RAMPS[pf] * bevel) - start), 0, 1);
+        double body = u*u*u*(u*(u*6-15)+10);
+        u = clampd((depth - 4) / (start - 4), 0, 1);
+        double skin = fmin(8, brMax(pf)) * u*u*u*(u*(u*6-15)+10);
+        *br = skin + (brMax(pf) - skin) * body;
+    }
     s[0] = s[1] = 0;
     if (l <= 0 || depth <= 0 || depth >= bevel) return;
     double t = 1 - depth / bevel;
@@ -157,7 +164,7 @@ int main(void) {
             for (double dep = 0; dep < hy; dep += 0.25) {
                 double sv[2], b; field(0, hy - dep, hx, hy, r, kp, sv, &b);
                 CHECK(b >= last - 1e-12, "br not monotone"); last = b;
-                if (dep < 0.25 * bevel) CHECK(b == 0, "br at rim");
+                if (dep <= (pf ? 4.0 : 0.25 * bevel)) CHECK(b < 1e-12, "br at rim");
                 if (dep >= RAMPS[pf] * bevel && dep <= hy - 1) CHECK(fabs(b - brMax(pf)) < 1e-9, "br at body");
             }
         }
