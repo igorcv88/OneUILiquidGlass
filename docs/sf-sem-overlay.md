@@ -72,6 +72,19 @@ O módulo atual chega lá por um caminho: copia `/system/bin/surfaceflinger`, tr
 
 **Ainda falta, mesmo com as três checagens OK:** confirmar que o DZIF continua em GLES (Ganesh), e não em Vulkan. Isso só se vê no dump de shaders depois da primeira injeção (`/data/misc/surfaceflinger/oulg_shaders.txt`, com `VS_OK`, `FS_OK` e `FAIL` contados como no README).
 
+### A, implementação (2026-10-26, não testada no aparelho)
+
+`sfhook/inject.c` (estático, `oulg_inject`) e o mesmo `liboulg_sf.so`, no asset `OneUILiquidGlass-SurfaceFlinger-live-*.zip` do release. Diferenças em relação ao fluxo acima:
+
+- **Ponto de injeção:** não um `PTRACE_INTERRUPT` em lugar qualquer, mas o ponto de entrada do executável (`AT_ENTRY`). O injetor para o SF novo enquanto ele tem uma thread só, põe um `BRK` no entry e chama `__loader_dlopen` do `linker64` quando o processo para ali. Nesse ponto a ligação dinâmica acabou, nenhum lock está tomado e o `main()` ainda não criou o RenderEngine. Se o processo já passou do entry (mais de uma thread, ou o `BRK` não é atingido em 3 s), o injetor solta o processo intacto e sai com código 3.
+- **Namespace:** o `caller` do `__loader_dlopen` é o entry, então a lib entra no namespace do próprio SF. Se o namespace recusar `/data`, o `dlerror` é impresso.
+- **Troca de GOT:** o construtor da lib percorre todos os objetos carregados (`dl_iterate_phdr`) e troca as entradas `JUMP_SLOT`/`GLOB_DAT` de `glShaderSource` e `eglGetProcAddress`. Ficam de fora a própria lib, a `libEGL` e a `libGLES*`. O valor antigo vira a função real. Carregada por `DT_NEEDED`, as entradas já apontam para ela e nada muda. Log: `GOT ... patched`, `GOT_DONE`.
+- **Funções GL reais:** com `dlopen`, o `RTLD_NEXT` só vê o grupo local da lib (libc, liblog, libdl), então a busca cai para `RTLD_DEFAULT`, o grupo global do SF.
+- **Reinício:** `--restart` manda o `ctl.restart` de dentro do próprio injetor, que antes sai do cgroup do app (`--daemon`). O reinício do userspace mata o Termux e tudo que estiver no cgroup dele.
+- **`--probe`:** só leitura. Faz `PTRACE_SEIZE` e solta na hora, sem parar o SF. Informa o linker, o entry, os símbolos e o rótulo SELinux da lib.
+
+Ainda não foi visto no aparelho: se o DEFEX/SELinux deixa o domínio do root usar ptrace no SF, se o domínio `surfaceflinger` pode mapear a lib, quanto o SF leva até o entry depois do exec (a corrida) e se o DZIF é GLES.
+
 ### B. Bind mount de um único arquivo
 
 `mount --bind` do binário patcheado sobre `/system/bin/surfaceflinger`, sem OverlayFS, seguido de `ctl.restart`. Funciona, mas:
