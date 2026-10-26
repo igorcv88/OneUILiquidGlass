@@ -1,8 +1,6 @@
 name: Controls panel checks
 on:
   pull_request:
-  push:
-    branches: ["work/**"]
 concurrency:
   group: controls-${{ github.event.pull_request.head.sha || github.sha }}
   cancel-in-progress: true

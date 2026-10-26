@@ -923,10 +923,10 @@ public final class MainActivity extends Activity {
                                 }));
         note(
                 recovery,
-                "Se o SystemUI não responder, desative o módulo no LSPosed e reinicie. Módulo SF:"
-                    + " desative pelo método root usado na instalação e reinicie o aparelho. Não"
-                    + " apague caches ou arquivos de outros módulos. Logs OULG/OULG_SF não são"
-                    + " lidos sem acesso autorizado.");
+                "Se o SystemUI não responder, desative o módulo no LSPosed e reinicie. Componente"
+                    + " SF live: use Remover arquivos da injeção e faça reboot; não há injeção no"
+                    + " boot. Não apague arquivos de outros módulos. Logs OULG/OULG_SF exigem"
+                    + " acesso autorizado.");
     }
 
     private void moduleCard(LinearLayout parent) {

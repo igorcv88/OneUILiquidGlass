@@ -84,7 +84,12 @@ public final class ModulePanel {
                                     && !"0".equals(model.status.get("bundled_ok"))
                                     && !"1".equals(model.status.get("legacy_conflict")));
                     recompile.setEnabled(
-                            !model.busy
+                            model.bundled
+                                    && !model.busy
+                                    && "1".equals(model.status.get("fingerprint_ok"))
+                                    && "1".equals(model.status.get("bundled_ok"))
+                                    && "1".equals(model.status.get("installed_ok"))
+                                    && !"1".equals(model.status.get("legacy_conflict"))
                                     && "1".equals(model.status.get("selftest_ok"))
                                     && "0".equals(model.status.get("update_needed")));
                     refresh.setEnabled(model.bundled && !model.busy);
@@ -225,6 +230,11 @@ public final class ModulePanel {
                                 "\n"
                                     + "Efetividade do shader: não confirmada; sf_loaded e sf.optics"
                                     + " não substituem REWRITE_OK.");
+        if ("1".equals(s.get("legacy_conflict")))
+            text.append(
+                    "\n"
+                        + "Desative o módulo legado oulg_sf pelo seu método de root e faça reboot"
+                        + " antes de usar a rota live.");
         return text.toString();
     }
 }
