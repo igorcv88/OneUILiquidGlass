@@ -217,6 +217,11 @@ jobs:
             grep -qE " ${entry}\$" "$RUNNER_TEMP/module-entries.txt" || { echo "::error::module zip lacks $entry" >&2; exit 1; }
           done
           sha256sum "$MODULE_ASSET" | tee "${MODULE_ASSET}.sha256"
+          # Route A: the injector and the library, without a module (docs/sf-sem-overlay.md).
+          LIVE_ASSET="OneUILiquidGlass-SurfaceFlinger-live-${MODULE_VERSION}.zip"
+          cp sfhook/build/oulg-sf-live.zip "$LIVE_ASSET"
+          sha256sum "$LIVE_ASSET" | tee "${LIVE_ASSET}.sha256"
+          echo "LIVE_ASSET=$LIVE_ASSET" >> "$GITHUB_ENV"
           {
             echo "MODULE_VERSION=$MODULE_VERSION"
             echo "MODULE_ASSET=$MODULE_ASSET"
@@ -261,6 +266,8 @@ jobs:
             "${RELEASE_ASSET}.sha256" \
             "$MODULE_ASSET" \
             "${MODULE_ASSET}.sha256" \
+            "$LIVE_ASSET" \
+            "${LIVE_ASSET}.sha256" \
             --verify-tag \
             --title "One UI Liquid Glass ${VERSION_NAME}" \
             --notes-file "$NOTES_PATH" \

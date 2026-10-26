@@ -72,6 +72,25 @@ O módulo atual chega lá por um caminho: copia `/system/bin/surfaceflinger`, tr
 
 **Ainda falta, mesmo com as três checagens OK:** confirmar que o DZIF continua em GLES (Ganesh), e não em Vulkan. Isso só se vê no dump de shaders depois da primeira injeção (`/data/misc/surfaceflinger/oulg_shaders.txt`, com `VS_OK`, `FS_OK` e `FAIL` contados como no README).
 
+### A, implementação (2026-10-26, não testada no aparelho)
+
+`sfhook/inject.c` (estático, `oulg_inject`) e o mesmo `liboulg_sf.so`, no asset `OneUILiquidGlass-SurfaceFlinger-live-*.zip` do release. Diferenças em relação ao fluxo acima:
+
+- **Ponto de injeção:** não um `PTRACE_INTERRUPT` em lugar qualquer, mas o ponto de entrada do executável (`AT_ENTRY`). O injetor para o SF novo enquanto ele tem uma thread só, põe um `BRK` no entry e chama `__loader_dlopen` do `linker64` quando o processo para ali. Nesse ponto a ligação dinâmica acabou, nenhum lock está tomado e o `main()` ainda não criou o RenderEngine. Se o processo já passou do entry (mais de uma thread, ou o `BRK` não é atingido em 3 s), o injetor solta o processo intacto e sai com código 3.
+- **Namespace:** o `caller` do `__loader_dlopen` é o entry, então a lib entra no namespace do próprio SF. Se o namespace recusar `/data`, o `dlerror` é impresso.
+- **Troca de GOT:** o construtor da lib percorre todos os objetos carregados (`dl_iterate_phdr`) e troca as entradas `JUMP_SLOT`/`GLOB_DAT` de `glShaderSource` e `eglGetProcAddress`. Ficam de fora a própria lib, a `libEGL` e a `libGLES*`. O valor antigo vira a função real. Carregada por `DT_NEEDED`, as entradas já apontam para ela e nada muda. Log: `GOT ... patched`, `GOT_DONE`.
+- **Funções GL reais:** com `dlopen`, o `RTLD_NEXT` só vê o grupo local da lib (libc, liblog, libdl), então a busca cai para `RTLD_DEFAULT`, o grupo global do SF.
+- **Reinício:** `--restart` segue a sequência do `handoff.md`: para o SF, apaga o cache (`--clear-cache`), inicia o SF, injeta e reinicia o zygote 3 s depois do start. Reiniciar só o SF deixava o aparelho 4–5 min em "Powered by Android", até um watchdog reiniciar o zygote; com o zygote reiniciado logo, eram ~20 s. O zygote é reiniciado mesmo se a injeção falhar. Se esse reinício derrubar o SF de novo, o processo novo também é injetado. Tudo roda de dentro do injetor, que antes sai do cgroup do app (`--daemon`), porque o reinício do userspace mata o Termux.
+- **`--probe`:** só leitura. Faz `PTRACE_SEIZE`, para a thread principal só pelo `PTRACE_DETACH` (que exige ptrace-stop) e confere o retorno. Informa o linker, o entry, os símbolos e o rótulo SELinux da lib.
+
+- **Limpeza verificada:** a instrução original do entry é relida depois de restaurada, os registradores são conferidos depois do `SETREGSET`, e todo `PTRACE_DETACH` tem o retorno checado. Um processo que não volta intacto, ou que não pode ser solto, é morto com `SIGKILL` (o init sobe um SF limpo), em vez de ficar parado ou com o `BRK`.
+- **Parada que falha:** se o SF não parar em 10 s, nada é apagado nem injetado; o injetor pede `ctl.start` e, se o SF reiniciar mesmo assim, reinicia o zygote.
+- **Cgroup:** `--restart` exige `--daemon` e confere em `/proc/self/cgroup` que o injetor saiu do cgroup do app; se não saiu, recusa o reinício.
+- **GOT:** a página volta à proteção exata que tinha (lida de `/proc/self/maps`); página executável ou de proteção desconhecida não é tocada. `GOT_DONE ... main=N` diz quantas entradas foram trocadas no próprio executável; `main=0` é falha, mesmo com `DLOPEN_OK`.
+- **`DLOPEN_OK` não prova interceptação.** A prova está no `logcat -s OULG_SF` (`GOT_DONE main>0`, linhas `SRC`) e no dump de shaders, que também diz se o DZIF é GLES.
+
+Ainda não foi visto no aparelho: se o DEFEX/SELinux deixa o domínio do root usar ptrace no SF, se o domínio `surfaceflinger` pode mapear a lib, quanto o SF leva até o entry depois do exec (a corrida) e se o DZIF é GLES.
+
 ### B. Bind mount de um único arquivo
 
 `mount --bind` do binário patcheado sobre `/system/bin/surfaceflinger`, sem OverlayFS, seguido de `ctl.restart`. Funciona, mas:

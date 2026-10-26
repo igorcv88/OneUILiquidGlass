@@ -1053,14 +1053,12 @@ Source: device video of PR #39 (18:45:08) and a lockscreen screenshot (18:46). T
 - Shown rows whose own card took no tone this opening take the scene's text tone (`TEXT_ORPHAN`), at the capture and 300 ms and 1 s after; restored when the shade closes. oulg43: a minimised group's two rows had no card drawn (radii 0) and `app_name_text ffffffff swapped=false`; round 43's child-row walk did not reach them.
 - `paneldim` defaults to 0.12: with it the dark theme's panel over a white app matched the light theme's in the screenshots (~221 in both).
 
-### Round 45: region gate for the pop-up band, experimental (2026-10-26)
+### Round 45: region gate, tried and removed (2026-10-26)
 
-`debug.oulg.lensgate=region` (default stays `directional`). Not tested on the device.
-
-- A touch cuts the band only if it is a system gesture (bottom 4.5 %, sides 4 %) or went down within 160 px above or below the card; those follow the directional rules. Any other touch (a carousel or the keyboard mid-screen, a tap on an app) no longer cuts it, and captures continue at `rimhz` through it.
-- Instead, every capture shown to a band is read back on its own worker (`oulg-region`) and reduced to mean luminance per 16 px screen cell (`RegionDiff`). Two consecutive captures that differ by more than `lensregiondiff` (default 2/255) in any cell under the card set `changedAt`; the band returns only from a capture requested `lenssettle` after it (`regionMotion`). A capture whose verdict lags more than `lensmaxage` behind it is not drawn (`regionPending`). A failed readback falls back to the directional gate for that band (`REGION_READBACK_FAILED`).
-- Motion without touch (video, an app's animation, a launch) now cuts the band too, which the touch gate never saw.
-- Cost and limit: the change is seen only after a capture shows it, so the first moving capture behind the card is still drawn (onset trail of about one capture plus the readback). The readback goes through the RenderThread; a 0.5 shade capture took 55-100 ms on the shade worker (25/10). If that holds here, most draws log `regionPending` and the band rarely shows. `REGION_STATS` logs readback P50/P95/max, skipped captures and still/changed/unknown verdicts every 240 readbacks.
+`lensgate=region` (PR #46) compared consecutive captures per 16 px cell under the card and cut the band on any change, instead of on touches. Removed after the device test (oulg45 log, 26/10):
+- The readback was cheap: P50 4–16 ms, P95 9–19 ms, max 68 ms per 0.5 capture (the 55–100 ms of the shade worker did not repeat).
+- The band flickered on a still screen (`regionPending`, `age`) and dropped on every vertical scroll (`regionMotion` 86–194 of 240 draws while scrolling): any pixel change behind the card counts, so the directional rule (vertical keeps the band) was lost.
+- It does not remove the capture's delay, which is what the user asked for. The next step is the compositor (route A, `sfhook/inject.c`).
 
 ### Round 46: monochrome small icons follow the text tone (2026-10-26)
 

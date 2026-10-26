@@ -110,10 +110,7 @@ public final class GlassDrawable extends Drawable {
             view.getLocationOnScreen(lensXy);
             lensRect.set(lensXy[0] + bounds.left, lensXy[1] + bounds.top, lensXy[0] + bounds.right, lensXy[1] + bounds.bottom);
             Tuning t = Tuning.get();
-            // A region gate whose readback failed falls back to the directional one.
-            block = lens.regionGate()
-                    ? BackdropMotion.blockRegion(frame.capturedAt, now, lensRect, t.lensMaxAge, t.lensSettle, lens.regionChangedAt(), lens.regionVerifiedAt())
-                    : BackdropMotion.block(frame.capturedAt, now, lensRect, t.lensMaxAge, t.lensSettle, t.lensDirectional() || t.lensRegion());
+            block = BackdropMotion.block(frame.capturedAt, now, lensRect, t.lensMaxAge, t.lensSettle, t.lensDirectional());
         }
         float dt = lensDrawnAt == 0 ? 16f : Math.max(1f, Math.min(100f, now - lensDrawnAt));
         lensDrawnAt = now;

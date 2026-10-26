@@ -11,10 +11,13 @@
 #include <fcntl.h>
 #include <pthread.h>
 #include <stdint.h>
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <link.h>
+#include <sys/mman.h>
 #include <sys/system_properties.h>
 #include <EGL/egl.h>
 #include <GLES2/gl2.h>
@@ -37,8 +40,122 @@ static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 static uint64_t seen[MAX_SEEN];
 static int seen_count, logged;
 
+void glShaderSource(GLuint shader, GLsizei count, const GLchar *const *strings, const GLint *lengths);
+__eglMustCastToProperFunctionPointerType eglGetProcAddress(const char *name);
+
+// The next definition of a symbol. Through DT_NEEDED, RTLD_NEXT finds the GLES/EGL libraries after
+// this one; loaded by dlopen its local group holds only libc, liblog and libdl, so the global group
+// (surfaceflinger and its own dependencies, which this library is not part of) is searched instead.
+static void *resolve(const char *name, void *ours) {
+    void *f = dlsym(RTLD_NEXT, name);
+    if (!f) f = dlsym(RTLD_DEFAULT, name);
+    return f == ours ? NULL : f;
+}
+
+// Loaded by dlopen (oulg_inject, route A) this library interposes nothing: its exports are local to
+// it. The constructor then points the GOT entries of every loaded object that imports
+// glShaderSource or eglGetProcAddress (surfaceflinger's own, where RenderEngine is linked) at this
+// library, and keeps the values it replaced as the real functions. Loaded through DT_NEEDED those
+// entries already point here and are left alone. RELRO pages are made writable only for the write,
+// never executable.
+struct got_hook { const char *name; void *ours; void **real; int patched; };
+static struct got_hook hooks[2];
+/** Entries replaced in surfaceflinger's own executable, where DZIF's RenderEngine imports both. */
+static int main_patched;
+
+/** PROT_* of the mapping holding addr, from /proc/self/maps, or -1. */
+static int page_prot(uintptr_t addr) {
+    FILE *f = fopen("/proc/self/maps", "re");
+    if (!f) return -1;
+    char line[512];
+    int prot = -1;
+    while (prot < 0 && fgets(line, sizeof line, f)) {
+        uintptr_t a, b;
+        char perms[5];
+        if (sscanf(line, "%" SCNxPTR "-%" SCNxPTR " %4s", &a, &b, perms) != 3 || addr < a || addr >= b) continue;
+        prot = (perms[0] == 'r' ? PROT_READ : 0) | (perms[1] == 'w' ? PROT_WRITE : 0) | (perms[2] == 'x' ? PROT_EXEC : 0);
+    }
+    fclose(f);
+    return prot;
+}
+/**
+ * Writes one GOT slot. The page keeps exactly the protection it had: a writable page is written as
+ * it is, a read-only one (RELRO) is opened for the write and given its old protection back. An
+ * executable page is not touched (it would need execmod), nor one whose protection is unknown.
+ */
+static int write_slot(void **slot, void *value) {
+    long page = sysconf(_SC_PAGESIZE);
+    uintptr_t pg = (uintptr_t) slot & ~(uintptr_t) (page - 1);
+    int prot = page_prot((uintptr_t) slot);
+    if (prot < 0 || (prot & PROT_EXEC)) return 0;
+    if (prot & PROT_WRITE) { *slot = value; return 1; }
+    if (mprotect((void *) pg, (size_t) page, prot | PROT_WRITE) != 0) return 0;
+    *slot = value;
+    if (mprotect((void *) pg, (size_t) page, prot) != 0)
+        __android_log_print(ANDROID_LOG_WARN, TAG, "GOT page %p left writable: restoring protection failed", (void *) pg);
+    return 1;
+}
+static int patch_object(struct dl_phdr_info *info, size_t size, void *self) {
+    (void) size;
+    if (info->dlpi_name && (strstr(info->dlpi_name, "liboulg_sf") || strstr(info->dlpi_name, "/libEGL") || strstr(info->dlpi_name, "/libGLES")))
+        return 0;
+    (void) self;
+    const ElfW(Dyn) *dyn = NULL;
+    for (int i = 0; i < info->dlpi_phnum; i++)
+        if (info->dlpi_phdr[i].p_type == PT_DYNAMIC) dyn = (const ElfW(Dyn) *) (info->dlpi_addr + info->dlpi_phdr[i].p_vaddr);
+    if (!dyn) return 0;
+    const ElfW(Sym) *symtab = NULL;
+    const char *strtab = NULL;
+    const ElfW(Rela) *rel[2] = {NULL, NULL};
+    size_t relsz[2] = {0, 0};
+    for (; dyn->d_tag != DT_NULL; dyn++) {
+        // Bionic leaves the dynamic section unrelocated: pointers are link-time addresses.
+        ElfW(Addr) a = dyn->d_un.d_ptr < info->dlpi_addr ? info->dlpi_addr + dyn->d_un.d_ptr : dyn->d_un.d_ptr;
+        switch (dyn->d_tag) {
+            case DT_SYMTAB: symtab = (const ElfW(Sym) *) a; break;
+            case DT_STRTAB: strtab = (const char *) a; break;
+            case DT_JMPREL: rel[0] = (const ElfW(Rela) *) a; break;
+            case DT_PLTRELSZ: relsz[0] = dyn->d_un.d_val; break;
+            case DT_RELA: rel[1] = (const ElfW(Rela) *) a; break;
+            case DT_RELASZ: relsz[1] = dyn->d_un.d_val; break;
+        }
+    }
+    if (!symtab || !strtab) return 0;
+    int is_main = info->dlpi_name && (info->dlpi_name[0] == 0 || strstr(info->dlpi_name, "/bin/surfaceflinger"));
+    for (int t = 0; t < 2; t++) {
+        if (!rel[t]) continue;
+        for (size_t k = 0; k < relsz[t] / sizeof(ElfW(Rela)); k++) {
+            uint32_t type = ELF64_R_TYPE(rel[t][k].r_info);
+            if (type != R_AARCH64_JUMP_SLOT && type != R_AARCH64_GLOB_DAT) continue;
+            const char *name = strtab + symtab[ELF64_R_SYM(rel[t][k].r_info)].st_name;
+            for (int h = 0; h < 2; h++) {
+                if (strcmp(name, hooks[h].name) != 0) continue;
+                void **slot = (void **) (info->dlpi_addr + rel[t][k].r_offset);
+                if (*slot == hooks[h].ours) continue;
+                void *was = *slot;
+                if (!write_slot(slot, hooks[h].ours)) {
+                    __android_log_print(ANDROID_LOG_WARN, TAG, "GOT %s in %s: not writable (protection %d)", name, info->dlpi_name, page_prot((uintptr_t) slot));
+                    continue;
+                }
+                if (was && !*hooks[h].real) *hooks[h].real = was;
+                hooks[h].patched++;
+                if (is_main) main_patched++;
+                __android_log_print(ANDROID_LOG_INFO, TAG, "GOT %s patched in %s", name, info->dlpi_name && info->dlpi_name[0] ? info->dlpi_name : "(main)");
+            }
+        }
+    }
+    return 0;
+}
+
 __attribute__((constructor)) static void loaded(void) {
     __android_log_print(ANDROID_LOG_INFO, TAG, "LOADED pid=%d", getpid());
+    hooks[0] = (struct got_hook) { "glShaderSource", (void *) glShaderSource, (void **) &real_shader_source, 0 };
+    hooks[1] = (struct got_hook) { "eglGetProcAddress", (void *) eglGetProcAddress, (void **) &real_get_proc, 0 };
+    dl_iterate_phdr(patch_object, NULL);
+    // Objects loaded later are not walked. On DZIF the executable itself imports both functions
+    // (dzif-port.md), and it is loaded before the entry point; main=0 means that did not hold.
+    __android_log_print(main_patched ? ANDROID_LOG_INFO : ANDROID_LOG_WARN, TAG, "GOT_DONE glShaderSource=%d eglGetProcAddress=%d main=%d",
+                        hooks[0].patched, hooks[1].patched, main_patched);
 }
 
 static uint64_t fnv1a(const char *s, size_t n) {
@@ -179,13 +296,13 @@ static void announce_optics(void) {
 }
 
 void glShaderSource(GLuint shader, GLsizei count, const GLchar *const *strings, const GLint *lengths) {
-    if (!real_shader_source) real_shader_source = (ShaderSourceFn) dlsym(RTLD_NEXT, "glShaderSource");
+    if (!real_shader_source) real_shader_source = (ShaderSourceFn) resolve("glShaderSource", (void *) glShaderSource);
     if (!real_shader_source) return;
     if (!strings || count <= 0) { real_shader_source(shader, count, strings, lengths); return; }
     log_source(shader, count, strings, lengths);
     if (!real_compile) {
-        real_compile = (CompileFn) dlsym(RTLD_NEXT, "glCompileShader");
-        real_get_shaderiv = (GetShaderivFn) dlsym(RTLD_NEXT, "glGetShaderiv");
+        real_compile = (CompileFn) resolve("glCompileShader", NULL);
+        real_get_shaderiv = (GetShaderivFn) resolve("glGetShaderiv", NULL);
     }
     char *joined = NULL;
     if (!rewrite_disabled() && real_compile && real_get_shaderiv) {
@@ -244,7 +361,7 @@ void glShaderSource(GLuint shader, GLsizei count, const GLchar *const *strings, 
 }
 
 __eglMustCastToProperFunctionPointerType eglGetProcAddress(const char *name) {
-    if (!real_get_proc) real_get_proc = (GetProcFn) dlsym(RTLD_NEXT, "eglGetProcAddress");
+    if (!real_get_proc) real_get_proc = (GetProcFn) resolve("eglGetProcAddress", (void *) eglGetProcAddress);
     if (name && strcmp(name, "glShaderSource") == 0) return (__eglMustCastToProperFunctionPointerType) glShaderSource;
     return real_get_proc ? real_get_proc(name) : NULL;
 }
