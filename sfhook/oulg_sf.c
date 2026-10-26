@@ -62,6 +62,8 @@ struct got_hook { const char *name; void *ours; void **real; int patched; };
 static struct got_hook hooks[2];
 /** Entries replaced in surfaceflinger's own executable, where DZIF's RenderEngine imports both. */
 static int main_patched;
+/** Pages whose protection could not be put back after a write (left writable). */
+static int prot_failed;
 
 /** PROT_* of the mapping holding addr, from /proc/self/maps, or -1. */
 static int page_prot(uintptr_t addr) {
@@ -91,8 +93,10 @@ static int write_slot(void **slot, void *value) {
     if (prot & PROT_WRITE) { *slot = value; return 1; }
     if (mprotect((void *) pg, (size_t) page, prot | PROT_WRITE) != 0) return 0;
     *slot = value;
-    if (mprotect((void *) pg, (size_t) page, prot) != 0)
+    if (mprotect((void *) pg, (size_t) page, prot) != 0) {
+        prot_failed++;
         __android_log_print(ANDROID_LOG_WARN, TAG, "GOT page %p left writable: restoring protection failed", (void *) pg);
+    }
     return 1;
 }
 static int patch_object(struct dl_phdr_info *info, size_t size, void *self) {
@@ -154,8 +158,8 @@ __attribute__((constructor)) static void loaded(void) {
     dl_iterate_phdr(patch_object, NULL);
     // Objects loaded later are not walked. On DZIF the executable itself imports both functions
     // (dzif-port.md), and it is loaded before the entry point; main=0 means that did not hold.
-    __android_log_print(main_patched ? ANDROID_LOG_INFO : ANDROID_LOG_WARN, TAG, "GOT_DONE glShaderSource=%d eglGetProcAddress=%d main=%d",
-                        hooks[0].patched, hooks[1].patched, main_patched);
+    __android_log_print(main_patched && !prot_failed ? ANDROID_LOG_INFO : ANDROID_LOG_WARN, TAG, "GOT_DONE glShaderSource=%d eglGetProcAddress=%d main=%d protfail=%d",
+                        hooks[0].patched, hooks[1].patched, main_patched, prot_failed);
 }
 
 static uint64_t fnv1a(const char *s, size_t n) {

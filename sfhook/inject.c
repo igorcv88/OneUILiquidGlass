@@ -10,6 +10,9 @@
 // it (exit 3) unless --late is given.
 //
 // Usage: oulg_inject --lib PATH [--probe] [--restart] [--clear-cache] [--late] [--daemon LOG] [--timeout S]
+//   --selftest     the whole injection into a throwaway child (/system/bin/sleep) instead of
+//                  surfaceflinger: nothing is stopped or restarted. Run it before --restart.
+//   --version      the commit it was built from
 //   --probe        read-only check on the running surfaceflinger: PTRACE_SEIZE and an immediate
 //                  detach (the process is never stopped), its linker and entry, the library's label
 //   --restart      stop surfaceflinger, start it, inject into the new one, and restart the zygote
@@ -41,6 +44,9 @@
 #define SF_EXE "/system/bin/surfaceflinger"
 #define CACHE_DIR "/data/misc/surfaceflinger/"
 #define BRK0 0xd4200000u
+#ifndef OULG_VERSION
+#define OULG_VERSION "dev"
+#endif
 
 static double t0;
 static double now_ms(void) {
@@ -208,11 +214,26 @@ static void peek_string(pid_t pid, uintptr_t addr, char *out, size_t size) {
     out[at] = 0;
 }
 
+/** Logs the signal and the registers of a stopped pid: what a fault looked like, before anything else. */
+static void log_stop(pid_t pid) {
+    siginfo_t si;
+    if (ptrace(PTRACE_GETSIGINFO, pid, NULL, &si) == 0)
+        say("  siginfo signo=%d code=%d addr=%p", si.si_signo, si.si_code, si.si_addr);
+    struct user_pt_regs r;
+    if (get_regs(pid, &r))
+        say("  regs pc=0x%llx sp=0x%llx lr=0x%llx pstate=0x%llx (btype=%llu) x0=0x%llx x1=0x%llx x2=0x%llx",
+            (unsigned long long) r.pc, (unsigned long long) r.sp, (unsigned long long) r.regs[30], (unsigned long long) r.pstate,
+            (unsigned long long) ((r.pstate & PSR_BTYPE_MASK) >> 10), (unsigned long long) r.regs[0], (unsigned long long) r.regs[1],
+            (unsigned long long) r.regs[2]);
+}
+
 /**
- * Resumes pid until it stops with {@code want} (a signal-delivery stop), passing other signals on.
- * Returns 1 on that stop, 0 if the process died or the deadline passed.
+ * Resumes pid until it stops with {@code want} (a signal-delivery stop). Returns the signal it
+ * stopped with, or 0 if it died or the deadline passed. capture: any other signal also ends the
+ * wait, undelivered, with the process stopped (a remote call that faulted: the fault is logged and
+ * never handed to the process). Without capture other signals are logged and passed on.
  */
-static int run_until(pid_t pid, int want, double deadline_ms) {
+static int run_until(pid_t pid, int want, double deadline_ms, int capture) {
     if (ptrace(PTRACE_CONT, pid, NULL, NULL) != 0) { say("CONT failed: %s", strerror(errno)); return 0; }
     for (;;) {
         int st;
@@ -226,25 +247,39 @@ static int run_until(pid_t pid, int want, double deadline_ms) {
         if (!WIFSTOPPED(st)) continue;
         int sig = WSTOPSIG(st), event = st >> 16;
         if (event == PTRACE_EVENT_STOP) { ptrace(PTRACE_CONT, pid, NULL, NULL); continue; }
-        if (sig == want) return 1;
-        say("passing signal %d", sig);
+        if (sig == want) return sig;
+        say("stopped by signal %d%s", sig, capture ? "; not delivered" : "; passing it on");
+        log_stop(pid);
+        if (capture) return sig;
         ptrace(PTRACE_CONT, pid, NULL, (void *) (long) sig);
     }
 }
 
-/** Calls fn(a0, a1, a2) in pid, returning x0; the call returns to address 0 and traps. */
-static int remote_call(pid_t pid, const struct user_pt_regs *base, uintptr_t fn, uintptr_t a0, uintptr_t a1, uintptr_t a2, uintptr_t *ret) {
+/**
+ * Calls fn(a0, a1, a2) in a stopped pid and returns 1 with x0 in *ret. The call returns to address
+ * 0 and stops there with SIGSEGV. On failure *fault is where it stopped (fn itself: nothing in the
+ * target ran), or 0 if it died or did not stop in time.
+ *
+ * PSTATE.BTYPE is cleared, as a BLR would leave it for the callee. Stopped on the executable's
+ * entry, the process carries BTYPE=0b11 from the linker's "br x0"; with that, the "bti c" that
+ * opens __loader_dlopen raised a branch-target exception (SIGILL ILL_ILLOPC on DZIF, 26/10).
+ */
+static int remote_call(pid_t pid, const struct user_pt_regs *base, uintptr_t fn, uintptr_t a0, uintptr_t a1, uintptr_t a2,
+                       uintptr_t *ret, uintptr_t *fault) {
     struct user_pt_regs r = *base;
     r.regs[0] = a0; r.regs[1] = a1; r.regs[2] = a2;
     r.regs[30] = 0;
     r.pc = fn;
+    r.pstate &= ~(uint64_t) PSR_BTYPE_MASK;
+    *fault = fn;
     if (!set_regs(pid, &r)) { say("SETREGSET failed: %s", strerror(errno)); return 0; }
-    if (!run_until(pid, SIGSEGV, now_ms() + 5000)) return 0;
+    int sig = run_until(pid, SIGSEGV, now_ms() + 5000, 1);
     struct user_pt_regs out;
-    if (!get_regs(pid, &out)) return 0;
-    if (out.pc != 0) { say("call faulted inside the target at pc=0x%llx", (unsigned long long) out.pc); return 0; }
-    *ret = out.regs[0];
-    return 1;
+    if (!sig || !get_regs(pid, &out)) { *fault = 0; return 0; }
+    if (sig == SIGSEGV && out.pc == 0) { *ret = out.regs[0]; return 1; }
+    if (sig == SIGSEGV) log_stop(pid);
+    *fault = out.pc;
+    return 0;
 }
 
 /** Whether this process is out of every app cgroup (no "/uid_" in /proc/self/cgroup); logs them. */
@@ -318,88 +353,175 @@ static int release_target(pid_t pid, int intact) {
     return 0;
 }
 
-static int inject_into(pid_t pid, const char *lib, int late) {
-    if (ptrace(PTRACE_SEIZE, pid, NULL, NULL) != 0) { say("PTRACE_SEIZE failed: %s (SELinux or DEFEX; check dmesg | grep avc)", strerror(errno)); return 1; }
-    int st = 0;
-    if (ptrace(PTRACE_INTERRUPT, pid, NULL, NULL) != 0 || waitpid(pid, &st, __WALL) != pid || !WIFSTOPPED(st)) {
-        // Not stopped: it cannot be detached; the kernel detaches it when this injector exits.
-        say("no stop after interrupt (0x%x, %s)", st, strerror(errno));
+/** Exit codes: what failed, for the log and for scripts. */
+enum { RC_OK = 0, RC_FAIL = 1, RC_USAGE = 2, RC_MISSED = 3, RC_CALL_FAULT = 4, RC_DLOPEN_NULL = 5 };
+
+/** Puts back the registers the process had when it was stopped, read back to be sure. */
+static int restore_regs(pid_t pid, struct user_pt_regs *saved) {
+    struct user_pt_regs back;
+    if (set_regs(pid, saved) && get_regs(pid, &back) && back.pc == saved->pc && back.sp == saved->sp && back.pstate == saved->pstate)
         return 1;
-    }
+    say("restoring registers failed: %s", strerror(errno));
+    return 0;
+}
+
+/**
+ * The injection itself, on a stopped tracee. can_interrupt: attached with PTRACE_SEIZE (a
+ * PTRACE_TRACEME child cannot be interrupted).
+ */
+static int inject_attached(pid_t pid, const char *lib, int late, int can_interrupt) {
     struct user_pt_regs regs;
-    if (!get_regs(pid, &regs)) { say("GETREGSET failed: %s", strerror(errno)); release_target(pid, 1); return 1; }
-    struct module lk = {0, 0}, exe = {0, 0};
+    if (!get_regs(pid, &regs)) { say("GETREGSET failed: %s", strerror(errno)); release_target(pid, 1); return RC_FAIL; }
+    struct module lk = {0, 0};
     char linker[256] = "";
     int have_linker = linker_path(pid, linker, sizeof linker) && find_module(pid, "/linker64", &lk);
-    find_module(pid, SF_EXE, &exe);
     uintptr_t entry = auxv_entry(pid);
     int in_linker = have_linker && regs.pc >= lk.start && regs.pc < lk.end, threads = thread_count(pid);
-    say("stopped pc=0x%llx linker=%s [%lx-%lx] in_linker=%d threads=%d entry=0x%lx", (unsigned long long) regs.pc, linker, lk.start, lk.end, in_linker, threads, entry);
-    if (!have_linker || !entry) { say("linker or entry not found; detaching"); release_target(pid, 1); return 1; }
+    say("stopped pc=0x%llx pstate=0x%llx linker=%s [%lx-%lx] in_linker=%d threads=%d entry=0x%lx", (unsigned long long) regs.pc,
+        (unsigned long long) regs.pstate, linker, lk.start, lk.end, in_linker, threads, entry);
+    if (!have_linker || !entry) { say("linker or entry not found; detaching"); release_target(pid, 1); return RC_FAIL; }
+    int st = 0;
     // One thread: still linking, running library constructors, or early in main(). A breakpoint
     // on the entry is reached only in the first two cases; it is removed again if it is not.
     if (threads == 1) {
         errno = 0;
         long orig = ptrace(PTRACE_PEEKTEXT, pid, (void *) entry, NULL);
-        if (errno) { say("PEEKTEXT entry failed: %s", strerror(errno)); release_target(pid, 1); return 1; }
+        if (errno) { say("PEEKTEXT entry failed: %s", strerror(errno)); release_target(pid, 1); return RC_FAIL; }
         long trap = (long) (((unsigned long) orig & ~0xffffffffUL) | BRK0);
-        if (ptrace(PTRACE_POKETEXT, pid, (void *) entry, (void *) trap) != 0) { say("POKETEXT entry failed: %s", strerror(errno)); release_target(pid, 1); return 1; }
-        int hit = run_until(pid, SIGTRAP, now_ms() + 3000);
+        if (ptrace(PTRACE_POKETEXT, pid, (void *) entry, (void *) trap) != 0) { say("POKETEXT entry failed: %s", strerror(errno)); release_target(pid, 1); return RC_FAIL; }
+        int hit = run_until(pid, SIGTRAP, now_ms() + 3000, 0) == SIGTRAP;
         int stopped = hit;
-        if (!hit && kill(pid, 0) == 0) {
+        if (!hit && kill(pid, 0) == 0 && can_interrupt) {
             // Past the entry already, still running: stop it to take the breakpoint out.
             stopped = ptrace(PTRACE_INTERRUPT, pid, NULL, NULL) == 0 && waitpid(pid, &st, __WALL) == pid && WIFSTOPPED(st);
         }
-        if (!stopped) { say("cannot stop the process to remove the breakpoint"); release_target(pid, 0); return 1; }
+        if (!stopped) { say("cannot stop the process to remove the breakpoint"); release_target(pid, 0); return RC_FAIL; }
         // The breakpoint must be gone, read back, before the process may run on.
         errno = 0;
         int restored = ptrace(PTRACE_POKETEXT, pid, (void *) entry, (void *) orig) == 0
                 && ptrace(PTRACE_PEEKTEXT, pid, (void *) entry, NULL) == orig && errno == 0;
-        if (!restored) { say("restoring the entry instruction failed: %s", strerror(errno)); release_target(pid, 0); return 1; }
-        if (!hit) { say("missed: entry breakpoint not reached in 3 s; removed (read back), detached (retry)"); return release_target(pid, 1) ? 3 : 1; }
-        if (!get_regs(pid, &regs) || regs.pc != entry) { say("trapped away from the entry (pc=0x%llx); detaching", (unsigned long long) regs.pc); release_target(pid, 1); return 1; }
-        say("at entry point");
+        if (!restored) { say("restoring the entry instruction failed: %s", strerror(errno)); release_target(pid, 0); return RC_FAIL; }
+        if (!hit) { say("missed: entry breakpoint not reached in 3 s; removed (read back), detached (retry)"); return release_target(pid, 1) ? RC_MISSED : RC_FAIL; }
+        if (!get_regs(pid, &regs) || regs.pc != entry) { say("trapped away from the entry (pc=0x%llx); detaching", (unsigned long long) regs.pc); release_target(pid, 1); return RC_FAIL; }
+        say("at entry point pstate=0x%llx (btype=%llu)", (unsigned long long) regs.pstate, (unsigned long long) ((regs.pstate & PSR_BTYPE_MASK) >> 10));
     } else if (!late) {
-        say("missed: surfaceflinger already runs %d threads; detaching it untouched (retry, or --late)", threads);
-        return release_target(pid, 1) ? 3 : 1;
+        say("missed: the process already runs %d threads; detaching it untouched (retry, or --late)", threads);
+        return release_target(pid, 1) ? RC_MISSED : RC_FAIL;
     } else {
-        say("late injection at pc=0x%llx (a lock held here would deadlock surfaceflinger)", (unsigned long long) regs.pc);
+        say("late injection at pc=0x%llx (a lock held here would deadlock the process)", (unsigned long long) regs.pc);
     }
     uintptr_t dlopen_off = elf_symbol(linker, "__loader_dlopen"), dlerror_off = elf_symbol(linker, "__loader_dlerror");
-    if (!dlopen_off) { say("__loader_dlopen not found in %s; detaching", linker); release_target(pid, 1); return 1; }
+    if (!dlopen_off) { say("__loader_dlopen not found in %s; detaching", linker); release_target(pid, 1); return RC_FAIL; }
     struct user_pt_regs saved = regs, call = regs;
     // Scratch below the stack pointer, 16-byte aligned; the path sits above the callee's frame area.
     call.sp = (regs.sp - 0x2000) & ~(uint64_t) 0xf;
     uintptr_t path_at = call.sp + 0x1000;
-    if (!poke(pid, path_at, lib, strlen(lib) + 1)) { say("writing the path failed: %s", strerror(errno)); release_target(pid, 1); return 1; }
-    uintptr_t handle = 0;
-    // caller = the entry point: the library joins surfaceflinger's own linker namespace.
-    int ok = remote_call(pid, &call, lk.start + dlopen_off, path_at, 2 /* RTLD_NOW */, entry, &handle);
+    if (!poke(pid, path_at, lib, strlen(lib) + 1)) { say("writing the path failed: %s", strerror(errno)); release_target(pid, 1); return RC_FAIL; }
+    uintptr_t handle = 0, fault = 0, fn = lk.start + dlopen_off;
+    // caller = the entry point: the library joins the executable's own linker namespace.
+    int ok = remote_call(pid, &call, fn, path_at, 2 /* RTLD_NOW */, entry, &handle, &fault);
     char err[512] = "";
     if (ok && !handle && dlerror_off) {
-        uintptr_t msg = 0;
-        if (remote_call(pid, &call, lk.start + dlerror_off, 0, 0, 0, &msg) && msg) peek_string(pid, msg, err, sizeof err);
+        uintptr_t msg = 0, efn = lk.start + dlerror_off;
+        if (remote_call(pid, &call, efn, 0, 0, 0, &msg, &fault) && msg) peek_string(pid, msg, err, sizeof err);
+        else if (fault != efn) ok = 0;
     }
-    // A call that faulted leaves the process stopped in an unknown state: it is not let run.
-    struct user_pt_regs back;
-    int intact = ok && set_regs(pid, &saved) && get_regs(pid, &back) && back.pc == saved.pc && back.sp == saved.sp;
-    if (!ok) say("the remote call did not return cleanly");
-    else if (!intact) say("restoring registers failed: %s", strerror(errno));
-    if (!release_target(pid, intact)) return 1;
-    if (!handle) { say("dlopen returned NULL: %s", err[0] ? err : "(no dlerror)"); return 1; }
+    if (!ok) {
+        // Fail closed: only a fault on the called function's first instruction proves that nothing
+        // in the target ran (no lock taken, no memory changed); that process is put back as it was.
+        int clean = fault == fn;
+        say("remote call failed at pc=0x%lx (%s)", fault, clean ? "its first instruction: nothing ran" : "inside the target, or no stop");
+        if (clean && restore_regs(pid, &saved) && release_target(pid, 1)) say("process restored and released untouched");
+        else if (!clean) release_target(pid, 0);
+        return RC_CALL_FAULT;
+    }
+    if (!release_target(pid, restore_regs(pid, &saved))) return RC_FAIL;
+    if (!handle) { say("dlopen returned NULL: %s", err[0] ? err : "(no dlerror)"); return RC_DLOPEN_NULL; }
     // dlopen succeeded, nothing more: whether the GOT was hooked, the renderer is GLES and the
     // rewrite runs is in logcat -s OULG_SF (GOT_DONE, SRC, REWRITE) and the shader dump.
     say("DLOPEN_OK handle=0x%lx; detached. Not yet proof of interception: check logcat -s OULG_SF for GOT_DONE", handle);
-    return 0;
+    return RC_OK;
+}
+
+static int inject_into(pid_t pid, const char *lib, int late) {
+    if (ptrace(PTRACE_SEIZE, pid, NULL, NULL) != 0) { say("PTRACE_SEIZE failed: %s (SELinux or DEFEX; check dmesg | grep avc)", strerror(errno)); return RC_FAIL; }
+    int st = 0;
+    if (ptrace(PTRACE_INTERRUPT, pid, NULL, NULL) != 0 || waitpid(pid, &st, __WALL) != pid || !WIFSTOPPED(st)) {
+        // Not stopped: it cannot be detached; the kernel detaches it when this injector exits.
+        say("no stop after interrupt (0x%x, %s)", st, strerror(errno));
+        return RC_FAIL;
+    }
+    return inject_attached(pid, lib, late, 1);
+}
+
+/** Path of a mapping of pid whose path contains {@code needle}, logged; whether there is one. */
+static int mapped(pid_t pid, const char *needle) {
+    char path[64], line[512];
+    snprintf(path, sizeof path, "/proc/%d/maps", pid);
+    FILE *f = fopen(path, "r");
+    if (!f) return 0;
+    int found = 0;
+    while (!found && fgets(line, sizeof line, f)) if (strstr(line, needle)) { line[strcspn(line, "\n")] = 0; say("  mapped: %s", line); found = 1; }
+    fclose(f);
+    return found;
+}
+
+/**
+ * --selftest: the same injection, into a throwaway process instead of surfaceflinger. A child
+ * execs SELFTEST_EXE under PTRACE_TRACEME and stops in the dynamic linker, as surfaceflinger is
+ * caught; the library is loaded at its entry point, and its mapping is checked before the child is
+ * killed. Same linker, same BTI/PAC state, nothing restarted.
+ */
+#define SELFTEST_EXE "/system/bin/sleep"
+/** Written by a passing --selftest with the build that passed it; --restart requires it. */
+#define SELFTEST_STAMP "/data/local/tmp/oulg_selftest.ok"
+static int selftest_passed(void) {
+    char buf[64] = "";
+    int fd = open(SELFTEST_STAMP, O_RDONLY | O_CLOEXEC);
+    if (fd < 0) return 0;
+    ssize_t n = read(fd, buf, sizeof buf - 1);
+    close(fd);
+    if (n <= 0) return 0;
+    buf[n] = 0;
+    buf[strcspn(buf, "\n")] = 0;
+    return strcmp(buf, OULG_VERSION) == 0;
+}
+static int selftest(const char *lib) {
+    pid_t child = fork();
+    if (child < 0) { say("fork failed: %s", strerror(errno)); return RC_FAIL; }
+    if (child == 0) {
+        ptrace(PTRACE_TRACEME, 0, NULL, NULL);
+        execl(SELFTEST_EXE, "sleep", "10", (char *) NULL);
+        _exit(127);
+    }
+    int st = 0;
+    if (waitpid(child, &st, __WALL) != child || !WIFSTOPPED(st)) { say("selftest child did not stop at exec (0x%x)", st); kill(child, SIGKILL); return RC_FAIL; }
+    say("selftest child pid=%d (%s) stopped at exec", child, SELFTEST_EXE);
+    int rc = inject_attached(child, lib, 0, 0);
+    usleep(100000);
+    int there = kill(child, 0) == 0 && mapped(child, lib);
+    int alive = kill(child, 0) == 0;
+    kill(child, SIGKILL);
+    waitpid(child, &st, 0);
+    int pass = rc == RC_OK && there && alive;
+    say("SELFTEST %s rc=%d child_alive=%d lib_mapped=%d", pass ? "OK" : "FAILED", rc, alive, there);
+    unlink(SELFTEST_STAMP);
+    if (pass) {
+        int fd = open(SELFTEST_STAMP, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
+        if (fd >= 0) { dprintf(fd, "%s\n", OULG_VERSION); close(fd); }
+    }
+    return pass ? RC_OK : (rc ? rc : RC_FAIL);
 }
 
 int main(int argc, char **argv) {
     const char *lib = NULL, *log = NULL;
-    int restart = 0, clear = 0, late = 0, probe = 0, timeout = 120;
+    int restart = 0, clear = 0, late = 0, probe = 0, self = 0, timeout = 120;
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--lib") && i + 1 < argc) lib = argv[++i];
         else if (!strcmp(argv[i], "--restart")) restart = 1;
         else if (!strcmp(argv[i], "--probe")) probe = 1;
+        else if (!strcmp(argv[i], "--selftest")) self = 1;
+        else if (!strcmp(argv[i], "--version")) { printf("oulg_inject %s\n", OULG_VERSION); return RC_OK; }
         else if (!strcmp(argv[i], "--clear-cache")) clear = 1;
         else if (!strcmp(argv[i], "--late")) late = 1;
         else if (!strcmp(argv[i], "--daemon") && i + 1 < argc) log = argv[++i];
@@ -408,9 +530,12 @@ int main(int argc, char **argv) {
     }
     if (!lib || lib[0] != '/') { fprintf(stderr, "--lib needs an absolute path\n"); return 2; }
     if (access(lib, R_OK) != 0) { fprintf(stderr, "cannot read %s: %s\n", lib, strerror(errno)); return 2; }
+    if (restart && !selftest_passed()) { fprintf(stderr, "--restart needs a passing --selftest of this build (%s) first\n", OULG_VERSION); return 2; }
     if (restart && !log) { fprintf(stderr, "--restart needs --daemon LOG: the restart kills the calling shell\n"); return 2; }
     if (log) daemonize(log);
     t0 = now_ms();
+    say("oulg_inject %s", OULG_VERSION);
+    if (self) return selftest(lib);
     if (restart && !leave_app_cgroup()) { say("still in an app cgroup: refusing to restart (this injector would die with the userspace)"); return 1; }
     pid_t old = find_sf(0);
     say("lib=%s running surfaceflinger pid=%d", lib, old);

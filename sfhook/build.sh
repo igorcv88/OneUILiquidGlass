@@ -9,7 +9,8 @@ $CC -O2 -Wall -Wextra -fPIC -shared -Wl,-Bsymbolic -o build/module/lib/liboulg_s
 $CC -O2 -Wall -Wextra -static -o build/module/tools/dtneeded dtneeded.c
 # Route A (no module, no mount): the injector and the same library, for /data/local/tmp.
 mkdir -p build/live
-$CC -O2 -Wall -Wextra -static -s -o build/live/oulg_inject inject.c
+VERSION="$(git rev-parse --short HEAD 2>/dev/null || echo dev)"
+$CC -O2 -Wall -Wextra -static -s -DOULG_VERSION="\"$VERSION\"" -o build/live/oulg_inject inject.c
 cp build/module/lib/liboulg_sf.so build/live/
 (cd build/live && zip -q ../oulg-sf-live.zip oulg_inject liboulg_sf.so)
 cp module/module.prop module/customize.sh module/service.sh module/post-fs-data.sh build/module/
