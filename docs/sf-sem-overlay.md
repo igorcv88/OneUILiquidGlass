@@ -89,6 +89,23 @@ O módulo atual chega lá por um caminho: copia `/system/bin/surfaceflinger`, tr
 - **GOT:** a página volta à proteção exata que tinha (lida de `/proc/self/maps`); página executável ou de proteção desconhecida não é tocada. `GOT_DONE ... main=N` diz quantas entradas foram trocadas no próprio executável; `main=0` é falha, mesmo com `DLOPEN_OK`.
 - **`DLOPEN_OK` não prova interceptação.** A prova está no `logcat -s OULG_SF` (`GOT_DONE main>0`, linhas `SRC`) e no dump de shaders, que também diz se o DZIF é GLES.
 
+#### Primeira tentativa no aparelho (26/10): SIGILL por BTI
+
+O `--probe` passou: `PTRACE_SEIZE` permitido, a thread principal ficou parada 0,04 ms e o `PTRACE_DETACH` retornou 0. Na injeção, o SF novo parou no linker com uma thread e chegou ao entry. A chamada remota morreu com `SIGILL ILL_ILLOPC` em `0x7cd22bd214`, que é a base do `linker64` (`0x7cd222f000`) mais `__loader_dlopen` (`0x8e214`). O init subiu um SF limpo e o zygote foi reiniciado; nada foi carregado (laudo `OULG49_DIAGNOSTICO_SIGILL_DZIF`).
+
+Causa, conferida no `linker64` do DZIF (`aarch64 feature: BTI, PAC`):
+- O linker entra no executável com `br x0` (`__dl__start`, `0x90b0c`), de uma página protegida. Isso deixa `PSTATE.BTYPE = 0b11` na primeira instrução do entry.
+- O `BRK` do injetor é aceito com qualquer BTYPE, então a parada preserva `BTYPE=11` no `pstate`.
+- O injetor trocava só o PC. `__loader_dlopen` começa com `bti c`, que aceita BTYPE `01`/`10`. Com `11`, o processador gera exceção de branch target, entregue como `SIGILL ILL_ILLOPC`.
+
+Correção:
+- A chamada remota zera `PSTATE.BTYPE`, como um `BLR` deixaria para a função chamada. O `pstate` original volta com os registradores.
+- Um sinal inesperado durante a chamada não é mais repassado ao processo: o injetor registra `siginfo` e os registradores (`pc`, `sp`, `lr`, `pstate`, `btype`).
+- Se a falha foi na primeira instrução da função chamada (nada rodou), o processo é restaurado e solto intacto. Fora isso, `SIGKILL`.
+- `--selftest` faz a injeção inteira num filho descartável (`/system/bin/sleep`, parado no linker por `PTRACE_TRACEME`): mesmo linker, mesmo estado BTI/PAC, nada é reiniciado. Também confere o mapeamento da lib no filho.
+- Os códigos de saída distinguem: 0 ok, 1 falha, 2 uso, 3 entry perdido, 4 falha na chamada remota, 5 `dlopen` nulo.
+- `--version` imprime o commit. Um `--selftest` aprovado grava o commit em `/data/local/tmp/oulg_selftest.ok`, e o `--restart` recusa rodar sem esse registro do mesmo build.
+
 Ainda não foi visto no aparelho: se o DEFEX/SELinux deixa o domínio do root usar ptrace no SF, se o domínio `surfaceflinger` pode mapear a lib, quanto o SF leva até o entry depois do exec (a corrida) e se o DZIF é GLES.
 
 ### B. Bind mount de um único arquivo
