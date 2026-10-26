@@ -35,7 +35,7 @@ public final class CaptureBackdrop implements SampledBackdrop, CaptureHub.Client
     public long regionChangedAt() { return changedAt; }
     public long regionVerifiedAt() { return verifiedAt; }
     /** Whether the region gate can run for this band: asked for and its readback still works. */
-    public boolean regionGate() { return !regionFailed && region.getAsBoolean(); }
+    public boolean regionGate() { return !regionFailed && CaptureHub.regionAvailable() && region.getAsBoolean(); }
 
     @Override public String name() { return keyguard ? "capture-keyguard" : "capture"; }
     @Override public void update(int radiusPx, int tint, float[] radii) { }

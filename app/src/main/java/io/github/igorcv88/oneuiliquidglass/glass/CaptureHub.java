@@ -330,6 +330,8 @@ public final class CaptureHub {
             if (c != null && c.region()) c.onRegion(previous, next);
         }
     }
+    /** False once a readback failed: no signature comes again, for bands created later too. */
+    static boolean regionAvailable() { return !regionBroken; }
     /** Region verdicts from a client, counted into REGION_STATS. */
     static void noteRegion(int verdict) { regionStats.verdicts[verdict]++; }
 
