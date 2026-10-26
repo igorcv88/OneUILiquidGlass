@@ -128,6 +128,13 @@ Confirmado com leitura no aparelho e o binário do DZIF (`sha256 f13befcb…bf7`
 - `got_check`: `glShaderSource`, `glCompileShader`, `glCreateShader` e `glGetShaderiv` são `GLOB_DAT` e só existem na tabela `DT_ANDROID_RELA`; o binário não tem RELA comum (`rela=0`). `eglGetProcAddress` é o único `JUMP_SLOT` entre eles, e foi o único trocado no teste.
 - O `llvm-readelf -r` do mesmo binário dá os mesmos offsets (`0x9281f0` `glShaderSource`) e o mesmo total (1057 + 5824 = 6881 relocações).
 
+#### Terceira tentativa (26/10, `def955a`): shaders do DZIF interceptados
+
+- `DLOPEN_OK` no SF (PID 2734), lib mapeada, sem AVC, sem crash. Hook pelas relocações compactadas: 138 programas GLSL passaram por `glShaderSource` (`#version 320 es`), 24 deles com `radii_selector` (`FillRRect`). Dump: `sfhook/tools/testdata/dzif_dump.txt`.
+- `refract.h` contra esse dump (`tools/check.sh testdata/dzif_dump.txt "11 36"`): 11 dos 12 vertex shaders `FillRRect` reescritos e 36 fragment shaders. Tudo compila com o `glslangValidator`, e as 528 combinações de link vertex+fragment passam.
+- O 12º vertex `FillRRect` (`orig_005`) não tem `vTransformedCoords_`: é um retângulo arredondado sólido, não uma região de blur, e não aciona o desligamento das reescritas de fragment.
+- Ainda com `debug.oulg.sf.norewrite=1`: nada foi reescrito no aparelho. O próximo passo é a reescrita, e depois `sfrefract=1` para marcar os cards.
+
 Ainda não foi visto no aparelho: se o DEFEX/SELinux deixa o domínio do root usar ptrace no SF, se o domínio `surfaceflinger` pode mapear a lib, quanto o SF leva até o entry depois do exec (a corrida) e se o DZIF é GLES.
 
 ### B. Bind mount de um único arquivo
