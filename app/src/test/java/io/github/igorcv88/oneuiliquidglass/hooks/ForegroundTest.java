@@ -88,6 +88,10 @@ public final class ForegroundTest {
         // Icons: only the expand chevron, never an app or action icon.
         assertTrue(Foreground.standardId("android", host, "expand_button_icon"));
         assertFalse(Foreground.standardId("android", host, "icon"));
+        // The small icon has its own path (Foreground.glyph): only the template's android:icon.
+        assertTrue(Foreground.smallIconId("android", "icon"));
+        assertFalse(Foreground.smallIconId("android", "right_icon"));
+        assertFalse(Foreground.smallIconId("com.whatsapp", "icon"));
         assertFalse(Foreground.standardId("android", host, "right_icon"));
         assertFalse(Foreground.standardId("com.whatsapp", host, "expand_more"));
     }
