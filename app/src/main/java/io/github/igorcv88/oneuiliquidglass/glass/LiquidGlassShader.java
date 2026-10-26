@@ -47,6 +47,7 @@ public final class LiquidGlassShader {
         uniform float sheen;
         uniform float glintGain;
         uniform float rimGain;
+        uniform float outline;
 
         float roundedBox(float2 p, float2 hs, float r) {
             float2 q = abs(p) - hs + r;
@@ -95,6 +96,9 @@ public final class LiquidGlassShader {
 
             float a = (depth - b * 0.60) / (b * 0.45);
             float absorb = exp(-a * a) * far * far * 0.05;
+            // outline: a thin dark contour on light glass (debug.oulg.lightoutline). Added light
+            // cannot show on a white card over a white app; this is what marks where the card ends.
+            float edgeDark = contour * outline;
 
             float top = clamp((p.y + hs.y) / max(hs.y * 2.0, 1.0), 0.0, 1.0);
             float sh = sheen * (1.0 - smoothstep(0.0, 0.65, top));
@@ -102,7 +106,7 @@ public final class LiquidGlassShader {
             float3 cool = float3(0.95, 0.975, 1.0);
             float3 added = cool * (contour * contourGain + fresnel + inner + sh) + float3(1.0, 0.995, 0.985) * glint;
             added *= specular / 0.60 * decor;
-            return half4(half3(clamp(added, 0.0, 1.0)), half(clamp(absorb * shadow / 0.26 * decor, 0.0, 1.0)));
+            return half4(half3(clamp(added * (1.0 - edgeDark), 0.0, 1.0)), half(clamp(absorb * shadow / 0.26 * decor + edgeDark, 0.0, 1.0)));
         }
         half4 edge(float2 p, float2 hs, float d, float2 n) {
             if (live > 0.5) {

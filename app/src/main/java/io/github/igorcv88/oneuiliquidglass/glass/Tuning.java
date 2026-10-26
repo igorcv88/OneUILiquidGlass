@@ -204,26 +204,18 @@ public final class Tuning {
      */
     public final float styleLo, styleHi;
     /**
-     * Light glass: alpha (debug.oulg.lightglass, default 0.32) of the region colour
-     * debug.oulg.lighttone (hex RGB, default b8c2ce, a cool light grey). Round 37 used white at 0.25,
-     * which left the cards white on a white app with no separation (device video, 25/10); this
-     * composes to about #E8ECEF over white (luma ~0.92), a light frost, far from the 25 % black
-     * (#BFBFBF) that read as lead grey. lighttone ffffff with lightglass 0.25 is round 37's look.
+     * Light glass, shade and pop-up: alpha (debug.oulg.lightglass, default 0.75) of the region
+     * colour debug.oulg.lighttone (hex RGB, default ffffff): the light theme's own card, brighter
+     * than the white app behind it (~250 over ~236). Round 41's grey b8c2ce at 0.32 sat darker than
+     * the backdrop (~220 over ~235) and read as a dark shade on a white app (device screenshots,
+     * light vs dark theme, 26/10). The card's end is marked by debug.oulg.lightoutline instead.
      */
     public final float lightGlass;
     public final int lightTone;
-    /**
-     * The shade's light glass (debug.oulg.shadelightglass, shadelighttone): the light theme's own
-     * card, white at ~0.75, brighter than the white app behind it. The grey b8c2ce at 0.32 sat
-     * darker than the backdrop (luma ~220 over ~235) and read as a dark shade on a white app
-     * (device screenshots, light vs dark theme, 26/10). The pop-up keeps lightglass and lighttone.
-     */
-    public final float shadeLightGlass;
-    public final int shadeLightTone;
-    /** Thickness-shadow gain on light glass (debug.oulg.lightedge, default 2, 1 = as on other cards, max 4). */
+    /** Dark contour on light glass, shade and pop-up (debug.oulg.lightoutline). */
+    public final float lightOutline;
+    /** Thickness-shadow gain on light glass (debug.oulg.lightedge, default 1 = as on other cards, max 4). */
     public final float lightEdge;
-    /** The same for the shade's cards (debug.oulg.shadeedge). */
-    public final float shadeEdge;
     /**
      * Pop-ups in the dark theme, LSPosed-only mode (lockscreen cards keep liveDarkColor and no fill,
      * their look approved before round 39): white alpha of the region
@@ -346,12 +338,10 @@ public final class Tuning {
         veilMax = clamp(number("veilmax", 0.25f), 0f, 0.75f);
         styleHi = clamp(number("stylehi", 0.62f), 0.3f, 1f);
         styleLo = Math.min(styleHi, clamp(number("stylelo", 0.48f), 0.2f, 1f));
-        lightGlass = clamp(number("lightglass", 0.32f), 0f, 0.6f);
-        lightTone = rgb(prop("lighttone", "b8c2ce"), 0xb8c2ce);
-        shadeLightGlass = clamp(number("shadelightglass", 0.75f), 0f, 0.95f);
-        shadeLightTone = rgb(prop("shadelighttone", "ffffff"), 0xffffff);
-        lightEdge = clamp(number("lightedge", 2f), 0f, 4f);
-        shadeEdge = clamp(number("shadeedge", 1f), 0f, 4f);
+        lightGlass = clamp(number("lightglass", 0.75f), 0f, 0.95f);
+        lightTone = rgb(prop("lighttone", "ffffff"), 0xffffff);
+        lightOutline = clamp(number("lightoutline", 0.14f), 0f, 0.6f);
+        lightEdge = clamp(number("lightedge", 1f), 0f, 4f);
         liveDarkAlpha = Math.round(clamp(number("livedarkalpha", 20f), 0f, 255f));
         liveDarkFill = Math.round(clamp(number("livedarkfill", 10f), 0f, 255f));
         liveRim = clamp(number("liverim", 2f), 0f, 4f);
@@ -404,7 +394,7 @@ public final class Tuning {
         return "backdrop=" + backdrop + " profile=" + profile + " lens=" + lens + " rimhz=" + rimHz + " rimblur=" + rimBlur
                 + " refract=" + refract + " ior=" + ior + " blur=" + blur + " sat=" + saturation
                 + " disp=" + dispersion + " hz=" + hz + " hzkg=" + keyguardHz + " tint=" + tintAlpha
-                + " semradius=" + semRadius + " semradiuslens=" + semRadiusLens + " sflens=" + sfLens + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " live=" + live + " liveradius=" + liveRadius + " liveshaderadius=" + liveShadeRadius + " liveoptics=" + liveOptics + " livesheen=" + liveSheen + " liveglint=" + liveGlint + " shadeglint=" + shadeGlint + " livelens=" + liveLens + " lensmaxage=" + lensMaxAge + " lenssettle=" + lensSettle + " lensgate=" + lensGate + " lenstransition=" + lensTransition + " kgblurpath=" + kgBlurPath + " shadeblurpath=" + shadeBlurPath + " shadefadecut=" + shadeFadeCut + " kgblurradius=" + kgBlurRadius + " pillglass=" + pillGlass + " pillblur=" + pillBlur + " kgoptics=" + kgOptics + " huoptics=" + huOptics + " kglens=" + kgLens + " shadetone=" + shadeTone + " shadeveil=" + shadeVeil + " shadeadaptive=" + shadeAdaptive + " shadecap=" + shadeCap + " shadelift=" + shadeLift + " veilmax=" + veilMax + " stylelo=" + styleLo + " stylehi=" + styleHi + " lightglass=" + lightGlass + " lighttone=" + Integer.toHexString(lightTone) + " shadelightglass=" + shadeLightGlass + " shadelighttone=" + Integer.toHexString(shadeLightTone) + " lightedge=" + lightEdge + " shadeedge=" + shadeEdge + " livedarkalpha=" + liveDarkAlpha + " livedarkfill=" + liveDarkFill + " liverim=" + liveRim + " kgdarkalpha=" + kgDarkAlpha + " kgdarkfill=" + kgDarkFill + " kgrim=" + kgRim + " kgglint=" + kgGlint + " textswap=" + textSwap + " headertone=" + headerTone + " popuptone=" + popupTone + " shadescaleveil=" + shadeScaleVeil + " sfoptics=" + sfOptics + " kgwinblur=" + kgWinBlur + " headergap=" + headerGap + " perf=" + perf + " trace=" + trace;
+                + " semradius=" + semRadius + " semradiuslens=" + semRadiusLens + " sflens=" + sfLens + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " live=" + live + " liveradius=" + liveRadius + " liveshaderadius=" + liveShadeRadius + " liveoptics=" + liveOptics + " livesheen=" + liveSheen + " liveglint=" + liveGlint + " shadeglint=" + shadeGlint + " livelens=" + liveLens + " lensmaxage=" + lensMaxAge + " lenssettle=" + lensSettle + " lensgate=" + lensGate + " lenstransition=" + lensTransition + " kgblurpath=" + kgBlurPath + " shadeblurpath=" + shadeBlurPath + " shadefadecut=" + shadeFadeCut + " kgblurradius=" + kgBlurRadius + " pillglass=" + pillGlass + " pillblur=" + pillBlur + " kgoptics=" + kgOptics + " huoptics=" + huOptics + " kglens=" + kgLens + " shadetone=" + shadeTone + " shadeveil=" + shadeVeil + " shadeadaptive=" + shadeAdaptive + " shadecap=" + shadeCap + " shadelift=" + shadeLift + " veilmax=" + veilMax + " stylelo=" + styleLo + " stylehi=" + styleHi + " lightglass=" + lightGlass + " lighttone=" + Integer.toHexString(lightTone) + " lightedge=" + lightEdge + " lightoutline=" + lightOutline + " livedarkalpha=" + liveDarkAlpha + " livedarkfill=" + liveDarkFill + " liverim=" + liveRim + " kgdarkalpha=" + kgDarkAlpha + " kgdarkfill=" + kgDarkFill + " kgrim=" + kgRim + " kgglint=" + kgGlint + " textswap=" + textSwap + " headertone=" + headerTone + " popuptone=" + popupTone + " shadescaleveil=" + shadeScaleVeil + " sfoptics=" + sfOptics + " kgwinblur=" + kgWinBlur + " headergap=" + headerGap + " perf=" + perf + " trace=" + trace;
     }
 
     /** A hex RGB value (with or without #), or the fallback. */

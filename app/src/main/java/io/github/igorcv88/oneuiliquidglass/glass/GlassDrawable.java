@@ -130,6 +130,9 @@ public final class GlassDrawable extends Drawable {
     /** Light glass (ShadeTone light style): the thickness shadow is scaled by {@code edge} (debug.oulg.lightedge, shadeedge). */
     private boolean lightStyle;
     private float lightEdge = 1f;
+    /** Dark contour on light glass (debug.oulg.lightoutline); 0 on any other card. */
+    private float outline;
+    public void setOutline(float o) { if (outline != o) { outline = o; invalidateSelf(); } }
     public void setLightStyle(boolean on, float edge) {
         if (lightStyle != on || lightEdge != edge) { lightStyle = on; lightEdge = edge; invalidateSelf(); }
     }
@@ -245,6 +248,7 @@ public final class GlassDrawable extends Drawable {
         s.setFloatUniform("sheen", live ? t.liveSheen : 0f);
         s.setFloatUniform("glintGain", live ? glint : 1f);
         s.setFloatUniform("rimGain", live ? rimGain : 1f);
+        s.setFloatUniform("outline", live ? outline : 0f);
     }
     /**
      * False until the first frame arrives; the caller then draws veil and edge alone.

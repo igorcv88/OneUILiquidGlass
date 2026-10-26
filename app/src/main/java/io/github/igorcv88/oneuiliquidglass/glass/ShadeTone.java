@@ -203,14 +203,13 @@ public final class ShadeTone implements CaptureHub.Client {
      * on the theme's side, light or dark glass with swapped text on the other (debug.oulg.stylelo,
      * stylehi, lightglass).
      */
-    public static Material materialFor(float luma, Boolean scene, boolean shade) {
+    public static Material materialFor(float luma, Boolean scene) {
         Tuning t = Tuning.get();
         if (!t.textSwap) {
             boolean light = VeilMath.classify(luma, scene, t.styleLo, t.styleHi);
             return new Material(VeilMath.veil(VeilMath.need(luma, lightText(), t.shadeCap, t.shadeLift), lightText(), t.veilMax), false, light);
         }
-        int lightGlass = shade ? Math.round(255f * t.shadeLightGlass) << 24 | t.shadeLightTone
-                : Math.round(255f * t.lightGlass) << 24 | t.lightTone;
+        int lightGlass = Math.round(255f * t.lightGlass) << 24 | t.lightTone;
         return VeilMath.material(luma, scene, lightText(), t.shadeCap, t.shadeLift, t.veilMax, t.styleLo, t.styleHi,
                 lightGlass, DARK_GLASS);
     }

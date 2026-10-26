@@ -1075,7 +1075,7 @@ public final class HeadsUpHooks {
          */
         void setTone(float luma, boolean transition) {
             boolean shade = SURFACE_SHADE.equals(toneSurface);
-            io.github.igorcv88.oneuiliquidglass.glass.Material m = ShadeTone.materialFor(luma, shade ? shadeScene : popupScene, shade);
+            io.github.igorcv88.oneuiliquidglass.glass.Material m = ShadeTone.materialFor(luma, shade ? shadeScene : popupScene);
             lightBackdrop = m.light;
             if (!shade) popupScene = m.light;
             toneAt = android.os.SystemClock.uptimeMillis();
@@ -1171,13 +1171,21 @@ public final class HeadsUpHooks {
         /** Set when this row's glass is built: its text may carry its group's tone until the next setForeground. */
         boolean inherited;
         /** Light glass: the edge's thickness shadow is drawn stronger (debug.oulg.lightedge) to define the card on white. */
-        void setLightStyle(boolean on) { lightStyle = on; if (glass != null) glass.setLightStyle(on, lightEdge()); }
+        void setLightStyle(boolean on) {
+            lightStyle = on;
+            if (glass != null) { glass.setLightStyle(on, Tuning.get().lightEdge); glass.setOutline(outline()); }
+        }
         /**
-         * The shade's light glass takes the light theme's own thickness shadow (debug.oulg.shadeedge,
-         * 1x): at the pop-up's 2x it drew a grey inner bevel on every card of a stack over a white
-         * app (device frames, 25/10). The pop-up keeps debug.oulg.lightedge.
+         * A shade or pop-up card whose glass is light (the light theme's own card, or light glass
+         * over a white app in the dark theme) gets a thin dark contour (debug.oulg.lightoutline):
+         * white on white, the card's end was barely visible (device screenshots, 26/10). The
+         * lockscreen keeps its look.
          */
-        float lightEdge() { return SURFACE_SHADE.equals(toneSurface) ? Tuning.get().shadeEdge : Tuning.get().lightEdge; }
+        float outline() {
+            if (toneSurface == null) return 0f;
+            boolean light = lightStyle || (!swapped && !ShadeTone.lightText());
+            return light ? Tuning.get().lightOutline : 0f;
+        }
         boolean lightStyle;
         /** The veil measured for this card at the current shade opening (0: none needed). */
         int measuredVeil;
@@ -1618,7 +1626,8 @@ public final class HeadsUpHooks {
                 if (compBridge != null && !pill) safeTone(v);
                 if (semBridge != null) semBridge.setSuspended(stacked);
                 glass = new GlassDrawable(backdrop, v.getResources().getDisplayMetrics().density, spec);
-                glass.setLightStyle(lightStyle, lightEdge());
+                glass.setLightStyle(lightStyle, Tuning.get().lightEdge);
+                glass.setOutline(outline());
                 inherited = true;
                 glassKind = kind;
                 glassSource = source;
