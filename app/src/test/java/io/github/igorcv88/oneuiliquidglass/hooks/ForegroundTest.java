@@ -95,6 +95,27 @@ public final class ForegroundTest {
         assertFalse(Foreground.standardId("android", host, "right_icon"));
         assertFalse(Foreground.standardId("com.whatsapp", host, "expand_more"));
     }
+    /** A template icon view that is not a large icon: the app badge in a conversation's avatar qualifies. */
+    @Test public void appIconViewsButNotLargeIcons() {
+        assertTrue(Foreground.iconView("CachingIconView"));
+        assertTrue(Foreground.iconView("NotificationRowIconView"));
+        assertFalse(Foreground.iconView("ImageView"));
+        assertFalse(Foreground.largeIconId("conversation_icon_badge_icon"));
+        assertFalse(Foreground.largeIconId("icon"));
+        assertTrue(Foreground.largeIconId("left_icon"));
+        assertTrue(Foreground.largeIconId("conversation_icon"));
+        assertTrue(Foreground.largeIconId("conversation_icon_badge_bg"));
+        assertTrue(Foreground.largeIconId("conversation_icon_badge_ring"));
+        assertTrue(Foreground.largeIconId("right_icon"));
+        assertTrue(Foreground.largeIconId(null));
+    }
+    /** The template's colour counts only while its filter is on the drawable (ours replacing it counts too). */
+    @Test public void anUntintedAppIconHasNoTemplateColour() {
+        assertTrue(Foreground.untinted(false, false, false));
+        assertFalse(Foreground.untinted(true, false, false));
+        assertTrue(Foreground.untinted(true, true, false));
+        assertFalse(Foreground.untinted(true, true, true));
+    }
     /** SystemUI binds the content again while swapped: the next pre-draw sees it, not the 500 ms walk. */
     @Test public void aRebindIsSeenAsDrift() {
         Map<Object, Foreground.Rec> m = new HashMap<>();

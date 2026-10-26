@@ -1,0 +1,12 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <group android:translateX="0" android:translateY="0">
+        <!-- The back card: an outline, only where the front card does not cover it (its lines would show through the cut-out bars); the clip is its own group's, not the front card's. -->
+        <group>
+            <clip-path android:pathData="M-21.26,-21.26H36.18V70.34H127.28V127.28H-21.26Z" />
+            <path android:strokeColor="#FFFFFFFF" android:strokeWidth="3" android:pathData="M37.16,36.84H62.25A7.26,7.26 0 0 1 69.51,44.1V69.19A7.26,7.26 0 0 1 62.25,76.45H37.16A7.26,7.26 0 0 1 29.9,69.19V44.1A7.26,7.26 0 0 1 37.16,36.84Z" />
+        </group>
+        <!-- The front card, its three lines cut out. -->
+        <path android:fillColor="#FFFFFFFF" android:fillType="evenOdd" android:pathData="M43.77,27.92H71.0A7.59,7.59 0 0 1 78.59,35.51V62.75A7.59,7.59 0 0 1 71.0,70.34H43.77A7.59,7.59 0 0 1 36.18,62.75V35.51A7.59,7.59 0 0 1 43.77,27.92ZM45.75,41.95H52.68A2.31,2.31 0 0 1 54.99,44.26V44.26A2.31,2.31 0 0 1 52.68,46.57H45.75A2.31,2.31 0 0 1 43.44,44.26V44.26A2.31,2.31 0 0 1 45.75,41.95ZM45.26,49.54H70.17A1.82,1.82 0 0 1 71.99,51.36V51.35A1.82,1.82 0 0 1 70.17,53.17H45.26A1.82,1.82 0 0 1 43.44,51.35V51.36A1.82,1.82 0 0 1 45.26,49.54ZM45.26,55.32H62.74A1.82,1.82 0 0 1 64.56,57.14V57.13A1.82,1.82 0 0 1 62.74,58.95H45.26A1.82,1.82 0 0 1 43.44,57.13V57.14A1.82,1.82 0 0 1 45.26,55.32Z" />
+    </group>
+</vector>
