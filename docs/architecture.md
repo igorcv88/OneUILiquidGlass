@@ -1071,6 +1071,13 @@ Source: device video of PR #39 (18:45:08) and a lockscreen screenshot (18:46). T
 - `Foreground.glyph` now also takes, while the text is swapped: an app icon with a monochrome layer (`AdaptiveIconDrawable.getMonochrome()`), shown instead in the swapped tone; and an app icon drawn as one neutral colour on transparency (sampled once per drawable at 24 px, `oneColourGlyph`), filtered like a small icon. Full-colour icons (a third of the glyph red, or no transparency) and avatars are left alone.
 - The light disc behind the icon (its background, a `BitmapDrawable`) is hidden while the icon is swapped. Restore puts back the filter, the drawable and the disc. `ICON_TONE` (trace) logs what each icon was found to be.
 
+### Round 48: compositor lens live on DZIF; pop-up tone decided once, in both modes; minimised rows at first draw (2026-10-26)
+
+- Route A (`sfhook/inject.c`, docs/sf-sem-overlay.md) ran on the device: 60 programs rewritten (`REWRITE_OK`, 0 failed), `debug.oulg.sf.optics=9`, and with `sfrefract=1` the pop-up rim refracts live, without the capture gate (user, 26/10). A screen recording did not show the lens; on the panel it is there.
+- In that mode the pop-up's text kept the theme's tone over a white app: `popupTone` ran only with `live`, which `sfrefract=1` turns off. It now also runs on the Samsung blur path (`semBridge`). Only the text tone and the light style change there: the pop-up veil slot exists only on the live drawable.
+- `popuplock` (default 1): a pop-up is measured when it arrives and keeps that tone while shown, whatever moves behind it; each new heads-up arrival of the row measures again (`popupArrival`, counted before the tone so its first frame is not the previous arrival's). 0: measured every second and after touches, as before. The shade already decides once per opening (one scene per generation).
+- `orphandraw` (default 1): a row with no card of its own in the open shade (a minimised group's) takes the scene's text tone at its own pre-draw. `orphanTone` reached only rows shown when the capture landed; the minimised rows appeared later and stayed white until its 300 ms pass (device, 26/10).
+
 ## Future work
 
 - **Separate blur for the notification center and the control center.** Theme Park and HomeUp set a single blur amount for both panels. The user runs 12 %: lower leaves the control center unreadable, higher over-blurs the notification list. A split needs its own investigation: find where SystemUI applies the panel blur, whether the two panels are separate blur regions or one window, and whether the module can own one of them.

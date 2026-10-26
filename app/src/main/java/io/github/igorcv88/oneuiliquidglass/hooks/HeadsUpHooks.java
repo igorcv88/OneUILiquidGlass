@@ -945,6 +945,9 @@ public final class HeadsUpHooks {
         /** Last reason the native background was drawn instead of the glass; null while glass draws. */
         String lastFallback;
         Boolean lastHeadsUp;
+        /** Heads-up arrivals of this row (false to true), and the arrival popupTone last started from. */
+        int popupArrival, popupToneArrival = -1;
+        Boolean toneHeadsUp;
         int width = -1, height = -1;
         final float[] lastRadii = new float[8];
         final int[] location = new int[2], lastLocation = {Integer.MIN_VALUE, Integer.MIN_VALUE};
@@ -1016,7 +1019,9 @@ public final class HeadsUpHooks {
         void tone(View v) {
             Tuning t = Tuning.get();
             if (t.shadeAdaptive && Boolean.TRUE.equals(shadeExpanded) && barState != null && barState == Eligibility.BAR_SHADE) { shadeTone(v); return; }
-            if (t.live && t.popupTone && compBridge != null && popupSurface()) { popupTone(v); return; }
+            // The compositor-lens mode (sfrefract) draws through the Samsung blur: the pop-up's text
+            // tone follows the backdrop there too; its veil slot exists only on the live drawable.
+            if (t.popupTone && popupSurface() && ((t.live && compBridge != null) || (t.sfRefract && semBridge != null))) { popupTone(v); return; }
             // Unlocked, between surfaces (a pop-up handing over to the shade: heads-up animating away,
             // the shade not yet expanded): hold the material. Restoring here and applying it again a
             // few frames later flashed the text white-dark (TEXT_TONE swap=false, then true 50 ms
@@ -1081,7 +1086,9 @@ public final class HeadsUpHooks {
         }
         void popupTone(View v) {
             long now = android.os.SystemClock.uptimeMillis();
-            if (!SURFACE_POPUP.equals(toneSurface)) {
+            // A new heads-up arrival on this row starts over: its tone is measured afresh.
+            if (!SURFACE_POPUP.equals(toneSurface) || popupToneArrival != popupArrival) {
+                popupToneArrival = popupArrival;
                 toneSurface = SURFACE_POPUP; popupMeasureAt = 0; popupMeasuredAlpha = 0f; popupScene = null;
                 // The pop-up slot is empty or stale: write the current veil before any step from it.
                 pushToneVeil();
@@ -1089,6 +1096,10 @@ public final class HeadsUpHooks {
                 setNative();
                 logTone("POPUP_CONTRAST", v, toneSource, Float.NaN, -1f, "");
             } else setForeground(swapped);
+            // Decided once (popuplock): after the first measurement of this arrival the pop-up keeps
+            // its tone while shown. Measured again on every backdrop change, it switched between
+            // looks over moving content (device, 26/10).
+            if (Tuning.get().popupLock && "sample".equals(toneSource)) return;
             if (!v.isShown()) return;
             v.getLocationOnScreen(toneXy);
             float alpha = shownAlpha(v);
@@ -1482,15 +1493,27 @@ public final class HeadsUpHooks {
                 // Only a card that draws glass this frame takes a veil or swapped text: with the module
                 // disabled, or a card going back to its native background (ineligible, failed), its
                 // text is left as SystemUI drew it.
+                View r = row.get();
+                Boolean headsUp = r == null ? null : Reflect.bool(r, "isHeadsUpState", "mIsHeadsUp");
+                // Counted before the tone, so a new arrival's first frame is measured, not the last one's tone.
+                if (Boolean.TRUE.equals(headsUp) && !Boolean.TRUE.equals(toneHeadsUp)) popupArrival++;
+                toneHeadsUp = headsUp;
                 if (!pill) {
                     if (Eligibility.textTone(enabled, glass != null, glass != null && glass.failed(), eligible)) safeTone(v);
+                    else if (Tuning.get().orphanDraw && enabled && Boolean.TRUE.equals(shadeExpanded) && shadeScene != null && toneOpen != shadeOpens
+                            && barState != null && barState == Eligibility.BAR_SHADE) {
+                        // A row with no card of its own (a minimised group's) takes the scene's tone at
+                        // its own first draw: orphanTone only reaches rows shown when the capture
+                        // lands, and these appeared later and stayed white until its 300 ms pass.
+                        boolean swap = Tuning.get().textSwap && shadeScene == ShadeTone.lightText();
+                        setForeground(swap);
+                        if (swap) orphans.add(this); else orphans.remove(this);
+                    }
                     // A row drawn inside its group's glass (orphanTone) keeps the scene's tone: this
                     // restore undid it at the next traversal, and round 43's walk from the group too.
                     else setForeground(orphans.contains(this) && enabled && Boolean.TRUE.equals(shadeExpanded) && shadeScene != null
                             && shadeScene == ShadeTone.lightText());
                 } else shelfTone();
-                View r = row.get();
-                Boolean headsUp = r == null ? null : Reflect.bool(r, "isHeadsUpState", "mIsHeadsUp");
                 String reason = reason();
                 if (headsUp != null && !headsUp.equals(lastHeadsUp)) {
                     lastHeadsUp = headsUp;
