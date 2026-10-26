@@ -1,6 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <application android:icon="@android:drawable/ic_dialog_info" android:label="One UI Liquid Glass" android:theme="@android:style/Theme.Material.NoActionBar" android:allowBackup="false" android:supportsRtl="true">
+    <application android:icon="@drawable/oulg_launcher" android:roundIcon="@drawable/oulg_launcher" android:label="One UI Liquid Glass" android:theme="@android:style/Theme.Material.NoActionBar" android:allowBackup="false" android:supportsRtl="true">
         <meta-data android:name="xposedmodule" android:value="true" />
         <meta-data android:name="xposeddescription" android:value="Samsung heads-up compositor glass and firmware diagnostics" />
         <meta-data android:name="xposedminversion" android:value="93" />
