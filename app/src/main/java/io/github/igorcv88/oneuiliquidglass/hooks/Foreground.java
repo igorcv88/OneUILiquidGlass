@@ -129,7 +129,9 @@ final class Foreground {
         ColorStateList tint = v.getImageTintList();
         if (tint != null) return tint.getDefaultColor();
         try {
-            Object c = v.getClass().getMethod("getOriginalIconColor").invoke(v);
+            java.lang.reflect.Method m = Reflect.method(v.getClass(), "getOriginalIconColor");
+            if (m == null) return null;
+            Object c = m.invoke(v);
             // Notification.COLOR_INVALID (1): no colour, the app's own icon is shown.
             return c instanceof Integer && (Integer) c != 1 ? (Integer) c : null;
         } catch (ReflectiveOperationException | RuntimeException e) { return null; }
@@ -211,10 +213,14 @@ final class Foreground {
             restore(v, g);
             return true;
         }
-        if (g != null && g.current(v)) return false;
         android.graphics.drawable.Drawable d = v.getDrawable();
-        android.graphics.drawable.Drawable mono = null;
         Integer c = d == null ? null : glyphColor(v);
+        if (g != null && g.current(v)) {
+            // The template recoloured the icon in place (an accent tint): released, as text is.
+            if (c != null && !themeTone(c, lightText)) { glyphs.remove(v); restore(v, g); }
+            return false;
+        }
+        android.graphics.drawable.Drawable mono = null;
         if (d != null && c == null) {
             if (d instanceof android.graphics.drawable.AdaptiveIconDrawable) mono = ((android.graphics.drawable.AdaptiveIconDrawable) d).getMonochrome();
             if (mono == null) c = lightGlyph(d);
