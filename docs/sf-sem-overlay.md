@@ -99,12 +99,16 @@ Causa, conferida no `linker64` do DZIF (`aarch64 feature: BTI, PAC`):
 - O injetor trocava só o PC. `__loader_dlopen` começa com `bti c`, que aceita BTYPE `01`/`10`. Com `11`, o processador gera exceção de branch target, entregue como `SIGILL ILL_ILLOPC`.
 
 Correção:
-- A chamada remota zera `PSTATE.BTYPE`, como um `BLR` deixaria para a função chamada. O `pstate` original volta com os registradores.
+- A chamada remota põe `PSTATE.BTYPE = 0b10`, o que um `BLR` deixa para a função chamada; o `bti c` de `__loader_dlopen` e de `__loader_dlerror` aceita esse valor. (A primeira versão, #51, zerava o BTYPE: isso também evita o `SIGILL`, mas porque desliga a verificação naquela entrada.) Depois, o `pstate` original volta com os registradores.
 - Um sinal inesperado durante a chamada não é mais repassado ao processo: o injetor registra `siginfo` e os registradores (`pc`, `sp`, `lr`, `pstate`, `btype`).
 - Se a falha foi na primeira instrução da função chamada (nada rodou), o processo é restaurado e solto intacto. Fora isso, `SIGKILL`.
 - `--selftest` faz a injeção inteira num filho descartável (`/system/bin/sleep`, parado no linker por `PTRACE_TRACEME`): mesmo linker, mesmo estado BTI/PAC, nada é reiniciado. Também confere o mapeamento da lib no filho.
+- **Controle negativo do BTI:** antes do `dlopen`, o selftest chama `__loader_dlerror` com o BTYPE que o `br x0` do linker deixa (`0b11`) e exige um `SIGILL` na primeira instrução. Isso prova que o BTI está ativo no filho; sem isso, o teste não representa o SF e falha (`bti_enforced=0`).
+- **Restauração:** todos os registradores são comparados por inteiro depois do `SETREGSET`, e os 8 KiB abaixo do `sp` usados como rascunho são salvos antes e reescritos (relidos) depois.
+- **Sem `--late`:** depois do `main()`, um lock pode estar tomado e o `dlopen` travaria nele. Só o entry é aceito.
 - Os códigos de saída distinguem: 0 ok, 1 falha, 2 uso, 3 entry perdido, 4 falha na chamada remota, 5 `dlopen` nulo.
-- `--version` imprime o commit. Um `--selftest` aprovado grava o commit em `/data/local/tmp/oulg_selftest.ok`, e o `--restart` recusa rodar sem esse registro do mesmo build.
+- `--version` imprime o commit. Um `--selftest` aprovado grava em `/data/local/tmp/oulg_selftest.ok` o commit e os hashes (FNV-1a) do injetor e da lib; um selftest novo apaga o registro antes de começar. Qualquer injeção no SF exige o mesmo commit e os mesmos hashes.
+- **GOT:** se a página não voltar à proteção original, a entrada é desfeita e não conta como trocada (`protfail`).
 
 Ainda não foi visto no aparelho: se o DEFEX/SELinux deixa o domínio do root usar ptrace no SF, se o domínio `surfaceflinger` pode mapear a lib, quanto o SF leva até o entry depois do exec (a corrida) e se o DZIF é GLES.
 

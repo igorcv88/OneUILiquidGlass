@@ -92,10 +92,15 @@ static int write_slot(void **slot, void *value) {
     if (prot < 0 || (prot & PROT_EXEC)) return 0;
     if (prot & PROT_WRITE) { *slot = value; return 1; }
     if (mprotect((void *) pg, (size_t) page, prot | PROT_WRITE) != 0) return 0;
+    void *was = *slot;
     *slot = value;
     if (mprotect((void *) pg, (size_t) page, prot) != 0) {
+        // The page cannot be made read-only again: the entry is put back and counts as not hooked.
+        // The page stays writable (nothing else can be done from here), which GOT_DONE reports.
+        *slot = was;
         prot_failed++;
-        __android_log_print(ANDROID_LOG_WARN, TAG, "GOT page %p left writable: restoring protection failed", (void *) pg);
+        __android_log_print(ANDROID_LOG_WARN, TAG, "GOT page %p left writable: restoring protection failed; entry reverted", (void *) pg);
+        return 0;
     }
     return 1;
 }
