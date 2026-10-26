@@ -363,6 +363,7 @@ public final class HeadsUpHooks {
                             // up to 4 are dropped: a pull-down or the bouncer passes that within a few frames.
                             p.args[0] = null;
                         }
+                        if (p.args[0] != null && v.getRootView() == v && v.getClass().getName().endsWith("NotificationShadeWindowView")) panelBlur(v, p.args[0]);
                         if (Probe.trace && v.getRootView() == v) {
                             // The shade window's own blur, to match a card region to it before removal.
                             String panel = p.args[0] == null ? "null" : Probe.blurFields(p.args[0]);
@@ -564,6 +565,42 @@ public final class HeadsUpHooks {
         }
         for (State st : new ArrayList<>(states.values())) st.invalidate();
         headerTone(grid);
+        panelDim(enabled && Tuning.get().textSwap && shadeScene && ShadeTone.lightText());
+    }
+    /** The shade window's last blur info and its host, SystemUI's own colour on it, and the dim applied. */
+    private WeakReference<View> panelHost;
+    private Object panelInfo;
+    private int panelOwnColor, panelApplied;
+    private boolean panelDim;
+    /**
+     * The shade window's blur darkened over a light app in the dark theme (debug.oulg.paneldim):
+     * the light theme's panel sits at ~235 over a white app and its cards at ~250, so they stand
+     * out; the dark theme's sat at ~250 under cards of ~249 and the cards dissolved into it
+     * (device screenshots, 26/10). Called for every blur SystemUI sets on the shade window.
+     */
+    private void panelBlur(View v, Object info) {
+        Field f = Reflect.field(info.getClass(), "mBackgroundBlurColor");
+        if (f == null) return;
+        try {
+            int now = f.getInt(info);
+            if (info != panelInfo || now != panelApplied) panelOwnColor = now;
+            panelHost = new WeakReference<>(v); panelInfo = info;
+            float dim = Tuning.get().panelDim;
+            panelApplied = panelDim && dim > 0f ? ShadeTone.overNative(Math.round(255f * dim) << 24, panelOwnColor) : panelOwnColor;
+            if (now != panelApplied) f.setInt(info, panelApplied);
+        } catch (IllegalAccessException | RuntimeException e) { Probe.error("PANEL_DIM_FAILED", e); }
+    }
+    /** Turns the panel dim on for this opening's scene, and sets the panel's blur again so it shows now. */
+    private void panelDim(boolean on) {
+        if (panelDim == on) return;
+        panelDim = on;
+        Probe.log("PANEL_DIM", "on=" + on + " alpha=" + Tuning.get().panelDim);
+        View host = panelHost == null ? null : panelHost.get();
+        // Turned off only by the closing shade, whose own blur calls restore the colour: setting the
+        // last (fully open) blur again there would flash it back.
+        if (!on || host == null || panelInfo == null) return;
+        try { View.class.getMethod("semSetBlurInfo", Class.forName("android.view.SemBlurInfo")).invoke(host, panelInfo); }
+        catch (ReflectiveOperationException | RuntimeException e) { Probe.error("PANEL_DIM_FAILED", e); }
     }
     /** The shade header's clock, date and carrier while they carry the swapped tone. */
     private final java.util.List<View> headerViews = new ArrayList<>();
@@ -652,6 +689,7 @@ public final class HeadsUpHooks {
                 + " intercepted=" + Foreground.interceptions());
         shadeGrid = null; shadeOpenAt = 0;
         restoreHeader();
+        panelDim(false);
     }
     private void installShade() {
         Class<?> c = resolve("com.android.systemui.shade.NotificationPanelViewController");
