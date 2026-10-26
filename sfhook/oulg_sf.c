@@ -274,6 +274,8 @@ static float prop_float(const char *name, float fallback) {
 // restores v0.11) and .kgglow (rim glow width; 1 with kgrim 1 and kgspec 0.30 restores v0.11). Profile 2
 // (expanded-shade legibility): debug.oulg.sf.shadecap and .shadelift (luma limits). Which
 // profile a card gets travels in its tag, set live by the module.
+// .kggradient (0..1, default 1) enables the continuous glass/body transition;
+// .kggradient=0 with .kgcorecap=62 restores the v0.21 lockscreen reference.
 static void layered_blur(struct oulg_profile p[OULG_PROFILES]) {
     p[0] = OULG_PROFILES_DEFAULT[0];
     p[0].core = prop_float("debug.oulg.sf.core", OULG_CORE_DEFAULT);
@@ -296,6 +298,7 @@ static void layered_blur(struct oulg_profile p[OULG_PROFILES]) {
     p[1].fcap = prop_float("debug.oulg.sf.kgflatcap", OULG_KG_FCAP_DEFAULT);
     p[1].cdim = prop_float("debug.oulg.sf.kgcoredim", OULG_KG_CDIM_DEFAULT);
     p[1].glow = prop_float("debug.oulg.sf.kgglow", OULG_KG_GLOW_DEFAULT);
+    p[1].gradient = prop_float("debug.oulg.sf.kggradient", OULG_KG_GRADIENT_DEFAULT);
     p[2] = OULG_PROFILES_DEFAULT[2];
     p[2].cap = prop_float("debug.oulg.sf.shadecap", OULG_SHADE_CAP_DEFAULT);
     p[2].lift = prop_float("debug.oulg.sf.shadelift", OULG_SHADE_LIFT_DEFAULT);

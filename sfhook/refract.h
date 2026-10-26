@@ -76,7 +76,7 @@
 //  - a thin contour, the grazing edge of the same surface, 1.6 px from the outline;
 //  - a specular band inside the contour, peaked mid-bevel on the light-facing side (light from the
 //    upper left, as the module's edge optics), a fainter one opposite, fading over bright backdrops.
-#define OULG_FS_GLOBALS "highp float oulg_on, oulg_pf, oulg_br, oulg_bw, oulg_t, oulg_k, oulg_bv;\nhighp vec2 oulg_jx, oulg_jy, oulg_n;\n"
+#define OULG_FS_GLOBALS "highp float oulg_on, oulg_pf, oulg_br, oulg_bw, oulg_t, oulg_k, oulg_bv, oulg_grad;\nhighp vec2 oulg_jx, oulg_jy, oulg_n;\n"
 #define OULG_FS_BSPLINE \
     "mediump vec4 oulg_bspline(sampler2D s, highp vec2 uv) {\n" \
     "  highp vec2 ts = vec2(textureSize(s, 0));\n" \
@@ -202,11 +202,13 @@
     "    mediump float facing = dot(oulg_n, vec2(-0.4512, -0.8924));\n" \
     "    mediump vec3 env = vec3(0.90, 0.94, 1.0) * mix(0.62, 1.0, 0.5 + 0.5 * facing);\n" \
     "    mediump float f = clamp(%.3f * pow(1.0 - cos(%.3f * g), 5.0), 0.0, 1.0);\n" \
+    "    f *= 1.0 - oulg_grad * body;\n" \
     "    rgb = mix(rgb, env, f);\n" \
     "    highp float px = (1.0 - oulg_t) * oulg_bv;\n" \
     "    mediump float line = %.3f * exp(-px * px / 5.12) * (0.7 + 0.3 * max(facing, 0.0));\n" \
     "    rgb = mix(rgb, vec3(0.97, 0.985, 1.0), clamp(line, 0.0, 1.0));\n" \
     "    mediump float band = smoothstep(0.30, 0.62, tg) * (1.0 - smoothstep(0.80, 0.95, tg));\n" \
+    "    band *= 1.0 - oulg_grad * body;\n" \
     "    mediump float lobe = pow(max(facing, 0.0), 3.0) + 0.45 * pow(max(-facing, 0.0), 3.0);\n" \
     "    mediump float m = max(max(rgb.r, rgb.g), max(rgb.b, 1e-3));\n" \
     "    mediump vec3 hue = mix(vec3(1.0), rgb / m, 0.3);\n" \
@@ -226,21 +228,27 @@
     "mediump vec4 oulg_sample(sampler2D s, highp vec2 uv) {\n" \
     "  return oulg_on > 0.0 ? (oulg_pf > 1.5 ? oulg_tone(texture(s, uv)) : oulg_lens(s, uv)) : texture(s, uv);\n" \
     "}\n"
-// The field (ramp1, core1, ccap1, core0, ramp0); programs that sample an external texture get only
+// The field (gradient1, ramp1, core1, ccap1, core0, ramp0, ramp1, core1, ccap1); programs that sample an external texture get only
 // this and the globals. Profile 0's shift keeps its v0.7 expression.
 //
-// Profile 1's body radius (v0.16): oulg_bw is the v0.11 ramp (0 at a quarter bevel, 1 past `ramp`
-// bevels) and the radius is core x bw capped at ccap. Below the cap, which on a 108 px corner lies
-// past the bevel band, every pixel samples exactly as in v0.11: the rim, its refraction and the
-// transition keep their filtering; only the core is blurred less. The material weights its colour
-// terms by bw, not by radius / core, so capping the radius does not change the core's colour.
+// Profile 1 gradient (v0.22): preserve the outer 4 px, then ease to an 8 px lightly
+// blurred glass band at max(8 px, quarter bevel). A second quintic smootherstep
+// reaches min(core, ccap) at ramp bevels, without the old hard radius cap. The same
+// body coordinate drives tone and fades inner reflection/specular, while the
+// refraction field and the outer contour remain unchanged. gradient=0 restores
+// the old curve; use ccap=62 as well for the exact v0.21 reference.
 #define OULG_FS_FIELD_FMT \
+    "highp float oulg_smootherstep(highp float lo, highp float hi, highp float x) {\n" \
+    "  highp float u = clamp((x - lo) / (hi - lo), 0.0, 1.0);\n" \
+    "  return u * u * u * (u * (u * 6.0 - 15.0) + 10.0);\n" \
+    "}\n" \
     "highp vec2 oulg_field(highp vec2 q, highp vec2 hs, highp float r, highp float kp) {\n" \
     "  oulg_pf = kp >= 4.0 ? 2.0 : kp >= 2.0 ? 1.0 : 0.0;\n" \
     "  highp float k = kp - 2.0 * oulg_pf;\n" \
     "  oulg_k = k;\n" \
     "  oulg_t = 0.0;\n" \
     "  oulg_n = vec2(0.0);\n" \
+    "  oulg_grad = oulg_pf > 0.5 && oulg_pf < 1.5 ? %.3f : 0.0;\n" \
     "  if (oulg_pf > 1.5) { oulg_br = 0.0; return vec2(0.0); }\n" \
     "  highp vec2 w = abs(q) - (hs - vec2(r));\n" \
     "  highp vec2 v = max(w, vec2(0.0));\n" \
@@ -250,6 +258,14 @@
     "  oulg_bw = smoothstep(0.25 * bevel, %.3f * bevel, depth);\n" \
     "  oulg_br = oulg_pf > 0.5 ? min(%.2f * oulg_bw, %.2f)\n" \
     "                          : %.2f * smoothstep(0.25 * bevel, %.3f * bevel, depth);\n" \
+    "  if (oulg_pf > 0.5 && oulg_grad > 0.0) {\n" \
+    "    highp float start = max(8.0, 0.25 * bevel);\n" \
+    "    highp float body = oulg_smootherstep(start, max(start + 1.0, %.3f * bevel), depth);\n" \
+    "    highp float core = min(%.2f, %.2f);\n" \
+    "    highp float skin = min(8.0, core) * oulg_smootherstep(4.0, start, depth);\n" \
+    "    oulg_br = mix(oulg_br, mix(skin, core, body), oulg_grad);\n" \
+    "    oulg_bw = mix(oulg_bw, body, oulg_grad);\n" \
+    "  }\n" \
     "  if (l <= 0.0 || depth <= 0.0 || depth >= bevel) return vec2(0.0);\n" \
     "  highp float t = 1.0 - depth / bevel;\n" \
     "  if (oulg_pf > 0.5) {\n" \
@@ -269,7 +285,7 @@
 // (Fresnel and specular band) as a fraction of the bevel band (1: v0.11); profile 0 only: the bloom
 // control of its body disc (0: none, the plain disc).
 struct oulg_profile { float core; int taps; float ramp; float sat; float tone; float rim; float spec; float cap; float lift;
-                      float flat; float level; float cool; float tilt; float line; float ccap; float fcap; float cdim; float glow; float bloom; };
+                      float flat; float level; float cool; float tilt; float line; float ccap; float fcap; float cdim; float glow; float bloom; float gradient; };
 #define OULG_CORE_DEFAULT 48.0f
 #define OULG_HU_BLOOM_DEFAULT 0.0f
 #define OULG_TAPS_DEFAULT 24
@@ -279,9 +295,10 @@ struct oulg_profile { float core; int taps; float ramp; float sat; float tone; f
 #define OULG_KG_CORE_DEFAULT 80.0f
 #define OULG_KG_TAPS_DEFAULT 48
 #define OULG_KG_RAMP_DEFAULT 1.5f
-// Lockscreen body radius cap (v0.16): the v0.11 core of 80 px hid too much of the wallpaper. Capped
-// at 62 px, the core is clearer while the rim and its transition (radius below 62 px) are unchanged.
-#define OULG_KG_CCAP_DEFAULT 62.0f
+// Lockscreen effective core: 62 -> 52 px for a modest reduction in blur. In gradient
+// mode this is the smooth endpoint rather than a hard clamp on an 80 px curve.
+#define OULG_KG_CCAP_DEFAULT 52.0f
+#define OULG_KG_GRADIENT_DEFAULT 1.0f
 // Cap on the transmission flattening weight (v0.17). In v0.11 the core took the full `flat` (0.5)
 // toward 0.40 and the rim far less: on the host the core sat +0.20 above the wallpaper and followed
 // it at 46 %, the rim +0.14 at 81 % (bright contour, darker rim, light core again: a whitish core
@@ -324,13 +341,13 @@ struct oulg_profile { float core; int taps; float ramp; float sat; float tone; f
 #define OULG_OPTICS_VERSION "9"
 static const struct oulg_profile OULG_PROFILES_DEFAULT[OULG_PROFILES] = {
     {OULG_CORE_DEFAULT, OULG_TAPS_DEFAULT, OULG_RAMP_DEFAULT, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 400.0f, 1.0f, 0.0f, 1.0f,
-     OULG_HU_BLOOM_DEFAULT},
+     OULG_HU_BLOOM_DEFAULT, 0.0f},
     {OULG_KG_CORE_DEFAULT, OULG_KG_TAPS_DEFAULT, OULG_KG_RAMP_DEFAULT, OULG_KG_SAT_DEFAULT, OULG_KG_TONE_DEFAULT,
      OULG_KG_RIM_DEFAULT, OULG_KG_SPEC_DEFAULT, 0.0f, 0.0f,
      OULG_KG_FLAT_DEFAULT, OULG_KG_LEVEL_DEFAULT, OULG_KG_COOL_DEFAULT, OULG_KG_TILT_DEFAULT, OULG_KG_LINE_DEFAULT,
-     OULG_KG_CCAP_DEFAULT, OULG_KG_FCAP_DEFAULT, OULG_KG_CDIM_DEFAULT, OULG_KG_GLOW_DEFAULT, 0.0f},
+     OULG_KG_CCAP_DEFAULT, OULG_KG_FCAP_DEFAULT, OULG_KG_CDIM_DEFAULT, OULG_KG_GLOW_DEFAULT, 0.0f, OULG_KG_GRADIENT_DEFAULT},
     {0.0f, OULG_TAPS_DEFAULT, OULG_RAMP_DEFAULT, 1.0f, 0.0f, 0.0f, 0.0f, OULG_SHADE_CAP_DEFAULT, OULG_SHADE_LIFT_DEFAULT,
-     0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 400.0f, 1.0f, 0.0f, 1.0f, 0.0f},
+     0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 400.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f},
 };
 #define OULG_VS_RADII_AT "highp vec2 neighbor_radii = radii_and_neighbors.zw;\n"
 #define OULG_VS_POS_AT "gl_Position = vec4(devcoord, 0.0, 1.0);\n"
@@ -440,6 +457,7 @@ static void oulg_fix_params(struct oulg_profile p[OULG_PROFILES]) {
         if (!(p[i].cdim >= 0.0f && p[i].cdim <= 0.5f)) p[i].cdim = d->cdim;
         if (!(p[i].glow >= 0.2f && p[i].glow <= 1.0f)) p[i].glow = d->glow;
         if (!(p[i].bloom >= 0.0f && p[i].bloom <= 4.0f)) p[i].bloom = d->bloom;
+        if (!(p[i].gradient >= 0.0f && p[i].gradient <= 1.0f)) p[i].gradient = d->gradient;
     }
 }
 
@@ -470,8 +488,8 @@ static int oulg_lib(char *out, size_t cap, int external, const struct oulg_profi
             if (!ok) return 0;
         }
     }
-    if (!oulg_append(out, cap, &at, OULG_FS_FIELD_FMT, (double) p[1].ramp, (double) p[1].core, (double) p[1].ccap,
-                     (double) p[0].core, (double) p[0].ramp)) return 0;
+    if (!oulg_append(out, cap, &at, OULG_FS_FIELD_FMT, (double) p[1].gradient, (double) p[1].ramp, (double) p[1].core, (double) p[1].ccap,
+                     (double) p[0].core, (double) p[0].ramp, (double) p[1].ramp, (double) p[1].core, (double) p[1].ccap)) return 0;
     if (!external && !oulg_append(out, cap, &at, OULG_FS_TONE_FMT, (double) p[2].cap, (double) p[2].lift)) return 0;
     // The cool tint, normalised to unit luma so it shifts hue only.
     double cr = 1.0 - 0.06 * p[1].cool, cg = 1.0 - 0.01 * p[1].cool, cb = 1.0 + 0.08 * p[1].cool;
