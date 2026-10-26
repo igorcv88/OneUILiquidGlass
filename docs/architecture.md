@@ -1067,6 +1067,12 @@ Source: device video of PR #39 (18:45:08) and a lockscreen screenshot (18:46). T
 - A notification's small icon (`android:icon`) whose glyph has a theme-tone colour (its tint list, or `CachingIconView.getOriginalIconColor()` when the template tints the drawable with a filter) takes the mirrored colour as a `SRC_IN` filter on its mutated drawable while the row's text carries the swapped tone; restore gives the drawable its own filter back, and a new drawable (rebind) is taken by the next walk (`Foreground.glyph`). Full-colour app icons have no glyph colour and are never touched; large icons and avatars are not the small icon. Over light glass in the dark theme, Gmail, Chrome, GitHub, ChatGPT and Termux glyphs were light grey and nearly invisible (device screenshot, 26/10). `icontone 0` turns it off.
 - Not covered: the light disc behind those glyphs, until a trace log names its view.
 
+### Round 47: app icons in the text tone (2026-10-26)
+
+- Device (oulg47, screenshot): only GitHub's icon turned dark. The others are the apps' own icons shown by `NotificationRowIconView` (an Icon Pack Studio pack: white glyph on transparency), which the template does not tint, so round 46 found no glyph colour.
+- `Foreground.glyph` now also takes, while the text is swapped: an app icon with a monochrome layer (`AdaptiveIconDrawable.getMonochrome()`), shown instead in the swapped tone; and an app icon drawn as one neutral colour on transparency (sampled once per drawable at 24 px, `oneColourGlyph`), filtered like a small icon. Full-colour icons (a third of the glyph red, or no transparency) and avatars are left alone.
+- The light disc behind the icon (its background, a `BitmapDrawable`) is hidden while the icon is swapped. Restore puts back the filter, the drawable and the disc. `ICON_TONE` (trace) logs what each icon was found to be.
+
 ## Future work
 
 - **Separate blur for the notification center and the control center.** Theme Park and HomeUp set a single blur amount for both panels. The user runs 12 %: lower leaves the control center unreadable, higher over-blurs the notification list. A split needs its own investigation: find where SystemUI applies the panel blur, whether the two panels are separate blur regions or one window, and whether the module can own one of them.
