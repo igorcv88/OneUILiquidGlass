@@ -1031,6 +1031,13 @@ Source: device video of PR #39 (18:45:08) and a lockscreen screenshot (18:46). T
 
 **Validation:** Gradle `testDebugUnitTest` (106 tests; new system-gesture, transition-settle and no-id cases), `lintDebug`, `assembleDebug`. Not tested on the device.
 
+### Round 42: low-resolution tone prefetch, minimised groups, header tone (2026-10-25)
+
+- Flash at the opening: the tone prefetch landed 71-108 ms after the opening, after the cards' first visible frame (42-58 ms), so their text turned from white to dark on screen (device log, 25/10). The capture itself took 5-8 ms; the software copy at the band's 0.5 scale was the cost. CaptureHub now captures at the largest scale its shown clients ask for (`Client.scale()`); the prefetch asks for 0.125 and samples every pixel of it. A lens frame never comes from a prefetch-only capture (`CaptureBackdrop` skips frames below `CaptureHub.SCALE`).
+- Minimised group: a child row drawn inside its group's card (no glass of its own) is now walked with the group's tone; child rows with their own glass keep theirs (`Foreground.ownsTone`). TEXT_ROW showed `app_name_text ffffffff swapped=false` on the group's light glass.
+- Header: `header_clock`, `header_date` and `shade_carrier_text` follow the backdrop band under them at each shade capture and are restored on close (`HEADER_TONE`, off with `headertone 0`). `clear_all` and `noti_setting` sit on their own pills and are left.
+- Light glass (shade and pop-up) is the light theme's own card: white (`lighttone ffffff`) at `lightglass` 0.75, with the 1x thickness shadow (`lightedge` 1). The grey `b8c2ce` at 0.32 sat darker than the white app behind it (luma ~220 over ~235); the light theme's card sits above it (~250 over ~236), which is what reads as a card floating over the app (device screenshots, light vs dark theme, 26/10). Its end is marked by a brighter edge, light bent round the outer contour (`lightoutline` 0.8, shader `outline`: a bright contour all round plus a stronger Fresnel lift), on light glass and on the light theme's own shade and pop-up cards; the lockscreen is unchanged. `lighttone b8c2ce; lightglass 0.32; lightedge 2; lightoutline 0` restore round 41.
+
 ## Future work
 
 - **Separate blur for the notification center and the control center.** Theme Park and HomeUp set a single blur amount for both panels. The user runs 12 %: lower leaves the control center unreadable, higher over-blurs the notification list. A split needs its own investigation: find where SystemUI applies the panel blur, whether the two panels are separate blur regions or one window, and whether the module can own one of them.

@@ -127,9 +127,15 @@ public final class GlassDrawable extends Drawable {
     /** Gain of the outer contour line in the LSPosed-only edge model (1: unchanged). */
     private float rimGain = 1f;
     public void setRimGain(float g) { if (rimGain != g) { rimGain = g; invalidateSelf(); } }
-    /** Light glass (ShadeTone light style): the thickness shadow is scaled by debug.oulg.lightedge. */
+    /** Light glass (ShadeTone light style): the thickness shadow is scaled by {@code edge} (debug.oulg.lightedge, shadeedge). */
     private boolean lightStyle;
-    public void setLightStyle(boolean on) { if (lightStyle != on) { lightStyle = on; invalidateSelf(); } }
+    private float lightEdge = 1f;
+    /** Bright contour on light glass (debug.oulg.lightoutline); 0 on any other card. */
+    private float outline;
+    public void setOutline(float o) { if (outline != o) { outline = o; invalidateSelf(); } }
+    public void setLightStyle(boolean on, float edge) {
+        if (lightStyle != on || lightEdge != edge) { lightStyle = on; lightEdge = edge; invalidateSelf(); }
+    }
     public void setPressed(boolean on) { if (pressed != on) { pressed = on; invalidateSelf(); } }
     /**
      * The compositor lights this card (sfhook profile 1: rim reflectance, specular and contour from
@@ -232,7 +238,7 @@ public final class GlassDrawable extends Drawable {
         s.setFloatUniform("specular", spec.specular);
         // On light glass over a white app the additive light edge is invisible; a stronger
         // thickness shadow on the far side is what separates the card (debug.oulg.lightedge).
-        s.setFloatUniform("shadow", spec.innerShadow * (lightStyle && Tuning.get().live ? Tuning.get().lightEdge : 1f));
+        s.setFloatUniform("shadow", spec.innerShadow * (lightStyle && Tuning.get().live ? lightEdge : 1f));
         // LSPosed-only cards over the live drawable blur take the light-only edge model.
         Tuning t = Tuning.get();
         boolean live = t.live && backdrop instanceof BackgroundBlurBridge;
@@ -242,6 +248,7 @@ public final class GlassDrawable extends Drawable {
         s.setFloatUniform("sheen", live ? t.liveSheen : 0f);
         s.setFloatUniform("glintGain", live ? glint : 1f);
         s.setFloatUniform("rimGain", live ? rimGain : 1f);
+        s.setFloatUniform("outline", live ? outline : 0f);
     }
     /**
      * False until the first frame arrives; the caller then draws veil and edge alone.

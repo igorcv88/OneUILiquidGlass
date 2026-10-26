@@ -78,6 +78,12 @@ public final class CaptureHub {
          * asked for on the first frame of the shade opening, before its window is made visible.
          */
         default boolean evenHidden() { return false; }
+        /**
+         * Capture scale this client needs (screen px to bitmap px). A capture serves every shown
+         * client at the largest scale among them; a luminance measurement needs far less than a
+         * refracted band.
+         */
+        default float scale() { return SCALE; }
     }
 
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
@@ -132,10 +138,12 @@ public final class CaptureHub {
         // the loop keeps polling every IDLE_POLL_MS, capturing nothing, so it resumes promptly.
         int hz = 0;
         boolean anyShown = !shown.isEmpty();
+        float scale = 0f;
         for (int i = shown.size() - 1; i >= 0; i--) {
             int h = shown.get(i).hz();
-            if (h <= 0) shown.remove(i); else hz = Math.max(hz, h);
+            if (h <= 0) shown.remove(i); else { hz = Math.max(hz, h); scale = Math.max(scale, shown.get(i).scale()); }
         }
+        float captureScale = scale > 0f ? Math.min(SCALE, scale) : SCALE;
         MAIN.postDelayed(TICK, hz > 0 ? 1000L / hz : anyShown ? IDLE_POLL_MS : 500L);
         if (shown.isEmpty() || inFlight || !available()) return;
         View first = shown.get(0).view();
@@ -168,10 +176,10 @@ public final class CaptureHub {
             worker = new Handler(t.getLooper());
         }
         inFlight = true;
-        worker.post(() -> capture(displayId, finalCrop, exclude));
+        worker.post(() -> capture(displayId, finalCrop, exclude, captureScale));
     }
 
-    private static void capture(int displayId, Rect crop, SurfaceControl[] exclude) {
+    private static void capture(int displayId, Rect crop, SurfaceControl[] exclude, float scale) {
         CaptureApi api = CaptureApi.get();
         long t0 = SystemClock.elapsedRealtimeNanos();
         long requestedAt = SystemClock.uptimeMillis();
@@ -189,7 +197,7 @@ public final class CaptureHub {
                 }
                 done.countDown();
             });
-            api.capture(displayId, api.args(crop, SCALE, exclude), listener);
+            api.capture(displayId, api.args(crop, scale, exclude), listener);
             boolean ok = done.await(TIMEOUT_MS, TimeUnit.MILLISECONDS);
             if (!ok) synchronized (lock) { abandoned[0] = true; if (result[0] != null) { api.closeQuietly(result[0]); result[0] = null; } }
             double ms = (SystemClock.elapsedRealtimeNanos() - t0) / 1e6;
@@ -207,7 +215,7 @@ public final class CaptureHub {
                     ColorSpace space = api.colorSpace(shot);
                     // The bitmap keeps its own reference to the buffer; the handle is closed below.
                     Bitmap bitmap = secure ? null : Bitmap.wrapHardwareBuffer(hb, space);
-                    if (bitmap != null) frame = new Frame(bitmap, crop, SCALE, true, requestedAt);
+                    if (bitmap != null) frame = new Frame(bitmap, crop, scale, true, requestedAt);
                     else if (!secure) error = "wrapFailed";
                 } finally { if (hb != null) hb.close(); }
             }
