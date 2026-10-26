@@ -3,6 +3,18 @@ package io.github.igorcv88.oneuiliquidglass.glass;
 /** The veil and text halo for a measured backdrop luminance (ShadeTone), free of Android state. */
 final class VeilMath {
     private VeilMath() {}
+    /** {@code src} composited over {@code dst} (non-premultiplied ARGB). */
+    static int over(int src, int dst) {
+        float sa = (src >>> 24) / 255f, da = (dst >>> 24) / 255f;
+        float a = sa + da * (1f - sa);
+        if (a <= 0f) return 0;
+        int out = Math.round(a * 255f) << 24;
+        for (int shift = 16; shift >= 0; shift -= 8) {
+            float s = (src >> shift) & 255, d = (dst >> shift) & 255;
+            out |= Math.round((s * sa + d * da * (1f - sa)) / a) << shift;
+        }
+        return out;
+    }
     /** The veil alpha (0-1) that brings luma to the cap (light text) or the lift (dark text), uncapped. */
     static float need(float luma, boolean lightText, float cap, float lift) {
         float a = lightText ? (luma > cap ? 1f - cap / luma : 0f)

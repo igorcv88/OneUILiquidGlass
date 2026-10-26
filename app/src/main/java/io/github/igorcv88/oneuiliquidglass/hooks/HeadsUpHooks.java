@@ -224,8 +224,14 @@ public final class HeadsUpHooks {
         installTextColorGuard();
         // A child row with its own glass keeps its own tone; one drawn inside its group's card
         // (no glass of its own) is walked with the group's.
+        // In the open shade a child owns its tone only if its own card took this opening's tone: a
+        // minimised group's child kept its glass but its background is not drawn, so its tone never
+        // ran and its text stayed white on the group's light glass (TEXT_ROW app_name_text
+        // ffffffff swapped=false, device log 26/10).
         Foreground.ownsTone = child -> {
-            for (State st : states.values()) if (st.row.get() == child && st.glass != null) return true;
+            boolean shade = Boolean.TRUE.equals(shadeExpanded);
+            for (State st : states.values())
+                if (st.row.get() == child && st.glass != null && (!shade || st.toneOpen == shadeOpens)) return true;
             return false;
         };
         // Shade state is only known once SystemUI constructs the controller, after this point.
@@ -357,6 +363,7 @@ public final class HeadsUpHooks {
                             // up to 4 are dropped: a pull-down or the bouncer passes that within a few frames.
                             p.args[0] = null;
                         }
+                        if (p.args[0] != null && v.getRootView() == v && v.getClass().getName().endsWith("NotificationShadeWindowView")) panelBlur(v, p.args[0]);
                         if (Probe.trace && v.getRootView() == v) {
                             // The shade window's own blur, to match a card region to it before removal.
                             String panel = p.args[0] == null ? "null" : Probe.blurFields(p.args[0]);
@@ -558,6 +565,42 @@ public final class HeadsUpHooks {
         }
         for (State st : new ArrayList<>(states.values())) st.invalidate();
         headerTone(grid);
+        panelDim(enabled && Tuning.get().textSwap && shadeScene && ShadeTone.lightText());
+    }
+    /** The shade window's last blur info and its host, SystemUI's own colour on it, and the dim applied. */
+    private WeakReference<View> panelHost;
+    private Object panelInfo;
+    private int panelOwnColor, panelApplied;
+    private boolean panelDim;
+    /**
+     * The shade window's blur darkened over a light app in the dark theme (debug.oulg.paneldim):
+     * the light theme's panel sits at ~235 over a white app and its cards at ~250, so they stand
+     * out; the dark theme's sat at ~250 under cards of ~249 and the cards dissolved into it
+     * (device screenshots, 26/10). Called for every blur SystemUI sets on the shade window.
+     */
+    private void panelBlur(View v, Object info) {
+        Field f = Reflect.field(info.getClass(), "mBackgroundBlurColor");
+        if (f == null) return;
+        try {
+            int now = f.getInt(info);
+            if (info != panelInfo || now != panelApplied) panelOwnColor = now;
+            panelHost = new WeakReference<>(v); panelInfo = info;
+            float dim = Tuning.get().panelDim;
+            panelApplied = panelDim && dim > 0f ? ShadeTone.overNative(Math.round(255f * dim) << 24, panelOwnColor) : panelOwnColor;
+            if (now != panelApplied) f.setInt(info, panelApplied);
+        } catch (IllegalAccessException | RuntimeException e) { Probe.error("PANEL_DIM_FAILED", e); }
+    }
+    /** Turns the panel dim on for this opening's scene, and sets the panel's blur again so it shows now. */
+    private void panelDim(boolean on) {
+        if (panelDim == on) return;
+        panelDim = on;
+        Probe.log("PANEL_DIM", "on=" + on + " alpha=" + Tuning.get().panelDim);
+        View host = panelHost == null ? null : panelHost.get();
+        // Turned off only by the closing shade, whose own blur calls restore the colour: setting the
+        // last (fully open) blur again there would flash it back.
+        if (!on || host == null || panelInfo == null) return;
+        try { View.class.getMethod("semSetBlurInfo", Class.forName("android.view.SemBlurInfo")).invoke(host, panelInfo); }
+        catch (ReflectiveOperationException | RuntimeException e) { Probe.error("PANEL_DIM_FAILED", e); }
     }
     /** The shade header's clock, date and carrier while they carry the swapped tone. */
     private final java.util.List<View> headerViews = new ArrayList<>();
@@ -584,7 +627,9 @@ public final class HeadsUpHooks {
             top = Math.min(top, xy[1]); bottom = Math.max(bottom, xy[1] + v.getHeight());
         }
         if (found.isEmpty() || bottom <= top) { Probe.log("HEADER_TONE", "views=" + found.size() + " state=skip"); return; }
-        float luma = grid.luma(top, bottom);
+        // The scene's decision, like the cards: the band under the header read 0.34 over a white
+        // app (the header animating in from above the screen, device log 26/10).
+        float luma = Tuning.get().shadeLocal ? grid.luma(top, bottom) : grid.whole();
         boolean light = ShadeTone.lightBackdrop(luma, shadeScene);
         boolean swap = light == ShadeTone.lightText();
         int changed = 0;
@@ -644,6 +689,7 @@ public final class HeadsUpHooks {
                 + " intercepted=" + Foreground.interceptions());
         shadeGrid = null; shadeOpenAt = 0;
         restoreHeader();
+        panelDim(false);
     }
     private void installShade() {
         Class<?> c = resolve("com.android.systemui.shade.NotificationPanelViewController");
@@ -962,7 +1008,11 @@ public final class HeadsUpHooks {
             ToneGrid grid = shadeGrid;
             if (grid != null && grid.generation == shadeOpens) {
                 v.getLocationOnScreen(toneXy);
-                luma = grid.luma(toneXy[1], toneXy[1] + v.getHeight());
+                // One luminosity for the whole stack, from the whole screen: a card under a white
+                // patch of the wallpaper (a cloud) was veiled darker than the rest (device frame,
+                // 26/10). Each card's colour still comes from the live blur behind it.
+                // debug.oulg.shadelocal=1 measures each card's own band again.
+                luma = Tuning.get().shadeLocal ? grid.luma(toneXy[1], toneXy[1] + v.getHeight()) : grid.whole();
                 if (luma < 0f) return;
                 source = "grid";
             } else if (first && toneAt > 0 && android.os.SystemClock.uptimeMillis() - toneAt <= HOLD_MS) {
@@ -1080,7 +1130,9 @@ public final class HeadsUpHooks {
             if (!shade) popupScene = m.light;
             toneAt = android.os.SystemClock.uptimeMillis();
             styleChanged(m.style());
-            int veil = m.veil;
+            // A glass style replaces the tint; in the shade the native side's legibility veil darkens
+            // it instead (the pop-up's look is left as approved, 26/10).
+            int veil = m.swap || !shade ? m.veil : ShadeTone.overNative(m.veil, nativeTint);
             boolean swapLight = m.swap && m.light;
             int da = Math.abs((veil >>> 24) - (measuredVeil >>> 24));
             boolean sameColour = veil == 0 || measuredVeil == 0 || (veil & 0x00ffffff) == (measuredVeil & 0x00ffffff);
