@@ -1062,6 +1062,11 @@ Source: device video of PR #39 (18:45:08) and a lockscreen screenshot (18:46). T
 - Motion without touch (video, an app's animation, a launch) now cuts the band too, which the touch gate never saw.
 - Cost and limit: the change is seen only after a capture shows it, so the first moving capture behind the card is still drawn (onset trail of about one capture plus the readback). The readback goes through the RenderThread; a 0.5 shade capture took 55-100 ms on the shade worker (25/10). If that holds here, most draws log `regionPending` and the band rarely shows. `REGION_STATS` logs readback P50/P95/max, skipped captures and still/changed/unknown verdicts every 240 readbacks.
 
+### Round 46: monochrome small icons follow the text tone (2026-10-26)
+
+- A notification's small icon (`android:icon`) whose glyph has a theme-tone colour (its tint list, or `CachingIconView.getOriginalIconColor()` when the template tints the drawable with a filter) takes the mirrored colour as a `SRC_IN` filter on its mutated drawable while the row's text carries the swapped tone; restore gives the drawable its own filter back, and a new drawable (rebind) is taken by the next walk (`Foreground.glyph`). Full-colour app icons have no glyph colour and are never touched; large icons and avatars are not the small icon. Over light glass in the dark theme, Gmail, Chrome, GitHub, ChatGPT and Termux glyphs were light grey and nearly invisible (device screenshot, 26/10). `icontone 0` turns it off.
+- Not covered: the light disc behind those glyphs, until a trace log names its view.
+
 ## Future work
 
 - **Separate blur for the notification center and the control center.** Theme Park and HomeUp set a single blur amount for both panels. The user runs 12 %: lower leaves the control center unreadable, higher over-blurs the notification list. A split needs its own investigation: find where SystemUI applies the panel blur, whether the two panels are separate blur regions or one window, and whether the module can own one of them.
