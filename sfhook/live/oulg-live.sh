@@ -32,6 +32,11 @@ sf_pid() { pidof surfaceflinger | cut -d ' ' -f 1; }
 [ "$(id -u)" = 0 ] || die 2 "not_root"
 
 legacy_conflict() {
+    # A disable marker takes effect only after reboot; an existing overlay still conflicts now.
+    legacy_pid="$(sf_pid)"
+    if [ -n "$legacy_pid" ] && grep -Fq '/oulg_sf/' "$PROCDIR/$legacy_pid/mountinfo" 2>/dev/null; then
+        return 0
+    fi
     for module in /data/adb/modules/oulg_sf /data/adb/modules_update/oulg_sf; do
         [ -d "$module" ] && [ ! -e "$module/disable" ] && [ ! -e "$module/remove" ] && return 0
     done

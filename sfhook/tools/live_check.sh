@@ -76,6 +76,13 @@ printf '1000-2000 r-xp 00000000 00:01 %s %s.backup\n' "$new_inode" "$T/lib/libou
 expect "$(run status)" "sf_loaded=0"
 printf '1000-2000 r-xp 00000000 00:01 %s %s\n' "$new_inode" "$T/lib/liboulg_sf.so" > "$T/proc/4242/maps"
 expect "$(run status)" "sf_loaded=1"
+printf '1 0 0:1 / /system rw - overlay overlay lowerdir=/data/adb/metamodule/mnt/oulg_sf/system\n' > "$T/proc/4242/mountinfo"
+expect "$(run status)" "legacy_conflict=1"
+set +e; o="$(run restart rewrite)"; rc=$?; set -e
+[ $rc -eq 2 ] || { echo "FAIL: mounted legacy module rc=$rc"; exit 1; }
+expect "$o" "error=legacy_module_active_disable_it_and_reboot_first"
+: > "$T/proc/4242/mountinfo"
+expect "$(run status)" "legacy_conflict=0"
 set +e; o="$(run restart now)"; rc=$?; set -e
 [ $rc -eq 2 ] || { echo "FAIL: bad restart mode rc=$rc"; exit 1; }
 expect "$(run uninstall)" "uninstall=ok"
