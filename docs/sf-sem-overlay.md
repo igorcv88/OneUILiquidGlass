@@ -110,6 +110,21 @@ Correção:
 - `--version` imprime o commit. Um `--selftest` aprovado grava em `/data/local/tmp/oulg_selftest.ok` o commit e os hashes (FNV-1a) do injetor e da lib; um selftest novo apaga o registro antes de começar. Qualquer injeção no SF exige o mesmo commit e os mesmos hashes.
 - **GOT:** se a página não voltar à proteção original, a entrada é desfeita e não conta como trocada (`protfail`).
 
+#### Segunda tentativa (26/10, `ad1a574`): injeção ok, `glShaderSource` não interceptado
+
+- O selftest passou: entry com `btype=3`; o controle `BTYPE=0b11` gerou `SIGILL` em `linker + 0x10f5b8`; o `dlopen` com `0b10` funcionou e a lib ficou mapeada.
+- No SF (PID 22010): `DLOPEN_OK`, lib mapeada em `/proc/<SF>/maps`, sem AVC, sem crash. O reinício do zygote não derrubou o SF.
+- `GOT_DONE glShaderSource=0 eglGetProcAddress=1 main=1 protfail=0`: nenhuma entrada de `glShaderSource` foi achada. Nenhuma linha `SRC` e nenhum dump.
+
+Hipótese principal: o Skia monta a interface GL do Android tomando as funções GL básicas por endereço; só as extensões passam por `eglGetProcAddress`. Uma referência por endereço é `GLOB_DAT`/`ABS64`, e o lld do Android costuma colocá-la na tabela compactada (`DT_ANDROID_RELA`, "APS2"), que o hook não lia. Com `DT_NEEDED`, a interposição de símbolo cobria isso; com `dlopen`, não.
+
+Correção:
+- `relocs.h` decodifica a tabela APS2 com o mesmo formato do iterador do bionic. O hook passa a percorrê-la e também aceita `ABS64` com símbolo.
+- `tools/got_check.c` roda o mesmo parser num ELF puxado do aparelho e lista cada relocação que nomeia `glShaderSource`/`eglGetProcAddress`, com tabela e tipo. Validado numa lib sintética linkada com `--pack-dyn-relocs=android`: os offsets batem com o `llvm-readelf`.
+- A lib registra os primeiros 24 nomes pedidos a `eglGetProcAddress` (`PROC`). Um renderer Vulkan não pede nenhum.
+
+Hipótese alternativa: o RenderEngine do DZIF roda em Vulkan, e então não há `glShaderSource` a interceptar. O `got_check` no binário e os mapas do processo separam as duas.
+
 Ainda não foi visto no aparelho: se o DEFEX/SELinux deixa o domínio do root usar ptrace no SF, se o domínio `surfaceflinger` pode mapear a lib, quanto o SF leva até o entry depois do exec (a corrida) e se o DZIF é GLES.
 
 ### B. Bind mount de um único arquivo

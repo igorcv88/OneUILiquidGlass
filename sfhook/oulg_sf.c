@@ -22,6 +22,7 @@
 #include <EGL/egl.h>
 #include <GLES2/gl2.h>
 #include "refract.h"
+#include "relocs.h"
 
 #define TAG "OULG_SF"
 #define DUMP "/data/misc/surfaceflinger/oulg_shaders.txt"
@@ -104,55 +105,63 @@ static int write_slot(void **slot, void *value) {
     }
     return 1;
 }
+struct patch_ctx { struct dl_phdr_info *info; const ElfW(Sym) *symtab; const char *strtab; int is_main; };
+static void patch_reloc(uint64_t r_offset, uint64_t r_info, void *arg) {
+    struct patch_ctx *c = arg;
+    uint32_t type = ELF64_R_TYPE(r_info);
+    if (type != R_AARCH64_JUMP_SLOT && type != R_AARCH64_GLOB_DAT && type != R_AARCH64_ABS64) return;
+    uint32_t sym = ELF64_R_SYM(r_info);
+    if (!sym) return;
+    const char *name = c->strtab + c->symtab[sym].st_name;
+    for (int h = 0; h < 2; h++) {
+        if (strcmp(name, hooks[h].name) != 0) continue;
+        void **slot = (void **) (c->info->dlpi_addr + r_offset);
+        if (*slot == hooks[h].ours) continue;
+        void *was = *slot;
+        if (!write_slot(slot, hooks[h].ours)) {
+            __android_log_print(ANDROID_LOG_WARN, TAG, "GOT %s in %s: not writable (protection %d)", name, c->info->dlpi_name, page_prot((uintptr_t) slot));
+            continue;
+        }
+        if (was && !*hooks[h].real) *hooks[h].real = was;
+        hooks[h].patched++;
+        if (c->is_main) main_patched++;
+        __android_log_print(ANDROID_LOG_INFO, TAG, "GOT %s patched in %s (type %u, offset 0x%llx)", name,
+                            c->info->dlpi_name && c->info->dlpi_name[0] ? c->info->dlpi_name : "(main)", type, (unsigned long long) r_offset);
+    }
+}
 static int patch_object(struct dl_phdr_info *info, size_t size, void *self) {
     (void) size;
+    (void) self;
     if (info->dlpi_name && (strstr(info->dlpi_name, "liboulg_sf") || strstr(info->dlpi_name, "/libEGL") || strstr(info->dlpi_name, "/libGLES")))
         return 0;
-    (void) self;
     const ElfW(Dyn) *dyn = NULL;
     for (int i = 0; i < info->dlpi_phnum; i++)
         if (info->dlpi_phdr[i].p_type == PT_DYNAMIC) dyn = (const ElfW(Dyn) *) (info->dlpi_addr + info->dlpi_phdr[i].p_vaddr);
     if (!dyn) return 0;
-    const ElfW(Sym) *symtab = NULL;
-    const char *strtab = NULL;
+    struct patch_ctx c = { info, NULL, NULL, 0 };
     const ElfW(Rela) *rel[2] = {NULL, NULL};
-    size_t relsz[2] = {0, 0};
+    size_t relsz[2] = {0, 0}, packedsz = 0;
+    const uint8_t *packed = NULL;
     for (; dyn->d_tag != DT_NULL; dyn++) {
         // Bionic leaves the dynamic section unrelocated: pointers are link-time addresses.
         ElfW(Addr) a = dyn->d_un.d_ptr < info->dlpi_addr ? info->dlpi_addr + dyn->d_un.d_ptr : dyn->d_un.d_ptr;
         switch (dyn->d_tag) {
-            case DT_SYMTAB: symtab = (const ElfW(Sym) *) a; break;
-            case DT_STRTAB: strtab = (const char *) a; break;
+            case DT_SYMTAB: c.symtab = (const ElfW(Sym) *) a; break;
+            case DT_STRTAB: c.strtab = (const char *) a; break;
             case DT_JMPREL: rel[0] = (const ElfW(Rela) *) a; break;
             case DT_PLTRELSZ: relsz[0] = dyn->d_un.d_val; break;
             case DT_RELA: rel[1] = (const ElfW(Rela) *) a; break;
             case DT_RELASZ: relsz[1] = dyn->d_un.d_val; break;
+            case DT_ANDROID_RELA: packed = (const uint8_t *) a; break;
+            case DT_ANDROID_RELASZ: packedsz = dyn->d_un.d_val; break;
         }
     }
-    if (!symtab || !strtab) return 0;
-    int is_main = info->dlpi_name && (info->dlpi_name[0] == 0 || strstr(info->dlpi_name, "/bin/surfaceflinger"));
-    for (int t = 0; t < 2; t++) {
-        if (!rel[t]) continue;
-        for (size_t k = 0; k < relsz[t] / sizeof(ElfW(Rela)); k++) {
-            uint32_t type = ELF64_R_TYPE(rel[t][k].r_info);
-            if (type != R_AARCH64_JUMP_SLOT && type != R_AARCH64_GLOB_DAT) continue;
-            const char *name = strtab + symtab[ELF64_R_SYM(rel[t][k].r_info)].st_name;
-            for (int h = 0; h < 2; h++) {
-                if (strcmp(name, hooks[h].name) != 0) continue;
-                void **slot = (void **) (info->dlpi_addr + rel[t][k].r_offset);
-                if (*slot == hooks[h].ours) continue;
-                void *was = *slot;
-                if (!write_slot(slot, hooks[h].ours)) {
-                    __android_log_print(ANDROID_LOG_WARN, TAG, "GOT %s in %s: not writable (protection %d)", name, info->dlpi_name, page_prot((uintptr_t) slot));
-                    continue;
-                }
-                if (was && !*hooks[h].real) *hooks[h].real = was;
-                hooks[h].patched++;
-                if (is_main) main_patched++;
-                __android_log_print(ANDROID_LOG_INFO, TAG, "GOT %s patched in %s", name, info->dlpi_name && info->dlpi_name[0] ? info->dlpi_name : "(main)");
-            }
-        }
-    }
+    if (!c.symtab || !c.strtab) return 0;
+    c.is_main = info->dlpi_name && (info->dlpi_name[0] == 0 || strstr(info->dlpi_name, "/bin/surfaceflinger"));
+    oulg_rela_each(rel[0], relsz[0], patch_reloc, &c);
+    oulg_rela_each(rel[1], relsz[1], patch_reloc, &c);
+    if (packed && oulg_aps2_each(packed, packedsz, patch_reloc, &c) < 0)
+        __android_log_print(ANDROID_LOG_WARN, TAG, "GOT packed relocations of %s unreadable", info->dlpi_name);
     return 0;
 }
 
@@ -369,7 +378,11 @@ void glShaderSource(GLuint shader, GLsizei count, const GLchar *const *strings, 
     free(joined);
 }
 
+// The first names asked of eglGetProcAddress, logged: a renderer that never asks (Vulkan) or that
+// asks only for extensions (core GL taken by address) shows here.
+static int procs_logged;
 __eglMustCastToProperFunctionPointerType eglGetProcAddress(const char *name) {
+    if (procs_logged < 24 && name) { procs_logged++; __android_log_print(ANDROID_LOG_INFO, TAG, "PROC %s", name); }
     if (!real_get_proc) real_get_proc = (GetProcFn) resolve("eglGetProcAddress", (void *) eglGetProcAddress);
     if (name && strcmp(name, "glShaderSource") == 0) return (__eglMustCastToProperFunctionPointerType) glShaderSource;
     return real_get_proc ? real_get_proc(name) : NULL;
