@@ -1075,7 +1075,7 @@ public final class HeadsUpHooks {
          */
         void setTone(float luma, boolean transition) {
             boolean shade = SURFACE_SHADE.equals(toneSurface);
-            io.github.igorcv88.oneuiliquidglass.glass.Material m = ShadeTone.materialFor(luma, shade ? shadeScene : popupScene);
+            io.github.igorcv88.oneuiliquidglass.glass.Material m = ShadeTone.materialFor(luma, shade ? shadeScene : popupScene, shade);
             lightBackdrop = m.light;
             if (!shade) popupScene = m.light;
             toneAt = android.os.SystemClock.uptimeMillis();
@@ -1173,9 +1173,9 @@ public final class HeadsUpHooks {
         /** Light glass: the edge's thickness shadow is drawn stronger (debug.oulg.lightedge) to define the card on white. */
         void setLightStyle(boolean on) { lightStyle = on; if (glass != null) glass.setLightStyle(on, lightEdge()); }
         /**
-         * The shade's light glass takes a lighter thickness shadow (debug.oulg.shadeedge): at the
-         * pop-up's 2x it drew a grey inner bevel on every card of a stack over a white app (device
-         * frames, 25/10). The pop-up keeps debug.oulg.lightedge.
+         * The shade's light glass takes the light theme's own thickness shadow (debug.oulg.shadeedge,
+         * 1x): at the pop-up's 2x it drew a grey inner bevel on every card of a stack over a white
+         * app (device frames, 25/10). The pop-up keeps debug.oulg.lightedge.
          */
         float lightEdge() { return SURFACE_SHADE.equals(toneSurface) ? Tuning.get().shadeEdge : Tuning.get().lightEdge; }
         boolean lightStyle;
