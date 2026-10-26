@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1600" height="500" viewBox="0 0 1600 500" role="img" aria-labelledby="title desc">
+  <title id="title">One UI Liquid Glass</title>
+  <desc id="desc">Liquid Glass for Samsung One UI notifications, with heads-up, lockscreen and shade controls.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#050b1e"/>
+      <stop offset="0.58" stop-color="#0b1837"/>
+      <stop offset="1" stop-color="#161537"/>
+    </linearGradient>
+    <linearGradient id="stroke" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#57cfff"/>
+      <stop offset="0.52" stop-color="#c3d3ff"/>
+      <stop offset="1" stop-color="#c5a8ff"/>
+    </linearGradient>
+    <radialGradient id="halo">
+      <stop offset="0" stop-color="#5a8cff" stop-opacity=".17"/>
+      <stop offset="1" stop-color="#5a8cff" stop-opacity="0"/>
+    </radialGradient>
+    <clipPath id="iconClip"><rect x="75" y="75" width="350" height="350" rx="76"/></clipPath>
+  </defs>
+  <rect width="1600" height="500" rx="34" fill="url(#bg)"/>
+  <rect x="18" y="18" width="1564" height="464" rx="27" fill="none" stroke="url(#stroke)" stroke-opacity=".42" stroke-width="2"/>
+  <circle cx="290" cy="240" r="240" fill="url(#halo)"/>
+  <circle cx="1450" cy="82" r="180" fill="none" stroke="#a9afff" stroke-opacity=".10" stroke-width="2"/>
+  <circle cx="1450" cy="82" r="122" fill="none" stroke="#a9afff" stroke-opacity=".10" stroke-width="2"/>
+  <path d="M520 410 C860 130 1060 158 1620 285" fill="none" stroke="#a2b8ff" stroke-opacity=".14" stroke-width="2"/>
+  <path d="M545 430 C900 160 1120 190 1620 320" fill="none" stroke="#a2b8ff" stroke-opacity=".09" stroke-width="2"/>
+  <image x="75" y="75" width="350" height="350" clip-path="url(#iconClip)" xlink:href="oneui-liquid-glass-icon.png"/>
+  <text x="505" y="188" fill="#f7f9ff" font-family="Inter,Segoe UI,Arial,sans-serif" font-weight="800" font-size="69" letter-spacing="-1.8">One UI <tspan fill="#a8d9ff">Liquid Glass</tspan></text>
+  <text x="509" y="245" fill="#becbe2" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="29">Liquid Glass for Samsung notifications</text>
+  <g font-family="Inter,Segoe UI,Arial,sans-serif" font-size="22" font-weight="650" text-anchor="middle">
+    <rect x="509" y="292" width="170" height="49" rx="24.5" fill="#1b3157" stroke="#74cbff" stroke-opacity=".42"/>
+    <text x="594" y="323" fill="#dfedff">Heads-up</text>
+    <rect x="695" y="292" width="178" height="49" rx="24.5" fill="#1b3157" stroke="#74cbff" stroke-opacity=".42"/>
+    <text x="784" y="323" fill="#dfedff">Lockscreen</text>
+    <rect x="889" y="292" width="213" height="49" rx="24.5" fill="#1b3157" stroke="#74cbff" stroke-opacity=".42"/>
+    <text x="995.5" y="323" fill="#dfedff">Shade</text>
+  </g>
+  <rect x="509" y="370" width="140" height="47" rx="23.5" fill="#223059" stroke="#b0bcff" stroke-opacity=".47"/>
+  <circle cx="532" cy="393.5" r="6" fill="#a0d6ff"/>
+  <text x="586" y="401" text-anchor="middle" fill="#e4ecff" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="21" font-weight="700">BETA</text>
+  <text x="674" y="401" fill="#9eb1d2" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="20">Android 17 · One UI 9 · LSPosed</text>
+</svg>
