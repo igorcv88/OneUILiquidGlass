@@ -565,7 +565,34 @@ public final class HeadsUpHooks {
         }
         for (State st : new ArrayList<>(states.values())) st.invalidate();
         headerTone(grid);
+        orphanTone();
+        View anchor = panelView == null ? null : panelView.get();
+        int gen = shadeOpens;
+        // Rows bound or shown after the capture (a group minimised meanwhile) get the same pass.
+        if (anchor != null) for (long delay : new long[] { 300, 1000 })
+            anchor.postDelayed(() -> { if (gen == shadeOpens) orphanTone(); }, delay);
         panelDim(enabled && Tuning.get().textSwap && shadeScene && ShadeTone.lightText());
+    }
+    /** Rows given the scene's text tone by orphanTone, restored when the shade closes. */
+    private final java.util.Set<State> orphans = Collections.newSetFromMap(new WeakHashMap<>());
+    /**
+     * Shown rows in the open shade whose own card took no tone this opening take the scene's text
+     * tone: a minimised group's rows have no card drawn (radii 0), so their tone never ran and their
+     * app_name_text stayed white on the group's light glass (oulg43: two rows, swapped=false). Every
+     * card's tone comes from the same scene reading, so this is the tone they would have taken.
+     */
+    private void orphanTone() {
+        if (shadeScene == null || !Boolean.TRUE.equals(shadeExpanded)) return;
+        boolean swap = enabled && Tuning.get().textSwap && shadeScene == ShadeTone.lightText();
+        int n = 0;
+        for (State st : new ArrayList<>(states.values())) {
+            View r = st.row.get();
+            if (r == null || st.pill || st.toneOpen == shadeOpens || !r.isShown()) continue;
+            st.setForeground(swap);
+            if (swap) orphans.add(st); else orphans.remove(st);
+            n++;
+        }
+        if (n > 0) Probe.log("TEXT_ORPHAN", "rows=" + n + " swap=" + swap + " generation=" + shadeOpens);
     }
     /** The shade window's last blur info and its host, SystemUI's own colour on it, and the dim applied. */
     private WeakReference<View> panelHost;
@@ -689,6 +716,8 @@ public final class HeadsUpHooks {
                 + " intercepted=" + Foreground.interceptions());
         shadeGrid = null; shadeOpenAt = 0;
         restoreHeader();
+        for (State st : new ArrayList<>(orphans)) st.setForeground(false);
+        orphans.clear();
         panelDim(false);
     }
     private void installShade() {
@@ -1125,7 +1154,7 @@ public final class HeadsUpHooks {
          */
         void setTone(float luma, boolean transition) {
             boolean shade = SURFACE_SHADE.equals(toneSurface);
-            io.github.igorcv88.oneuiliquidglass.glass.Material m = ShadeTone.materialFor(luma, shade ? shadeScene : popupScene);
+            io.github.igorcv88.oneuiliquidglass.glass.Material m = ShadeTone.materialFor(luma, shade ? shadeScene : popupScene, shade);
             lightBackdrop = m.light;
             if (!shade) popupScene = m.light;
             toneAt = android.os.SystemClock.uptimeMillis();

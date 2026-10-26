@@ -1047,6 +1047,12 @@ Source: device video of PR #39 (18:45:08) and a lockscreen screenshot (18:46). T
 - The shade window's blur is darkened by `paneldim` (0.07 black over `mBackgroundBlurColor`) when the scene is light in the dark theme: over a white app the light theme's panel sits at ~235 and its cards at ~250, so the cards stand out; the dark theme's panel sat at ~250 under cards of ~249 and the cards dissolved into it (device screenshots, 26/10). Set on every panel blur SystemUI issues while on, and once more when the scene is decided; turned off by the closing shade's own blur calls. `paneldim 0` disables it.
 - The grey shade in oulg42 was the device's own props: `lightglass 0.32`, `lighttone b8c2ce`, `lightedge 2` were set explicitly (the round-41 restore command) and override the new defaults; the shade cards showed `veil=52b8c2ce`.
 
+### Round 44: shade light glass at the light theme's alpha, orphan rows, panel dim 0.12 (2026-10-26)
+
+- The shade's light glass is white at `shadelightglass` 0.27, the light theme's own shade card; the pop-up keeps `lightglass` 0.75. A card's blur samples the app itself, not the panel's blur: over a white app it reads ~251 at either alpha, but at 0.75 a colour under the card at ~140 read 226 where the light theme reads 171, so the dark theme's cards looked like opaque white panels (device screenshots of the same notifications in both themes, 26/10). Round 42's 0.75 came from comparing the card with the dimmed panel, which the card's blur never sees.
+- Shown rows whose own card took no tone this opening take the scene's text tone (`TEXT_ORPHAN`), at the capture and 300 ms and 1 s after; restored when the shade closes. oulg43: a minimised group's two rows had no card drawn (radii 0) and `app_name_text ffffffff swapped=false`; round 43's child-row walk did not reach them.
+- `paneldim` defaults to 0.12: with it the dark theme's panel over a white app matched the light theme's in the screenshots (~221 in both).
+
 ## Future work
 
 - **Separate blur for the notification center and the control center.** Theme Park and HomeUp set a single blur amount for both panels. The user runs 12 %: lower leaves the control center unreadable, higher over-blurs the notification list. A split needs its own investigation: find where SystemUI applies the panel blur, whether the two panels are separate blur regions or one window, and whether the module can own one of them.
