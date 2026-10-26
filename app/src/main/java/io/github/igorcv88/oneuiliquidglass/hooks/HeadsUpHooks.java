@@ -503,8 +503,8 @@ public final class HeadsUpHooks {
      * style. On the main thread; one request per gesture, bound to it.
      */
     private boolean shadeConfigEnabled() {
-        return enabled && io.github.igorcv88.oneuiliquidglass.config.ConfigClient.flag("surface.shade.enabled")
-                && io.github.igorcv88.oneuiliquidglass.config.ConfigClient.flag("surface.shade.feature.tonemap.enabled");
+        return io.github.igorcv88.oneuiliquidglass.config.ProductFlags.shadeContrastEnabled(enabled,
+                io.github.igorcv88.oneuiliquidglass.config.ConfigClient::flag);
     }
     private void preOpen(long gesture) {
         Tuning t = Tuning.get();
@@ -1005,7 +1005,7 @@ public final class HeadsUpHooks {
         void shelfTone() {
             try {
                 Tuning t = Tuning.get();
-                boolean on = enabled && surfaceEnabled() && feature("tonemap") && t.textSwap && t.shadeAdaptive && Boolean.TRUE.equals(shadeExpanded) && barState != null
+                boolean on = shadeConfigEnabled() && t.textSwap && t.shadeAdaptive && Boolean.TRUE.equals(shadeExpanded) && barState != null
                         && barState == Eligibility.BAR_SHADE && shadeScene != null && shadeScene == ShadeTone.lightText();
                 setForeground(on);
             } catch (RuntimeException | LinkageError e) { if (toneErrors++ < 5) Probe.error("SHELF_TONE_FAILED", e); }
