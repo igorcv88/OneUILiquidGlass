@@ -7,9 +7,9 @@
 // is one thread. So the injector waits for the new process, stops it while the dynamic linker is
 // still working, puts a BRK on AT_ENTRY, and calls the linker's __loader_dlopen when it traps there.
 // If the process is already past its entry when it is caught, the injector detaches without touching
-// it (exit 3) unless --late is given.
+// it (exit 3).
 //
-// Usage: oulg_inject --lib PATH [--probe] [--restart] [--clear-cache] [--late] [--daemon LOG] [--timeout S]
+// Usage: oulg_inject --lib PATH [--probe] [--restart] [--clear-cache] [--selftest] [--daemon LOG] [--timeout S]
 //   --selftest     the whole injection into a throwaway child (/system/bin/sleep) instead of
 //                  surfaceflinger: nothing is stopped or restarted. Run it before --restart.
 //   --version      the commit it was built from
@@ -255,22 +255,27 @@ static int run_until(pid_t pid, int want, double deadline_ms, int capture) {
     }
 }
 
+/** PSTATE.BTYPE values (bits 11:10): what a BLR leaves for its target, and what "br x0" leaves. */
+#define BTYPE_BLR 2ULL
+#define BTYPE_BR 3ULL
+
 /**
  * Calls fn(a0, a1, a2) in a stopped pid and returns 1 with x0 in *ret. The call returns to address
  * 0 and stops there with SIGSEGV. On failure *fault is where it stopped (fn itself: nothing in the
  * target ran), or 0 if it died or did not stop in time.
  *
- * PSTATE.BTYPE is cleared, as a BLR would leave it for the callee. Stopped on the executable's
- * entry, the process carries BTYPE=0b11 from the linker's "br x0"; with that, the "bti c" that
- * opens __loader_dlopen raised a branch-target exception (SIGILL ILL_ILLOPC on DZIF, 26/10).
+ * PSTATE.BTYPE is set to btype. A real call is BTYPE_BLR (0b10), which the callee's "bti c"
+ * accepts. Stopped on the executable's entry, the process carries BTYPE=0b11 from the linker's
+ * "br x0"; kept as it was, the "bti c" that opens __loader_dlopen raised a branch-target exception
+ * (SIGILL ILL_ILLOPC on DZIF, 26/10). 0b00 would also pass, but by switching the check off.
  */
 static int remote_call(pid_t pid, const struct user_pt_regs *base, uintptr_t fn, uintptr_t a0, uintptr_t a1, uintptr_t a2,
-                       uintptr_t *ret, uintptr_t *fault) {
+                       unsigned long long btype, uintptr_t *ret, uintptr_t *fault) {
     struct user_pt_regs r = *base;
     r.regs[0] = a0; r.regs[1] = a1; r.regs[2] = a2;
     r.regs[30] = 0;
     r.pc = fn;
-    r.pstate &= ~(uint64_t) PSR_BTYPE_MASK;
+    r.pstate = (r.pstate & ~(uint64_t) PSR_BTYPE_MASK) | (btype << 10);
     *fault = fn;
     if (!set_regs(pid, &r)) { say("SETREGSET failed: %s", strerror(errno)); return 0; }
     int sig = run_until(pid, SIGSEGV, now_ms() + 5000, 1);
@@ -356,20 +361,42 @@ static int release_target(pid_t pid, int intact) {
 /** Exit codes: what failed, for the log and for scripts. */
 enum { RC_OK = 0, RC_FAIL = 1, RC_USAGE = 2, RC_MISSED = 3, RC_CALL_FAULT = 4, RC_DLOPEN_NULL = 5 };
 
-/** Puts back the registers the process had when it was stopped, read back to be sure. */
+/** Puts back every register the process had when it was stopped, read back and compared in full. */
 static int restore_regs(pid_t pid, struct user_pt_regs *saved) {
     struct user_pt_regs back;
-    if (set_regs(pid, saved) && get_regs(pid, &back) && back.pc == saved->pc && back.sp == saved->sp && back.pstate == saved->pstate)
-        return 1;
+    if (set_regs(pid, saved) && get_regs(pid, &back) && memcmp(&back, saved, sizeof back) == 0) return 1;
     say("restoring registers failed: %s", strerror(errno));
     return 0;
+}
+
+/**
+ * The scratch area below the stack pointer the calls use (the path, the callees' frames). Saved
+ * before and written back after, compared word by word: below sp is not live data under AAPCS64,
+ * but this is what lets "untouched" mean untouched.
+ */
+#define SCRATCH 0x2000
+static int save_scratch(pid_t pid, uintptr_t from, long *words) {
+    for (size_t i = 0; i < SCRATCH / 8; i++) {
+        errno = 0;
+        words[i] = ptrace(PTRACE_PEEKDATA, pid, (void *) (from + i * 8), NULL);
+        if (errno) return 0;
+    }
+    return 1;
+}
+static int restore_scratch(pid_t pid, uintptr_t from, const long *words) {
+    for (size_t i = 0; i < SCRATCH / 8; i++) {
+        if (ptrace(PTRACE_POKEDATA, pid, (void *) (from + i * 8), (void *) words[i]) != 0) return 0;
+        errno = 0;
+        if (ptrace(PTRACE_PEEKDATA, pid, (void *) (from + i * 8), NULL) != words[i] || errno) return 0;
+    }
+    return 1;
 }
 
 /**
  * The injection itself, on a stopped tracee. can_interrupt: attached with PTRACE_SEIZE (a
  * PTRACE_TRACEME child cannot be interrupted).
  */
-static int inject_attached(pid_t pid, const char *lib, int late, int can_interrupt) {
+static int inject_attached(pid_t pid, const char *lib, int can_interrupt, int *bti_enforced) {
     struct user_pt_regs regs;
     if (!get_regs(pid, &regs)) { say("GETREGSET failed: %s", strerror(errno)); release_target(pid, 1); return RC_FAIL; }
     struct module lk = {0, 0};
@@ -404,39 +431,56 @@ static int inject_attached(pid_t pid, const char *lib, int late, int can_interru
         if (!hit) { say("missed: entry breakpoint not reached in 3 s; removed (read back), detached (retry)"); return release_target(pid, 1) ? RC_MISSED : RC_FAIL; }
         if (!get_regs(pid, &regs) || regs.pc != entry) { say("trapped away from the entry (pc=0x%llx); detaching", (unsigned long long) regs.pc); release_target(pid, 1); return RC_FAIL; }
         say("at entry point pstate=0x%llx (btype=%llu)", (unsigned long long) regs.pstate, (unsigned long long) ((regs.pstate & PSR_BTYPE_MASK) >> 10));
-    } else if (!late) {
-        say("missed: the process already runs %d threads; detaching it untouched (retry, or --late)", threads);
-        return release_target(pid, 1) ? RC_MISSED : RC_FAIL;
     } else {
-        say("late injection at pc=0x%llx (a lock held here would deadlock the process)", (unsigned long long) regs.pc);
+        // No late injection: past main() a lock may be held, and dlopen would deadlock on it.
+        say("missed: the process already runs %d threads; detaching it untouched (retry)", threads);
+        return release_target(pid, 1) ? RC_MISSED : RC_FAIL;
     }
     uintptr_t dlopen_off = elf_symbol(linker, "__loader_dlopen"), dlerror_off = elf_symbol(linker, "__loader_dlerror");
     if (!dlopen_off) { say("__loader_dlopen not found in %s; detaching", linker); release_target(pid, 1); return RC_FAIL; }
     struct user_pt_regs saved = regs, call = regs;
     // Scratch below the stack pointer, 16-byte aligned; the path sits above the callee's frame area.
-    call.sp = (regs.sp - 0x2000) & ~(uint64_t) 0xf;
+    call.sp = (regs.sp - SCRATCH) & ~(uint64_t) 0xf;
     uintptr_t path_at = call.sp + 0x1000;
-    if (!poke(pid, path_at, lib, strlen(lib) + 1)) { say("writing the path failed: %s", strerror(errno)); release_target(pid, 1); return RC_FAIL; }
-    uintptr_t handle = 0, fault = 0, fn = lk.start + dlopen_off;
+    static long scratch[SCRATCH / 8];
+    if (!save_scratch(pid, call.sp, scratch)) { say("reading the scratch stack failed: %s", strerror(errno)); release_target(pid, 1); return RC_FAIL; }
+    if (!poke(pid, path_at, lib, strlen(lib) + 1)) { say("writing the path failed: %s", strerror(errno)); release_target(pid, !restore_scratch(pid, call.sp, scratch) ? 0 : 1); return RC_FAIL; }
+    uintptr_t handle = 0, fault = 0, fn = lk.start + dlopen_off, efn = dlerror_off ? lk.start + dlerror_off : 0;
+    int ok = 1;
+    if (bti_enforced) {
+        // Selftest control: the same callee entry with the BTYPE the linker's "br x0" leaves must
+        // raise SIGILL on its "bti c" before anything runs. Otherwise BTI is off in this process and
+        // the test says nothing about surfaceflinger, where it fired.
+        uintptr_t unused = 0;
+        *bti_enforced = 0;
+        if (efn && !remote_call(pid, &call, efn, 0, 0, 0, BTYPE_BR, &unused, &fault)) {
+            if (fault == efn) { *bti_enforced = 1; say("BTI control: BTYPE=0b11 into \"bti c\" faulted on its first instruction (enforced)"); }
+            else ok = 0;
+        } else say("BTI control: BTYPE=0b11 call returned; BTI is not enforced in this process");
+    }
     // caller = the entry point: the library joins the executable's own linker namespace.
-    int ok = remote_call(pid, &call, fn, path_at, 2 /* RTLD_NOW */, entry, &handle, &fault);
+    if (ok) ok = remote_call(pid, &call, fn, path_at, 2 /* RTLD_NOW */, entry, BTYPE_BLR, &handle, &fault);
     char err[512] = "";
-    if (ok && !handle && dlerror_off) {
-        uintptr_t msg = 0, efn = lk.start + dlerror_off;
-        if (remote_call(pid, &call, efn, 0, 0, 0, &msg, &fault) && msg) peek_string(pid, msg, err, sizeof err);
+    if (ok && !handle && efn) {
+        uintptr_t msg = 0;
+        if (remote_call(pid, &call, efn, 0, 0, 0, BTYPE_BLR, &msg, &fault) && msg) peek_string(pid, msg, err, sizeof err);
         else if (fault != efn) ok = 0;
     }
     if (!ok) {
-        // Fail closed: only a fault on the called function's first instruction proves that nothing
+        // Fail closed: only a fault on a called function's first instruction proves that nothing
         // in the target ran (no lock taken, no memory changed); that process is put back as it was.
-        int clean = fault == fn;
-        say("remote call failed at pc=0x%lx (%s)", fault, clean ? "its first instruction: nothing ran" : "inside the target, or no stop");
+        int clean = fault && (fault == fn || fault == efn) && !handle;
+        say("remote call failed at pc=0x%lx (%s)", fault, clean ? "a callee's first instruction: nothing ran" : "inside the target, or no stop");
         // release_target kills on a failed detach; a failed restore is killed here.
-        if (clean && restore_regs(pid, &saved)) { if (release_target(pid, 1)) say("process restored and released untouched"); }
-        else release_target(pid, 0);
+        if (clean && restore_scratch(pid, call.sp, scratch) && restore_regs(pid, &saved)) {
+            if (release_target(pid, 1)) say("registers and scratch stack restored (read back) and released");
+        } else release_target(pid, 0);
         return RC_CALL_FAULT;
     }
-    if (!release_target(pid, restore_regs(pid, &saved))) return RC_FAIL;
+    // After a successful dlopen the scratch below sp holds the callees' dead frames; it is still
+    // written back, and a process whose state cannot be restored is not let run.
+    int intact = restore_scratch(pid, call.sp, scratch) && restore_regs(pid, &saved);
+    if (!release_target(pid, intact)) return RC_FAIL;
     if (!handle) { say("dlopen returned NULL: %s", err[0] ? err : "(no dlerror)"); return RC_DLOPEN_NULL; }
     // dlopen succeeded, nothing more: whether the GOT was hooked, the renderer is GLES and the
     // rewrite runs is in logcat -s OULG_SF (GOT_DONE, SRC, REWRITE) and the shader dump.
@@ -444,7 +488,7 @@ static int inject_attached(pid_t pid, const char *lib, int late, int can_interru
     return RC_OK;
 }
 
-static int inject_into(pid_t pid, const char *lib, int late) {
+static int inject_into(pid_t pid, const char *lib) {
     if (ptrace(PTRACE_SEIZE, pid, NULL, NULL) != 0) { say("PTRACE_SEIZE failed: %s (SELinux or DEFEX; check dmesg | grep avc)", strerror(errno)); return RC_FAIL; }
     int st = 0;
     if (ptrace(PTRACE_INTERRUPT, pid, NULL, NULL) != 0 || waitpid(pid, &st, __WALL) != pid || !WIFSTOPPED(st)) {
@@ -452,7 +496,7 @@ static int inject_into(pid_t pid, const char *lib, int late) {
         say("no stop after interrupt (0x%x, %s)", st, strerror(errno));
         return RC_FAIL;
     }
-    return inject_attached(pid, lib, late, 1);
+    return inject_attached(pid, lib, 1, NULL);
 }
 
 /** Path of a mapping of pid whose path contains {@code needle}, logged; whether there is one. */
@@ -474,20 +518,40 @@ static int mapped(pid_t pid, const char *needle) {
  * killed. Same linker, same BTI/PAC state, nothing restarted.
  */
 #define SELFTEST_EXE "/system/bin/sleep"
-/** Written by a passing --selftest with the build that passed it; --restart requires it. */
+/**
+ * Written by a passing --selftest: the build, and FNV-1a hashes of this injector and of the
+ * library it loaded. Any injection into surfaceflinger requires the same three; a new selftest
+ * deletes it first, so a failed one leaves none.
+ */
 #define SELFTEST_STAMP "/data/local/tmp/oulg_selftest.ok"
-static int selftest_passed(void) {
-    char buf[64] = "";
+static uint64_t file_hash(const char *path) {
+    int fd = open(path, O_RDONLY | O_CLOEXEC);
+    if (fd < 0) return 0;
+    uint64_t h = 1469598103934665603ULL;
+    unsigned char buf[65536];
+    ssize_t n;
+    while ((n = read(fd, buf, sizeof buf)) > 0) for (ssize_t i = 0; i < n; i++) { h ^= buf[i]; h *= 1099511628211ULL; }
+    close(fd);
+    return n < 0 ? 0 : h;
+}
+static void stamp_text(const char *lib, char *out, size_t size) {
+    snprintf(out, size, "%s exe=%016llx lib=%016llx %s\n", OULG_VERSION, (unsigned long long) file_hash("/proc/self/exe"),
+             (unsigned long long) file_hash(lib), lib);
+}
+static int selftest_passed(const char *lib) {
+    char want[512], have[512] = "";
+    stamp_text(lib, want, sizeof want);
     int fd = open(SELFTEST_STAMP, O_RDONLY | O_CLOEXEC);
     if (fd < 0) return 0;
-    ssize_t n = read(fd, buf, sizeof buf - 1);
+    ssize_t n = read(fd, have, sizeof have - 1);
     close(fd);
     if (n <= 0) return 0;
-    buf[n] = 0;
-    buf[strcspn(buf, "\n")] = 0;
-    return strcmp(buf, OULG_VERSION) == 0;
+    have[n] = 0;
+    return strcmp(have, want) == 0;
 }
+#define SELFTEST_EXE "/system/bin/sleep"
 static int selftest(const char *lib) {
+    unlink(SELFTEST_STAMP);
     pid_t child = fork();
     if (child < 0) { say("fork failed: %s", strerror(errno)); return RC_FAIL; }
     if (child == 0) {
@@ -498,25 +562,27 @@ static int selftest(const char *lib) {
     int st = 0;
     if (waitpid(child, &st, __WALL) != child || !WIFSTOPPED(st)) { say("selftest child did not stop at exec (0x%x)", st); kill(child, SIGKILL); return RC_FAIL; }
     say("selftest child pid=%d (%s) stopped at exec", child, SELFTEST_EXE);
-    int rc = inject_attached(child, lib, 0, 0);
+    int bti = 0;
+    int rc = inject_attached(child, lib, 0, &bti);
     usleep(100000);
     int there = kill(child, 0) == 0 && mapped(child, lib);
     int alive = kill(child, 0) == 0;
     kill(child, SIGKILL);
     waitpid(child, &st, 0);
-    int pass = rc == RC_OK && there && alive;
-    say("SELFTEST %s rc=%d child_alive=%d lib_mapped=%d", pass ? "OK" : "FAILED", rc, alive, there);
-    unlink(SELFTEST_STAMP);
+    int pass = rc == RC_OK && there && alive && bti;
+    say("SELFTEST %s rc=%d bti_enforced=%d child_alive=%d lib_mapped=%d", pass ? "OK" : "FAILED", rc, bti, alive, there);
     if (pass) {
+        char text[512];
+        stamp_text(lib, text, sizeof text);
         int fd = open(SELFTEST_STAMP, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
-        if (fd >= 0) { dprintf(fd, "%s\n", OULG_VERSION); close(fd); }
+        if (fd >= 0) { write(fd, text, strlen(text)); close(fd); say("stamp: %s", text); }
     }
     return pass ? RC_OK : (rc ? rc : RC_FAIL);
 }
 
 int main(int argc, char **argv) {
     const char *lib = NULL, *log = NULL;
-    int restart = 0, clear = 0, late = 0, probe = 0, self = 0, timeout = 120;
+    int restart = 0, clear = 0, probe = 0, self = 0, timeout = 120;
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--lib") && i + 1 < argc) lib = argv[++i];
         else if (!strcmp(argv[i], "--restart")) restart = 1;
@@ -524,14 +590,16 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--selftest")) self = 1;
         else if (!strcmp(argv[i], "--version")) { printf("oulg_inject %s\n", OULG_VERSION); return RC_OK; }
         else if (!strcmp(argv[i], "--clear-cache")) clear = 1;
-        else if (!strcmp(argv[i], "--late")) late = 1;
         else if (!strcmp(argv[i], "--daemon") && i + 1 < argc) log = argv[++i];
         else if (!strcmp(argv[i], "--timeout") && i + 1 < argc) timeout = atoi(argv[++i]);
         else { fprintf(stderr, "unknown argument %s\n", argv[i]); return 2; }
     }
     if (!lib || lib[0] != '/') { fprintf(stderr, "--lib needs an absolute path\n"); return 2; }
     if (access(lib, R_OK) != 0) { fprintf(stderr, "cannot read %s: %s\n", lib, strerror(errno)); return 2; }
-    if (restart && !selftest_passed()) { fprintf(stderr, "--restart needs a passing --selftest of this build (%s) first\n", OULG_VERSION); return 2; }
+    if (!probe && !self && !selftest_passed(lib)) {
+        fprintf(stderr, "injecting needs a passing --selftest of this injector (%s) with this library first\n", OULG_VERSION);
+        return 2;
+    }
     if (restart && !log) { fprintf(stderr, "--restart needs --daemon LOG: the restart kills the calling shell\n"); return 2; }
     if (log) daemonize(log);
     t0 = now_ms();
@@ -606,7 +674,7 @@ int main(int argc, char **argv) {
     }
     pid_t pid = wait_new_sf(old, now_ms() + timeout * 1e3, 100);
     if (!pid) { if (restart) restart_zygote(started); return 1; }
-    int rc = inject_into(pid, lib, late);
+    int rc = inject_into(pid, lib);
     if (!restart) return rc;
     // The zygote is restarted whatever the injection did: without it the device hangs on the boot
     // animation. If that restart takes surfaceflinger down again, the new one is injected too.
@@ -614,7 +682,7 @@ int main(int argc, char **argv) {
     // A surfaceflinger the zygote restarts is caught at 100 us too: the race is the same.
     pid_t again = wait_new_sf(pid, now_ms() + 30000, 100);
     // Only after a clean injection: a failed one is not retried on the new process.
-    if (again && rc == 0) { say("surfaceflinger restarted with the zygote"); rc = inject_into(again, lib, late); }
+    if (again && rc == 0) { say("surfaceflinger restarted with the zygote"); rc = inject_into(again, lib); }
     else if (again) say("surfaceflinger restarted with the zygote; previous injection failed, not retried");
     else say("surfaceflinger pid=%d kept through the zygote restart", pid);
     return rc;
