@@ -1177,9 +1177,9 @@ public final class HeadsUpHooks {
         }
         /**
          * A shade or pop-up card whose glass is light (the light theme's own card, or light glass
-         * over a white app in the dark theme) gets a thin dark contour (debug.oulg.lightoutline):
-         * white on white, the card's end was barely visible (device screenshots, 26/10). The
-         * lockscreen keeps its look.
+         * over a white app in the dark theme) gets a brighter edge, light bent round its outer
+         * contour (debug.oulg.lightoutline): white on white, the card's end was barely visible
+         * (device screenshots, 26/10). The lockscreen keeps its look.
          */
         float outline() {
             if (toneSurface == null) return 0f;

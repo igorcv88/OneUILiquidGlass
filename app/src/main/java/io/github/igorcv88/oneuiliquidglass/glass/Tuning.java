@@ -208,11 +208,11 @@ public final class Tuning {
      * colour debug.oulg.lighttone (hex RGB, default ffffff): the light theme's own card, brighter
      * than the white app behind it (~250 over ~236). Round 41's grey b8c2ce at 0.32 sat darker than
      * the backdrop (~220 over ~235) and read as a dark shade on a white app (device screenshots,
-     * light vs dark theme, 26/10). The card's end is marked by debug.oulg.lightoutline instead.
+     * light vs dark theme, 26/10). The card's end is marked by a bright edge (debug.oulg.lightoutline).
      */
     public final float lightGlass;
     public final int lightTone;
-    /** Dark contour on light glass, shade and pop-up (debug.oulg.lightoutline). */
+    /** Bright contour and edge Fresnel on light glass, shade and pop-up (debug.oulg.lightoutline). */
     public final float lightOutline;
     /** Thickness-shadow gain on light glass (debug.oulg.lightedge, default 1 = as on other cards, max 4). */
     public final float lightEdge;
@@ -340,7 +340,7 @@ public final class Tuning {
         styleLo = Math.min(styleHi, clamp(number("stylelo", 0.48f), 0.2f, 1f));
         lightGlass = clamp(number("lightglass", 0.75f), 0f, 0.95f);
         lightTone = rgb(prop("lighttone", "ffffff"), 0xffffff);
-        lightOutline = clamp(number("lightoutline", 0.14f), 0f, 0.6f);
+        lightOutline = clamp(number("lightoutline", 0.8f), 0f, 2f);
         lightEdge = clamp(number("lightedge", 1f), 0f, 4f);
         liveDarkAlpha = Math.round(clamp(number("livedarkalpha", 20f), 0f, 255f));
         liveDarkFill = Math.round(clamp(number("livedarkfill", 10f), 0f, 255f));
