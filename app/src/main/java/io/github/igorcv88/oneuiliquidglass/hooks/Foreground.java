@@ -147,7 +147,9 @@ final class Foreground {
         if (g != null && g.drawable == d && d.getColorFilter() == g.applied) return false;
         // Its own state: the drawable may share a constant state (and paint) with the status bar's.
         d = d.mutate();
-        android.graphics.ColorFilter saved = g != null && g.drawable == d ? g.saved : d.getColorFilter();
+        // Not our filter (returned above): the template's current one, possibly a newer colour than
+        // the one saved, is what restore gives back.
+        android.graphics.ColorFilter saved = d.getColorFilter();
         android.graphics.ColorFilter applied = new android.graphics.PorterDuffColorFilter(mirror(c), android.graphics.PorterDuff.Mode.SRC_IN);
         d.setColorFilter(applied);
         glyphs.put(v, new Glyph(d, saved, applied));
@@ -302,7 +304,8 @@ final class Foreground {
                 shadowFor((TextView) v, swap);
             }
         } else if (v instanceof ImageView && (glyphs.containsKey(v) || smallIcon(v))) {
-            changed += glyph((ImageView) v, swap, lightText) ? 1 : 0;
+            // icontone turned off live restores the glyphs already swapped.
+            changed += glyph((ImageView) v, swap && io.github.igorcv88.oneuiliquidglass.glass.Tuning.get().iconTone, lightText) ? 1 : 0;
         } else if (v instanceof ImageView && (((ImageView) v).getImageTintList() != null || swapped.containsKey(v))) {
             ImageView i = (ImageView) v;
             if (i.getImageTintList() == null) swapped.remove(v);
