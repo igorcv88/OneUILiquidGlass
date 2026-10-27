@@ -183,8 +183,9 @@ barra de status e sombras do sistema são aproximados.
   reboot é um comando fixo em `RootAccess.SOFT_REBOOT`: para o SurfaceFlinger, apaga
   `skia_shaders`, `egl_shaders` e `oulg_shaders.txt`, sobe o SurfaceFlinger e reinicia o zygote,
   desacoplado via `nohup` (o próprio app morre junto). Uma lente injetada em runtime não sobrevive ao
-  reinício do compositor, então `debug.oulg.sfrefract` é limpo, exceto quando o módulo de boot
-  `oulg_sf` está ativo (ele recarrega a lente a cada início do compositor).
+  reinício do compositor, então `debug.oulg.sfrefract` é limpo, exceto quando o compositor em
+  execução tem o overlay do módulo de boot `oulg_sf` montado (verificado em `mountinfo` antes do
+  stop; esse overlay recarrega a lente a cada início do compositor).
 - [x] Tema claro/escuro/sistema, reduzir movimento, fonte ampliada, paisagem, voltar preditivo, TalkBack
   (rótulos, estados de switch, slider com faixa e ações, abas da barra).
 

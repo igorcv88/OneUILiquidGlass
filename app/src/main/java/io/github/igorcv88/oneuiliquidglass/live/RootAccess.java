@@ -14,16 +14,18 @@ public final class RootAccess {
     /**
      * "Soft reboot": compositor and zygote restart with the shader caches cleared. Detached with
      * nohup because the app itself dies with zygote. A compositor restart drops a lens injected at
-     * runtime, so the refraction flag is cleared unless the boot module (which loads the lens on
-     * every compositor start) is active; otherwise cards would stay tagged with nothing refracting.
+     * runtime, so the refraction flag is cleared unless the running compositor has the boot
+     * module's overlay mounted (checked before the stop, as oulg-live.sh does): that overlay is
+     * what loads the lens again. Module markers describe the next boot, not the current one.
      */
     static final String SOFT_REBOOT =
-            "nohup sh -c \"stop surfaceflinger;"
+            "nohup sh -c 'p=$(pidof surfaceflinger | cut -d \" \" -f 1); keep=0;"
+                    + " [ -n \"$p\" ] && grep -Fq /oulg_sf/ /proc/$p/mountinfo && keep=1;"
+                    + " stop surfaceflinger;"
                     + " rm -f /data/misc/surfaceflinger/skia_shaders /data/misc/surfaceflinger/egl_shaders"
                     + " /data/misc/surfaceflinger/oulg_shaders.txt;"
-                    + " if [ ! -d /data/adb/modules/oulg_sf ] || [ -e /data/adb/modules/oulg_sf/disable ];"
-                    + " then setprop debug.oulg.sfrefract ''; fi;"
-                    + " start surfaceflinger; sleep 3; setprop ctl.restart zygote\" >/dev/null 2>&1 &";
+                    + " [ \"$keep\" = 1 ] || setprop debug.oulg.sfrefract \"\";"
+                    + " start surfaceflinger; sleep 3; setprop ctl.restart zygote' >/dev/null 2>&1 &";
 
     private final Activity activity;
     private final ExecutorService worker;
