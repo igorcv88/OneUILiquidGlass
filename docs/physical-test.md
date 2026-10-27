@@ -58,3 +58,45 @@ Applies with glass mode on. Keep the font scale, display size and resolution fix
    - The glass covers the taller card exactly: no gap at the bottom rim, and the refraction band is on the outline.
    - Check RTL with the device language set to Arabic or Hebrew.
    - The progress updates every second without the title jumping.
+
+## Exit animations (round 50)
+
+`sfrefract=1`, Detailed pop-ups. Clear the log, set `debug.oulg.trace 1` for the frame lines, record the screen at 60 fps and collect `OULG` plus `SurfaceComposerClient` (`regionSize`, `BlurRegion`) and `StackScroller` lines. Run each in the dark and the light theme, and at the Standard and Adaptive refresh rates:
+
+1. Swipe away the top card in the shade.
+2. Swipe away a middle and a bottom card.
+3. Remove a card with an action button (the test notification's "Dispensar").
+4. Dismiss a heads-up with its button.
+5. Let a heads-up time out.
+6. Pull the shade down while a heads-up is shown (heads-up to shade card).
+7. Remove a card of a group, and a whole group.
+8. Remove a card on the lockscreen.
+
+Pass, by sight on the recording: no flash of the card or its blur, no frosted card-shaped area left after the content has gone, no blur region left where a card was; a heads-up pulled into the shade keeps its glass.
+
+Pass, in the log, for every exit:
+- `EXIT_BEGIN` then `EXIT_END reason=finished`, with no `GLASS_RELEASED` / `GLASS_APPLIED` pair between them. A transient re-parent shows `MATERIAL_REATTACH kept=true`.
+- `EXIT_SIGNAL` names at least one signal (`content=true` or `fraction=true`). Both false means the region is dropped at the start of every exit: report it.
+- `EXIT_END regionOffMs` not later than about one frame after `contentOffMs`; in the trace, `EXIT_FRAME` shows the exit alpha falling and `region=` turning `off` (Samsung) or `drawable@0.00`.
+- No `BlurRegion` with the removed card's rectangle after `regionOffMs`.
+- Scenario 6: no `EXIT_BEGIN` for the heads-up, and its card is drawn with glass in the shade.
+
+Custom notifications: check that the text contrast is unchanged before and during the exit (no `TEXT_REAPPLY reason=restore` at the start of an exit).
+
+## Performance capture (round 51)
+
+Standard 60 Hz, QHD+, same wallpaper, apps and notifications for both captures; SystemUI restarted before each; the same 30–35 s script (open the shade, scroll, dismiss two cards with the button, swipe one, receive and dismiss a heads-up, close).
+
+1. `setprop debug.oulg.perf 1` (keep `debug.oulg.trace 0`: the trace logs per frame and distorts timing).
+2. Record Perfetto with FrameTimeline and app tracing for SystemUI, e.g. `atrace` categories `gfx view input` plus `-a com.android.systemui`, and collect `logcat -s OULG:I` alongside.
+3. Repeat with the module's glass disabled in the app (not the LSPosed scope), then with the previous APK, under the same script.
+
+Compare:
+- Janky NotificationShade frames (FrameTimeline) per capture.
+- From `PERF`: per slot p99 and max, `frame=` p99/max, `tuning=` (off the main thread after the first read: any `PERF_SPIKE ... slot=tuning` should read `main=false`), `reassertSkipped` vs `reassertApplied`, `reattachKept` vs `reattachRebuilt`.
+- For each janky frame, the `OULG:*` time inside its `Choreographer#doFrame` against the frame's overrun; `PERF_FRAME` lines for frames where the module took ≥ 4 ms.
+- With the glass disabled: `predraw` keeps its call count (the pre-draw listener stays installed, and it is measured before the early return), but its p95/p99/max drop to the cost of that return; `drawBefore` has calls only for cards that still owe a restore; no `touch` calls; no `LIFECYCLE` lines.
+- `PERF_FRAME_SOURCE available=true` once at start. With `available=false` the per-frame figures read `frame=na`: use the `OULG:*` slices in Perfetto, which are the reference in any case.
+- `frame=` counts outermost intervals only (no slot twice); `outsideFrameUs` is main-thread time outside any frame's callbacks (input, posted runnables).
+
+The performance question is answered by these numbers, not by the build or the unit tests.

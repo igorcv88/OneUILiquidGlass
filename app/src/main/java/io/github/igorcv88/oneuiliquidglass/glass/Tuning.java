@@ -298,12 +298,24 @@ public final class Tuning {
     /** Enables the view-tree and window diagnostic dumps (see {@link Probe#trace}). */
     public final boolean trace;
     /** Bumped whenever any knob changes, so cached backdrop parameters are rebuilt. */
-    public static int generation;
+    public static volatile int generation;
 
-    private static Tuning cached;
-    private static long readAt;
+    private static volatile Tuning cached;
+    private static volatile long readAt;
     private static String lastLogged;
-    private static long configRevision = -1;
+    private static volatile long configRevision = -1;
+    /** A refresh is queued on the worker (at most one at a time). */
+    private static final java.util.concurrent.atomic.AtomicBoolean refreshing = new java.util.concurrent.atomic.AtomicBoolean();
+    /**
+     * The refresh worker: one daemon thread, created on the first refresh after the initial read.
+     * Creating an executor does not wait for its thread to start (a HandlerThread's getLooper()
+     * blocks the caller until it has), so a caller on the draw path never waits for it.
+     */
+    private static final java.util.concurrent.ExecutorService worker = java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "oulg-tuning");
+        t.setDaemon(true);
+        return t;
+    });
 
     private Tuning() {
         String b = prop("backdrop", "auto");
@@ -413,14 +425,46 @@ public final class Tuning {
     }
     public int livePx(boolean lens, boolean keyguard) { return livePx(liveRadius, liveShadeRadius, kgBlurRadius, lens, keyguard); }
 
+    /**
+     * The knobs, read again at most once a second or when the app's config changes. Reading them
+     * builds a new Tuning from about a hundred properties and compares its whole description; that
+     * ran on whichever thread asked first after the second elapsed, usually SystemUI's main thread
+     * inside a card's pre-draw or draw. Only the first read is synchronous now: later ones are
+     * queued on a worker thread and this returns the current values meanwhile, so a change applies
+     * a few milliseconds later than before (generation bumps then, and cards rebuild on their next
+     * pre-draw). Nothing polls while nothing asks.
+     */
     public static Tuning get() {
-        long now = SystemClock.uptimeMillis();
-        if (cached == null || now - readAt > 1000 || configRevision != io.github.igorcv88.oneuiliquidglass.config.ConfigClient.revision()) {
-            cached = new Tuning(); readAt = now; configRevision = io.github.igorcv88.oneuiliquidglass.config.ConfigClient.revision();
-            String line = cached.toString();
-            if (!line.equals(lastLogged)) { lastLogged = line; generation++; Probe.log("TUNING", line); }
+        Tuning c = cached;
+        if (c == null) {
+            synchronized (Tuning.class) { if (cached == null) refresh(); }
+            return cached;
         }
-        return cached;
+        long now = SystemClock.uptimeMillis();
+        if ((now - readAt > 1000 || configRevision != io.github.igorcv88.oneuiliquidglass.config.ConfigClient.revision())
+                && refreshing.compareAndSet(false, true)) {
+            try {
+                worker.execute(() -> { try { refresh(); } finally { refreshing.set(false); } });
+            } catch (RuntimeException e) {
+                // Rejected (never expected for an unbounded queue): no refresh is pending, so the
+                // next call may queue one; the current values stay meanwhile.
+                refreshing.set(false);
+                Probe.log("TUNING_REFRESH_REJECTED", "error=" + e.getClass().getSimpleName());
+            }
+        }
+        return c;
+    }
+    private static synchronized void refresh() {
+        long started = Perf.start(Perf.TUNING);
+        try {
+            long revision = io.github.igorcv88.oneuiliquidglass.config.ConfigClient.revision();
+            Tuning next = new Tuning();
+            String line = next.toString();
+            readAt = SystemClock.uptimeMillis(); configRevision = revision;
+            // Unchanged values keep the published instance; a change publishes and bumps generation.
+            if (!line.equals(lastLogged)) { lastLogged = line; cached = next; generation++; Probe.log("TUNING", line); }
+            else if (cached == null) cached = next;
+        } finally { Perf.end(Perf.TUNING, started); }
     }
 
     @Override public String toString() {
@@ -448,9 +492,12 @@ public final class Tuning {
         String override = io.github.igorcv88.oneuiliquidglass.config.ConfigClient.override(key);
         if (override != null) return override;
         try {
-            Class<?> props = Class.forName("android.os.SystemProperties");
-            Object v = props.getMethod("get", String.class, String.class).invoke(null, "debug.oulg." + key, fallback);
+            java.lang.reflect.Method get = sysGet;
+            if (get == null) sysGet = get = Class.forName("android.os.SystemProperties").getMethod("get", String.class, String.class);
+            Object v = get.invoke(null, "debug.oulg." + key, fallback);
             return v == null ? fallback : ((String) v).trim();
         } catch (ReflectiveOperationException | RuntimeException e) { return fallback; }
     }
+    /** SystemProperties.get(String, String), looked up once instead of once per property per read. */
+    private static volatile java.lang.reflect.Method sysGet;
 }

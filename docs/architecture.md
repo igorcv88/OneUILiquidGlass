@@ -1088,6 +1088,84 @@ Source: device video of PR #39 (18:45:08) and a lockscreen screenshot (18:46). T
 
 **Validation:** Gradle `testDebugUnitTest` (111 tests; new icon-view and untinted cases), `lintDebug`, `assembleDebug`. Icon layers checked in a browser render. Not tested on the device.
 
+### Round 50: a leaving card keeps its material, and its region follows the exit (2026-10-27)
+
+Device: SM-S938B, One UI 9 DZIF, `sfrefract=1`. Logcat of 27/10 (14:02) and a screen recording.
+
+**Heads-up flashing on Dismiss.** Sequence for row `cabc4d` (background `f39fe4`):
+
+| Time | Event | Source |
+|---|---|---|
+| 41.763 | `setHeadsUpAnimatingAway` true, `removeNotification` | OULG |
+| 41.766 | `GLASS_RELEASED native=true`, `semSetBlurInfo null` on the background | OULG, View |
+| 41.768 | `HEADS_UP_DISAPPEAR addTransientView` for the same row, `onAttachedToWindow` | StackScroller, OULG |
+| 41.769 | `startAppearAnimation` (the disappear animation) | OULG |
+| 41.771 | `GLASS_APPLIED source=samsung` (a new bridge) | OULG |
+| 41.772 | `regionSize=0` | SurfaceComposerClient |
+| 41.782 | the new `SemBlurInfo` applied (posted after the traversal) | View |
+| 41.796 | `regionSize=1`, alpha 1.00 | SurfaceComposerClient |
+| 41.830 | `semSetBlurInfo null` without a release: the fade cut (ancestor alpha < 0.5) | View |
+| 41.846 | `regionSize=0` | SurfaceComposerClient |
+| 41.950 | `GLASS_RELEASED native=false` (row hidden), then `onAppearAnimationFinished` | OULG |
+
+Cause: the stack removes the row and adds it back at once as a transient view for its disappear animation. `State.onViewDetachedFromWindow` released the material on that detach (`isShown()` was still true, hence `native=true`, and the native blur recorded for the view was handed back). The transient view's first draw built a new material; its Samsung region reached the compositor two frames later (the bridge applies after the traversal), at full alpha; the fade cut then removed it mid-animation. One exit: blur gone, back, gone again. The text tone was also reset by the release. `BACKGROUND_UPDATE`, `glassKind` and `SemBlurBridge.restoreNative()` were not the trigger: the release came from the detach; `restoreNative` only ran inside it.
+
+**Ghost in the shade.** Removal with an action button at 24.451 (`StackScroller: created Remove Event - SwipedOut: false`): the same detach, release and rebuild (`GLASS_APPLIED source=compositor` at 24.457). Then the removed card's region (`BlurRegion #3`, radius 180) stayed at `alpha=1.00` and full height for every frame of the removal while sliding up (`rect` top 390 → 55, 24.468–24.634), and went only with the release at 24.650. The recording shows the content dimming, then a frosted card-shaped area with no content and no edge between the header and the next card. One UI animates a removal through the appear animation (`startAppearAnimation(false)`: content alpha and the outline clip), not through view alpha. The region took only the accumulated view alpha of the card's ancestors (1.0 throughout), so it stayed; `shadefadecut` acts on that same alpha, which is why `shadefadecut 0` changed nothing. The drawn glass is clipped by the native outline and folded away; the compositor region ignores canvas and outline clips.
+
+**Fix (`CardExit`, `HeadsUpHooks.State`).**
+- A detach holds a card's material until the main thread's current message is done (`heldRelease`). A re-attach to the same window (`ViewRootImpl` identity recorded at build) keeps it (`MATERIAL_REATTACH kept=true`); another window releases it at once. A card that does not come back is released then, as before but with `native=false`, so no native blur is handed back to a card on its way out.
+- The disappear animation is tracked from `startAppearAnimation` with `isAppearing=false` (or, without that argument, a row reporting `isRemoved`) to `onAppearAnimationFinished` (`EXIT_BEGIN`, `EXIT_END`), with a 1.5 s backstop. A heads-up animating away into the shade runs no disappear animation and is not affected.
+- While leaving, a change of backdrop kind or source does not rebuild the material (`MATERIAL_HELD`).
+- While leaving, the region takes the exit's own alpha: the lowest of the shown content view's alpha (`mPrivateLayout`, `mChildrenContainer`, `mPublicLayout`) and `mAppearAnimationFraction`, whichever the firmware has (`EXIT_SIGNAL` reports which, once). With neither, the region goes at the start of the exit. The drawable path fades or cuts it as before (`shadefadecut` in the unlocked shade); the Samsung path, whose region does not follow its drawable's alpha, is cut at 0.5 even without a shade cut, and that suspension is applied in pre-draw (`SemBlurBridge.flush`), before the frame's draw, instead of a traversal later.
+- Not leaving: the region policy is the earlier one, value for value (`CardExitTest.notLeavingKeepsTheEarlierPolicy`).
+- No animation of its own: the region follows values the native animation sets.
+
+**Instrumentation.** Always (events, not frames): `EXIT_BEGIN` (view, row, heads-up, pinned, animatingAway, material, shade and bar state), `EXIT_END` (duration, frames, `contentOffMs`, `regionOffMs`), `EXIT_SIGNAL`, `MATERIAL_REATTACH`, `MATERIAL_HELD`; `GLASS_APPLIED` and `GLASS_RELEASED` now carry `viewId` and `leaving`. With `debug.oulg.trace=1` only: `EXIT_FRAME` per changed frame of a leaving card (ancestor alpha, exit alpha, fraction, translation, heads-up and animatingAway, region state), `SEM_BLUR_APPLY` for every Samsung region set or cleared, and the notification key in `EXIT_BEGIN`.
+
+**Not covered.** The region's geometry still does not follow the outline fold, only its alpha: until the content is gone the region keeps the card's full height. A swipe-out was not in the log; it goes through the same detach handling, unverified.
+
+**Validation:** `testDebugUnitTest` (183 tests, 13 new in `CardExitTest`), `lintDebug` (0 errors), `assembleDebug`. Not tested on the device: the scenarios are in `physical-test.md`, *Exit animations*.
+
+### Round 51: exit cancel, conditional reassert, disabled fast path, main-thread work and percentile instrumentation (2026-10-27)
+
+**Device data received (SM-S938B, QHD+, Standard 60 Hz).**
+- Shader rewrite on/off (`norewrite=1`: 50/337 janky frames, 14.84 %; `norewrite=0`: 53/337, 15.73 %). The rewrite is not the main cost; the native refraction is unchanged.
+- Hook time over ~30.8 s: predraw 6216 calls / 155.9 ms, drawBefore 734 / 86.1 ms, drawAfter 538 / 24.7 ms (glassDraw 19.4 ms inside it), blurGuard 465 / 3.6 ms. That is about 270 ms of main-thread time in 30.8 s (0.9 %), about 0.62 ms per NotificationShade frame on average (439 frames, 83 janky, 18.9 %), against a 16.7 ms budget. **The averages cannot explain the jank rate.** What they cannot show: single long calls, work outside the measured hooks, and how the module's time falls per frame. This round measures those; it does not establish them.
+- The lifecycle log of 15:22:27 (`GLASS_RELEASED native=true` → `ATTACH` → `GLASS_APPLIED` 7 ms later on the same row) is the round-50 defect. Its `GLASS_RELEASED` line has no `viewId=`/`leaving=` fields, which every release prints since round 50, so it was most likely taken with an APK without that round; it needs to be repeated with this build (look for `MATERIAL_REATTACH kept=true`).
+
+**Lifecycle (follow-up to round 50).**
+- Exit cancel: `cancelAppearDrawing` and `cancelAppearAnimation` (AOSP `ActivatableNotificationView`) end the exit (`EXIT_END reason=cancelled`) instead of waiting for `MAX_EXIT_MS`. A cancel only ends the exit; it never releases the material, so a heads-up pulled into the shade mid-exit gets its shade material through the normal kind change.
+- Re-attach identity: the window token (`View.getWindowToken()`, public API, one per `ViewRootImpl`) instead of `getViewRootImpl` by reflection. `MATERIAL_REATTACH kept=false` now names why (`noGlass`, `noWindowThen`, `noWindowNow`, `otherWindow`).
+- Row lifecycle events no longer re-apply the Samsung blur unconditionally. `State.event()` ran `reassertBackdrop()` on every row callback (setHeadsUp, setPinned, setHeadsUpAnimatingAway, BACKGROUND_UPDATE twice per update, attach...), and each apply is a `semSetBlurInfo` that installs a new blur drawable on the view. They now call `reassertIfLost()`: `SemBlurBridge` skips it when the view's `SemBlurInfo` field still holds what its last apply left there (only an apply that took counts) and, where the region fades through the drawable, the view's background is still a blur drawable. Without the field it applies as before. Shade open/close and the blur-mutator repair still re-apply unconditionally. A leaving card is not re-applied at all (its region follows the exit).
+- `BLUR_FACTORY` (a capability report that builds a blur drawable from the window) runs once per process instead of on every attach.
+
+**Main-thread work.**
+- `Tuning.get()` rebuilt the knob set from about a hundred `SystemProperties.get` calls, each through `Class.forName` + `getMethod`, plus a ~3 KB description compared as a string, once a second on whichever thread asked first after the second elapsed (in practice a card's pre-draw or draw on the main thread). It now refreshes on a worker thread (`oulg-tuning`) and returns the current values meanwhile; only the first read is synchronous. The `Method` is looked up once. A knob change applies a few ms later than before; nothing polls while nothing asks. The refresh cost is the new `tuning` slot.
+- The settle redraw (tag back after motion) was a `removeCallbacks` + `postDelayed` per moving card per frame; it is now one pending post moved forward when it fires.
+- The per-frame `DECISION` key was a new string per card per frame; fields are compared instead.
+
+**Glass disabled in the app.** With `enabled=false` and nothing of the module left on a card (no glass, no swapped text, no native blur owed, no held material, no veil ramp, and one full pre-draw already run), `onPreDraw` and the draw hook return at once (`State.minimal()`). The draw hook also skips the host walk for backgrounds that never had state. The touch hook returns at once (its signal feeds only glass features). Row events skip the per-event `LIFECYCLE`/`ROW_EVENT` lines unless `debug.oulg.trace=1` (the probe-mode lifecycle now needs the trace). Restoration is unchanged: turning the glass off releases every card through `resolveConfig` (native blur and text restored); a card that still owes its native blur takes the full path until it is restored; turning it on invalidates every card, which takes the full path again.
+
+**Instrumentation (`debug.oulg.perf=1`).**
+- `PERF` every 2 s: per slot `calls/totalus/p95=/p99=/max=` (µs; percentiles from fixed buckets, at most one bucket coarse, capped by the maximum). New slots: `event`, `attach`, `detach`, `exit`, `touch`, `textGuard`, `tuning`.
+- `frame=`: the module's main-thread time summed per Choreographer frame (outermost intervals only, see the review corrections below), with its p95/p99/max.
+- Counters: `reassertAsked/Skipped/Applied`, `reattachKept/Rebuilt`.
+- `PERF_SPIKE`: any single call of 2 ms or more (slot, µs, frame). `PERF_FRAME`: any frame where the module took 4 ms or more, with its vsync time (`frameNs`, `System.nanoTime` base = `CLOCK_MONOTONIC`).
+- Trace sections `OULG:<slot>` while the platform traces SystemUI's app sections, so Perfetto shows the module's slices inside `Choreographer#doFrame` next to FrameTimeline's verdict for the same frame.
+
+**How to tell the module's delay from SystemUI's or the compositor's.** In a Perfetto trace with app tracing for `com.android.systemui` (atrace `-a com.android.systemui`, or the `view`/`gfx` categories) and FrameTimeline: for each NotificationShade frame marked janky, sum the `OULG:*` slices on the main thread inside its `Choreographer#doFrame`. A janky frame whose `OULG:*` time is a small part of the overrun is SystemUI's or the compositor's (FrameTimeline's jank type then says which: App Deadline Missed with long non-OULG slices, or SurfaceFlinger/Display types). `PERF_FRAME` lines give the same answer from logcat alone for frames where the module took ≥ 4 ms.
+
+**Review corrections (same round, before any device capture).**
+- The per-frame sum counted nested slots twice (`event` inside `predraw` and `attach`, not only `glassDraw` inside `drawAfter`). `FrameAccount` now sums only outermost main-thread intervals (a depth counter); per-slot figures still include the slots they call.
+- A call outside a frame's callbacks was attributed to the last vsync. The frame is now taken only while `Choreographer.mCallbacksRunning` is true; other main-thread time is reported as `outsideFrameUs`. Both fields are private: `PERF_FRAME_SOURCE` says once whether they are readable, and when not the figures read `frame=na`. Perfetto's `OULG:*` slices inside `Choreographer#doFrame` are the reference for attribution; `PERF_FRAME` is an aid.
+- The `Tuning` worker was a `HandlerThread` created on the draw path, whose `getLooper()` blocks until the thread runs, and a `post()` returning false would have left the refresh flag set for good. It is now a single-thread executor (creating it does not wait for its thread), and a rejected refresh clears the flag and logs `TUNING_REFRESH_REJECTED`.
+- `physical-test.md` expected almost no `predraw` calls with the glass off. The listener stays installed and the call is measured before the early return, so the count stays and the time per call drops.
+- Open, device-dependent: `reassertIfLost()` judges a Samsung region intact from the view's `SemBlurInfo` field and its blur drawable; if One UI dropped a region without changing either, it would not be re-applied on a routine event. To check: blur present after dynamic updates of a notification (`BACKGROUND_UPDATE`), after heads-up → shade, and on custom notifications; `reassertSkipped` against cards seen without blur.
+
+**Not done, deliberately.** No change to refresh rate, Standard mode, refraction, blur, gradient, tone or edge parameters, captures or the native library.
+
+**Validation:** `testDebugUnitTest` (198 tests; new: `PerfStatsTest`, `FrameAccountTest`, four `CardExitTest` transitions), `lintDebug` (0 errors, 25 warnings as on `main`; the perf-only Choreographer reads carry a justified suppression), `assembleDebug`. **No before/after device measurement exists for this round.** Whether jank changes, and by how much, depends on the capture described in `physical-test.md`, *Performance capture*.
+
 ## Future work
 
 - **Separate blur for the notification center and the control center.** Theme Park and HomeUp set a single blur amount for both panels. The user runs 12 %: lower leaves the control center unreadable, higher over-blurs the notification list. A split needs its own investigation: find where SystemUI applies the panel blur, whether the two panels are separate blur regions or one window, and whether the module can own one of them.
