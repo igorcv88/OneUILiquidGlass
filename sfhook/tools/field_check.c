@@ -20,7 +20,7 @@
 #include <stdio.h>
 
 // OULG_PROFILES_DEFAULT; profile 1 also caps its body radius (v0.16).
-static const double CORES[2] = {48.0, 80.0}, RAMPS[2] = {1.5, 1.5}, CCAP1 = 52.0;
+static const double CORES[2] = {48.0, 80.0}, RAMPS[2] = {1.5, 1.5}, CCAP1 = 36.0;
 static double brMax(int pf) { return pf ? fmin(CORES[1], CCAP1) : CORES[0]; }
 
 static double clampd(double v, double lo, double hi) { return v < lo ? lo : v > hi ? hi : v; }

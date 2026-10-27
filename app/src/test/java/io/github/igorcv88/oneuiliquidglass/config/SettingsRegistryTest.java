@@ -116,6 +116,17 @@ public class SettingsRegistryTest {
     }
 
     @Test
+    public void lockscreenBlurCapDefaultMatchesNativeShader() throws Exception {
+        String shader = read(root().resolve("sfhook/refract.h"));
+        Matcher match = Pattern.compile("#define OULG_KG_CCAP_DEFAULT ([0-9.]+)f").matcher(shader);
+        assertTrue("native lockscreen blur cap missing", match.find());
+        assertEquals(
+                Double.parseDouble(match.group(1)),
+                Double.parseDouble(SettingsRegistry.get("sf.kgcorecap").defaultValue),
+                0.000001);
+    }
+
+    @Test
     public void productFlagsAreNotPropertiesAndHaveSurfaceScope() {
         for (String surface : ProductFlags.SURFACES) {
             assertTrue(ProductFlags.known("surface." + surface + ".enabled"));

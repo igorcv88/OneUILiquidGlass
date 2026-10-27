@@ -336,9 +336,10 @@ struct oulg_profile { float core; int taps; float ramp; float sat; float tone; f
 #define OULG_KG_CORE_DEFAULT 80.0f
 #define OULG_KG_TAPS_DEFAULT 48
 #define OULG_KG_RAMP_DEFAULT 1.5f
-// Lockscreen effective core: 62 -> 52 px for a modest reduction in blur. In gradient
-// mode this is the smooth endpoint rather than a hard clamp on an 80 px curve.
-#define OULG_KG_CCAP_DEFAULT 52.0f
+// Lockscreen effective core: v0.22 used 52 px; device A/B with the continuous v0.23
+// field favored 36 px. The cap stays separate from the 80 px base core so the older
+// profiles remain reproducible through explicit overrides.
+#define OULG_KG_CCAP_DEFAULT 36.0f
 #define OULG_KG_GRADIENT_DEFAULT 1.0f
 // Continuous field (v0.23): on the device (v0.22) the refraction ended at the 0.42 r bevel while the
 // blur kept rising to 1.5 bevels, so the refraction that was left sat under 10-38 px of blur and only

@@ -130,7 +130,7 @@ Observar que as propriedades `lightglass` e `shadelightglass` se aplicam a super
 | `sf.kgcool` | 0.50 | Lockscreen: matiz fria |
 | `sf.kgtilt` | 1.42 | Lockscreen: inclinação da luz (rad) |
 | `sf.kgline` | 0.62 | Lockscreen: contorno |
-| `sf.kgcorecap` | 52 | Lockscreen: teto do raio efetivo do miolo (px) |
+| `sf.kgcorecap` | 36 | Lockscreen: teto do raio efetivo do miolo (px) |
 | `sf.kggradient` | 1 | Lockscreen: transição contínua vidro-miolo (0–1; 0 usa curva anterior, junto de kgcorecap=62 restaura referência) |
 | `sf.kgband` | 0.85 | Lockscreen: largura da transição óptica (fração do raio do canto; 0 restaura v0.22; abaixo de ~0.42 fica no bisel mínimo) |
 | `sf.kgbodylens` | 0.05 | Lockscreen: curvatura da lente no miolo (ampliação uniforme; 0 desliga) |

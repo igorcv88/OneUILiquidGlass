@@ -52,6 +52,8 @@ O disco da lockscreen continua com 48 amostras. Como o blur começa mais perto d
 
 Na captura do aparelho (v0.22, várias notificações sobre o rosto) a refração só aparecia nos ~12 px externos. Causa no shader: o deslocamento refrativo terminava em `bevel = 0.42 r` (~45 px num pill de 108 px), enquanto o blur seguia subindo até `1.5 bevel`. Onde a distorção é máxima (meio do bisel, ~22 px) o blur já tinha 10–17 px de raio, e no fim do bisel ~38 px: a refração existia, mas ficava escondida sob o desfoque.
 
+**Ajuste padrão após validação no S25 Ultra:** `kgcorecap=36` (antes 52), com `kgcore=80`, `kgband=0.85`, `kgbodylens=0.05` e `kgblurexp=2` preservados. A mudança afeta apenas o limite do raio do disco adicional e sua progressão proporcional; os parâmetros de iluminação e o campo de refração não mudam. Capturas com o mesmo papel de parede mostraram menor mistura de cores no miolo sobre cabelo, mantendo a intensidade do delineado.
+
 O perfil 1 agora usa uma única coordenada `u = depth / band`, `band = clamp(kgband · r, bevel, r)`, para refração e blur:
 
 - **Transição (borda interna):** o mesmo perfil de laje `A · band · G(1 − u)`, agora ao longo da faixa inteira (padrão `0.85 r`, ~91 px num pill de 108 px). O pico de ampliação radial continua `1 − 1.5 A`; a faixa ficou mais larga, não mais forte.
@@ -65,7 +67,7 @@ Valores com os padrões (`kglens 0.40`, pill `r ≈ 107`), medidos a partir do d
 | Profundidade (px) | 0⁺ | 15 | 29 | 43 | 57 | 71 | 85 | ≥92 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | Deslocamento (px) | 41.9 | 38.5 | 31.7 | 23.1 | 14.1 | 6.4 | 1.6 | ≤0.8 |
-| Raio do blur (px) | 0 | 0.1 | 1.8 | 10.4 | 27.3 | 44.4 | 51.7 | 52 |
+| Raio do blur (px) | 0 | 0.1 | 1.2 | 7.2 | 18.9 | 30.7 | 35.8 | 36 |
 
 **Degrau no delineado.** `0⁺` é o limite logo dentro do cartão. O deslocamento é contínuo até ali, e o `field_check` verifica isso de 1e-6 a 1 px de profundidade, tanto num lado reto quanto na diagonal de um canto. O próprio delineado (`depth = 0`) fica fora do cartão (cobertura zero) e devolve só a lente do miolo (5.4 px). O degrau que importa é o de fora para dentro: o fundo fora do cartão não tem deslocamento, e logo dentro ele chega a 41.9 px (v0.22: 18 px). Esse degrau é a própria refração da borda; ele fica sob o contorno e a borda de cobertura. Numa renderização com texto de alto contraste cruzando o delineado (`render_check`), não aparece rasgo nem serrilhado. Mas o texto que cruza a borda não continua do lado de dentro, porque ali o vidro mostra o fundo de ~42 px para dentro. Esse degrau escala com `kglens` e com a largura da faixa.
 
