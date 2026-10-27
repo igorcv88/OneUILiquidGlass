@@ -247,10 +247,11 @@
 //    the peak stretch the same; band <= r keeps it outside the inner rect, where the normal is defined.
 //    The strength cap acap1 = min(0.5, (0.75 - lensbody) / 1.5) keeps the radial Jacobian of both
 //    terms together >= 0.25: at most 4x magnification, v0.22's bound;
-//  - body lens: a weak paraxial dome over the whole card, -lensbody x p, p the offset from the medial
-//    segment of the inscribed stadium (radius min(hs)). Its Jacobian is the constant 1 - lensbody
-//    (a uniform magnification, defined and smooth everywhere, also inside the inner rect and across
-//    the medial line where the outward normal flips), so it adds no seam;
+//  - body lens: a weak elliptic paraxial dome scaled to the card, -lensbody x q x min(hs) / hs. It is
+//    linear: its Jacobian is the constant diag(1 - lensbody R / hs) (R = min(hs); a pill magnifies
+//    across its short axis only), smooth everywhere, inside the inner rect and across the medial line
+//    included; its shift is lensbody x R at the middle of each side (at most sqrt(2) x that in a corner). (A stadium clamp, tried first,
+//    kinked the Jacobian at the medial segment's endpoints.)
 //  - blur: min(core, ccap) x S(u)^blurexp (S the quintic smootherstep): ~0 at the outline, the core
 //    radius at the end of the band, C2 there; blurexp > 1 keeps the band clear where its refraction
 //    is strongest (u = 0.5: 25 % of the core radius at blurexp 2). The material's body weight is that
@@ -294,7 +295,7 @@
     "    oulg_bw = sb > 0.0 ? pow(sb, %.3f) : 0.0;\n" \
     "    oulg_br = min(%.2f, %.2f) * oulg_bw;\n" \
     "    highp float R = min(hs.x, hs.y);\n" \
-    "    highp vec2 s = -%.4f * (q - clamp(q, -(hs - vec2(R)), hs - vec2(R)));\n" \
+    "    highp vec2 s = -%.4f * q * (R / hs);\n" \
     "    if (l <= 0.0 || depth <= 0.0) return s;\n" \
     "    highp vec2 n = (v / l) * sign(q);\n" \
     "    if (depth < bevel) { oulg_t = 1.0 - depth / bevel; oulg_bv = bevel; oulg_n = n; }\n" \

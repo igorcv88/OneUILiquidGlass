@@ -68,8 +68,8 @@ static void field23(double qx, double qy, double hx, double hy, double r, double
     double sb = smootherd(0, band, depth);
     *br = brMax(1) * (sb > 0 ? pow(sb, bexp) : 0);
     double R = fmin(hx, hy);
-    s[0] = -lb * (qx - clampd(qx, -(hx - R), hx - R));
-    s[1] = -lb * (qy - clampd(qy, -(hy - R), hy - R));
+    s[0] = -lb * qx * R / hx;
+    s[1] = -lb * qy * R / hy;
     *lt = 0;
     if (l <= 0 || depth <= 0) return;
     double nx = vx / l * signd(qx), ny = vy / l * signd(qy);
@@ -86,7 +86,7 @@ static void check23(void) {
     const double sizes[][3] = {{670, 108, 108}, {670, 108, 107.4}, {670, 300, 92}, {700, 160, 56}, {540, 400, 140}, {670, 96, 48}, {670, 200, 108.4}};
     const double ks[] = {0.1, 0.4, 0.5, 1.2}, bands[] = {0.42, 0.85, 1.0}, lbs[] = {0, 0.05, 0.15}, exps[] = {1, 2, 4};
     long points = 0;
-    double minDet = 1e9, maxSmax = 0, maxMag = 0;
+    double minDet = 1e9, maxSmax = 0, maxMag = 0, maxJump = 0;
     for (unsigned si = 0; si < sizeof sizes / sizeof sizes[0]; si++)
     for (unsigned ki = 0; ki < sizeof ks / sizeof ks[0]; ki++)
     for (unsigned bi = 0; bi < sizeof bands / sizeof bands[0]; bi++)
@@ -104,8 +104,8 @@ static void check23(void) {
             if (depth <= 0.02) continue;
             points++;
             double mag = hypot(s[0], s[1]);
-            // Inward: toward the stadium's medial segment and, in the band, against the outward normal.
-            double px = qx - clampd(qx, -(hx - R), hx - R), py = qy - clampd(qy, -(hy - R), hy - R);
+            // Inward: toward the centre and, in the band, against the outward normal.
+            double px = qx * R / hx, py = qy * R / hy;
             CHECK(mag <= fmin(k, 0.5) * band + lb * hypot(px, py) + 1e-9, "v0.23 shift %.3f too large", mag);
             if (mag > 1e-9) CHECK(s[0] * px + s[1] * py <= 1e-9 || (l > 0 && s[0] * vx * signd(qx) + s[1] * vy * signd(qy) < 0),
                                   "v0.23 shift not inward at %.2f,%.2f", qx, qy);
@@ -128,6 +128,18 @@ static void check23(void) {
             if (det < minDet) minDet = det;
             if (smax > maxSmax) maxSmax = smax;
             if (smin > 0 && 1 / smin > maxMag) maxMag = 1 / smin;
+            // Past the band only the body lens acts: its Jacobian must be continuous there, i.e. the
+            // same one step further along both axes (a kinked lens shows as a jump).
+            if (depth >= band + 2) {
+                double t0[2], t1[2], u0[2], u1[2], e = 1.0;
+                field23(qx + e + h, qy, hx, hy, r, k, band1, lb, bexp, t1, &b2, &l2); field23(qx + e - h, qy, hx, hy, r, k, band1, lb, bexp, t0, &b2, &l2);
+                field23(qx, qy + e + h, hx, hy, r, k, band1, lb, bexp, u1, &b2, &l2); field23(qx, qy + e - h, hx, hy, r, k, band1, lb, bexp, u0, &b2, &l2);
+                double d00 = 1 + (t1[0] - t0[0]) / (2 * h) - j00, d11 = 1 + (u1[1] - u0[1]) / (2 * h) - j11;
+                double d10 = (t1[1] - t0[1]) / (2 * h) - j10, d01 = (u1[0] - u0[0]) / (2 * h) - j01;
+                double jump = fmax(fmax(fabs(d00), fabs(d11)), fmax(fabs(d10), fabs(d01)));
+                if (depth >= band + 2 + e) CHECK(jump < 1e-6, "v0.23 body Jacobian jumps %.5f at %.2f,%.2f", jump, qx, qy);
+                if (jump > maxJump) maxJump = jump;
+            }
         }
         // Monotone body radius along a straight-edge normal, ~0 at the outline (exponent >= 2).
         double last = -1;
@@ -137,8 +149,8 @@ static void check23(void) {
             if (dep <= 4 && bexp >= 2) CHECK(b < 0.5, "v0.23 br %.3f at the outline (%.2f px)", b, dep);
         }
     }
-    printf("field v0.23: %ld points, min det %.3f, max sigma %.6f, max magnification %.2fx, failures = %d\n",
-           points, minDet, maxSmax, maxMag, failures);
+    printf("field v0.23: %ld points, min det %.3f, max sigma %.6f, max magnification %.2fx, body Jacobian jump %.1e, failures = %d\n",
+           points, minDet, maxSmax, maxMag, maxJump, failures);
     // Defaults (kglens 0.40, band 0.85, body lens 0.05, exponent 2) on a 108 px lockscreen pill.
     double r = tag(108, 0.4, 1);
     printf("field v0.23 defaults, pill r=%.2f: depth px -> shift px, blur radius px\n ", r);
