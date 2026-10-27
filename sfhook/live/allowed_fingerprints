@@ -1,3 +1,5 @@
 # ro.build.fingerprint values the live route was validated on, one per line (read with getprop on
-# the device, never derived from a firmware name). Same list as module/customize.sh.
+# the device, never derived from a firmware name). This list is for the live route only.
 samsung/pa3qxxx/pa3q:17/CP2A.260605.016/S938BXXUCDZIF_OXMCDZIF:user/release-keys
+# OWO CSC: read from the user's DZIF device; PDA and system/vendor builds also report DZIF.
+samsung/pa3qxxx/pa3q:17/CP2A.260605.016/S938BXXUCDZIF_OWOCDZIF:user/release-keys
