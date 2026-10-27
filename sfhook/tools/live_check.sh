@@ -9,7 +9,7 @@ mkdir -p "$T/stub" "$T/bundle" "$T/bin" "$T/lib" "$T/proc"
 FP="samsung/pa3qxxx/pa3q:17/CP2A.260605.016/S938BXXUCDZIF_OXMCDZIF:user/release-keys"
 cat > "$T/stub/getprop" <<S
 #!/bin/sh
-case "\$1" in ro.build.fingerprint) echo "$FP";; *) cat "$T/prop_\$1" 2>/dev/null;; esac
+case "\$1" in ro.build.fingerprint) echo "\${OULG_TEST_FP:-$FP}";; *) cat "$T/prop_\$1" 2>/dev/null;; esac
 S
 cat > "$T/stub/setprop" <<S
 #!/bin/sh
@@ -87,4 +87,28 @@ set +e; o="$(run restart now)"; rc=$?; set -e
 [ $rc -eq 2 ] || { echo "FAIL: bad restart mode rc=$rc"; exit 1; }
 expect "$(run uninstall)" "uninstall=ok"
 expect "$(run status)" "installed_ok=0"
+# The observed OWO variant must migrate a manual library (mapped, no manifest)
+# through install -> selftest -> restart without accepting arbitrary CSC/builds.
+export OULG_TEST_FP="samsung/pa3qxxx/pa3q:17/CP2A.260605.016/S938BXXUCDZIF_OWOCDZIF:user/release-keys"
+cp "$T/bundle/liboulg_sf.so" "$T/lib/liboulg_sf.so"
+inode="$(stat -c '%i' "$T/lib/liboulg_sf.so")"
+printf '1000-2000 r-xp 00000000 00:01 %s %s\n' "$inode" "$T/lib/liboulg_sf.so" > "$T/proc/4242/maps"
+s="$(run status)"; expect "$s" "fingerprint_ok=1"; expect "$s" "sf_loaded=1"
+expect "$s" "installed_ok=0"; expect "$s" "installed_version="; expect "$s" "update_needed=1"
+expect "$(run install)" "install=ok"
+expect "$(run selftest)" "selftest=ok"
+expect "$(run status)" "installed_ok=1"
+expect "$(run restart rewrite)" "restart=started"
+for rejected in \
+    "${OULG_TEST_FP%OWOCDZIF:user/release-keys}XXXCDZIF:user/release-keys" \
+    "samsung/pa3qxxx/pa3q:17/CP2A.260605.016/S938BXXUCZZIC_OWOCZZIC:user/release-keys"; do
+    export OULG_TEST_FP="$rejected"
+    expect "$(run status)" "fingerprint_ok=0"
+    for operation in install 'restart rewrite'; do
+        set +e; o="$(run $operation)"; rc=$?; set -e
+        [ $rc -eq 2 ] || { echo "FAIL: unknown firmware accepted: $operation rc=$rc"; exit 1; }
+        expect "$o" "error=fingerprint_not_allowed"
+    done
+done
+unset OULG_TEST_FP
 echo "live helper: all checks passed"
