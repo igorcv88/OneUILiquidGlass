@@ -7,6 +7,8 @@
 #   oulg-live.sh install         copies the bundle next to this script into place (atomically)
 #   oulg-live.sh selftest        injection into a throwaway process; required before restart
 #   oulg-live.sh restart MODE    MODE rewrite (lens) or dump (shaders only): restarts the userspace
+#   oulg-live.sh setprops K=V..  writes allowlisted compositor parameters (debug.oulg.sf.K); they
+#                                take effect when the shaders compile, i.e. at the next restart
 #   oulg-live.sh log             the last selftest and injection logs
 #   oulg-live.sh uninstall       removes the installed files; the running compositor keeps them
 #                                mapped until it restarts
@@ -153,6 +155,32 @@ restart)
     out log "$LOG"
     exit 0
     ;;
+setprops)
+    # Compositor parameters only: names from the library's reader, numeric values (empty clears
+    # back to the library default). Every argument is checked before anything is written.
+    shift
+    [ $# -gt 0 ] || die 2 "usage_setprops_key_value"
+    for kv in "$@"; do
+        name="${kv%%=*}"; value="${kv#*=}"
+        [ "$name" != "$kv" ] || die 2 "malformed_$kv"
+        case "$name" in
+            core|taps|ramp|hubloom|kgcore|kgtaps|kgramp|kgsat|kgtone|kgrim|kgspec|kgflat|kglevel|kgcool|kgtilt|kgline|kgcorecap|kggradient|kgflatcap|kgcoredim|kgglow|shadecap|shadelift|debug) ;;
+            *) die 2 "key_not_allowed_$name" ;;
+        esac
+        case "$value" in
+            "") ;;
+            *[!0-9.-]*|*.*.*|?*-*|-|.|-.) die 2 "value_not_numeric_$name" ;;
+        esac
+        [ ${#value} -le 12 ] || die 2 "value_too_long_$name"
+    done
+    for kv in "$@"; do
+        name="${kv%%=*}"; value="${kv#*=}"
+        setprop "debug.oulg.sf.$name" "$value"
+        out "set_$name" "$(getprop "debug.oulg.sf.$name")"
+    done
+    out setprops ok
+    exit 0
+    ;;
 log)
     echo "--- selftest"; cat "$SELFLOG" 2>/dev/null
     echo "--- inject"; cat "$LOG" 2>/dev/null
@@ -170,6 +198,6 @@ uninstall)
     exit 0
     ;;
 *)
-    die 2 "usage_status_install_selftest_restart_log_uninstall"
+    die 2 "usage_status_install_selftest_restart_setprops_log_uninstall"
     ;;
 esac

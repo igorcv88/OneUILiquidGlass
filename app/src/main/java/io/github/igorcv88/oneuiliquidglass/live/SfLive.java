@@ -70,7 +70,7 @@ public final class SfLive {
 
     /** The helper's commands. RESTART takes a mode: "rewrite" (the lens) or "dump" (shaders only). */
     public enum Command {
-        STATUS("status"), INSTALL("install"), SELFTEST("selftest"), RESTART("restart"), LOG("log"), UNINSTALL("uninstall");
+        STATUS("status"), INSTALL("install"), SELFTEST("selftest"), RESTART("restart"), SETPROPS("setprops"), LOG("log"), UNINSTALL("uninstall");
         final String word;
         Command(String word) { this.word = word; }
     }
@@ -86,9 +86,36 @@ public final class SfLive {
         if (command == Command.RESTART) {
             if (!"rewrite".equals(mode) && !"dump".equals(mode)) throw new IllegalArgumentException("mode");
             line += " " + mode;
-        } else if (mode != null) throw new IllegalArgumentException("mode");
+        } else if (mode != null || command == Command.SETPROPS) throw new IllegalArgumentException("mode");
         return Arrays.asList("su", "-c", line);
     }
+
+    /**
+     * {@code setprops name=value...} for compositor parameters. Names are the library's short
+     * names (sf.kgcore -> kgcore) and must be in {@link #WRITABLE}; values are plain decimals or
+     * empty (back to the library default). The helper checks both again before writing.
+     */
+    public static List<String> setprops(String bundleDir, Map<String, String> values) {
+        List<String> base = command(bundleDir, Command.STATUS, null);
+        if (values.isEmpty()) throw new IllegalArgumentException("empty");
+        StringBuilder line = new StringBuilder(base.get(2).replaceFirst(" status$", " setprops"));
+        for (Map.Entry<String, String> e : values.entrySet()) {
+            String key = e.getKey(), value = e.getValue();
+            if (!key.startsWith("sf.") || !WRITABLE.contains(key.substring(3)))
+                throw new IllegalArgumentException("key " + key);
+            if (!value.matches("(-?[0-9]+(\\.[0-9]+)?)?") || value.length() > 12)
+                throw new IllegalArgumentException("value " + key);
+            line.append(' ').append(key.substring(3)).append('=').append(value);
+        }
+        return Arrays.asList("su", "-c", line.toString());
+    }
+
+    /** Mirrors the helper's allowlist: the library's reader minus the version marker and the
+     * rewrite switch the restart command owns. */
+    public static final List<String> WRITABLE = Collections.unmodifiableList(Arrays.asList(
+            "core", "taps", "ramp", "hubloom", "kgcore", "kgtaps", "kgramp", "kgsat", "kgtone",
+            "kgrim", "kgspec", "kgflat", "kglevel", "kgcool", "kgtilt", "kgline", "kgcorecap",
+            "kggradient", "kgflatcap", "kgcoredim", "kgglow", "shadecap", "shadelift", "debug"));
 
     /** key=value lines (the helper's output, a live.prop); comments and other lines are skipped. */
     public static Map<String, String> parse(String text) {

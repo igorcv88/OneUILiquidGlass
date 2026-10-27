@@ -9,6 +9,11 @@ import java.util.Map;
 public final class SfLiveFlow {
     public interface Runner {
         Reply run(SfLive.Command command, String mode) throws Exception;
+
+        /** {@code setprops} with already validated compositor values (SfLive.setprops). */
+        default Reply setprops(Map<String, String> values) throws Exception {
+            throw new UnsupportedOperationException("setprops");
+        }
     }
 
     public static final class Reply {
@@ -99,16 +104,45 @@ public final class SfLiveFlow {
         return status;
     }
 
-    public Reply restartConfirmed() throws Exception {
-        // Revalidate after confirmation: UI state may have become stale while the dialog was open.
-        Map<String, String> status = status();
-        supported(status);
+    /**
+     * Writes the desired compositor values, reads each back, and only then restarts: a value
+     * the helper did not confirm stops the operation before anything restarts. The restart
+     * compiles the shaders with these values; the caller still has to observe the result.
+     */
+    public Reply applyAndRestart(Map<String, String> values) throws Exception {
+        if (!values.isEmpty()) {
+            Map<String, String> status = status();
+            supported(status);
+            ready(status);
+            Reply set = runner.setprops(values);
+            Map<String, String> echo = set.values();
+            if (set.exit != SfLive.OK || !"ok".equals(echo.get("setprops")))
+                throw new Failure("Valores recusados; nada foi reiniciado.\n" + set.output, false);
+            for (Map.Entry<String, String> e : values.entrySet()) {
+                String name = "set_" + e.getKey().substring(3);
+                if (!e.getValue().equals(echo.get(name)))
+                    throw new Failure(
+                            "O valor de " + e.getKey() + " não foi confirmado; nada foi reiniciado.",
+                            false);
+            }
+        }
+        return restartConfirmed();
+    }
+
+    private static void ready(Map<String, String> status) throws Failure {
         if (!"0".equals(status.get("update_needed"))
                 || !"1".equals(status.get("installed_ok"))
                 || !"1".equals(status.get("selftest_ok")))
             throw new Failure(
                     "Binários mudaram ou selftest ausente. Prepare novamente antes de reiniciar.",
                     false);
+    }
+
+    public Reply restartConfirmed() throws Exception {
+        // Revalidate after confirmation: UI state may have become stale while the dialog was open.
+        Map<String, String> status = status();
+        supported(status);
+        ready(status);
         Reply reply = checked(SfLive.Command.RESTART, "rewrite");
         if (!"started".equals(reply.values().get("restart")))
             throw new Failure("Início do reinício não confirmado.\n" + reply.output, false);

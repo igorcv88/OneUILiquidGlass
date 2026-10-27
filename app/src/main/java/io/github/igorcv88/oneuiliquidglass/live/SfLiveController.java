@@ -83,7 +83,10 @@ public final class SfLiveController {
 
     private SfLiveFlow.Reply run(File bundle, SfLive.Command command, String mode)
             throws Exception {
-        List<String> argv = SfLive.command(bundle.getAbsolutePath(), command, mode);
+        return run(SfLive.command(bundle.getAbsolutePath(), command, mode), command);
+    }
+
+    private SfLiveFlow.Reply run(List<String> argv, SfLive.Command command) throws Exception {
         Process process = new ProcessBuilder(argv).redirectErrorStream(true).start();
         ExecutorService outputReader = Executors.newSingleThreadExecutor();
         Future<String> output =
@@ -153,9 +156,16 @@ public final class SfLiveController {
         submit(Action.PREPARE);
     }
 
-    public void restartConfirmed() {
+    /**
+     * Writes {@code compositorValues} (pending sf.* values, possibly empty), confirms them and
+     * restarts. Recorded so the next launch can check what the new compositor compiled with.
+     */
+    public void restartConfirmed(Map<String, String> compositorValues) {
+        restartValues = new LinkedHashMap<>(compositorValues);
         submit(Action.RESTART);
     }
+
+    private Map<String, String> restartValues = Collections.emptyMap();
 
     public void log() {
         submit(Action.LOG);
@@ -186,7 +196,31 @@ public final class SfLiveController {
                         bundle = verifiedBundle();
                         final File extracted = bundle;
                         SfLiveFlow flow =
-                                new SfLiveFlow((command, mode) -> run(extracted, command, mode));
+                                new SfLiveFlow(
+                                        new SfLiveFlow.Runner() {
+                                            @Override
+                                            public SfLiveFlow.Reply run(
+                                                    SfLive.Command command, String mode)
+                                                    throws Exception {
+                                                return SfLiveController.this.run(
+                                                        SfLive.command(
+                                                                extracted.getAbsolutePath(),
+                                                                command,
+                                                                mode),
+                                                        command);
+                                            }
+
+                                            @Override
+                                            public SfLiveFlow.Reply setprops(
+                                                    Map<String, String> values)
+                                                    throws Exception {
+                                                return SfLiveController.this.run(
+                                                        SfLive.setprops(
+                                                                extracted.getAbsolutePath(),
+                                                                values),
+                                                        SfLive.Command.SETPROPS);
+                                            }
+                                        });
                         Map<String, String> status = before.status;
                         String message, log = before.log;
                         switch (action) {
@@ -197,11 +231,14 @@ public final class SfLiveController {
                                             + " estado abaixo.";
                                 break;
                             case RESTART:
-                                activity.getSharedPreferences("sf_live_ui", Activity.MODE_PRIVATE)
-                                        .edit()
-                                        .putLong("restartRequestedAt", System.currentTimeMillis())
-                                        .commit();
-                                flow.restartConfirmed();
+                                Map<String, String> values = restartValues;
+                                // Committed before the restart kills this process.
+                                CompositorValues.recordAttempt(
+                                        activity.getSharedPreferences(
+                                                "sf_live_ui", Activity.MODE_PRIVATE),
+                                        values,
+                                        System.currentTimeMillis());
+                                flow.applyAndRestart(values);
                                 message =
                                         "Reinício iniciado. Os apps serão encerrados. Reabra e"
                                             + " verifique o estado; ainda não é confirmação de"
@@ -234,6 +271,10 @@ public final class SfLiveController {
                         io.github.igorcv88.oneuiliquidglass.config.SystemPropertyReader.refresh();
                         publish(new Model(false, true, status, message, log));
                     } catch (Exception error) {
+                        if (action == Action.RESTART)
+                            CompositorValues.clearAttempt(
+                                    activity.getSharedPreferences(
+                                            "sf_live_ui", Activity.MODE_PRIVATE));
                         String log = before.log;
                         if (error instanceof SfLiveFlow.Failure
                                 && ((SfLiveFlow.Failure) error).selftest

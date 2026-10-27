@@ -90,8 +90,31 @@ public final class ConfigRepository {
         if (!ProductFlags.known(key) && !key.equals(Config.KEY_ENABLED))
             throw new IllegalArgumentException(key);
         snapshot();
-        prefs.edit().putBoolean(key, value).putLong("generation", generation() + 1).apply();
+        prefs.edit()
+                .putBoolean(key, value)
+                .putLong("generation", generation() + 1)
+                .putLong("lastChange", System.currentTimeMillis())
+                .apply();
         notifyChanged();
+    }
+
+    /** Code defaults for {@code keys} saved as desired values (one undo snapshot). */
+    public synchronized void resetToDefaults(Collection<String> keys) {
+        Map<String, String> defaults = new LinkedHashMap<>();
+        for (String key : keys) {
+            SettingSpec s = SettingsRegistry.get(key);
+            if (s != null && s.type != SettingSpec.Type.READONLY && !s.helperOwned())
+                defaults.put(key, s.defaultValue);
+        }
+        if (!defaults.isEmpty()) replace(defaults, false);
+    }
+
+    public long lastChange() {
+        return prefs.getLong("lastChange", 0);
+    }
+
+    public boolean canUndo() {
+        return prefs.contains("undo");
     }
 
     public long generation() {
