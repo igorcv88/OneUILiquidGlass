@@ -1126,6 +1126,39 @@ Cause: the stack removes the row and adds it back at once as a transient view fo
 
 **Validation:** `testDebugUnitTest` (183 tests, 13 new in `CardExitTest`), `lintDebug` (0 errors), `assembleDebug`. Not tested on the device: the scenarios are in `physical-test.md`, *Exit animations*.
 
+### Round 51: exit cancel, conditional reassert, disabled fast path, main-thread work and percentile instrumentation (2026-10-27)
+
+**Device data received (SM-S938B, QHD+, Standard 60 Hz).**
+- Shader rewrite on/off (`norewrite=1`: 50/337 janky frames, 14.84 %; `norewrite=0`: 53/337, 15.73 %). The rewrite is not the main cost; the native refraction is unchanged.
+- Hook time over ~30.8 s: predraw 6216 calls / 155.9 ms, drawBefore 734 / 86.1 ms, drawAfter 538 / 24.7 ms (glassDraw 19.4 ms inside it), blurGuard 465 / 3.6 ms. That is about 270 ms of main-thread time in 30.8 s (0.9 %), about 0.62 ms per NotificationShade frame on average (439 frames, 83 janky, 18.9 %), against a 16.7 ms budget. **The averages cannot explain the jank rate.** What they cannot show: single long calls, work outside the measured hooks, and how the module's time falls per frame. This round measures those; it does not establish them.
+- The lifecycle log of 15:22:27 (`GLASS_RELEASED native=true` → `ATTACH` → `GLASS_APPLIED` 7 ms later on the same row) is the round-50 defect. Its `GLASS_RELEASED` line has no `viewId=`/`leaving=` fields, which every release prints since round 50, so it was most likely taken with an APK without that round; it needs to be repeated with this build (look for `MATERIAL_REATTACH kept=true`).
+
+**Lifecycle (follow-up to round 50).**
+- Exit cancel: `cancelAppearDrawing` and `cancelAppearAnimation` (AOSP `ActivatableNotificationView`) end the exit (`EXIT_END reason=cancelled`) instead of waiting for `MAX_EXIT_MS`. A cancel only ends the exit; it never releases the material, so a heads-up pulled into the shade mid-exit gets its shade material through the normal kind change.
+- Re-attach identity: the window token (`View.getWindowToken()`, public API, one per `ViewRootImpl`) instead of `getViewRootImpl` by reflection. `MATERIAL_REATTACH kept=false` now names why (`noGlass`, `noWindowThen`, `noWindowNow`, `otherWindow`).
+- Row lifecycle events no longer re-apply the Samsung blur unconditionally. `State.event()` ran `reassertBackdrop()` on every row callback (setHeadsUp, setPinned, setHeadsUpAnimatingAway, BACKGROUND_UPDATE twice per update, attach...), and each apply is a `semSetBlurInfo` that installs a new blur drawable on the view. They now call `reassertIfLost()`: `SemBlurBridge` skips it when the view's `SemBlurInfo` field still holds what its last apply left there (only an apply that took counts) and, where the region fades through the drawable, the view's background is still a blur drawable. Without the field it applies as before. Shade open/close and the blur-mutator repair still re-apply unconditionally. A leaving card is not re-applied at all (its region follows the exit).
+- `BLUR_FACTORY` (a capability report that builds a blur drawable from the window) runs once per process instead of on every attach.
+
+**Main-thread work.**
+- `Tuning.get()` rebuilt the knob set from about a hundred `SystemProperties.get` calls, each through `Class.forName` + `getMethod`, plus a ~3 KB description compared as a string, once a second on whichever thread asked first after the second elapsed (in practice a card's pre-draw or draw on the main thread). It now refreshes on a worker thread (`oulg-tuning`) and returns the current values meanwhile; only the first read is synchronous. The `Method` is looked up once. A knob change applies a few ms later than before; nothing polls while nothing asks. The refresh cost is the new `tuning` slot.
+- The settle redraw (tag back after motion) was a `removeCallbacks` + `postDelayed` per moving card per frame; it is now one pending post moved forward when it fires.
+- The per-frame `DECISION` key was a new string per card per frame; fields are compared instead.
+
+**Glass disabled in the app.** With `enabled=false` and nothing of the module left on a card (no glass, no swapped text, no native blur owed, no held material, no veil ramp, and one full pre-draw already run), `onPreDraw` and the draw hook return at once (`State.minimal()`). The draw hook also skips the host walk for backgrounds that never had state. The touch hook returns at once (its signal feeds only glass features). Row events skip the per-event `LIFECYCLE`/`ROW_EVENT` lines unless `debug.oulg.trace=1` (the probe-mode lifecycle now needs the trace). Restoration is unchanged: turning the glass off releases every card through `resolveConfig` (native blur and text restored); a card that still owes its native blur takes the full path until it is restored; turning it on invalidates every card, which takes the full path again.
+
+**Instrumentation (`debug.oulg.perf=1`).**
+- `PERF` every 2 s: per slot `calls/totalus/p95=/p99=/max=` (µs; percentiles from fixed buckets, at most one bucket coarse, capped by the maximum). New slots: `event`, `attach`, `detach`, `exit`, `touch`, `textGuard`, `tuning`.
+- `frame=`: the module's main-thread time summed per Choreographer frame (keyed by `Choreographer.mLastFrameTimeNanos`, read reflectively; `glassDraw` is not counted twice), with its p95/p99/max.
+- Counters: `reassertAsked/Skipped/Applied`, `reattachKept/Rebuilt`.
+- `PERF_SPIKE`: any single call of 2 ms or more (slot, µs, frame). `PERF_FRAME`: any frame where the module took 4 ms or more, with its vsync time (`frameNs`, `System.nanoTime` base = `CLOCK_MONOTONIC`).
+- Trace sections `OULG:<slot>` while the platform traces SystemUI's app sections, so Perfetto shows the module's slices inside `Choreographer#doFrame` next to FrameTimeline's verdict for the same frame.
+
+**How to tell the module's delay from SystemUI's or the compositor's.** In a Perfetto trace with app tracing for `com.android.systemui` (atrace `-a com.android.systemui`, or the `view`/`gfx` categories) and FrameTimeline: for each NotificationShade frame marked janky, sum the `OULG:*` slices on the main thread inside its `Choreographer#doFrame`. A janky frame whose `OULG:*` time is a small part of the overrun is SystemUI's or the compositor's (FrameTimeline's jank type then says which: App Deadline Missed with long non-OULG slices, or SurfaceFlinger/Display types). `PERF_FRAME` lines give the same answer from logcat alone for frames where the module took ≥ 4 ms.
+
+**Not done, deliberately.** No change to refresh rate, Standard mode, refraction, blur, gradient, tone or edge parameters, captures or the native library.
+
+**Validation:** `testDebugUnitTest` (193 tests; new: `PerfStatsTest`, four `CardExitTest` transitions), `lintDebug` (0 errors; one new `DiscouragedPrivateApi` warning for the perf-only `mLastFrameTimeNanos` read), `assembleDebug`. **No before/after device measurement exists for this round.** Whether jank changes, and by how much, depends on the capture described in `physical-test.md`, *Performance capture*.
+
 ## Future work
 
 - **Separate blur for the notification center and the control center.** Theme Park and HomeUp set a single blur amount for both panels. The user runs 12 %: lower leaves the control center unreadable, higher over-blurs the notification list. A split needs its own investigation: find where SystemUI applies the panel blur, whether the two panels are separate blur regions or one window, and whether the module can own one of them.

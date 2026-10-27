@@ -104,6 +104,8 @@ public final class HeadsUpHooks {
      * cards then take the Samsung blur for the rest of the process instead of the drawable path.
      */
     private boolean drawableUnavailable;
+    /** BLUR_FACTORY (the blur drawable factory works on this firmware) was reported. */
+    private boolean reportedCapability;
     /** Last cross-window blur capability logged (BLUR_CAPABILITY_CHANGED), across all cards. */
     private Boolean lastCapability;
     /** enabled == null: preferences unreadable, resolve through the module's ConfigProvider. */
@@ -192,6 +194,16 @@ public final class HeadsUpHooks {
             }
         };
         for (String n : new String[]{"onFinishInflate", "setHeadsUp", "setPinned", "setHeadsUpAnimatingAway", "startAppearAnimation", "onAppearAnimationFinished", "setUserExpanded", "setOnKeyguard", "onAttachedToWindow"}) hook(rowClass, n, rowEvent);
+        // A cancelled appear/disappear animation (AOSP ActivatableNotificationView.cancelAppearDrawing,
+        // and the animator cancel it runs) may end without onAppearAnimationFinished: the card stops
+        // leaving at once instead of at CardExit.MAX_EXIT_MS. It only ends the exit; it releases nothing.
+        XC_MethodHook exitCancel = new XC_MethodHook() {
+            @Override protected void afterHookedMethod(MethodHookParam p) {
+                try { if (rowClass != null && rowClass.isInstance(p.thisObject)) exitEvent((View) p.thisObject, ((Method) p.method).getName(), p.args); }
+                catch (RuntimeException | LinkageError e) { Probe.error("EXIT_CANCEL_FAILED", e); }
+            }
+        };
+        for (String n : new String[]{"cancelAppearDrawing", "cancelAppearAnimation"}) hook(rowClass, n, exitCancel);
         new HeaderGapHooks(loader, rowClass, () -> enabled).install();
         installShade();
         installBarState();
@@ -246,6 +258,7 @@ public final class HeadsUpHooks {
             Set<?> text = XposedBridge.hookAllMethods(android.widget.TextView.class, "setTextColor", new XC_MethodHook() {
                 @Override protected void beforeHookedMethod(MethodHookParam p) {
                     if (Foreground.applying || !Foreground.tracking() || p.args.length != 1) return;
+                    long started = Perf.start(Perf.TEXT_GUARD);
                     try {
                         Object a = p.args[0];
                         if (a instanceof Integer) {
@@ -256,6 +269,7 @@ public final class HeadsUpHooks {
                             if (c != null) p.args[0] = c;
                         }
                     } catch (RuntimeException | LinkageError e) { Probe.error("TEXT_GUARD_FAILED", e); }
+                    finally { Perf.end(Perf.TEXT_GUARD, started); }
                 }
             });
             Set<?> tint = XposedBridge.hookAllMethods(android.widget.ImageView.class, "setImageTintList", new XC_MethodHook() {
@@ -276,9 +290,15 @@ public final class HeadsUpHooks {
             Class<?> receiver = Class.forName("android.view.InputEventReceiver");
             Set<?> hooks = XposedBridge.hookAllMethods(receiver, "dispatchInputEvent", new XC_MethodHook() {
                 @Override protected void beforeHookedMethod(MethodHookParam p) {
+                    // Every input event of every SystemUI window passes here. The signal feeds the
+                    // lens band, the pop-up tone and the pre-open capture, all off with the glass.
+                    if (!enabled) return;
                     Object e = p.args.length > 1 ? p.args[1] : null;
                     if (!(e instanceof android.view.MotionEvent)) return;
-                    android.view.MotionEvent m = (android.view.MotionEvent) e;
+                    long started = Perf.start(Perf.TOUCH);
+                    try { touch(p, (android.view.MotionEvent) e); } finally { Perf.end(Perf.TOUCH, started); }
+                }
+                private void touch(MethodHookParam p, android.view.MotionEvent m) {
                     if (!m.isFromSource(android.view.InputDevice.SOURCE_TOUCHSCREEN)) return;
                     // The middle of the screen with the shade closed belongs to the app below, not to SystemUI.
                     float h = android.content.res.Resources.getSystem().getDisplayMetrics().heightPixels;
@@ -327,7 +347,7 @@ public final class HeadsUpHooks {
             XposedBridge.hookAllMethods(View.class, "semSetBlurInfo", new XC_MethodHook() {
                 @Override protected void beforeHookedMethod(MethodHookParam p) {
                     if (!(p.thisObject instanceof View)) return;
-                    long started = Perf.start();
+                    long started = Perf.start(Perf.BLUR_GUARD);
                     try { guard(p); } finally { Perf.end(Perf.BLUR_GUARD, started); }
                 }
                 private void guard(MethodHookParam p) {
@@ -445,7 +465,7 @@ public final class HeadsUpHooks {
                     XposedBridge.hookMethod(m, new XC_MethodHook() {
                         @Override protected void afterHookedMethod(MethodHookParam p) {
                             if (SemBlurBridge.applying() || !(p.thisObject instanceof View)) return;
-                            long started = Perf.start();
+                            long started = Perf.start(Perf.BLUR_MUTATOR);
                             try {
                                 State s = compositorState((View) p.thisObject);
                                 if (s == null) return;
@@ -801,7 +821,7 @@ public final class HeadsUpHooks {
         });
     }
     private void updateShade(Object controller) {
-        long started = Perf.start();
+        long started = Perf.start(Perf.SHADE);
         try { applyShade(controller); } finally { Perf.end(Perf.SHADE, started); }
     }
     private void applyShade(Object controller) {
@@ -863,11 +883,18 @@ public final class HeadsUpHooks {
      * is not affected.
      */
     private void exitEvent(View row, String name, Object[] args) {
+        long started = Perf.start(Perf.EXIT);
+        try { exit(row, name, args); } finally { Perf.end(Perf.EXIT, started); }
+    }
+    private void exit(View row, String name, Object[] args) {
         Object background = Reflect.read(row, "mBackgroundNormal");
         if (!(background instanceof View)) return;
-        State s = state((View) background, row);
+        // A cancel on a row with no state yet has nothing to end.
+        State s = name.startsWith("cancel") ? states.get(background) : state((View) background, row);
+        if (s == null) return;
         long now = android.os.SystemClock.uptimeMillis();
         if ("onAppearAnimationFinished".equals(name)) { s.exitEnd(now, "finished"); return; }
+        if (name.startsWith("cancel")) { s.exitEnd(now, "cancelled"); return; }
         Boolean appearing = CardExit.appearing(args);
         if (appearing == null) appearing = !Boolean.TRUE.equals(Reflect.bool(row, "isRemoved", "mRemoved"));
         if (appearing) s.exitEnd(now, "appear");
@@ -966,9 +993,9 @@ public final class HeadsUpHooks {
         ViewTreeObserver observer;
         boolean blurEnabled;
         boolean failed;
-        boolean reportedCapability;
         Boolean lastEligible;
-        String lastReason = "";
+        /** Surface and reason of the last DECISION line (reason null: glass). */
+        String lastSurface, lastReason;
         /** Last reason the native background was drawn instead of the glass; null while glass draws. */
         String lastFallback;
         Boolean lastHeadsUp;
@@ -1357,7 +1384,16 @@ public final class HeadsUpHooks {
         /** Last frame the card was scaled or faded (uptime ms); see onPreDraw. */
         long lastMotion = Long.MIN_VALUE / 2;
         /** Redraws once the card has been still for SETTLE_MS, so the tag comes back. */
-        final Runnable settle = this::invalidate;
+        final Runnable settle = this::settled;
+        boolean settlePosted;
+        void settled() {
+            settlePosted = false;
+            View v = background.get();
+            if (v == null) return;
+            long left = SETTLE_MS - (android.os.SystemClock.uptimeMillis() - lastMotion);
+            if (left > 0) { settlePosted = true; v.postDelayed(settle, left + 20); }
+            else v.invalidate();
+        }
         /** Last ROW_FRAME line (debug.oulg.trace); logged again only when it changes. */
         String lastTrace;
         /** The background of the notification shelf, not of a row: the lockscreen's overflow pill. */
@@ -1412,8 +1448,11 @@ public final class HeadsUpHooks {
         boolean pillReported;
         /** The card's exit and detach state: see CardExit. */
         final CardExit exit = new CardExit();
-        /** The window (ViewRootImpl) the glass was built in: a held material survives a re-attach only there. */
-        WeakReference<Object> glassRoot;
+        /**
+         * The window the glass was built in (its token, one per ViewRootImpl, whose blur regions the
+         * material's drawables belong to): a held material survives a re-attach only there.
+         */
+        WeakReference<Object> glassWindow;
         /** Releases a material held over a detach unless the card came back first (CardExit.detach). */
         final Runnable heldRelease = this::releaseHeld;
         /** The current exit, for EXIT_END: frames drawn, and when the content and the region went. */
@@ -1444,11 +1483,6 @@ public final class HeadsUpHooks {
                     + " durationMs=" + took + " frames=" + exitFrames + " contentOffMs=" + exitContentOff + " regionOffMs=" + exitRegionOff
                     + " glass=" + (glass != null) + " shown=" + (v != null && v.isShown()));
             invalidate();
-        }
-        /** The view-root identity of the card's window now, or null. */
-        Object viewRoot(View v) {
-            try { return v == null ? null : Reflect.call(v, "getViewRootImpl"); }
-            catch (ReflectiveOperationException | RuntimeException e) { return null; }
         }
         /** The deferred release of a material held over a detach (posted by onViewDetachedFromWindow). */
         void releaseHeld() {
@@ -1497,15 +1531,21 @@ public final class HeadsUpHooks {
         }
         void invalidate() { View v = background.get(); if (v != null) v.invalidate(); }
         @Override public void onViewAttachedToWindow(View view) {
+            long started = Perf.start(Perf.ATTACH);
+            try { attached(view); } finally { Perf.end(Perf.ATTACH, started); }
+        }
+        private void attached(View view) {
             if (observer != null) return;
             if (exit.held()) {
                 main.removeCallbacks(heldRelease);
                 // Back in the window its material was built for (the stack re-adding a leaving row
                 // as a transient view): the glass and its region carry on. Another window: the
                 // region belongs to the old one, released now and built again on the next draw.
-                Object then = glassRoot == null ? null : glassRoot.get(), now = viewRoot(view);
+                Object then = glassWindow == null ? null : glassWindow.get(), now = view.getWindowToken();
                 boolean keep = exit.attach(then != null && then == now);
+                Perf.count(keep ? Perf.MATERIAL_KEPT : Perf.MATERIAL_REBUILT);
                 Probe.log("MATERIAL_REATTACH", "viewId=" + Integer.toHexString(System.identityHashCode(view)) + " kept=" + keep
+                        + (keep ? "" : " reason=" + (glass == null ? "noGlass" : then == null ? "noWindowThen" : now == null ? "noWindowNow" : "otherWindow"))
                         + " leaving=" + exit.leaving(android.os.SystemClock.uptimeMillis()) + " glass=" + (glass != null));
                 if (!keep) release();
             }
@@ -1533,6 +1573,10 @@ public final class HeadsUpHooks {
             event("ATTACH");
         }
         @Override public void onViewDetachedFromWindow(View view) {
+            long started = Perf.start(Perf.DETACH);
+            try { detached(view); } finally { Perf.end(Perf.DETACH, started); }
+        }
+        private void detached(View view) {
             // A row leaving the stack is removed and, in the same message, added back as a transient
             // view for its disappear animation. Released here, its glass came back a frame later
             // and its region two frames later at full alpha (the flash, device log 27/10): the
@@ -1549,13 +1593,19 @@ public final class HeadsUpHooks {
                 try { wm.removeCrossWindowBlurEnabledListener(blurListener); }
                 catch (RuntimeException e) { Probe.error("BLUR_LISTENER_REMOVE_FAILED", e); }
             }
-            wm = null; blurListener = null; reportedCapability = false; lastEligible = null;
+            wm = null; blurListener = null; lastEligible = null;
             Probe.view("DETACH", view);
         }
         @Override public boolean onPreDraw() {
-            long started = Perf.start();
+            long started = Perf.start(Perf.PREDRAW);
             try {
                 View v = background.get(); if (v == null) return true;
+                // Glass off (the app's switch): a card with nothing of the module's left on it (no
+                // glass, no swapped text, no native blur owed, no held material) skips the per-frame
+                // reflection, eligibility and tone work. The first pre-draw after a detach or a
+                // config change runs in full (lastEligible), and turning the glass on invalidates
+                // every card (resolveConfig), which then takes the full path again.
+                if (minimal()) return true;
                 // A row scaled into the stack under a collapsed group: its blur region reaches the
                 // compositor at a fractional, elliptical size that drops the corner tag (white behind
                 // groups over a white app). Such rows carry no region; the glass draws the sliver.
@@ -1598,8 +1648,9 @@ public final class HeadsUpHooks {
                     // scales or fades it stays untagged until it has been still for SETTLE_MS.
                     if (Math.abs(sx - 1f) > 0.001f || Math.abs(sy - 1f) > 0.001f || a < 0.999f) {
                         lastMotion = now;
-                        v.removeCallbacks(settle);
-                        v.postDelayed(settle, SETTLE_MS + 20);
+                        // One pending redraw, moved forward when it fires (settled): a remove and a
+                        // post on the main queue for every moving card on every frame cost more.
+                        if (!settlePosted) { settlePosted = true; v.postDelayed(settle, SETTLE_MS + 20); }
                     }
                     boolean untag = now - lastMotion < SETTLE_MS;
                     if (compBridge != null) {
@@ -1669,9 +1720,9 @@ public final class HeadsUpHooks {
                             + " nativeBlur=" + Reflect.bool(v, "isBlurEnabled", "mBlurEnabled"));
                 }
                 String surface = Eligibility.surface(headsUp, r == null ? null : Reflect.bool(r, "isOnKeyguard", "mOnKeyguard"), shadeExpanded);
-                String decision = surface + "|" + reason;
-                if (!lastReason.equals(decision)) {
-                    lastReason = decision;
+                // Compared field by field: a concatenated key was a new string per card per frame.
+                if (!surface.equals(lastSurface) || !java.util.Objects.equals(reason, lastReason)) {
+                    lastSurface = surface; lastReason = reason;
                     Probe.log("DECISION", "viewId=" + Integer.toHexString(System.identityHashCode(v)) + " surface=" + surface
                             + (reason == null ? " glass=true backdrop=" + kind() : " glass=false reason=" + reason));
                 }
@@ -1699,6 +1750,11 @@ public final class HeadsUpHooks {
             } catch (RuntimeException | LinkageError e) { failed = true; release(); Probe.error("PREDRAW_FAILED", e); }
             finally { Perf.end(Perf.PREDRAW, started); }
             return true;
+        }
+        /** Whether this card is in the disabled state with nothing to restore (see onPreDraw). */
+        boolean minimal() {
+            return !enabled && !Probe.trace && glass == null && !swapped && !nativePending && !exit.held()
+                    && veilRamp == null && Boolean.FALSE.equals(lastEligible);
         }
         String configSurface() { return pill || !popupSurface() && lensSurface() ? "keyguard" : popupSurface() ? "headsup" : "shade"; }
         boolean surfaceEnabled() { return io.github.igorcv88.oneuiliquidglass.config.ConfigClient.flag("surface." + configSurface() + ".enabled"); }
@@ -1808,8 +1864,16 @@ public final class HeadsUpHooks {
             }
         }
         void event(String event) {
+            long started = Perf.start(Perf.EVENT);
+            try { onEvent(event); } finally { Perf.end(Perf.EVENT, started); }
+        }
+        private void onEvent(String event) {
             View v = background.get(), r = row.get(); if (v == null || r == null) return;
-            if (glass != null) glass.reassertBackdrop();
+            // A leaving card's region is driven by its exit (onPreDraw): applying the last blur
+            // again on startAppearAnimation re-set a region about to be cut.
+            if (glass != null && !exit.leaving(android.os.SystemClock.uptimeMillis())) glass.reassertBackdropIfLost();
+            // Glass off: nothing to repair or report per event; the lifecycle stays in the opt-in trace.
+            if (!enabled && !Probe.trace) return;
             Probe.view("ROW_EVENT", v);
             Probe.log("LIFECYCLE", "callback=" + event + " rowId=" + Integer.toHexString(System.identityHashCode(r))
                     + " headsUp=" + Reflect.bool(r, "isHeadsUpState", "mIsHeadsUp") + " keyguard=" + Reflect.read(r, "mOnKeyguard")
@@ -1817,6 +1881,8 @@ public final class HeadsUpHooks {
                     + " nativeBlur=" + Reflect.bool(v, "isBlurEnabled", "mBlurEnabled")
                     + " tint=" + Reflect.read(v, "mTintColor") + " radii=" + java.util.Arrays.toString(shape())
                     + " shadeExpanded=" + shadeExpanded + " crossBlur=" + blurEnabled);
+            // Once per process: each report builds a blur drawable from the window, and it ran on
+            // every attach (46 times in one 35 s log, 27/10).
             if (v.isAttachedToWindow() && !reportedCapability) {
                 reportedCapability = true;
                 try {
@@ -1895,7 +1961,7 @@ public final class HeadsUpHooks {
                 if (compBridge != null && !pill) safeTone(v);
                 if (semBridge != null) semBridge.setSuspended(stacked);
                 glass = new GlassDrawable(backdrop, v.getResources().getDisplayMetrics().density, spec);
-                glassRoot = new WeakReference<>(viewRoot(v));
+                glassWindow = new WeakReference<>(v.getWindowToken());
                 heldFor = null;
                 glass.setLightStyle(lightStyle, Tuning.get().lightEdge);
                 glass.setOutline(outline());
@@ -2076,7 +2142,7 @@ public final class HeadsUpHooks {
             boolean compositor = glassKind == Backdrop.Kind.SAMSUNG || glass.hybrid() || compBridge != null;
             boolean drawable = compBridge != null;
             if (!restore && semBridge != null) semBridge.clearOnRelease();
-            glass.release(); glass = null; glassKind = null; glassSource = null; semBridge = null; compBridge = null; glassRoot = null;
+            glass.release(); glass = null; glassKind = null; glassSource = null; semBridge = null; compBridge = null; glassWindow = null;
             View released = background.get();
             Probe.log("GLASS_RELEASED", "native=" + restore + " viewId=" + (released == null ? "null" : Integer.toHexString(System.identityHashCode(released)))
                     + " leaving=" + exit.leaving(android.os.SystemClock.uptimeMillis()) + " attached=" + (released != null && released.isAttachedToWindow()));
@@ -2107,7 +2173,13 @@ public final class HeadsUpHooks {
             if (!(p.thisObject instanceof View) || backgroundField == null || !(p.args[0] instanceof Canvas)) return;
             View v = (View) p.thisObject;
             if (!reported) { reported = true; Probe.log("DRAW_HOOK_CALLED", "view=" + v.getClass().getName()); }
-            long started = Perf.start();
+            if (!enabled) {
+                // Glass off: no host walk or state for a card that never had glass; a card that has
+                // glass or owes its native blur still goes through material(), which restores it.
+                State known = states.get(v);
+                if (known == null || known.minimal()) return;
+            }
+            long started = Perf.start(Perf.DRAW_BEFORE);
             try {
                 View row = findHost(v); if (row == null) return;
                 State s = state(v, row);
@@ -2128,7 +2200,7 @@ public final class HeadsUpHooks {
         }
         @Override protected void afterHookedMethod(MethodHookParam p) {
             Object real = p.getObjectExtra("oulgCanvas"); if (!(real instanceof Canvas)) return;
-            long started = Perf.start();
+            long started = Perf.start(Perf.DRAW_AFTER);
             try { composeGlass(p, (Canvas) real); } finally { Perf.end(Perf.DRAW_AFTER, started); }
         }
         private void composeGlass(MethodHookParam p, Canvas real) {

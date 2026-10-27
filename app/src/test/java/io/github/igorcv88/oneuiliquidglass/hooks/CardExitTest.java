@@ -142,4 +142,49 @@ public final class CardExitTest {
         assertTrue(CardExit.shown(0.8f, true, 0.6f) < semCut);
         assertFalse(CardExit.shown(0.8f, true, 1f) < semCut);
     }
+    /**
+     * A disappear animation cancelled without onAppearAnimationFinished (cancelAppearDrawing): the
+     * exit ends at once, the material is not released by it, and later kind changes rebuild again.
+     */
+    @Test public void cancelledExitEndsWithoutReleasing() {
+        CardExit e = new CardExit();
+        e.begin(0);
+        assertTrue(CardExit.keepMaterial(e.leaving(10), true, false));
+        // cancelAppearDrawing -> end(); nothing was held over a detach, so nothing is released.
+        assertTrue(e.end());
+        assertFalse(e.held());
+        assertFalse(e.deferredRelease(false));
+        assertFalse(CardExit.keepMaterial(e.leaving(20), true, false));
+        // A second cancel (both cancel hooks fire) is a no-op.
+        assertFalse(e.end());
+    }
+    /**
+     * A heads-up whose exit was cancelled (pulled into the shade while leaving) no longer holds its
+     * material, so the shade card's kind change rebuilds it; a later exit starts its own clock.
+     */
+    @Test public void cancelledExitThenShadeTransitionRebuildsAndLaterExitRestarts() {
+        CardExit e = new CardExit();
+        e.begin(0);
+        e.end();
+        assertFalse(CardExit.keepMaterial(e.leaving(40), true, false));
+        assertTrue(e.begin(100));
+        assertEquals(50, e.since(150));
+    }
+    /**
+     * Same view reused (an update of the notification): no detach, no exit; nothing is held and the
+     * material follows the new background (BACKGROUND_UPDATE) on the next draw.
+     */
+    @Test public void reusedViewIsNeitherHeldNorLeaving() {
+        CardExit e = new CardExit();
+        assertFalse(e.held());
+        assertFalse(e.leaving(0));
+        assertFalse(CardExit.keepMaterial(false, true, false));
+    }
+    /** A held material re-attached in a later message was already released: a fresh one is built. */
+    @Test public void lateReattachRebuilds() {
+        CardExit e = new CardExit();
+        e.detach(true);
+        assertTrue(e.deferredRelease(false));
+        assertFalse(e.attach(true));
+    }
 }

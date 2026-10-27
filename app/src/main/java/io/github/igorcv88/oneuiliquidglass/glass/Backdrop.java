@@ -13,6 +13,8 @@ public interface Backdrop {
     void release();
     /** Applies a compositor-side backdrop again; called on events that can drop it. */
     default void reassert() { }
+    /** Like {@link #reassert()}, for routine events: a backdrop that can tell it is intact skips it. */
+    default void reassertIfLost() { reassert(); }
 
     /**
      * Shade rows share the shade's own blurred backdrop. Rows with a sampleable background (the

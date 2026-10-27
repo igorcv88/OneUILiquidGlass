@@ -5,6 +5,7 @@ import android.graphics.Rect;
 import android.view.View;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
+import io.github.igorcv88.oneuiliquidglass.diagnostics.Perf;
 import io.github.igorcv88.oneuiliquidglass.diagnostics.Probe;
 
 /**
@@ -395,6 +396,7 @@ public final class SemBlurBridge implements Backdrop {
                 // host: the blur guard blocks a clear nested inside an apply on that host.
                 set.invoke(host, (Object) null);
                 lastInfo = pending;
+                appliedHeld = null;
                 if (Probe.trace) Probe.log("SEM_BLUR_APPLY", "viewId=" + Integer.toHexString(System.identityHashCode(host)) + " info=null " + regionState());
                 return;
             }
@@ -409,6 +411,8 @@ public final class SemBlurBridge implements Backdrop {
             // The view holds our info or a fresh copy of it. If another hook swallowed the call, the
             // field keeps the old or foreign value; that is logged, and the next row event retries.
             Object after = f != null ? f.get(host) : pending;
+            // Only an apply that took counts as intact later: a swallowed one is repaired by the next event.
+            appliedHeld = after != pending && (after == null || after == before) ? null : after;
             if (after != pending && (after == null || after == before) && (++swallowed <= 10 || swallowed % 100 == 0)) {
                 Probe.log("SEM_BLUR_SWALLOWED", "viewId=" + Integer.toHexString(System.identityHashCode(host))
                         + " held=" + (after == null ? "null" : "foreign") + " count=" + swallowed);
@@ -541,8 +545,38 @@ public final class SemBlurBridge implements Backdrop {
      * state change, a framework blur method touching the view), never on a timer or per frame.
      */
     @Override public void reassert() {
-        if (released || lastInfo == null || posted) return;
+        Perf.count(Perf.REASSERT_ASKED);
+        if (released || lastInfo == null || posted) { Perf.count(Perf.REASSERT_SKIPPED); return; }
         pending = lastInfo; posted = true; host.post(apply);
+        Perf.count(Perf.REASSERT_APPLIED);
+    }
+    /**
+     * Row lifecycle events (setHeadsUp, setPinned, BACKGROUND_UPDATE, attach...) asked for the blur
+     * again on every call, and each apply installs a new blur drawable on the view: SystemUI fires
+     * several per card per transition. Now the blur is applied again only when the view no longer
+     * holds what the last apply left on it (a foreign or nested call replaced it, or its blur
+     * drawable is gone); without the info field the check cannot be made and it applies as before.
+     */
+    @Override public void reassertIfLost() {
+        if (!released && lastInfo != null && !posted && intact()) { Perf.count(Perf.REASSERT_ASKED); Perf.count(Perf.REASSERT_SKIPPED); return; }
+        reassert();
+    }
+    /** What the view held right after this bridge's last apply (null after a suspension). */
+    private Object appliedHeld;
+    /** Whether the view still carries this bridge's last apply. */
+    private boolean intact() {
+        java.lang.reflect.Field f = infoField(infoClass);
+        if (f == null) return false;
+        Object now;
+        try { now = f.get(host); } catch (IllegalAccessException | RuntimeException e) { return false; }
+        if (suspended) return now == null;
+        if (now == null || now != appliedHeld) return false;
+        // A blur drawable replaced on the view drops the region while the info field still holds it.
+        if (Boolean.TRUE.equals(drawableFade)) {
+            android.graphics.drawable.Drawable d = host.getBackground();
+            return d != null && d.getClass().getName().contains("BlurDrawable");
+        }
+        return true;
     }
     @Override public void draw(Canvas canvas, Rect bounds) { }
     @Override public void setAlpha(int alpha) { }

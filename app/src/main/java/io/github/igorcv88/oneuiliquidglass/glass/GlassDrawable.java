@@ -150,6 +150,8 @@ public final class GlassDrawable extends Drawable {
     public void setCompositorLit(boolean on) { if (compositorLit != on) { compositorLit = on; invalidateSelf(); } }
     /** See {@link Backdrop#reassert()}. */
     public void reassertBackdrop() { if (!failed) backdrop.reassert(); }
+    /** See {@link Backdrop#reassertIfLost()}. */
+    public void reassertBackdropIfLost() { if (!failed) backdrop.reassertIfLost(); }
     /** Compositor-blur body with a captured lens band (see {@link HybridBackdrop}). */
     public boolean hybrid() { return backdrop instanceof HybridBackdrop; }
     /** A sampled backdrop that can no longer be used: the owner swaps to another backdrop kind. */
@@ -176,7 +178,7 @@ public final class GlassDrawable extends Drawable {
         }
     }
     @Override public void draw(Canvas canvas) {
-        long started = Perf.start();
+        long started = Perf.start(Perf.GLASS_DRAW);
         try { drawGlass(canvas); } finally { Perf.end(Perf.GLASS_DRAW, started); }
     }
     private void drawGlass(Canvas canvas) {

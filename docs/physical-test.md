@@ -82,3 +82,19 @@ Pass, in the log, for every exit:
 - Scenario 6: no `EXIT_BEGIN` for the heads-up, and its card is drawn with glass in the shade.
 
 Custom notifications: check that the text contrast is unchanged before and during the exit (no `TEXT_REAPPLY reason=restore` at the start of an exit).
+
+## Performance capture (round 51)
+
+Standard 60 Hz, QHD+, same wallpaper, apps and notifications for both captures; SystemUI restarted before each; the same 30–35 s script (open the shade, scroll, dismiss two cards with the button, swipe one, receive and dismiss a heads-up, close).
+
+1. `setprop debug.oulg.perf 1` (keep `debug.oulg.trace 0`: the trace logs per frame and distorts timing).
+2. Record Perfetto with FrameTimeline and app tracing for SystemUI, e.g. `atrace` categories `gfx view input` plus `-a com.android.systemui`, and collect `logcat -s OULG:I` alongside.
+3. Repeat with the module's glass disabled in the app (not the LSPosed scope), then with the previous APK, under the same script.
+
+Compare:
+- Janky NotificationShade frames (FrameTimeline) per capture.
+- From `PERF`: per slot p99 and max, `frame=` p99/max, `tuning=` (should be off the main thread: `PERF_SPIKE ... slot=tuning main=false`), `reassertSkipped` vs `reassertApplied`, `reattachKept` vs `reattachRebuilt`.
+- For each janky frame, the `OULG:*` time inside its `Choreographer#doFrame` against the frame's overrun; `PERF_FRAME` lines for frames where the module took ≥ 4 ms.
+- With the glass disabled: `predraw` and `drawBefore` near zero calls of any length beyond the first frame after the switch, no `touch` calls, no `LIFECYCLE` lines.
+
+The performance question is answered by these numbers, not by the build or the unit tests.
