@@ -1,5 +1,7 @@
 # Painel de controles — implementação e validação
 
+> **Substituído** pela refatoração de 27/10/2026: [UI_REFACTOR_2026-10-27.md](UI_REFACTOR_2026-10-27.md) e a matriz gerada [CONTROL_MATRIX.md](CONTROL_MATRIX.md). Mantido como histórico.
+
 Integração sobre `main` após #57 e #56 (`c7e9fb7`). O bundle e o contrato de `docs/sf-live-app.md` são a fonte do fluxo SF. Não há download/ZIP/módulo KernelSU no novo botão.
 
 ## Controles e ponte
