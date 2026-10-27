@@ -31,9 +31,13 @@ The release is a single APK:
 
 ## Project status
 
-**Beta, controls panel under review.** The APK includes searchable typed controls, synthetic previews, independent surface switches, reversible presets and real test notifications with actions. The SurfaceFlinger button uses the bundled SfLive helper: status → install/selftest → explicit restart confirmation. Native parameters remain manual/pending recompilation; see [implementation and device-QA status](docs/CONTROLS_IMPLEMENTATION_2026-10-26.md).
-
-A grouped settings interface with per-surface previews, switches and a realistic expanded test notification is **planned**, not yet implemented. See the [UI refactor handoff](docs/HANDOFF_APP_REFACTOR_2026-10-26.md) and the [full property catalog](docs/PROPERTY_CATALOG_2026-10-26.md) for the implementation contract.
+**Beta.** The app has three destinations: **Início** (state, master switch, the three surfaces, test
+notification, styles), **Superfícies** (Pop-up / Bloqueio / Central with a comparable sample, the main controls
+for the active mode, effect layers and grouped advanced settings) and **Ajustes** (theme, optional dynamic lens,
+test options, backup, diagnostics and recovery). Every one of the 99 `debug.oulg.*` parameters is reachable
+and documented in the generated [control matrix](docs/CONTROL_MATRIX.md); decisions, audit and validation are
+in [UI refactor 27/10](docs/UI_REFACTOR_2026-10-27.md). Compositor parameters are applied only through an
+explicit, confirmed restart and are reported as pending until then.
 
 ## Features
 
@@ -81,7 +85,10 @@ su -c 'logcat -d -s OULG_SF | head'
 
 ## Tuning and previews
 
-Today, most controls are **live SystemUI properties** refreshed about once per second:
+Everything below is editable in the app. Values saved there reach SystemUI through the module's read-only
+provider and take precedence over a property; a property changed by a terminal after the app saved the key is
+shown as "Alterado fora do app" and never overwritten silently. From a terminal, most controls are **live
+SystemUI properties** refreshed about once per second:
 
 ```sh
 su -c 'setprop debug.oulg.liveoptics 0.5'
@@ -111,7 +118,7 @@ The [property catalog](docs/PROPERTY_CATALOG_2026-10-26.md) enumerates every cur
 
 ## Troubleshooting and recovery
 
-- **Disable the look:** turn off Experimental glass and restart SystemUI, or disable the APK in LSPosed.
+- **Disable the look:** Ajustes → Desligar todo o vidro (or the switch on Início), or disable the APK in LSPosed.
 - **No heads-up:** verify Detailed pop-up mode, channel importance, notification permission and Do Not Disturb before treating it as a hook failure.
 - **Blur fallback:** find `BLUR_DRAWABLE_FALLBACK`, `DECISION`, `TUNING` in `logcat -s OULG`.
 - **Diagnostics:** set `debug.oulg.trace=1` for extra traces; `debug.oulg.perf=1` enables hook timings. Turn them off after testing.
@@ -125,6 +132,8 @@ The [property catalog](docs/PROPERTY_CATALOG_2026-10-26.md) enumerates every cur
 ```sh
 ./gradlew testDebugUnitTest lintDebug assembleDebug
 ```
+
+**UI screenshots and preview perceptibility:** a separate Paparazzi build in [tools/screenshots](tools/screenshots/README.md); not part of the APK build or CI.
 
 **SurfaceFlinger live bundle:** Android NDK r29 (`29.0.14206865`). Run before Gradle so the APK carries `assets/sfhook/`; a build without it works, with the feature unavailable.
 

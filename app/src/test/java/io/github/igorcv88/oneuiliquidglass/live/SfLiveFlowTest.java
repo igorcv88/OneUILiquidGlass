@@ -26,6 +26,15 @@ public final class SfLiveFlowTest {
             return this;
         }
 
+        final Queue<SfLiveFlow.Reply> props = new ArrayDeque<>();
+
+        @Override
+        public SfLiveFlow.Reply setprops(Map<String, String> values) {
+            calls.add("SETPROPS " + new TreeMap<>(values));
+            assertFalse("Unexpected setprops", props.isEmpty());
+            return props.remove();
+        }
+
         @Override
         public SfLiveFlow.Reply run(SfLive.Command command, String mode) {
             calls.add(command.name() + (mode == null ? "" : " " + mode));
@@ -105,5 +114,36 @@ public final class SfLiveFlowTest {
         assertThrows(SfLiveFlow.Failure.class, () -> new SfLiveFlow(fake).prepare());
         Fake denied = new Fake().add(1, "permission denied\n");
         assertThrows(SfLiveFlow.Failure.class, () -> new SfLiveFlow(denied).status());
+    }
+
+    @Test
+    public void applyWritesConfirmsThenRestarts() throws Exception {
+        Fake fake = new Fake().add(0, status("0", "1", "1")).add(0, status("0", "1", "1")).add(0, "restart=started\n");
+        fake.props.add(new SfLiveFlow.Reply(0, "set_kgcore=96\nsetprops=ok\n"));
+        List<Map<String, String>> adopted = new ArrayList<>();
+        new SfLiveFlow(fake).applyAndRestart(Collections.singletonMap("sf.kgcore", "96"), w -> {
+            adopted.add(w);
+            fake.calls.add("ADOPT");
+        });
+        assertEquals(Arrays.asList("STATUS", "SETPROPS {sf.kgcore=96}", "ADOPT", "STATUS", "RESTART rewrite"), fake.calls);
+        assertEquals(Collections.singletonList(Collections.singletonMap("sf.kgcore", "96")), adopted);
+    }
+
+    @Test
+    public void unconfirmedValueNeverRestarts() throws Exception {
+        Fake fake = new Fake().add(0, status("0", "1", "1"));
+        fake.props.add(new SfLiveFlow.Reply(0, "set_kgcore=\nsetprops=ok\n"));
+        assertThrows(SfLiveFlow.Failure.class,
+                () -> new SfLiveFlow(fake).applyAndRestart(Collections.singletonMap("sf.kgcore", "96"),
+                        w -> fail("unconfirmed values must not become baselines")));
+        assertFalse(fake.calls.contains("RESTART rewrite"));
+    }
+
+    @Test
+    public void applyRefusesWithoutSelftest() throws Exception {
+        Fake fake = new Fake().add(0, status("0", "0", "1"));
+        assertThrows(SfLiveFlow.Failure.class,
+                () -> new SfLiveFlow(fake).applyAndRestart(Collections.singletonMap("sf.kgcore", "96")));
+        assertEquals(Collections.singletonList("STATUS"), fake.calls);
     }
 }

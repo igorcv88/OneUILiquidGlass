@@ -1,0 +1,7 @@
+// Standalone screenshot harness (Paparazzi/layoutlib). Not part of the app build or CI:
+// it compiles the app's UI sources as a library so the views render on the JVM.
+pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+dependencyResolutionManagement {
+    repositories { google(); mavenCentral(); maven { url 'https://api.xposed.info/' } }
+}
+rootProject.name = 'oulg-screenshots'

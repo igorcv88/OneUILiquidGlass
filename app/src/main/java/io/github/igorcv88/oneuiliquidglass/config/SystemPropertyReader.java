@@ -13,6 +13,11 @@ public final class SystemPropertyReader {
         return available;
     }
 
+    /** Every observed debug.oulg.* value from the last successful read. */
+    public static Map<String, String> snapshot() {
+        return observed;
+    }
+
     public static String read(String key) {
         return SettingsRegistry.get(key) == null ? "" : observed.getOrDefault(key, "");
     }

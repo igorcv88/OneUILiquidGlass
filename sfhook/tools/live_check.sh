@@ -85,6 +85,17 @@ expect "$o" "error=legacy_module_active_disable_it_and_reboot_first"
 expect "$(run status)" "legacy_conflict=0"
 set +e; o="$(run restart now)"; rc=$?; set -e
 [ $rc -eq 2 ] || { echo "FAIL: bad restart mode rc=$rc"; exit 1; }
+# Compositor parameters: allowlisted names and numeric values only; nothing is written on refusal.
+o="$(run setprops kgcore=72 kgsat=1.3 core=)"; expect "$o" "setprops=ok"; expect "$o" "set_kgcore=72"
+expect "$o" "set_kgsat=1.3"; expect "$o" "set_core="
+[ "$(cat "$T/prop_debug.oulg.sf.kgcore")" = 72 ] || { echo "FAIL: setprops did not write"; exit 1; }
+for bad in 'optics=9' 'norewrite=1' 'kgcore=1;reboot' 'kgcore=$(id)' 'kgcore=1-2' 'kgcore=1.2.3' 'kgcore' '../x=1'; do
+    set +e; o="$(run setprops kgsat=2 "$bad")"; rc=$?; set -e
+    [ $rc -eq 2 ] || { echo "FAIL: setprops accepted $bad rc=$rc"; exit 1; }
+done
+[ "$(cat "$T/prop_debug.oulg.sf.kgsat")" = 1.3 ] || { echo "FAIL: refused setprops wrote a value"; exit 1; }
+set +e; o="$(run setprops)"; rc=$?; set -e
+[ $rc -eq 2 ] || { echo "FAIL: empty setprops rc=$rc"; exit 1; }
 expect "$(run uninstall)" "uninstall=ok"
 expect "$(run status)" "installed_ok=0"
 # The observed OWO variant must migrate a manual library (mapped, no manifest)
