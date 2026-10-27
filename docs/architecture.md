@@ -1148,16 +1148,23 @@ Cause: the stack removes the row and adds it back at once as a transient view fo
 
 **Instrumentation (`debug.oulg.perf=1`).**
 - `PERF` every 2 s: per slot `calls/totalus/p95=/p99=/max=` (µs; percentiles from fixed buckets, at most one bucket coarse, capped by the maximum). New slots: `event`, `attach`, `detach`, `exit`, `touch`, `textGuard`, `tuning`.
-- `frame=`: the module's main-thread time summed per Choreographer frame (keyed by `Choreographer.mLastFrameTimeNanos`, read reflectively; `glassDraw` is not counted twice), with its p95/p99/max.
+- `frame=`: the module's main-thread time summed per Choreographer frame (outermost intervals only, see the review corrections below), with its p95/p99/max.
 - Counters: `reassertAsked/Skipped/Applied`, `reattachKept/Rebuilt`.
 - `PERF_SPIKE`: any single call of 2 ms or more (slot, µs, frame). `PERF_FRAME`: any frame where the module took 4 ms or more, with its vsync time (`frameNs`, `System.nanoTime` base = `CLOCK_MONOTONIC`).
 - Trace sections `OULG:<slot>` while the platform traces SystemUI's app sections, so Perfetto shows the module's slices inside `Choreographer#doFrame` next to FrameTimeline's verdict for the same frame.
 
 **How to tell the module's delay from SystemUI's or the compositor's.** In a Perfetto trace with app tracing for `com.android.systemui` (atrace `-a com.android.systemui`, or the `view`/`gfx` categories) and FrameTimeline: for each NotificationShade frame marked janky, sum the `OULG:*` slices on the main thread inside its `Choreographer#doFrame`. A janky frame whose `OULG:*` time is a small part of the overrun is SystemUI's or the compositor's (FrameTimeline's jank type then says which: App Deadline Missed with long non-OULG slices, or SurfaceFlinger/Display types). `PERF_FRAME` lines give the same answer from logcat alone for frames where the module took ≥ 4 ms.
 
+**Review corrections (same round, before any device capture).**
+- The per-frame sum counted nested slots twice (`event` inside `predraw` and `attach`, not only `glassDraw` inside `drawAfter`). `FrameAccount` now sums only outermost main-thread intervals (a depth counter); per-slot figures still include the slots they call.
+- A call outside a frame's callbacks was attributed to the last vsync. The frame is now taken only while `Choreographer.mCallbacksRunning` is true; other main-thread time is reported as `outsideFrameUs`. Both fields are private: `PERF_FRAME_SOURCE` says once whether they are readable, and when not the figures read `frame=na`. Perfetto's `OULG:*` slices inside `Choreographer#doFrame` are the reference for attribution; `PERF_FRAME` is an aid.
+- The `Tuning` worker was a `HandlerThread` created on the draw path, whose `getLooper()` blocks until the thread runs, and a `post()` returning false would have left the refresh flag set for good. It is now a single-thread executor (creating it does not wait for its thread), and a rejected refresh clears the flag and logs `TUNING_REFRESH_REJECTED`.
+- `physical-test.md` expected almost no `predraw` calls with the glass off. The listener stays installed and the call is measured before the early return, so the count stays and the time per call drops.
+- Open, device-dependent: `reassertIfLost()` judges a Samsung region intact from the view's `SemBlurInfo` field and its blur drawable; if One UI dropped a region without changing either, it would not be re-applied on a routine event. To check: blur present after dynamic updates of a notification (`BACKGROUND_UPDATE`), after heads-up → shade, and on custom notifications; `reassertSkipped` against cards seen without blur.
+
 **Not done, deliberately.** No change to refresh rate, Standard mode, refraction, blur, gradient, tone or edge parameters, captures or the native library.
 
-**Validation:** `testDebugUnitTest` (193 tests; new: `PerfStatsTest`, four `CardExitTest` transitions), `lintDebug` (0 errors; one new `DiscouragedPrivateApi` warning for the perf-only `mLastFrameTimeNanos` read), `assembleDebug`. **No before/after device measurement exists for this round.** Whether jank changes, and by how much, depends on the capture described in `physical-test.md`, *Performance capture*.
+**Validation:** `testDebugUnitTest` (198 tests; new: `PerfStatsTest`, `FrameAccountTest`, four `CardExitTest` transitions), `lintDebug` (0 errors, 25 warnings as on `main`; the perf-only Choreographer reads carry a justified suppression), `assembleDebug`. **No before/after device measurement exists for this round.** Whether jank changes, and by how much, depends on the capture described in `physical-test.md`, *Performance capture*.
 
 ## Future work
 

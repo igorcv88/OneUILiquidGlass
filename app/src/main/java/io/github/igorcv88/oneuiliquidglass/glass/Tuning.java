@@ -306,7 +306,16 @@ public final class Tuning {
     private static volatile long configRevision = -1;
     /** A refresh is queued on the worker (at most one at a time). */
     private static final java.util.concurrent.atomic.AtomicBoolean refreshing = new java.util.concurrent.atomic.AtomicBoolean();
-    private static android.os.Handler worker;
+    /**
+     * The refresh worker: one daemon thread, created on the first refresh after the initial read.
+     * Creating an executor does not wait for its thread to start (a HandlerThread's getLooper()
+     * blocks the caller until it has), so a caller on the draw path never waits for it.
+     */
+    private static final java.util.concurrent.ExecutorService worker = java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "oulg-tuning");
+        t.setDaemon(true);
+        return t;
+    });
 
     private Tuning() {
         String b = prop("backdrop", "auto");
@@ -435,21 +444,15 @@ public final class Tuning {
         if ((now - readAt > 1000 || configRevision != io.github.igorcv88.oneuiliquidglass.config.ConfigClient.revision())
                 && refreshing.compareAndSet(false, true)) {
             try {
-                worker().post(() -> { try { refresh(); } finally { refreshing.set(false); } });
-            } catch (RuntimeException | LinkageError e) {
-                // No looper for a worker (a plain JVM): read in place, as before.
-                try { refresh(); } finally { refreshing.set(false); }
+                worker.execute(() -> { try { refresh(); } finally { refreshing.set(false); } });
+            } catch (RuntimeException e) {
+                // Rejected (never expected for an unbounded queue): no refresh is pending, so the
+                // next call may queue one; the current values stay meanwhile.
+                refreshing.set(false);
+                Probe.log("TUNING_REFRESH_REJECTED", "error=" + e.getClass().getSimpleName());
             }
         }
         return c;
-    }
-    private static synchronized android.os.Handler worker() {
-        if (worker == null) {
-            android.os.HandlerThread t = new android.os.HandlerThread("oulg-tuning");
-            t.start();
-            worker = new android.os.Handler(t.getLooper());
-        }
-        return worker;
     }
     private static synchronized void refresh() {
         long started = Perf.start(Perf.TUNING);

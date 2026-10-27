@@ -93,8 +93,10 @@ Standard 60 Hz, QHD+, same wallpaper, apps and notifications for both captures; 
 
 Compare:
 - Janky NotificationShade frames (FrameTimeline) per capture.
-- From `PERF`: per slot p99 and max, `frame=` p99/max, `tuning=` (should be off the main thread: `PERF_SPIKE ... slot=tuning main=false`), `reassertSkipped` vs `reassertApplied`, `reattachKept` vs `reattachRebuilt`.
+- From `PERF`: per slot p99 and max, `frame=` p99/max, `tuning=` (off the main thread after the first read: any `PERF_SPIKE ... slot=tuning` should read `main=false`), `reassertSkipped` vs `reassertApplied`, `reattachKept` vs `reattachRebuilt`.
 - For each janky frame, the `OULG:*` time inside its `Choreographer#doFrame` against the frame's overrun; `PERF_FRAME` lines for frames where the module took ≥ 4 ms.
-- With the glass disabled: `predraw` and `drawBefore` near zero calls of any length beyond the first frame after the switch, no `touch` calls, no `LIFECYCLE` lines.
+- With the glass disabled: `predraw` keeps its call count (the pre-draw listener stays installed, and it is measured before the early return), but its p95/p99/max drop to the cost of that return; `drawBefore` has calls only for cards that still owe a restore; no `touch` calls; no `LIFECYCLE` lines.
+- `PERF_FRAME_SOURCE available=true` once at start. With `available=false` the per-frame figures read `frame=na`: use the `OULG:*` slices in Perfetto, which are the reference in any case.
+- `frame=` counts outermost intervals only (no slot twice); `outsideFrameUs` is main-thread time outside any frame's callbacks (input, posted runnables).
 
 The performance question is answered by these numbers, not by the build or the unit tests.
