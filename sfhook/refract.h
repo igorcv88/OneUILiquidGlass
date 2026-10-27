@@ -254,7 +254,8 @@
 //    kinked the Jacobian at the medial segment's endpoints.)
 //  - blur: min(core, ccap) x S(u)^blurexp (S the quintic smootherstep): ~0 at the outline, the core
 //    radius at the end of the band, C2 there; blurexp > 1 keeps the band clear where its refraction
-//    is strongest (u = 0.5: 25 % of the core radius at blurexp 2). The material's body weight is that
+//    is strongest (u = 0.5: 25 % of the core radius at blurexp 2): a larger exponent means less blur
+//    in the band, a smaller one more. band1 below bevel / r (~0.42) clamps to the bevel. The material's body weight is that
 //    same normalised radius;
 //  - lighting: the Fresnel rim, contour and specular band keep the v0.22 bevel coordinate, normal and
 //    fade weight (oulg_lw), so the tuned rim does not move with the lens.

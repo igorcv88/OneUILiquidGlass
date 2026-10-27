@@ -148,13 +148,43 @@ static void check23(void) {
             CHECK(b >= last - 1e-12, "v0.23 br not monotone"); last = b;
             if (dep <= 4 && bexp >= 2) CHECK(b < 0.5, "v0.23 br %.3f at the outline (%.2f px)", b, dep);
         }
+        // Just inside the outline: the shift is continuous as depth -> 0+ (Lipschitz 1, since every
+        // singular value of the sampling map lies in (0, 1]) and its limit is the full step against the
+        // outside world, A x band along the normal plus the body lens. depth = 0 itself is outside the
+        // card (zero coverage) and returns the body lens alone; the step lies on that line, under the
+        // contour and the coverage edge. Checked along a straight-edge normal and a corner diagonal.
+        {
+            double A = fmin(k, fmin(0.5, (0.75 - lb) / 1.5)), ccx = hx - r, ccy = hy - r;
+            const double eps[] = {1e-6, 1e-4, 1e-3, 0.02, 0.25, 1.0};
+            for (int path = 0; path < 2; path++) {
+                double prev[2] = {0, 0}, prevDep = 0;
+                for (unsigned e = 0; e < sizeof eps / sizeof eps[0]; e++) {
+                    double dep = eps[e], qx = path ? ccx + (r - dep) * 0.70710678118654752 : 0, qy = path ? ccy + (r - dep) * 0.70710678118654752 : hy - dep;
+                    double sv[2], b, t2; field23(qx, qy, hx, hy, r, k, band1, lb, bexp, sv, &b, &t2);
+                    if (e) CHECK(hypot(sv[0] - prev[0], sv[1] - prev[1]) <= (dep - prevDep) + 1e-9,
+                                 "v0.23 shift not continuous inside the outline (path %d, %.0e -> %.0e px)", path, prevDep, dep);
+                    else {
+                        double nx = path ? 0.70710678118654752 : 0, ny = path ? 0.70710678118654752 : 1;
+                        double ex = -nx * A * band - lb * qx * R / hx, ey = -ny * A * band - lb * qy * R / hy;
+                        CHECK(hypot(sv[0] - ex, sv[1] - ey) < 1e-3, "v0.23 outline limit (path %d) %.3f,%.3f vs %.3f,%.3f", path, sv[0], sv[1], ex, ey);
+                    }
+                    prev[0] = sv[0]; prev[1] = sv[1]; prevDep = dep;
+                }
+            }
+        }
     }
     printf("field v0.23: %ld points, min det %.3f, max sigma %.6f, max magnification %.2fx, body Jacobian jump %.1e, failures = %d\n",
            points, minDet, maxSmax, maxMag, maxJump, failures);
     // Defaults (kglens 0.40, band 0.85, body lens 0.05, exponent 2) on a 108 px lockscreen pill.
     double r = tag(108, 0.4, 1);
+    {
+        double s0[2], s1[2], b, t2;
+        field23(0, 108, 670, 108, r, 0.4, 0.85, 0.05, 2, s0, &b, &t2);
+        field23(0, 108 - 1e-6, 670, 108, r, 0.4, 0.85, 0.05, 2, s1, &b, &t2);
+        printf("field v0.23 defaults, pill r=%.2f: outline step %.1f px (body lens alone on the outline itself: %.1f px)\n", r, -s1[1], -s0[1]);
+    }
     printf("field v0.23 defaults, pill r=%.2f: depth px -> shift px, blur radius px\n ", r);
-    for (int dep = 0; dep <= 105; dep += 7) {
+    for (int dep = 1; dep <= 106; dep += 7) {
         double sv[2], b, t2; field23(0, 108 - dep, 670, 108, r, 0.4, 0.85, 0.05, 2, sv, &b, &t2);
         printf(" %d:%.1f,%.1f", dep, -sv[1], b);
     }

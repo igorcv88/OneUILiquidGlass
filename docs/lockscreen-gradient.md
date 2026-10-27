@@ -60,12 +60,14 @@ O perfil 1 agora usa uma única coordenada `u = depth / band`, `band = clamp(kgb
 - **Iluminação:** Fresnel, contorno e banda especular mantêm a coordenada, a normal e o peso de atenuação da v0.22. A borda ajustada não muda com a lente; o que muda é o fundo refratado sob ela.
 - **Limite de segurança:** a força da borda é limitada a `min(0.5, (0.75 − kgbodylens) / 1.5)`, de modo que a soma dos dois termos nunca amplia mais que 4x (o mesmo limite da v0.22).
 
-Valores com os padrões (`kglens 0.40`, pill `r ≈ 107`):
+Valores com os padrões (`kglens 0.40`, pill `r ≈ 107`), medidos a partir do delineado para dentro:
 
-| Profundidade (px) | 0 | 14 | 28 | 42 | 56 | 70 | 84 | ≥91 |
+| Profundidade (px) | 0⁺ | 15 | 29 | 43 | 57 | 71 | 85 | ≥92 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Deslocamento (px) | 5.4 | 38.9 | 32.3 | 23.7 | 14.7 | 6.9 | 1.9 | ≤0.9 |
-| Raio do blur (px) | 0 | 0 | 1.5 | 9.4 | 25.9 | 43.4 | 51.5 | 52 |
+| Deslocamento (px) | 41.9 | 38.5 | 31.7 | 23.1 | 14.1 | 6.4 | 1.6 | ≤0.8 |
+| Raio do blur (px) | 0 | 0.1 | 1.8 | 10.4 | 27.3 | 44.4 | 51.7 | 52 |
+
+**Degrau no delineado.** `0⁺` é o limite logo dentro do cartão. O deslocamento é contínuo até ali, e o `field_check` verifica isso de 1e-6 a 1 px de profundidade, tanto num lado reto quanto na diagonal de um canto. O próprio delineado (`depth = 0`) fica fora do cartão (cobertura zero) e devolve só a lente do miolo (5.4 px). O degrau que importa é o de fora para dentro: o fundo fora do cartão não tem deslocamento, e logo dentro ele chega a 41.9 px (v0.22: 18 px). Esse degrau é a própria refração da borda; ele fica sob o contorno e a borda de cobertura. Numa renderização com texto de alto contraste cruzando o delineado (`render_check`), não aparece rasgo nem serrilhado. Mas o texto que cruza a borda não continua do lado de dentro, porque ali o vidro mostra o fundo de ~42 px para dentro. Esse degrau escala com `kglens` e com a largura da faixa.
 
 Na v0.22 o raio já era 8 px aos 12 px de profundidade e 38 px aos 45 px; o deslocamento terminava em 45 px.
 
@@ -73,9 +75,13 @@ Na v0.22 o raio já era 8 px aos 12 px de profundidade e 38 px aos 45 px; o desl
 
 | Propriedade | Padrão | Faixa | Efeito |
 | --- | ---: | --- | --- |
-| `sf.kgband` | 0.85 | 0–1 | largura da transição / raio do canto; **0 restaura a v0.22 bit a bit** |
+| `sf.kgband` | 0.85 | 0–1 | largura da transição / raio do canto; **0 restaura a v0.22 bit a bit**. A faixa nunca fica mais estreita que o bisel (`clamp(0.42 r, 16, 56)`): valores entre 0 e ~0.42 (menos para raios acima de 133 px) dão todos a mesma largura mínima; só ~0.42–1 ajusta de fato |
 | `sf.kgbodylens` | 0.05 | 0–0.15 | ampliação uniforme do miolo (0 desliga) |
-| `sf.kgblurexp` | 2 | 1–4 | quanto o blur demora a subir na transição (maior = borda mais nítida) |
+| `sf.kgblurexp` | 2 | 1–4 | quanto o blur demora a subir na transição. `S(u)` fica entre 0 e 1, então um expoente **maior dá menos blur** na transição (borda mais nítida) e um **menor dá mais blur** |
+
+**Se o texto perder legibilidade** porque o fundo ficou nítido demais na transição: **diminua** `kgblurexp` (até 1), ou diminua `kgband` (até ~0.42) para o blur chegar ao máximo mais cedo. Aumentar `kgblurexp` piora a legibilidade.
+
+**Cor do material.** O peso do material (saturação, achatamento da luminância, escurecimento do miolo) segue o novo raio de blur. Por isso a transição muda de cor e de luminância mesmo com `kgsat`, `kgcool`, `kgflat` e a iluminação inalterados. Na comparação no aparelho, mude só `kgband` entre as duas capturas.
 
 Com `kgband > 0`, `kggradient` e `kgramp` deixam de afetar o perfil 1 (o blur passa a ser definido pela faixa). `kglens` continua controlando a força da refração da transição.
 
