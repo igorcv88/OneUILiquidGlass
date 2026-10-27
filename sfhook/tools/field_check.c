@@ -10,7 +10,11 @@
 //  - the body blur radius rises monotonically from 0 at the rim to the core radius;
 //  - the clip program's geometry (centre and half size rebuilt from uinnerRect and uradiusPlusHalf)
 //    is the FillRRect program's, and both decode the same strength and profile from the corner tag;
-//  - profile 1 keeps its slab refraction field; gradient changes the blur only.
+//  - profile 1 keeps its slab refraction field; gradient changes the blur only;
+//  - the v0.23 continuous field (band > 0), separately: shift inward, bounded, C1 inside the card
+//    (finite-difference Jacobian everywhere, the medial line and the inner rect included), never
+//    folding and never minifying the texture; the lighting coordinate is the v0.22 one; the body
+//    radius rises monotonically from ~0 at the outline to the core radius at the end of the band.
 // Build: cc -O2 -o fc field_check.c -lm
 #include <math.h>
 #include <stdio.h>
@@ -49,6 +53,102 @@ static void field(double qx, double qy, double hx, double hy, double r, double k
     s[1] = -(vy / l) * signd(qy) * mag;
 }
 
+static double tag(double r, double k, int pf);
+
+// The v0.23 continuous field (OULG_FS_FIELD_FMT, band1 > 0), ported; *lt is the lighting coordinate
+// oulg_t, *bw the material's body weight.
+static double smootherd(double lo, double hi, double x) { double u = clampd((x - lo) / (hi - lo), 0, 1); return u * u * u * (u * (u * 6 - 15) + 10); }
+static void field23(double qx, double qy, double hx, double hy, double r, double k, double band1, double lb, double bexp,
+                    double s[2], double *br, double *lt) {
+    double wx = fabs(qx) - (hx - r), wy = fabs(qy) - (hy - r);
+    double vx = fmax(wx, 0), vy = fmax(wy, 0);
+    double l = sqrt(vx * vx + vy * vy);
+    double bevel = clampd(r * 0.42, 16, 56), band = clampd(band1 * r, bevel, r);
+    double depth = r - l - fmin(fmax(wx, wy), 0);
+    double sb = smootherd(0, band, depth);
+    *br = brMax(1) * (sb > 0 ? pow(sb, bexp) : 0);
+    double R = fmin(hx, hy);
+    s[0] = -lb * (qx - clampd(qx, -(hx - R), hx - R));
+    s[1] = -lb * (qy - clampd(qy, -(hy - R), hy - R));
+    *lt = 0;
+    if (l <= 0 || depth <= 0) return;
+    double nx = vx / l * signd(qx), ny = vy / l * signd(qy);
+    if (depth < bevel) *lt = 1 - depth / bevel;
+    if (depth >= band) return;
+    double t = 1 - depth / band, mag = fmin(k, fmin(0.5, (0.75 - lb) / 1.5)) * band * t * t * (3 - 2 * t);
+    s[0] -= nx * mag; s[1] -= ny * mag;
+}
+
+static int failures;
+#define CHECK(c, ...) do { if (!(c)) { if (failures++ < 20) { printf("FAIL: "); printf(__VA_ARGS__); printf("\n"); } } } while (0)
+
+static void check23(void) {
+    const double sizes[][3] = {{670, 108, 108}, {670, 108, 107.4}, {670, 300, 92}, {700, 160, 56}, {540, 400, 140}, {670, 96, 48}, {670, 200, 108.4}};
+    const double ks[] = {0.1, 0.4, 0.5, 1.2}, bands[] = {0.42, 0.85, 1.0}, lbs[] = {0, 0.05, 0.15}, exps[] = {1, 2, 4};
+    long points = 0;
+    double minDet = 1e9, maxSmax = 0, maxMag = 0;
+    for (unsigned si = 0; si < sizeof sizes / sizeof sizes[0]; si++)
+    for (unsigned ki = 0; ki < sizeof ks / sizeof ks[0]; ki++)
+    for (unsigned bi = 0; bi < sizeof bands / sizeof bands[0]; bi++)
+    for (unsigned li = 0; li < sizeof lbs / sizeof lbs[0]; li++) {
+        double hx = sizes[si][0], hy = sizes[si][1], k = ks[ki], r = tag(sizes[si][2], k, 1);
+        double band1 = bands[bi], lb = lbs[li], bexp = exps[(si + ki + bi + li) % 3];
+        double bevel = clampd(r * 0.42, 16, 56), band = clampd(band1 * r, bevel, r), R = fmin(hx, hy);
+        const double h = 1e-3, step = 1.37;
+        for (double qy = -hy + 0.05; qy < hy; qy += step) for (double qx = -hx + 0.05; qx < hx; qx += step) {
+            double s[2], br, lt, sx1[2], sx0[2], sy1[2], sy0[2], b2, l2;
+            field23(qx, qy, hx, hy, r, k, band1, lb, bexp, s, &br, &lt);
+            double wx = fabs(qx) - (hx - r), wy = fabs(qy) - (hy - r);
+            double vx = fmax(wx, 0), vy = fmax(wy, 0), l = sqrt(vx * vx + vy * vy);
+            double depth = r - l - fmin(fmax(wx, wy), 0);
+            if (depth <= 0.02) continue;
+            points++;
+            double mag = hypot(s[0], s[1]);
+            // Inward: toward the stadium's medial segment and, in the band, against the outward normal.
+            double px = qx - clampd(qx, -(hx - R), hx - R), py = qy - clampd(qy, -(hy - R), hy - R);
+            CHECK(mag <= fmin(k, 0.5) * band + lb * hypot(px, py) + 1e-9, "v0.23 shift %.3f too large", mag);
+            if (mag > 1e-9) CHECK(s[0] * px + s[1] * py <= 1e-9 || (l > 0 && s[0] * vx * signd(qx) + s[1] * vy * signd(qy) < 0),
+                                  "v0.23 shift not inward at %.2f,%.2f", qx, qy);
+            if (depth >= band) CHECK(fabs(s[0] + lb * px) < 1e-9 && fabs(s[1] + lb * py) < 1e-9, "v0.23 edge shift past the band");
+            // The lighting coordinate is v0.22's.
+            CHECK(fabs(lt - (l > 0 && depth < bevel ? 1 - depth / bevel : 0)) < 1e-12, "v0.23 lighting coordinate");
+            CHECK(br >= 0 && br <= brMax(1) + 1e-9, "v0.23 br range");
+            if (depth >= band) CHECK(fabs(br - brMax(1)) < 1e-9, "v0.23 br past the band %.4f", br);
+            // C1: no kinks are skipped; a seam would show as a huge or negative finite difference.
+            field23(qx + h, qy, hx, hy, r, k, band1, lb, bexp, sx1, &b2, &l2); field23(qx - h, qy, hx, hy, r, k, band1, lb, bexp, sx0, &b2, &l2);
+            field23(qx, qy + h, hx, hy, r, k, band1, lb, bexp, sy1, &b2, &l2); field23(qx, qy - h, hx, hy, r, k, band1, lb, bexp, sy0, &b2, &l2);
+            double j00 = 1 + (sx1[0] - sx0[0]) / (2 * h), j10 = (sx1[1] - sx0[1]) / (2 * h);
+            double j01 = (sy1[0] - sy0[0]) / (2 * h), j11 = 1 + (sy1[1] - sy0[1]) / (2 * h);
+            double det = j00 * j11 - j01 * j10;
+            double a2 = j00 * j00 + j10 * j10, b3 = j00 * j01 + j10 * j11, c2 = j01 * j01 + j11 * j11;
+            double tr = a2 + c2, disc = sqrt(fmax((a2 - c2) * (a2 - c2) + 4 * b3 * b3, 0));
+            double smin = sqrt(fmax((tr - disc) / 2, 0)), smax = sqrt((tr + disc) / 2);
+            CHECK(det > 0.05 && smin >= 0.25 - 1e-4, "v0.23 fold k=%.2f band=%.2f lb=%.2f size %.0fx%.0f r %.1f at %.2f,%.2f det=%.5f smin=%.5f", k, band1, lb, hx, hy, r, qx, qy, det, smin);
+            CHECK(smax <= 1 + 1e-5, "v0.23 minifies (sigma_max %.5f) at %.2f,%.2f", smax, qx, qy);
+            if (det < minDet) minDet = det;
+            if (smax > maxSmax) maxSmax = smax;
+            if (smin > 0 && 1 / smin > maxMag) maxMag = 1 / smin;
+        }
+        // Monotone body radius along a straight-edge normal, ~0 at the outline (exponent >= 2).
+        double last = -1;
+        for (double dep = 0; dep < hy; dep += 0.25) {
+            double sv[2], b, t2; field23(0, hy - dep, hx, hy, r, k, band1, lb, bexp, sv, &b, &t2);
+            CHECK(b >= last - 1e-12, "v0.23 br not monotone"); last = b;
+            if (dep <= 4 && bexp >= 2) CHECK(b < 0.5, "v0.23 br %.3f at the outline (%.2f px)", b, dep);
+        }
+    }
+    printf("field v0.23: %ld points, min det %.3f, max sigma %.6f, max magnification %.2fx, failures = %d\n",
+           points, minDet, maxSmax, maxMag, failures);
+    // Defaults (kglens 0.40, band 0.85, body lens 0.05, exponent 2) on a 108 px lockscreen pill.
+    double r = tag(108, 0.4, 1);
+    printf("field v0.23 defaults, pill r=%.2f: depth px -> shift px, blur radius px\n ", r);
+    for (int dep = 0; dep <= 105; dep += 7) {
+        double sv[2], b, t2; field23(0, 108 - dep, 670, 108, r, 0.4, 0.85, 0.05, 2, sv, &b, &t2);
+        printf(" %d:%.1f,%.1f", dep, -sv[1], b);
+    }
+    printf("\n");
+}
+
 // SemBlurBridge.sfTag and the two decoders (OULG_DECODE; FillRRect: radius fraction, clip: fraction
 // of radius + 0.5). Both return kp = k + 2 x profile, 0 off the bands.
 static double tag(double r, double k, int pf) {
@@ -71,9 +171,6 @@ static double toneLuma(double y, double k, double cap, double lift) {
     double k1 = lift + 0.12;
     return y < k1 ? k1 - 0.12 * (1 - exp((y - k1) / 0.12)) : y;
 }
-
-static int failures;
-#define CHECK(c, ...) do { if (!(c)) { if (failures++ < 20) { printf("FAIL: "); printf(__VA_ARGS__); printf("\n"); } } } while (0)
 
 int main(void) {
     const double sizes[][3] = {{670, 108, 108}, {670, 300, 92}, {700, 160, 56}, {540, 400, 140}, {670, 96, 48}, {670, 200, 91.875}, {670, 200, 108.4}};
@@ -212,5 +309,6 @@ int main(void) {
     // The lockscreen default (kglens 0.40) magnifies no more than the established heads-up (sflens 0.30).
     CHECK(maxMag[1][2] <= maxMag[0][1] * 1.01, "profile 1 at 0.40 magnifies %.3fx > profile 0 at 0.30 %.3fx", maxMag[1][2], maxMag[0][1]);
     printf("\nfield: failures = %d\n", failures);
+    check23();
     return failures != 0;
 }

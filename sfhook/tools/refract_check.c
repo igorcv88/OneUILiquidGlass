@@ -2,7 +2,8 @@
 // each rewrite as mod_NNN.{vert,frag} (vertex shaders also as min_NNN.vert, the zero-output
 // fallback), for glslangValidator, including a link of each fragment rewrite against the vertex
 // rewrites. A third argument "0" builds them without the debug tint; a fourth overrides profile 1
-// parameters, e.g. "core=48,taps=24,rim=0,spec=0" (core taps ramp sat tone rim spec flat level cool tilt line ccap fcap cdim glow). Build:
+// parameters, e.g. "core=48,taps=24,rim=0,spec=0" (core taps ramp sat tone rim spec flat level cool tilt line ccap fcap cdim glow gradient band
+// bodylens blurexp). Build:
 // gcc -I.. -o rc refract_check.c
 #include "refract.h"
 static void put(const char *dir, const char *kind, int idx, const char *ext, const char *text) {
@@ -29,6 +30,9 @@ int main(int argc, char **argv) {
         else if (!strcmp(kv, "cdim")) prof[1].cdim = v;
         else if (!strcmp(kv, "glow")) prof[1].glow = v;
         else if (!strcmp(kv, "gradient")) prof[1].gradient = v;
+        else if (!strcmp(kv, "band")) prof[1].band = v;
+        else if (!strcmp(kv, "bodylens")) prof[1].lensbody = v;
+        else if (!strcmp(kv, "blurexp")) prof[1].blurexp = v;
         else if (!strcmp(kv, "hubloom")) prof[0].bloom = v;
     }
     FILE *f = fopen(argv[1], "rb"); fseek(f, 0, SEEK_END); long n = ftell(f); fseek(f, 0, SEEK_SET);
