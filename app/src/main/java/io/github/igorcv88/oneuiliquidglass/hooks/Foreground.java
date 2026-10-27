@@ -11,10 +11,10 @@ import java.util.WeakHashMap;
 
 /**
  * The text and icon tone of a card that changed material style (ShadeTone.materialFor): over light
- * glass the theme's light text turns dark, over dark glass the theme's dark text turns light. Only
- * views of the standard templates change: text views whose id belongs to the framework ("android",
- * the notification templates) or to SystemUI, and the expand icon; a custom RemoteViews layout
- * carries the app's ids (or none) and is never touched. Among those, only the theme's text tone
+ * glass the theme's light text turns dark, over dark glass the theme's dark text turns light.
+ * Standard template text and custom text on a clear path to the notification row qualify;
+ * custom text with a background of its own is left alone. Icons retain their template-only rules.
+ * Among those, only the theme's text tone
  * (near-neutral greys: primary, secondary, time) changes; accent text, coloured spans, app icons
  * and action colours are left alone. Each grey is mirrored (255 - value, alpha kept), so the primary/secondary hierarchy holds.
  * Applied to the inflated views, never the RemoteViews; switching back restores each view's own
@@ -32,6 +32,7 @@ final class Foreground {
         int applied;
         /** The theme's text tone when the view was swapped (what a colour set later is compared with). */
         boolean lightText;
+        boolean custom;
         Rec(Object saved) { this.saved = saved; }
     }
     /** Whether a child row draws its own glass (and so its own tone); set by HeadsUpHooks. */
@@ -54,7 +55,14 @@ final class Foreground {
      */
     static Integer redirect(Object key, int color, Map<Object, Rec> swapped, java.util.function.IntFunction<Object> saver) {
         Rec r = swapped.get(key);
-        if (r == null || color == r.applied) return null;
+        if (r == null) return null;
+        // A RemoteViews reapply may add a private background before writing the text colour.
+        if (r.custom && key instanceof TextView && !customSurface((View) key)) {
+            swapped.remove(key);
+            reshadow((TextView) key);
+            return null;
+        }
+        if (color == r.applied) return null;
         if (!themeTone(color, r.lightText)) { swapped.remove(key); if (key instanceof TextView) reshadow((TextView) key); return null; }
         r.saved = saver.apply(color);
         r.applied = mirror(color);
@@ -395,6 +403,7 @@ final class Foreground {
         if (v instanceof TextView) {
             int c = ((TextView) v).getCurrentTextColor();
             out.add(describe(v) + " color=" + Integer.toHexString(c) + " vis=" + v.getVisibility() + " standard=" + standard(v, false)
+                    + " customSurface=" + customSurface(v) + " eligible=" + textEligible(v)
                     + " themeTone=" + themeTone(c, lightText) + " swapped=" + swapped.containsKey(v));
         }
         if (v instanceof ViewGroup) {
@@ -426,7 +435,10 @@ final class Foreground {
             Rec r = swapped.get(v);
             // Read in place (no Ink wrapper): this runs for every swapped view on every pre-draw.
             if (r == null) return "rebind";
-            if (v instanceof TextView) { if (((TextView) v).getCurrentTextColor() != r.applied) return "rebind"; }
+            if (v instanceof TextView) {
+                if (r.custom && !customSurface(v)) return "surface";
+                if (((TextView) v).getCurrentTextColor() != r.applied) return "rebind";
+            }
             else if (v instanceof ImageView) {
                 ColorStateList tint = ((ImageView) v).getImageTintList();
                 if (tint == null || tint.getDefaultColor() != r.applied) return "rebind";
@@ -443,9 +455,12 @@ final class Foreground {
     private static int walk(View v, boolean swap, boolean lightText, java.util.List<View> tracked) {
         int changed = 0;
         if (v instanceof TextView) {
-            if (standard(v, false)) {
-                changed += ink(new Text((TextView) v), swap, lightText, swapped) ? 1 : 0;
-                shadowFor((TextView) v, swap);
+            boolean eligible = textEligible(v);
+            if (eligible || swapped.containsKey(v)) {
+                changed += ink(new Text((TextView) v), swap && eligible, lightText, swapped) ? 1 : 0;
+                Rec record = swapped.get(v);
+                if (record != null) record.custom = !standard(v, false);
+                shadowFor((TextView) v, swap && eligible);
             }
         } else if (v instanceof ImageView && (glyphs.containsKey(v) || smallIcon(v))) {
             // icontone turned off live restores the glyphs already swapped.
@@ -498,7 +513,33 @@ final class Foreground {
         ink.set(r.applied);
         return true;
     }
-    /** Whether a view is part of a standard template (see the class comment); icon: only the expand icon. */
+    static boolean textEligible(View v) { return standard(v, false) || customSurface(v); }
+
+    /**
+     * A custom label may follow the glass only inside a notification row, with no private
+     * background between the label and that row. The row itself owns the module's material.
+     * Unknown drawables, including images, gradients and selectors, fail closed. This deliberately
+     * does not infer transparency from Drawable.getOpacity() (TRANSLUCENT can still paint a card).
+     * No resource-id or publisher allowlist: RemoteViews can also contain labels without ids.
+     */
+    static boolean customSurface(View v) {
+        for (View p = v; p != null; ) {
+            if (p.getClass().getName().endsWith("ExpandableNotificationRow")) return p != v;
+            if (!clear(p.getBackground()) || !clear(p.getForeground())) return false;
+            ColorStateList tint = p.getBackgroundTintList();
+            if (p.getBackground() != null && tint != null && tint.getColorForState(p.getDrawableState(), tint.getDefaultColor()) >>> 24 != 0)
+                return false;
+            android.view.ViewParent parent = p.getParent();
+            p = parent instanceof View ? (View) parent : null;
+        }
+        return false;
+    }
+    private static boolean clear(android.graphics.drawable.Drawable d) {
+        return d == null || d.getAlpha() == 0 || (d instanceof android.graphics.drawable.ColorDrawable
+                && (((android.graphics.drawable.ColorDrawable) d).getColor() >>> 24) == 0);
+    }
+
+    /** Whether a view is part of a standard template; icon: only the expand icon. */
     private static boolean standard(View v, boolean icon) {
         int id = v.getId();
         if (id == View.NO_ID || (id >>> 24) == 0) {

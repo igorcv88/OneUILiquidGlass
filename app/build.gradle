@@ -13,6 +13,7 @@ android {
         versionName releaseVersionName
     }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+    testOptions { unitTests.includeAndroidResources = true }
     buildTypes { release { minifyEnabled false } }
     // SurfaceFlinger live bundle (sfhook/build.sh writes assets/sfhook/ there). A build without
     // the NDK step has no bundle, and the app shows the feature as unavailable (SfLive.bundled).
@@ -21,5 +22,6 @@ android {
 dependencies {
     compileOnly 'de.robv.android.xposed:api:82'
     testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.robolectric:robolectric:4.14.1'
     testImplementation 'org.json:json:20240303'
 }
