@@ -238,7 +238,9 @@ public final class SfLiveController {
                                                 "sf_live_ui", Activity.MODE_PRIVATE),
                                         values,
                                         System.currentTimeMillis());
-                                flow.applyAndRestart(values);
+                                flow.applyAndRestart(values, written ->
+                                        new io.github.igorcv88.oneuiliquidglass.config.ConfigRepository(activity)
+                                                .adoptWritten(written));
                                 message =
                                         "Reinício iniciado. Os apps serão encerrados. Reabra e"
                                             + " verifique o estado; ainda não é confirmação de"

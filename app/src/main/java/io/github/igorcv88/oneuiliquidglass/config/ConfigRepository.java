@@ -122,6 +122,11 @@ public final class ConfigRepository {
     }
 
     public synchronized void replace(Map<String, String> values, boolean clear) {
+        replace(values, clear, null);
+    }
+
+    /** Values and, when not null, the master switch in one edit with one undo snapshot. */
+    public synchronized void replace(Map<String, String> values, boolean clear, Boolean enabled) {
         Map<String, String> checked = new LinkedHashMap<>();
         for (Map.Entry<String, String> e : values.entrySet()) {
             SettingSpec s = SettingsRegistry.get(e.getKey());
@@ -145,10 +150,23 @@ public final class ConfigRepository {
                 edit.putString(PREFIX + e.getKey(), e.getValue())
                         .putString(BASELINE + e.getKey(), SystemPropertyReader.read(e.getKey()));
         }
+        if (enabled != null) edit.putBoolean(Config.KEY_ENABLED, enabled);
         edit.putLong("generation", generation() + 1)
                 .putLong("lastChange", System.currentTimeMillis())
                 .apply();
         notifyChanged();
+    }
+
+    /**
+     * The app's own compositor writes, confirmed by the helper, become the new baselines so they
+     * are not mistaken for a Terminal change. commit(): a restart follows and kills the process.
+     */
+    @android.annotation.SuppressLint("ApplySharedPref")
+    public synchronized void adoptWritten(Map<String, String> written) {
+        SharedPreferences.Editor edit = prefs.edit();
+        for (Map.Entry<String, String> e : written.entrySet())
+            if (prefs.contains(PREFIX + e.getKey())) edit.putString(BASELINE + e.getKey(), e.getValue());
+        edit.commit();
     }
 
     private void snapshot() {

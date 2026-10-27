@@ -149,7 +149,8 @@ public final class SurfacesPage implements Page {
         tools.setVisibility(View.VISIBLE);
         tools.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
         tabs.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
-        int chrome = topInset + t.dp(8) + tabs.getMeasuredHeight() + t.dp(10) + tools.getMeasuredHeight() + t.dp(8);
+        toolsExpanded = tools.getMeasuredHeight();
+        int chrome = topInset + t.dp(8) + tabs.getMeasuredHeight() + t.dp(10) + toolsExpanded + t.dp(8);
         int ideal = Math.round(width * 248f / 360f);
         previewExpanded = wide ? Math.max(t.dp(120), Math.min(ideal, rootHeight - chrome - bottomInset)) : Math.min(ideal, Math.round(rootHeight * .36f));
         previewCompact = wide ? previewExpanded : Math.min(previewExpanded, t.dp(128));
@@ -162,11 +163,13 @@ public final class SurfacesPage implements Page {
     }
 
     private boolean wide;
+    private int toolsExpanded;
     private int bottomInset;
 
     private void collapse(int y) {
         if (previewExpanded == 0 || wide) return;
-        int toolsH = tools.getMeasuredHeight();
+        // The expanded height measured once: the live one shrinks as the header collapses.
+        int toolsH = toolsExpanded;
         int range = previewExpanded - previewCompact + toolsH;
         float p = range <= 0 ? 0 : Math.max(0, Math.min(1, y / (float) range));
         int ph = Math.round(previewExpanded + (previewCompact - previewExpanded) * p);

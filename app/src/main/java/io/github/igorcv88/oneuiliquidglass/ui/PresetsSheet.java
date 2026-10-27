@@ -3,7 +3,6 @@ package io.github.igorcv88.oneuiliquidglass.ui;
 import android.os.Build;
 import android.widget.LinearLayout;
 
-import io.github.igorcv88.oneuiliquidglass.Config;
 import io.github.igorcv88.oneuiliquidglass.config.*;
 import io.github.igorcv88.oneuiliquidglass.ui.kit.*;
 
@@ -115,8 +114,7 @@ final class PresetsSheet extends Sheet {
             s.text(b.toString().trim());
             s.action("Cancelar", Ui.ButtonStyle.OUTLINED, s::dismiss);
             s.action("Usar estilo", Ui.ButtonStyle.FILLED, () -> {
-                m.repo.replace(parsed.values, true);
-                if (parsed.enabled != m.state().enabled) m.repo.flag(Config.KEY_ENABLED, parsed.enabled);
+                m.repo.replace(parsed.values, true, parsed.enabled);
                 m.notifyChanged();
                 host.feedback("Estilo aplicado aos ajustes");
                 s.dismiss();

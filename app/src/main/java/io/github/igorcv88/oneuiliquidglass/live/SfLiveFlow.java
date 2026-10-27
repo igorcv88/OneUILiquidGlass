@@ -110,6 +110,12 @@ public final class SfLiveFlow {
      * compiles the shaders with these values; the caller still has to observe the result.
      */
     public Reply applyAndRestart(Map<String, String> values) throws Exception {
+        return applyAndRestart(values, null);
+    }
+
+    /** {@code confirmed} runs after every value read back and before the restart. */
+    public Reply applyAndRestart(Map<String, String> values, java.util.function.Consumer<Map<String, String>> confirmed)
+            throws Exception {
         if (!values.isEmpty()) {
             Map<String, String> status = status();
             supported(status);
@@ -125,6 +131,7 @@ public final class SfLiveFlow {
                             "O valor de " + e.getKey() + " não foi confirmado; nada foi reiniciado.",
                             false);
             }
+            if (confirmed != null) confirmed.accept(values);
         }
         return restartConfirmed();
     }
