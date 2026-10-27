@@ -100,9 +100,13 @@ public final class SettingsPage implements Page {
         });
         rec.addView(safe);
         rec.addView(Ui.divider(a, t, t.dp(72)));
-        LinearLayout restart = Ui.listRow(a, t, Icon.RESTART, "Reiniciar a interface do sistema", "Requer root; pede confirmação", null);
+        LinearLayout restart = Ui.listRow(a, t, Icon.RESTART, "Reiniciar interface do sistema", "Reinicia a SystemUI; os apps continuam abertos", null);
         restart.setOnClickListener(v -> InfoSheets.restartSystemUi(host));
         rec.addView(restart);
+        rec.addView(Ui.divider(a, t, t.dp(72)));
+        LinearLayout soft = Ui.listRow(a, t, Icon.RESTART, "Reiniciar userspace (\u201csoft reboot\u201d)", "Reinicia o compositor e o zygote; todos os apps fecham", null);
+        soft.setOnClickListener(v -> InfoSheets.softReboot(host));
+        rec.addView(soft);
         content.addView(rec, Ui.match());
         TextView help = Ui.text(a, t, "Se as notificações travarem, desative o módulo no LSPosed e reinicie o"
                 + " aparelho. A lente dinâmica nunca é carregada na inicialização: reiniciar o aparelho volta"

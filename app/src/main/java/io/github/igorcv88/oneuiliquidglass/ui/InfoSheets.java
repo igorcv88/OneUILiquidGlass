@@ -124,6 +124,35 @@ final class InfoSheets {
         s.show();
     }
 
+    /** "Soft reboot": fixed root command, informed confirmation, no automation. */
+    static void softReboot(Host host) {
+        Theme t = host.theme();
+        android.app.Activity a = host.activity();
+        Sheet s = new Sheet(a, t, "Reiniciar userspace?");
+        s.text("Reinicia o compositor de tela (SurfaceFlinger) e o zygote, sem desligar o aparelho. A"
+                + " tela fica preta por alguns segundos e todos os apps abertos são fechados, inclusive"
+                + " este. Os caches de sombreamento são apagados e refeitos.\n\nUma lente dinâmica ativada"
+                + " pelo app é descarregada; ative-a de novo depois, se quiser. Será pedido acesso root.");
+        Toggle ack = new Toggle(a, t);
+        LinearLayout card = Ui.card(a, t);
+        card.addView(Ui.switchRow(a, t, null, "Salvei o que estava fazendo", null, ack));
+        s.body().addView(card, Ui.match(t.dp(4), 0));
+        s.action("Cancelar", Ui.ButtonStyle.OUTLINED, s::dismiss);
+        TextView go = s.action("Reiniciar userspace", Ui.ButtonStyle.FILLED, () -> {
+            s.dismiss();
+            AppModel m = host.model();
+            Runnable restart = () -> m.root.softReboot(ok -> { if (!ok) host.feedback("Não foi possível reiniciar: " + m.root.message()); });
+            if (m.root.granted()) restart.run();
+            else m.root.check(ok -> {
+                if (ok) restart.run();
+                else host.feedback("Acesso root não concedido");
+            });
+        });
+        go.setEnabled(false);
+        ack.listener((x, on) -> go.setEnabled(on));
+        s.show();
+    }
+
     /** A Terminal changed a value the app also saves: choose which one wins. */
     static void conflicts(Host host) {
         Theme t = host.theme();

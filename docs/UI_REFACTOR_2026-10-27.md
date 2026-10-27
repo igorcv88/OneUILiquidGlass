@@ -178,7 +178,14 @@ barra de status e sombras do sistema são aproximados.
 - [x] Alterados fora do app: escolha explícita, sem sobrescrever.
 - [x] Lente dinâmica: verificar root (só ao tocar), instalar e testar, ativar, aplicar pendentes,
   confirmação, verificação posterior, registro, remover.
-- [x] Recuperação: desligar todo o vidro; reiniciar a interface do sistema (root, confirmação).
+- [x] Recuperação: desligar todo o vidro; reiniciar a interface do sistema (root, confirmação);
+  reiniciar userspace ("soft reboot", root, confirmação com "Salvei o que estava fazendo"). O soft
+  reboot é um comando fixo em `RootAccess.SOFT_REBOOT`: para o SurfaceFlinger, apaga
+  `skia_shaders`, `egl_shaders` e `oulg_shaders.txt`, sobe o SurfaceFlinger e reinicia o zygote,
+  desacoplado via `nohup` (o próprio app morre junto). Uma lente injetada em runtime não sobrevive ao
+  reinício do compositor, então `debug.oulg.sfrefract` é limpo, exceto quando o compositor em
+  execução tem o overlay do módulo de boot `oulg_sf` montado (verificado em `mountinfo` antes do
+  stop; esse overlay recarrega a lente a cada início do compositor).
 - [x] Tema claro/escuro/sistema, reduzir movimento, fonte ampliada, paisagem, voltar preditivo, TalkBack
   (rótulos, estados de switch, slider com faixa e ações, abas da barra).
 
