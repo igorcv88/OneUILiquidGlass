@@ -395,6 +395,7 @@ public final class SemBlurBridge implements Backdrop {
                 // host: the blur guard blocks a clear nested inside an apply on that host.
                 set.invoke(host, (Object) null);
                 lastInfo = pending;
+                if (Probe.trace) Probe.log("SEM_BLUR_APPLY", "viewId=" + Integer.toHexString(System.identityHashCode(host)) + " info=null " + regionState());
                 return;
             }
             applyingHost = host;
@@ -402,6 +403,7 @@ public final class SemBlurBridge implements Backdrop {
             Object before = f != null ? f.get(host) : null;
             set.invoke(host, pending);
             lastInfo = pending;
+            if (Probe.trace) Probe.log("SEM_BLUR_APPLY", "viewId=" + Integer.toHexString(System.identityHashCode(host)) + " info=set");
             // Each apply installs a fresh blur drawable at full alpha.
             fadeRegion(true);
             // The view holds our info or a fresh copy of it. If another hook swallowed the call, the
@@ -414,6 +416,22 @@ public final class SemBlurBridge implements Backdrop {
         }
         catch (ReflectiveOperationException | RuntimeException e) { Probe.error("SEM_BLUR_APPLY_FAILED", e); }
         finally { applying = false; applyingHost = null; }
+    }
+    /**
+     * Applies a pending blur or suspension now instead of after the traversal. Only from pre-draw,
+     * which runs before the frame's draw: a leaving card's region goes in the same frame as the
+     * content crosses the cut instead of the next one. Updates built in onDraw stay posted.
+     */
+    public void flush() {
+        if (!posted || released) return;
+        host.removeCallbacks(apply);
+        applyPending();
+    }
+    /** Whether the view carries no region of this bridge now (suspended or never applied). */
+    public boolean regionOff() { return released || suspended || lastInfo == null; }
+    /** The region's state for the exit trace: off, pending (a post not applied yet) or on. */
+    public String regionState() {
+        return (regionOff() ? "off" : "on") + (posted ? "+pending" : "") + (suspended ? " suspended=" + (stackSuspended ? "stack" : "") + (fadeSuspended ? "fade" : "") + (cutSuspended ? "cut" : "") : "");
     }
     private boolean suspended, stackSuspended, fadeSuspended;
     /**

@@ -1088,6 +1088,44 @@ Source: device video of PR #39 (18:45:08) and a lockscreen screenshot (18:46). T
 
 **Validation:** Gradle `testDebugUnitTest` (111 tests; new icon-view and untinted cases), `lintDebug`, `assembleDebug`. Icon layers checked in a browser render. Not tested on the device.
 
+### Round 50: a leaving card keeps its material, and its region follows the exit (2026-10-27)
+
+Device: SM-S938B, One UI 9 DZIF, `sfrefract=1`. Logcat of 27/10 (14:02) and a screen recording.
+
+**Heads-up flashing on Dismiss.** Sequence for row `cabc4d` (background `f39fe4`):
+
+| Time | Event | Source |
+|---|---|---|
+| 41.763 | `setHeadsUpAnimatingAway` true, `removeNotification` | OULG |
+| 41.766 | `GLASS_RELEASED native=true`, `semSetBlurInfo null` on the background | OULG, View |
+| 41.768 | `HEADS_UP_DISAPPEAR addTransientView` for the same row, `onAttachedToWindow` | StackScroller, OULG |
+| 41.769 | `startAppearAnimation` (the disappear animation) | OULG |
+| 41.771 | `GLASS_APPLIED source=samsung` (a new bridge) | OULG |
+| 41.772 | `regionSize=0` | SurfaceComposerClient |
+| 41.782 | the new `SemBlurInfo` applied (posted after the traversal) | View |
+| 41.796 | `regionSize=1`, alpha 1.00 | SurfaceComposerClient |
+| 41.830 | `semSetBlurInfo null` without a release: the fade cut (ancestor alpha < 0.5) | View |
+| 41.846 | `regionSize=0` | SurfaceComposerClient |
+| 41.950 | `GLASS_RELEASED native=false` (row hidden), then `onAppearAnimationFinished` | OULG |
+
+Cause: the stack removes the row and adds it back at once as a transient view for its disappear animation. `State.onViewDetachedFromWindow` released the material on that detach (`isShown()` was still true, hence `native=true`, and the native blur recorded for the view was handed back). The transient view's first draw built a new material; its Samsung region reached the compositor two frames later (the bridge applies after the traversal), at full alpha; the fade cut then removed it mid-animation. One exit: blur gone, back, gone again. The text tone was also reset by the release. `BACKGROUND_UPDATE`, `glassKind` and `SemBlurBridge.restoreNative()` were not the trigger: the release came from the detach; `restoreNative` only ran inside it.
+
+**Ghost in the shade.** Removal with an action button at 24.451 (`StackScroller: created Remove Event - SwipedOut: false`): the same detach, release and rebuild (`GLASS_APPLIED source=compositor` at 24.457). Then the removed card's region (`BlurRegion #3`, radius 180) stayed at `alpha=1.00` and full height for every frame of the removal while sliding up (`rect` top 390 → 55, 24.468–24.634), and went only with the release at 24.650. The recording shows the content dimming, then a frosted card-shaped area with no content and no edge between the header and the next card. One UI animates a removal through the appear animation (`startAppearAnimation(false)`: content alpha and the outline clip), not through view alpha. The region took only the accumulated view alpha of the card's ancestors (1.0 throughout), so it stayed; `shadefadecut` acts on that same alpha, which is why `shadefadecut 0` changed nothing. The drawn glass is clipped by the native outline and folded away; the compositor region ignores canvas and outline clips.
+
+**Fix (`CardExit`, `HeadsUpHooks.State`).**
+- A detach holds a card's material until the main thread's current message is done (`heldRelease`). A re-attach to the same window (`ViewRootImpl` identity recorded at build) keeps it (`MATERIAL_REATTACH kept=true`); another window releases it at once. A card that does not come back is released then, as before but with `native=false`, so no native blur is handed back to a card on its way out.
+- The disappear animation is tracked from `startAppearAnimation` with `isAppearing=false` (or, without that argument, a row reporting `isRemoved`) to `onAppearAnimationFinished` (`EXIT_BEGIN`, `EXIT_END`), with a 1.5 s backstop. A heads-up animating away into the shade runs no disappear animation and is not affected.
+- While leaving, a change of backdrop kind or source does not rebuild the material (`MATERIAL_HELD`).
+- While leaving, the region takes the exit's own alpha: the lowest of the shown content view's alpha (`mPrivateLayout`, `mChildrenContainer`, `mPublicLayout`) and `mAppearAnimationFraction`, whichever the firmware has (`EXIT_SIGNAL` reports which, once). With neither, the region goes at the start of the exit. The drawable path fades or cuts it as before (`shadefadecut` in the unlocked shade); the Samsung path, whose region does not follow its drawable's alpha, is cut at 0.5 even without a shade cut, and that suspension is applied in pre-draw (`SemBlurBridge.flush`), before the frame's draw, instead of a traversal later.
+- Not leaving: the region policy is the earlier one, value for value (`CardExitTest.notLeavingKeepsTheEarlierPolicy`).
+- No animation of its own: the region follows values the native animation sets.
+
+**Instrumentation.** Always (events, not frames): `EXIT_BEGIN` (view, row, heads-up, pinned, animatingAway, material, shade and bar state), `EXIT_END` (duration, frames, `contentOffMs`, `regionOffMs`), `EXIT_SIGNAL`, `MATERIAL_REATTACH`, `MATERIAL_HELD`; `GLASS_APPLIED` and `GLASS_RELEASED` now carry `viewId` and `leaving`. With `debug.oulg.trace=1` only: `EXIT_FRAME` per changed frame of a leaving card (ancestor alpha, exit alpha, fraction, translation, heads-up and animatingAway, region state), `SEM_BLUR_APPLY` for every Samsung region set or cleared, and the notification key in `EXIT_BEGIN`.
+
+**Not covered.** The region's geometry still does not follow the outline fold, only its alpha: until the content is gone the region keeps the card's full height. A swipe-out was not in the log; it goes through the same detach handling, unverified.
+
+**Validation:** `testDebugUnitTest` (183 tests, 13 new in `CardExitTest`), `lintDebug` (0 errors), `assembleDebug`. Not tested on the device: the scenarios are in `physical-test.md`, *Exit animations*.
+
 ## Future work
 
 - **Separate blur for the notification center and the control center.** Theme Park and HomeUp set a single blur amount for both panels. The user runs 12 %: lower leaves the control center unreadable, higher over-blurs the notification list. A split needs its own investigation: find where SystemUI applies the panel blur, whether the two panels are separate blur regions or one window, and whether the module can own one of them.

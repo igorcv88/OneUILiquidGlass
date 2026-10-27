@@ -182,6 +182,7 @@ public final class HeadsUpHooks {
                 try {
                     if (rowClass != null && rowClass.isInstance(p.thisObject)) {
                         String name = ((Method) p.method).getName();
+                        if ("startAppearAnimation".equals(name) || "onAppearAnimationFinished".equals(name)) exitEvent((View) p.thisObject, name, p.args);
                         observeRow((View) p.thisObject, name);
                         // A new row inflates when a notification arrives; survey windows while its pop-up is on screen.
                         if ("onFinishInflate".equals(name)) WindowSurvey.schedule("rowInflate");
@@ -854,6 +855,24 @@ public final class HeadsUpHooks {
             state.event(event);
         } else Probe.log("BACKGROUND_MISSING", "row=" + row.getClass().getName());
     }
+    /**
+     * The card's disappear animation (One UI removes a card, or takes a heads-up away, through
+     * startAppearAnimation(false) and ends it with onAppearAnimationFinished): its material is held
+     * and its region follows the exit (CardExit). Without the isAppearing argument a removed row
+     * counts as leaving. A heads-up animating away into the shade runs no disappear animation and
+     * is not affected.
+     */
+    private void exitEvent(View row, String name, Object[] args) {
+        Object background = Reflect.read(row, "mBackgroundNormal");
+        if (!(background instanceof View)) return;
+        State s = state((View) background, row);
+        long now = android.os.SystemClock.uptimeMillis();
+        if ("onAppearAnimationFinished".equals(name)) { s.exitEnd(now, "finished"); return; }
+        Boolean appearing = CardExit.appearing(args);
+        if (appearing == null) appearing = !Boolean.TRUE.equals(Reflect.bool(row, "isRemoved", "mRemoved"));
+        if (appearing) s.exitEnd(now, "appear");
+        else s.exitBegin(now, CardExit.appearing(args) != null ? "arg" : "removed");
+    }
     private void observeBackground(View bg, String event) {
         View row = findRow(bg);
         if (row != null) state(bg, row).event(event);
@@ -915,6 +934,20 @@ public final class HeadsUpHooks {
         float a = 1f;
         for (Object p = v; p instanceof View; p = ((View) p).getParent()) a *= ((View) p).getAlpha();
         return a;
+    }
+    /** The row's content views; the shown one carries the content alpha of a disappear animation. */
+    private static final String[] EXIT_CONTENT = {"mPrivateLayout", "mChildrenContainer", "mPublicLayout"};
+    /** EXIT_SIGNAL (which exit signals this firmware has) is logged once per process. */
+    private boolean exitSignalLogged;
+    private static String fmt(float v) { return String.format(java.util.Locale.ROOT, "%.2f", v); }
+    /** The notification's key (NotificationEntry.getKey), to correlate a card with SystemUI's own logs (trace only). */
+    private static String notificationKey(View row) {
+        if (row == null) return "null";
+        try {
+            Object entry = Reflect.call(row, "getEntry");
+            Object key = entry == null ? null : Reflect.call(entry, "getKey");
+            return key == null ? "unknown" : String.valueOf(key);
+        } catch (ReflectiveOperationException | RuntimeException e) { return "unknown"; }
     }
     private final class State implements View.OnAttachStateChangeListener, ViewTreeObserver.OnPreDrawListener {
         final WeakReference<View> background;
@@ -1377,6 +1410,87 @@ public final class HeadsUpHooks {
             }
         }
         boolean pillReported;
+        /** The card's exit and detach state: see CardExit. */
+        final CardExit exit = new CardExit();
+        /** The window (ViewRootImpl) the glass was built in: a held material survives a re-attach only there. */
+        WeakReference<Object> glassRoot;
+        /** Releases a material held over a detach unless the card came back first (CardExit.detach). */
+        final Runnable heldRelease = this::releaseHeld;
+        /** The current exit, for EXIT_END: frames drawn, and when the content and the region went. */
+        int exitFrames;
+        long exitContentOff = -1, exitRegionOff = -1;
+        String lastExitTrace;
+        /** The kind and source a leaving card's material was last held against (MATERIAL_HELD once per change). */
+        String heldFor;
+        void exitBegin(long now, String signal) {
+            if (!exit.begin(now)) return;
+            exitFrames = 0; exitContentOff = -1; exitRegionOff = -1; lastExitTrace = null;
+            View v = background.get(), r = row.get();
+            Probe.log("EXIT_BEGIN", "viewId=" + (v == null ? "null" : Integer.toHexString(System.identityHashCode(v)))
+                    + " rowId=" + (r == null ? "null" : Integer.toHexString(System.identityHashCode(r)))
+                    // The key names the app: only in the opt-in trace (physical-test.md: no keys by default).
+                    + (Probe.trace ? " key=" + notificationKey(r) : "")
+                    + " signal=" + signal + " headsUp=" + (r == null ? null : Reflect.bool(r, "isHeadsUpState", "mIsHeadsUp"))
+                    + " pinned=" + (r == null ? null : Reflect.bool(r, "isPinned", "mIsPinned"))
+                    + " animatingAway=" + (r == null ? null : Reflect.bool(r, "isHeadsUpAnimatingAway", "mHeadsUpAnimatingAway"))
+                    + " glass=" + (glass == null ? "none" : glassKind + "/" + glassSource) + " shadeExpanded=" + shadeExpanded + " barState=" + barState);
+            invalidate();
+        }
+        void exitEnd(long now, String why) {
+            long took = exit.since(now);
+            if (!exit.end()) return;
+            View v = background.get();
+            Probe.log("EXIT_END", "viewId=" + (v == null ? "null" : Integer.toHexString(System.identityHashCode(v))) + " reason=" + why
+                    + " durationMs=" + took + " frames=" + exitFrames + " contentOffMs=" + exitContentOff + " regionOffMs=" + exitRegionOff
+                    + " glass=" + (glass != null) + " shown=" + (v != null && v.isShown()));
+            invalidate();
+        }
+        /** The view-root identity of the card's window now, or null. */
+        Object viewRoot(View v) {
+            try { return v == null ? null : Reflect.call(v, "getViewRootImpl"); }
+            catch (ReflectiveOperationException | RuntimeException e) { return null; }
+        }
+        /** The deferred release of a material held over a detach (posted by onViewDetachedFromWindow). */
+        void releaseHeld() {
+            View v = background.get();
+            if (!exit.deferredRelease(v != null && v.isAttachedToWindow())) return;
+            release();
+            // The shelf keeps its swapped text through release(); a detached shelf gives it back.
+            if (pill) setForeground(false);
+        }
+        /**
+         * The exit's own alpha for this card now: the alpha of the row's shown content views and the
+         * appear fraction, whichever the firmware has (CardExit.exitAlpha). Read only while leaving.
+         */
+        float exitAlpha(View r) {
+            float content = Float.NaN;
+            for (String name : EXIT_CONTENT) {
+                Object c = Reflect.read(r, name);
+                if (c instanceof View && ((View) c).getVisibility() == View.VISIBLE)
+                    content = Float.isNaN(content) ? ((View) c).getAlpha() : Math.max(content, ((View) c).getAlpha());
+            }
+            Object f = Reflect.read(r, "mAppearAnimationFraction");
+            float fraction = f instanceof Float ? (Float) f : Float.NaN;
+            if (!exitSignalLogged) {
+                exitSignalLogged = true;
+                Probe.log("EXIT_SIGNAL", "content=" + !Float.isNaN(content) + " fraction=" + (f instanceof Float) + " row=" + r.getClass().getName());
+            }
+            return CardExit.exitAlpha(content, fraction);
+        }
+        /** Per-frame state of a leaving card (debug.oulg.trace only), logged when it changes. */
+        void exitTrace(View v, View r, float ancestors, float exitAlpha, String region) {
+            if (!Probe.trace) return;
+            Object f = Reflect.read(r, "mAppearAnimationFraction");
+            String line = "dt=" + exit.since(android.os.SystemClock.uptimeMillis()) + " a=" + fmt(ancestors) + " exit=" + fmt(exitAlpha)
+                    + " fraction=" + (f instanceof Float ? fmt((Float) f) : "na") + " rowTy=" + Math.round(r.getTranslationY())
+                    + " rowTx=" + Math.round(r.getTranslationX()) + " shown=" + v.isShown()
+                    + " headsUp=" + Reflect.bool(r, "isHeadsUpState", "mIsHeadsUp")
+                    + " animatingAway=" + Reflect.bool(r, "isHeadsUpAnimatingAway", "mHeadsUpAnimatingAway")
+                    + " glass=" + (glass == null ? "none" : String.valueOf(glassKind)) + " region=" + region;
+            if (line.equals(lastExitTrace)) return;
+            lastExitTrace = line;
+            Probe.log("EXIT_FRAME", "viewId=" + Integer.toHexString(System.identityHashCode(v)) + " " + line);
+        }
         State(View background, View row) {
             this.background = new WeakReference<>(background); this.row = new WeakReference<>(row);
             pill = rowClass == null || !rowClass.isInstance(row);
@@ -1384,6 +1498,17 @@ public final class HeadsUpHooks {
         void invalidate() { View v = background.get(); if (v != null) v.invalidate(); }
         @Override public void onViewAttachedToWindow(View view) {
             if (observer != null) return;
+            if (exit.held()) {
+                main.removeCallbacks(heldRelease);
+                // Back in the window its material was built for (the stack re-adding a leaving row
+                // as a transient view): the glass and its region carry on. Another window: the
+                // region belongs to the old one, released now and built again on the next draw.
+                Object then = glassRoot == null ? null : glassRoot.get(), now = viewRoot(view);
+                boolean keep = exit.attach(then != null && then == now);
+                Probe.log("MATERIAL_REATTACH", "viewId=" + Integer.toHexString(System.identityHashCode(view)) + " kept=" + keep
+                        + " leaving=" + exit.leaving(android.os.SystemClock.uptimeMillis()) + " glass=" + (glass != null));
+                if (!keep) release();
+            }
             if (!blurEnvironmentReported) { blurEnvironmentReported = true; Probe.blurEnvironment(view.getContext()); }
             resolveConfig(view.getContext());
             observer = view.getViewTreeObserver(); observer.addOnPreDrawListener(this);
@@ -1408,9 +1533,16 @@ public final class HeadsUpHooks {
             event("ATTACH");
         }
         @Override public void onViewDetachedFromWindow(View view) {
-            release();
-            // The shelf keeps its swapped text through release(); a detached shelf gives it back.
-            if (pill) setForeground(false);
+            // A row leaving the stack is removed and, in the same message, added back as a transient
+            // view for its disappear animation. Released here, its glass came back a frame later
+            // and its region two frames later at full alpha (the flash, device log 27/10): the
+            // material is held until this message is done, and released then unless re-attached.
+            if (exit.detach(glass != null)) { main.removeCallbacks(heldRelease); main.post(heldRelease); }
+            else {
+                release();
+                // The shelf keeps its swapped text through release(); a detached shelf gives it back.
+                if (pill) setForeground(false);
+            }
             if (observer != null && observer.isAlive()) observer.removeOnPreDrawListener(this);
             observer = null;
             if (wm != null && blurListener != null) {
@@ -1447,14 +1579,23 @@ public final class HeadsUpHooks {
                     for (Object p = v; p instanceof View; p = ((View) p).getParent()) {
                         View pv = (View) p; a *= pv.getAlpha(); sx *= pv.getScaleX(); sy *= pv.getScaleY();
                     }
+                    // A leaving card (CardExit) fades its content and folds its outline, not its view
+                    // alpha: its region takes the exit's own alpha too, or it stayed whole and slid
+                    // away as an empty frosted card (the ghost of a removal, device log 27/10).
+                    long now = android.os.SystemClock.uptimeMillis();
+                    boolean leaving = exit.leaving(now) && sr != null;
+                    float exitAlpha = leaving ? exitAlpha(sr) : 1f;
+                    float shown = CardExit.shown(a, leaving, exitAlpha);
                     // In the unlocked shade a partly transparent region turned whiter, not fainter (a
                     // white pill as the card faded): there it is whole or gone (shadefadecut).
                     float cut = barState != null && barState == Eligibility.BAR_SHADE ? Tuning.get().shadeFadeCut : 0f;
-                    float fade = cut > 0f ? (a >= cut ? 1f : 0f) : a;
+                    float fade = CardExit.drawableFade(shown, cut);
+                    // The Samsung region does not take its drawable's alpha: a leaving card's is
+                    // whole or gone even where the shade has no cut.
+                    float semCut = CardExit.samsungCut(cut, leaving);
                     // The tag cannot survive a scaled region; with the finger nearly still the scale
                     // wobbled between 1 and 0.999 and the tag switched every frame. Once the card
                     // scales or fades it stays untagged until it has been still for SETTLE_MS.
-                    long now = android.os.SystemClock.uptimeMillis();
                     if (Math.abs(sx - 1f) > 0.001f || Math.abs(sy - 1f) > 0.001f || a < 0.999f) {
                         lastMotion = now;
                         v.removeCallbacks(settle);
@@ -1469,8 +1610,19 @@ public final class HeadsUpHooks {
                     if (semBridge != null) {
                         try { semBridge.setScaled(untag); }
                         catch (ReflectiveOperationException e) { Probe.error("SEM_BLUR_SCALE_FAILED", e); }
-                        semBridge.setFadeCut(cut > 0f && a < cut);
-                        if (semBridge.setRegionFade(cut > 0f ? 1f : a)) v.invalidate();
+                        semBridge.setFadeCut(semCut > 0f && shown < semCut);
+                        // Posted, the region would leave a frame after the content crossed the cut;
+                        // pre-draw runs before this frame's draw, so a leaving card's goes now.
+                        if (leaving) semBridge.flush();
+                        if (semBridge.setRegionFade(semCut > 0f ? 1f : shown)) v.invalidate();
+                    }
+                    if (leaving) {
+                        exitFrames++;
+                        long dt = exit.since(now);
+                        if (exitAlpha <= 0.01f && exitContentOff < 0) exitContentOff = dt;
+                        boolean regionOff = compBridge != null ? stacked || fade <= 0.004f : semBridge.regionOff();
+                        if (regionOff && exitRegionOff < 0) exitRegionOff = dt;
+                        exitTrace(v, sr, a, exitAlpha, compBridge != null ? "drawable@" + fmt(stacked ? 0f : fade) : "samsung:" + semBridge.regionState());
                     }
                 }
                 if (Probe.trace) {
@@ -1689,7 +1841,19 @@ public final class HeadsUpHooks {
             for (int state : original.getState()) if (state == android.R.attr.state_pressed) pressed = true;
             if (glass != null && glass.failed()) { failed = true; release(); return fallback("glassFailed"); }
             String source = kind == Backdrop.Kind.SAMPLED ? sampledSource(v) : null;
-            if (glass != null && (glassKind != kind || glass.stale() || !java.util.Objects.equals(source, glassSource))) release();
+            if (glass != null && (glassKind != kind || glass.stale() || !java.util.Objects.equals(source, glassSource))) {
+                // A leaving card keeps the material it leaves with: the heads-up flag or the shade
+                // state changing under its disappear animation rebuilt it (a new region, a frame
+                // late, on a card about to go).
+                if (CardExit.keepMaterial(exit.leaving(android.os.SystemClock.uptimeMillis()), true, glass.stale())) {
+                    if (!(kind + "|" + source).equals(heldFor)) {
+                        heldFor = kind + "|" + source;
+                        Probe.log("MATERIAL_HELD", "viewId=" + Integer.toHexString(System.identityHashCode(v)) + " reason=leaving from="
+                                + glassKind + "/" + glassSource + " to=" + kind + "/" + source);
+                    }
+                    kind = glassKind; source = glassSource;
+                } else release();
+            }
             if (!CornerGeometry.supported(Reflect.read(v, "mCornerRadii"))) {
                 // Not sticky: a shape seen mid-animation must not leave the row native for its lifetime.
                 release(); return fallback("geometry");
@@ -1731,6 +1895,8 @@ public final class HeadsUpHooks {
                 if (compBridge != null && !pill) safeTone(v);
                 if (semBridge != null) semBridge.setSuspended(stacked);
                 glass = new GlassDrawable(backdrop, v.getResources().getDisplayMetrics().density, spec);
+                glassRoot = new WeakReference<>(viewRoot(v));
+                heldFor = null;
                 glass.setLightStyle(lightStyle, Tuning.get().lightEdge);
                 glass.setOutline(outline());
                 inherited = true;
@@ -1738,7 +1904,8 @@ public final class HeadsUpHooks {
                 glassSource = source;
                 glass.setCallback(v);
                 Probe.log("GLASS_APPLIED", "viewId=" + Integer.toHexString(System.identityHashCode(v)) + " source=" + backdrop.name()
-                        + " optics=" + (kind == Backdrop.Kind.SAMPLED ? "refraction" : "edge_shader"));
+                        + " optics=" + (kind == Backdrop.Kind.SAMPLED ? "refraction" : "edge_shader")
+                        + " leaving=" + exit.leaving(android.os.SystemClock.uptimeMillis()));
                 materialReported = false;
                 Probe.painters(row.get());
             }
@@ -1909,8 +2076,10 @@ public final class HeadsUpHooks {
             boolean compositor = glassKind == Backdrop.Kind.SAMSUNG || glass.hybrid() || compBridge != null;
             boolean drawable = compBridge != null;
             if (!restore && semBridge != null) semBridge.clearOnRelease();
-            glass.release(); glass = null; glassKind = null; glassSource = null; semBridge = null; compBridge = null;
-            Probe.log("GLASS_RELEASED", "native=" + restore);
+            glass.release(); glass = null; glassKind = null; glassSource = null; semBridge = null; compBridge = null; glassRoot = null;
+            View released = background.get();
+            Probe.log("GLASS_RELEASED", "native=" + restore + " viewId=" + (released == null ? "null" : Integer.toHexString(System.identityHashCode(released)))
+                    + " leaving=" + exit.leaving(android.os.SystemClock.uptimeMillis()) + " attached=" + (released != null && released.isAttachedToWindow()));
             View r = row.get(), bg = background.get();
             if (restore && compositor && r != null) SemBlurBridge.restoreNative(r);
             // The Samsung blur was taken off the background itself for the drawable path.
