@@ -112,7 +112,7 @@ Some examples from the **current code defaults** (not necessarily the effective 
 | `lightglass` / `shadelightglass` | 0.75 / 0.27 | Light material opacity on pop-up vs shade |
 | `sf.core` / `sf.kgcore` | 48 / 80 px | Shader body blur profile parameters; compilation-time |
 
-The lockscreen compositor now uses a continuous glass-to-core blur gradient (live bundle v0.22), with a 52 px effective core and unchanged outer contour. See [tuning and reference comparison](docs/lockscreen-gradient.md).
+The lockscreen compositor now uses a continuous glass-to-core blur gradient (live bundle v0.22), with a 52 px effective core and unchanged outer contour. See [tuning and reference comparison](docs/lockscreen-gradient.md). Live bundle v0.23 replaces the bevel-only refraction with one continuous field: refraction and blur rise together across a transition band (`sf.kgband`, `sf.kgblurexp`), plus a weak body lens (`sf.kgbodylens`); `sf.kgband=0` restores v0.22.
 
 The [property catalog](docs/PROPERTY_CATALOG_2026-10-26.md) enumerates every currently parsed setting, its default, domain and application phase. For engineering details, see [architecture](docs/architecture.md), [validation](docs/validation.md), [physical tests](docs/physical-test.md) and [optics handoff](docs/handoff.md).
 

@@ -563,6 +563,18 @@ public final class Controls {
                 .on(KG)
                 .help("Transição contínua entre o vidro e o miolo; 0 usa a curva anterior."
                         + restart));
+        put(c("sf.kgband", "Largura da transição óptica").fmt(Format.PERCENT_1).in(TECH, TEC)
+                .on(KG)
+                .help("Faixa, a partir do contorno, em que a refração e o desfoque crescem juntos"
+                        + " (fração do raio do canto). 0 usa o modelo anterior; de 0 a cerca de 42%"
+                        + " a faixa fica na largura mínima, só acima disso ela aumenta." + restart));
+        put(c("sf.kgbodylens", "Lente do miolo").fmt(Format.PERCENT_1).in(TECH, TEC).on(KG)
+                .help("Curvatura suave do cartão inteiro: amplia o fundo de forma uniforme."
+                        + restart));
+        put(c("sf.kgblurexp", "Curva do desfoque na transição").fmt(Format.PLAIN).in(TECH, TEC)
+                .on(KG)
+                .help("Quanto o desfoque demora a crescer na transição. Maior: menos desfoque"
+                        + " e borda mais nítida; menor: mais desfoque e texto mais legível." + restart));
         put(c("sf.kgtaps", "Amostras do bloqueio").fmt(Format.COUNT).in(TECH, TEC).on(KG)
                 .help("Amostras por pixel no desfoque do bloqueio." + restart));
         put(c("sf.kgramp", "Rampa do bloqueio").fmt(Format.PLAIN).in(TECH, TEC).on(KG)

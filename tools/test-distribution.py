@@ -28,5 +28,5 @@ class DistributionTests(unittest.TestCase):
         c=(ROOT/'sfhook/oulg_sf.c').read_text();registry=(ROOT/'app/src/main/java/io/github/igorcv88/oneuiliquidglass/config/SettingsRegistry.java').read_text()
         readers=set(re.findall(r'(?:number|prop)\("([a-z0-9.]+)"',java))|set(re.findall(r'debug\.oulg\.([a-z0-9.]+)',c))
         specs=set(re.findall(r'add\(new SettingSpec\("([a-z0-9.]+)"',registry))
-        self.assertEqual(99,len(readers));self.assertEqual(readers,specs)
+        self.assertEqual(102,len(readers));self.assertEqual(readers,specs)
 if __name__=='__main__':unittest.main()

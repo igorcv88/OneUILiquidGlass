@@ -76,7 +76,7 @@
 //  - a thin contour, the grazing edge of the same surface, 1.6 px from the outline;
 //  - a specular band inside the contour, peaked mid-bevel on the light-facing side (light from the
 //    upper left, as the module's edge optics), a fainter one opposite, fading over bright backdrops.
-#define OULG_FS_GLOBALS "highp float oulg_on, oulg_pf, oulg_br, oulg_bw, oulg_t, oulg_k, oulg_bv, oulg_grad;\nhighp vec2 oulg_jx, oulg_jy, oulg_n;\n"
+#define OULG_FS_GLOBALS "highp float oulg_on, oulg_pf, oulg_br, oulg_bw, oulg_lw, oulg_t, oulg_k, oulg_bv, oulg_grad;\nhighp vec2 oulg_jx, oulg_jy, oulg_n;\n"
 #define OULG_FS_BSPLINE \
     "mediump vec4 oulg_bspline(sampler2D s, highp vec2 uv) {\n" \
     "  highp vec2 ts = vec2(textureSize(s, 0));\n" \
@@ -184,6 +184,7 @@
     "mediump vec4 oulg_material(mediump vec4 c) {\n" \
     "  if (oulg_pf < 0.5) return c;\n" \
     "  mediump float body = clamp(oulg_bw * %.2f, 0.0, 1.0);\n" \
+    "  mediump float lbody = clamp(oulg_lw * %.2f, 0.0, 1.0);\n" \
     "  mediump float a = max(c.a, 1e-3);\n" \
     "  mediump vec3 rgb = c.rgb / a;\n" \
     "  const mediump vec3 w709 = vec3(0.2126, 0.7152, 0.0722);\n" \
@@ -202,13 +203,13 @@
     "    mediump float facing = dot(oulg_n, vec2(-0.4512, -0.8924));\n" \
     "    mediump vec3 env = vec3(0.90, 0.94, 1.0) * mix(0.62, 1.0, 0.5 + 0.5 * facing);\n" \
     "    mediump float f = clamp(%.3f * pow(1.0 - cos(%.3f * g), 5.0), 0.0, 1.0);\n" \
-    "    f *= 1.0 - oulg_grad * body;\n" \
+    "    f *= 1.0 - oulg_grad * lbody;\n" \
     "    rgb = mix(rgb, env, f);\n" \
     "    highp float px = (1.0 - oulg_t) * oulg_bv;\n" \
     "    mediump float line = %.3f * exp(-px * px / 5.12) * (0.7 + 0.3 * max(facing, 0.0));\n" \
     "    rgb = mix(rgb, vec3(0.97, 0.985, 1.0), clamp(line, 0.0, 1.0));\n" \
     "    mediump float band = smoothstep(0.30, 0.62, tg) * (1.0 - smoothstep(0.80, 0.95, tg));\n" \
-    "    band *= 1.0 - oulg_grad * body;\n" \
+    "    band *= 1.0 - oulg_grad * lbody;\n" \
     "    mediump float lobe = pow(max(facing, 0.0), 3.0) + 0.45 * pow(max(-facing, 0.0), 3.0);\n" \
     "    mediump float m = max(max(rgb.r, rgb.g), max(rgb.b, 1e-3));\n" \
     "    mediump vec3 hue = mix(vec3(1.0), rgb / m, 0.3);\n" \
@@ -228,8 +229,8 @@
     "mediump vec4 oulg_sample(sampler2D s, highp vec2 uv) {\n" \
     "  return oulg_on > 0.0 ? (oulg_pf > 1.5 ? oulg_tone(texture(s, uv)) : oulg_lens(s, uv)) : texture(s, uv);\n" \
     "}\n"
-// The field (gradient1, ramp1, core1, ccap1, core0, ramp0, ramp1, core1, ccap1); programs that sample an external texture get only
-// this and the globals. Profile 0's shift keeps its v0.7 expression.
+// The field (gradient1, ramp1, core1, ccap1, core0, ramp0, ramp1, core1, ccap1, band1, blurexp1, core1, ccap1, lensbody1, acap1);
+// programs that sample an external texture get only this and the globals. Profile 0's shift keeps its v0.7 expression.
 //
 // Profile 1 gradient (v0.22): preserve the outer 4 px, then ease to an 8 px lightly
 // blurred glass band at max(8 px, quarter bevel). A second quintic smootherstep
@@ -237,6 +238,27 @@
 // body coordinate drives tone and fades inner reflection/specular, while the
 // refraction field and the outer contour remain unchanged. gradient=0 restores
 // the old curve; use ccap=62 as well for the exact v0.21 reference.
+//
+// Profile 1 continuous field (v0.23, band1 > 0; band1 = 0 is v0.22 exactly). One depth coordinate
+// u = depth / band, band = clamp(band1 x r, bevel, r), drives refraction and blur together, so the
+// card has no region where the refraction has ended but the blur is still rising:
+//  - transition refraction: the slab profile above, A x band x G(1 - u), now across the whole band
+//    (before: the 0.42 r bevel only). Radial Jacobian 1 - 6 A t (1 - t) as before: the band is wider,
+//    the peak stretch the same; band <= r keeps it outside the inner rect, where the normal is defined.
+//    The strength cap acap1 = min(0.5, (0.75 - lensbody) / 1.5) keeps the radial Jacobian of both
+//    terms together >= 0.25: at most 4x magnification, v0.22's bound;
+//  - body lens: a weak elliptic paraxial dome scaled to the card, -lensbody x q x min(hs) / hs. It is
+//    linear: its Jacobian is the constant diag(1 - lensbody R / hs) (R = min(hs); a pill magnifies
+//    across its short axis only), smooth everywhere, inside the inner rect and across the medial line
+//    included; its shift is lensbody x R at the middle of each side (at most sqrt(2) x that in a corner). (A stadium clamp, tried first,
+//    kinked the Jacobian at the medial segment's endpoints.)
+//  - blur: min(core, ccap) x S(u)^blurexp (S the quintic smootherstep): ~0 at the outline, the core
+//    radius at the end of the band, C2 there; blurexp > 1 keeps the band clear where its refraction
+//    is strongest (u = 0.5: 25 % of the core radius at blurexp 2): a larger exponent means less blur
+//    in the band, a smaller one more. band1 below bevel / r (~0.42) clamps to the bevel. The material's body weight is that
+//    same normalised radius;
+//  - lighting: the Fresnel rim, contour and specular band keep the v0.22 bevel coordinate, normal and
+//    fade weight (oulg_lw), so the tuned rim does not move with the lens.
 #define OULG_FS_FIELD_FMT \
     "highp float oulg_smootherstep(highp float lo, highp float hi, highp float x) {\n" \
     "  highp float u = clamp((x - lo) / (hi - lo), 0.0, 1.0);\n" \
@@ -266,6 +288,22 @@
     "    oulg_br = mix(oulg_br, mix(skin, core, body), oulg_grad);\n" \
     "    oulg_bw = mix(oulg_bw, body, oulg_grad);\n" \
     "  }\n" \
+    "  oulg_lw = oulg_bw;\n" \
+    "  const highp float band1 = %.3f;\n" \
+    "  if (oulg_pf > 0.5 && band1 > 0.0) {\n" \
+    "    highp float band = clamp(band1 * r, bevel, r);\n" \
+    "    highp float sb = oulg_smootherstep(0.0, band, depth);\n" \
+    "    oulg_bw = sb > 0.0 ? pow(sb, %.3f) : 0.0;\n" \
+    "    oulg_br = min(%.2f, %.2f) * oulg_bw;\n" \
+    "    highp float R = min(hs.x, hs.y);\n" \
+    "    highp vec2 s = -%.4f * q * (R / hs);\n" \
+    "    if (l <= 0.0 || depth <= 0.0) return s;\n" \
+    "    highp vec2 n = (v / l) * sign(q);\n" \
+    "    if (depth < bevel) { oulg_t = 1.0 - depth / bevel; oulg_bv = bevel; oulg_n = n; }\n" \
+    "    if (depth >= band) return s;\n" \
+    "    highp float t = 1.0 - depth / band;\n" \
+    "    return s - n * (min(k, %.4f) * band * t * t * (3.0 - 2.0 * t));\n" \
+    "  }\n" \
     "  if (l <= 0.0 || depth <= 0.0 || depth >= bevel) return vec2(0.0);\n" \
     "  highp float t = 1.0 - depth / bevel;\n" \
     "  if (oulg_pf > 0.5) {\n" \
@@ -282,10 +320,13 @@
 // transmission flattening (0 = none) toward a luma level, cool tint (0 = none), rim tilt at the
 // outline (rad), contour strength (0 = none), the body radius cap in px (>= core: none) and the cap on
 // the flattening weight (1: none), the core dimming gain (0: none) and the width of the rim glow
-// (Fresnel and specular band) as a fraction of the bevel band (1: v0.11); profile 0 only: the bloom
-// control of its body disc (0: none, the plain disc).
+// (Fresnel and specular band) as a fraction of the bevel band (1: v0.11), the v0.22 gradient mix, and
+// the v0.23 continuous field: transition width as a fraction of the corner radius (0: v0.22), body
+// lens curvature (uniform magnification excess, 0: none) and the blur curve's exponent over the
+// transition; profile 0 only: the bloom control of its body disc (0: none, the plain disc).
 struct oulg_profile { float core; int taps; float ramp; float sat; float tone; float rim; float spec; float cap; float lift;
-                      float flat; float level; float cool; float tilt; float line; float ccap; float fcap; float cdim; float glow; float bloom; float gradient; };
+                      float flat; float level; float cool; float tilt; float line; float ccap; float fcap; float cdim; float glow; float bloom; float gradient;
+                      float band; float lensbody; float blurexp; };
 #define OULG_CORE_DEFAULT 48.0f
 #define OULG_HU_BLOOM_DEFAULT 0.0f
 #define OULG_TAPS_DEFAULT 24
@@ -299,6 +340,13 @@ struct oulg_profile { float core; int taps; float ramp; float sat; float tone; f
 // mode this is the smooth endpoint rather than a hard clamp on an 80 px curve.
 #define OULG_KG_CCAP_DEFAULT 52.0f
 #define OULG_KG_GRADIENT_DEFAULT 1.0f
+// Continuous field (v0.23): on the device (v0.22) the refraction ended at the 0.42 r bevel while the
+// blur kept rising to 1.5 bevels, so the refraction that was left sat under 10-38 px of blur and only
+// the outer ~12 px read as glass. The band now spans 0.85 r (~91 px on a 108 px pill), the blur rises
+// over the same band at exponent 2, and a 5 % dome magnifies the whole card.
+#define OULG_KG_BAND_DEFAULT 0.85f
+#define OULG_KG_LENSBODY_DEFAULT 0.05f
+#define OULG_KG_BLUREXP_DEFAULT 2.0f
 // Cap on the transmission flattening weight (v0.17). In v0.11 the core took the full `flat` (0.5)
 // toward 0.40 and the rim far less: on the host the core sat +0.20 above the wallpaper and followed
 // it at 46 %, the rim +0.14 at 81 % (bright contour, darker rim, light core again: a whitish core
@@ -341,13 +389,14 @@ struct oulg_profile { float core; int taps; float ramp; float sat; float tone; f
 #define OULG_OPTICS_VERSION "9"
 static const struct oulg_profile OULG_PROFILES_DEFAULT[OULG_PROFILES] = {
     {OULG_CORE_DEFAULT, OULG_TAPS_DEFAULT, OULG_RAMP_DEFAULT, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 400.0f, 1.0f, 0.0f, 1.0f,
-     OULG_HU_BLOOM_DEFAULT, 0.0f},
+     OULG_HU_BLOOM_DEFAULT, 0.0f, 0.0f, 0.0f, 1.0f},
     {OULG_KG_CORE_DEFAULT, OULG_KG_TAPS_DEFAULT, OULG_KG_RAMP_DEFAULT, OULG_KG_SAT_DEFAULT, OULG_KG_TONE_DEFAULT,
      OULG_KG_RIM_DEFAULT, OULG_KG_SPEC_DEFAULT, 0.0f, 0.0f,
      OULG_KG_FLAT_DEFAULT, OULG_KG_LEVEL_DEFAULT, OULG_KG_COOL_DEFAULT, OULG_KG_TILT_DEFAULT, OULG_KG_LINE_DEFAULT,
-     OULG_KG_CCAP_DEFAULT, OULG_KG_FCAP_DEFAULT, OULG_KG_CDIM_DEFAULT, OULG_KG_GLOW_DEFAULT, 0.0f, OULG_KG_GRADIENT_DEFAULT},
+     OULG_KG_CCAP_DEFAULT, OULG_KG_FCAP_DEFAULT, OULG_KG_CDIM_DEFAULT, OULG_KG_GLOW_DEFAULT, 0.0f, OULG_KG_GRADIENT_DEFAULT,
+     OULG_KG_BAND_DEFAULT, OULG_KG_LENSBODY_DEFAULT, OULG_KG_BLUREXP_DEFAULT},
     {0.0f, OULG_TAPS_DEFAULT, OULG_RAMP_DEFAULT, 1.0f, 0.0f, 0.0f, 0.0f, OULG_SHADE_CAP_DEFAULT, OULG_SHADE_LIFT_DEFAULT,
-     0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 400.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f},
+     0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 400.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
 };
 #define OULG_VS_RADII_AT "highp vec2 neighbor_radii = radii_and_neighbors.zw;\n"
 #define OULG_VS_POS_AT "gl_Position = vec4(devcoord, 0.0, 1.0);\n"
@@ -458,6 +507,9 @@ static void oulg_fix_params(struct oulg_profile p[OULG_PROFILES]) {
         if (!(p[i].glow >= 0.2f && p[i].glow <= 1.0f)) p[i].glow = d->glow;
         if (!(p[i].bloom >= 0.0f && p[i].bloom <= 4.0f)) p[i].bloom = d->bloom;
         if (!(p[i].gradient >= 0.0f && p[i].gradient <= 1.0f)) p[i].gradient = d->gradient;
+        if (!(p[i].band >= 0.0f && p[i].band <= 1.0f)) p[i].band = d->band;  // the band stays within r
+        if (!(p[i].lensbody >= 0.0f && p[i].lensbody <= 0.15f)) p[i].lensbody = d->lensbody;  // with A <= 0.5: Jacobian >= 0.1
+        if (!(p[i].blurexp >= 1.0f && p[i].blurexp <= 4.0f)) p[i].blurexp = d->blurexp;
     }
 }
 
@@ -489,12 +541,15 @@ static int oulg_lib(char *out, size_t cap, int external, const struct oulg_profi
         }
     }
     if (!oulg_append(out, cap, &at, OULG_FS_FIELD_FMT, (double) p[1].gradient, (double) p[1].ramp, (double) p[1].core, (double) p[1].ccap,
-                     (double) p[0].core, (double) p[0].ramp, (double) p[1].ramp, (double) p[1].core, (double) p[1].ccap)) return 0;
+                     (double) p[0].core, (double) p[0].ramp, (double) p[1].ramp, (double) p[1].core, (double) p[1].ccap,
+                     (double) p[1].band, (double) p[1].blurexp, (double) p[1].core, (double) p[1].ccap, (double) p[1].lensbody,
+                     (0.75 - (double) p[1].lensbody) / 1.5 < 0.5 ? (0.75 - (double) p[1].lensbody) / 1.5 : 0.5)) return 0;
     if (!external && !oulg_append(out, cap, &at, OULG_FS_TONE_FMT, (double) p[2].cap, (double) p[2].lift)) return 0;
     // The cool tint, normalised to unit luma so it shifts hue only.
     double cr = 1.0 - 0.06 * p[1].cool, cg = 1.0 - 0.01 * p[1].cool, cb = 1.0 + 0.08 * p[1].cool;
     double cl = 0.2126 * cr + 0.7152 * cg + 0.0722 * cb;
-    if (!external && !oulg_append(out, cap, &at, OULG_FS_LENS_FMT, (double) (p[1].core > 0.001f ? 1.0f : 0.0f),
+    double coreOn = p[1].core > 0.001f ? 1.0 : 0.0;
+    if (!external && !oulg_append(out, cap, &at, OULG_FS_LENS_FMT, coreOn, coreOn,
                                   (double) p[1].sat, (double) p[1].tone, (double) p[1].flat, (double) p[1].fcap, (double) p[1].level, (double) p[1].cdim,
                                   cr / cl, cg / cl, cb / cl, (double) p[1].glow, (double) p[1].rim, (double) p[1].tilt, (double) p[1].line,
                                   (double) p[1].spec)) return 0;
