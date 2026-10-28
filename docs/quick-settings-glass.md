@@ -160,10 +160,10 @@ ficam onde ficariam num tile com disco. Não depende de spec, provedor (SmartThi
 nome de app ou posição; vale após reordenar ou trocar o provedor. O escopo do chamador é capturado
 para que ligar/desligar a opção reposicione ao vivo; desligado, os argumentos são os da Samsung.
 
-Não há mudança de layout, `Modifier`, `Composer`, semântica, ordem de desenho ou gestos. Não há
-desenho por frame nem região de blur do compositor: o blur é o do próprio painel Samsung. Por isso
-não existe o "fantasma" de região de blur que ignora o alpha dos ancestrais (ver
-`docs/architecture.md`), nem atraso de geometria na abertura, rolagem ou edição.
+O alinhamento não altera `Modifier`, `Composer`, semântica, ordem de desenho ou gestos. O blur do
+miolo continua sendo o do painel Samsung. Com o perfil 3 ativo existe uma região de compositor por
+contêiner elegível, desenhada pelo nó Compose; seu alpha e sua liberação seguem o ciclo descrito
+acima para evitar resíduos na abertura, no fechamento e na troca de composição.
 
 Ligar ou desligar a opção (ou o master) invalida o escopo de recomposição de cada
 `BoxWithOutline` (`RecomposeScopeImpl.invalidateForResult(null)`, pois o `invalidate()` foi removido
@@ -240,3 +240,82 @@ Nada abaixo é verificável no host; os testes sintéticos só provam a matemát
 
 Desligar **Controles rápidos** (ou o master). Se o provider não responder, desativar o módulo no
 LSPosed e reiniciar o SystemUI. Nada é gravado em partições do sistema.
+
+
+## Diagnóstico do perfil 3 (após o PR #73)
+
+Este incremento instrumenta o caminho existente sem alterar shader, paleta, geometria, parâmetros
+ópticos ou reinício. `QS_COMPOSE_REFRESH` comprova recomposição; `QS_BOX` comprova recoloração;
+`REWRITE` comprova a reescrita de um programa no compositor. Nenhum desses eventos, isoladamente,
+comprova uma região do perfil 3 desenhada nos controles rápidos.
+
+`QS_EDGE_STATUS` é independente de `debug.oulg.trace`. Não precisa ativar o survey. Os eventos não
+registram rótulos, SSIDs, conteúdo de notificações ou árvores Compose. Identidades são
+`System.identityHashCode`, válidas apenas no processo atual.
+
+| Etapa | Evidência |
+| --- | --- |
+| Instalação | `phase=install ready=true`; na falha, `member` e tipo da exceção |
+| Hook do host | `phase=panel-hook installed=true acquisition=attachComposeView` |
+| Host adquirido depois da instalação | `phase=panel afterInstall=true host=true adapter=true expansionReadable=true`, com identidade da View |
+| Condições efetivas | `phase=gate ready=… option=… master=… enabled=… sfRefract=… sfOptics=… host=… blocked=…` |
+| Fundo e nó associados | `phase=path reason=element` e `reason=bind`, com identidades do elemento e do nó |
+| Região enviada ao drawable | `reason=region-created`, `region-updated` (geometria/tag) e `region-drawn` |
+| Central aberta | `phase=settled` ao atingir expansão ≥ 0,95, mesmo sem regiões; `phase=stabilized` 350 ms depois, após recalcular e aplicar o fade |
+| Desenho com alpha positivo | `phase=region-visible` requer nó já desenhado, expansão ≥ 0,95, `edgeFade>0` e alpha enviado > 0 |
+| Saída | `phase=exit` e, se a View sair da janela, `phase=detach` com contagens de liberação |
+
+`phase=snapshot` sai também ao alternar a opção/master, inclusive ao desligar e com zero regiões.
+Callbacks de configuração sem alternância checam os gates sem rearmar os resumos. Os motivos de caminho saem uma vez por sessão; as contagens continuam acumulando.
+Uma sessão de diagnóstico é rearmada na abertura, na aquisição do host e em callbacks de
+alternância, para repetir o diagnóstico após um toggle sem reiniciar o processo.
+Os contadores dos resumos cobrem o intervalo desde o último `exit`, incluindo a composição que
+antecede a abertura. `specsCreated` = specs criadas, `specsBound` = specs associadas,
+`nodesReleased` = associações removidas por unbind/rebind; `region_created`,
+`region_updated`, `region_drawn` e `region_released` contam operações de ciclo de vida. `region_drawn`
+conta o primeiro desenho de cada região criada, não frames. `nodesActive` são nós associados,
+`pending` specs aguardando associação, `regionsActive` drawables ainda não liberados.
+
+`element-unmatched` e `unbound-node` podem incluir fundos Compose comuns enquanto há specs QS
+pendentes; são indícios de associação a investigar, não prova isolada de falha. Elementos seguem
+comparados por identidade (`==`); não se usa `equals()`. `invalid-radius-tag eligible=false`
+distingue geometria fora de `43 ≤ r < 256` px de falha do hook.
+
+`phase=fade` registra somente transições entre host oculto, ancestral escalado/transparente,
+expansão ilegível/abaixo do fade e fade positivo. Variações numéricas dentro da mesma categoria
+não geram logs por frame.
+
+Os resumos incluem `shown`, `ancestorAlpha`, `scaled`, `expansion`, `edgeFade`, `alphaCalculated`,
+`alphaSentMin/Max`, `alphaPositive` e `visibleCandidates`. O guard existente de display list conserva
+alpha enviado **1/255** quando o fade calculado é zero. Por isso `alphaPositive>0` sozinho não
+comprova visibilidade: exigir `edgeFade>0`, expansão aberta e `visibleCandidates>0` na observação
+estabilizada. Expansão ilegível continua resultando em fade zero, e escala diferente de 1 mantém o
+guard. Nenhuma instrumentação força alpha 255. `region-visible` significa que o Java desenhou uma
+região candidata; somente inspeção no aparelho pode confirmar que o SurfaceFlinger a consumiu, que
+a janela Samsung não a cobriu depois e que o efeito é visualmente perceptível.
+
+Se houver `panel-hook` e não houver `phase=panel` no **log completo desde o início do processo**,
+a aquisição por `attachComposeView` não foi observada depois da instalação. Não concluir isso de
+um buffer truncado. Não foi introduzida busca de um singleton/host existente sem evidência de qual
+instância seria correta. O teste no aparelho decide se essa recuperação é necessária.
+
+### Coleta controlada no S25 Ultra
+
+1. Instalar o build diagnóstico e usar o fluxo seguro de reinício já existente no app. Não reiniciar
+   o SurfaceFlinger isoladamente. Manter survey/trace detalhado desligado.
+2. Com Controles rápidos ativado, abrir sobre fundo branco por 2 s, fechar, abrir sobre fundo azul
+   por 2 s e fechar. Repetir uma vez; alternar a opção desligada/ligada para repetir os snapshots.
+3. Coletar somente os eventos relevantes (o comando não altera configuração):
+
+   ```sh
+   su -c 'logcat -d -v threadtime -s OULG OULG_SF' | grep -E 'event=(QS_|TUNING|OPTICS)|OULG_SF.*(OPTICS|REWRITE)'
+   ```
+
+4. Verificar a cadeia da tabela e os valores **efetivos** em `phase=gate`, mesmo quando `getprop`
+   estiver vazio ou divergente. Não mudar `qslens`, `qsbody`, cores ou shader para compensar um gate.
+5. Confirmar liberação com master/ambiente desligado, `sfrefract=0`, versão óptica < 10, detach e
+   troca de composição. Repetir sliders, edição, rotação e mídia ativa para checar interação.
+
+Os testes de host cobrem gates e motivos, associação por identidade, rebind/unbind, release,
+substituição/detach do host, fade sem expansão legível, escala e atualização do alpha sem novo draw.
+Não substituem as capturas e os logs do dispositivo.
