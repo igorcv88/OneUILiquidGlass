@@ -118,7 +118,7 @@ public final class QuickSettingsGlass {
         if (!neutral(nativeColor)) return nativeColor;
         return withAlpha(InkTransition.lerp(0xffffffff, 0xff000000 | DARK_INK, darkness), alpha(nativeColor));
     }
-    static boolean neutral(int c) {
+    public static boolean neutral(int c) {
         int r=(c >> 16)&255, g=(c >> 8)&255, b=c&255;
         return (c >>> 24) != 0 && Math.max(r,Math.max(g,b))-Math.min(r,Math.min(g,b)) <= 36;
     }
@@ -127,22 +127,6 @@ public final class QuickSettingsGlass {
         // Unknown glyphs may belong to a native light disc; known inactive glyphs take the body ink.
         if(state==Kind.NONE&&((nativeColor>>16)&255)<128)return nativeColor;
         return ink(nativeColor,darkInk);
-    }
-
-    /**
-     * The active media player inside its glass capsule, for a page of {@code w x h} whose corner
-     * radius is {@code radius}: the player's whole drawing is scaled uniformly about the page centre
-     * so it ends at least {@code inset} from the outline, and keeps its own shape (the page shape
-     * scaled by the same factor). Nothing of Samsung's content is cut: it is resized, not clipped.
-     * Returns {scale, dx, dy, outer radius, rim width}; null when the page is too small (native).
-     */
-    public static float[] mediaCapsule(float w, float h, float radius, float inset, float rimWidth) {
-        if (!(w > 0f) || !(h > 0f) || !Float.isFinite(w) || !Float.isFinite(h) || !(inset > 0f) || !Float.isFinite(inset)) return null;
-        if (inset * 4f >= Math.min(w, h)) return null;
-        float scale = Math.min((w - 2f * inset) / w, (h - 2f * inset) / h);
-        float r = Float.isFinite(radius) ? Math.max(0f, Math.min(radius, Math.min(w, h) / 2f)) : 0f;
-        float rim = Float.isFinite(rimWidth) ? Math.max(0f, Math.min(rimWidth, inset)) : 0f;
-        return new float[] {scale, (w - w * scale) / 2f, (h - h * scale) / 2f, r, rim};
     }
 
     /** Centred envelope inside the native grid cell. Its long axis and hitbox never change. */
@@ -216,6 +200,15 @@ public final class QuickSettingsGlass {
         else{out[0]=lo;out[1]=across;out[2]=hi-lo;out[3]=narrow;}
         out[4]=Math.min(out[2],out[3])/2f;
         return out;
+    }
+
+    /** Packed Compose CornerRadius(x,y): no flat shoulders when a low fill is shorter than wide. */
+    public static long sliderCorners(float width,float height,boolean vertical){
+        float across=vertical?width:height, length=vertical?height:width;
+        float rx,ry;
+        if(length<across){rx=width/2f;ry=height/2f;}
+        else{rx=across/2f;ry=across/2f;}
+        return ((long)Float.floatToRawIntBits(rx)<<32)|(Float.floatToRawIntBits(ry)&0xffffffffL);
     }
 
     /**

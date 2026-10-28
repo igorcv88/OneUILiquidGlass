@@ -15,9 +15,10 @@ import io.github.igorcv88.oneuiliquidglass.glass.Tuning;
  * The notifications' glass optics on the Quick Settings capsules. The cards over a live blur draw
  * {@link LiquidGlassShader#SOURCE} in its live model: a contour bright on the side facing the light
  * and nearly gone opposite, a Fresnel lift that grows toward the outline, a specular glint where
- * the outline faces the light, a fainter internal reflection opposite and a soft absorption ring
- * inside the far side (the slab's thickness). The capsules had a uniform white line instead. The
- * same program, with the same GlassSpec and the shade's tuning, is drawn here inside each glass
+ * the outline faces the light, and a soft absorption ring inside the far side (the slab's
+ * thickness). Unlike notification cards, the opposed internal reflection is disabled here: it
+ * formed a conspicuous second arc at the bottom-right of every QS pill. The same program, with
+ * the same GlassSpec and the shade's tuning, is drawn here inside each glass
  * container between the native background and the content where the drawContent boundary is
  * available. Without that boundary it is drawn after the node, clipped to the inner bevel ring
  * so it cannot wash over the content in the middle of the capsule, in the inner box
@@ -53,6 +54,12 @@ final class QsCapsuleOptics {
      */
     boolean draw(Object node, Canvas canvas, float x, float y, float w, float h, float radius,
             float density, boolean light, boolean rimOnlyOverlay) {
+        return draw(node, canvas, x, y, w, h, radius, density, light, rimOnlyOverlay, false);
+    }
+
+    /** Media receives a narrow, subdued perimeter immediately adjacent to the native artwork. */
+    boolean draw(Object node, Canvas canvas, float x, float y, float w, float h, float radius,
+            float density, boolean light, boolean rimOnlyOverlay, boolean media) {
         if (broken || !canvas.isHardwareAccelerated() || !(w > 2f) || !(h > 2f)) return false;
         try {
             Paint paint;
@@ -65,12 +72,12 @@ final class QsCapsuleOptics {
                 }
             }
             RuntimeShader s = (RuntimeShader) paint.getShader();
-            uniforms(s, spec, Tuning.get(), w, h, radius, density, light);
+            uniforms(s, spec, Tuning.get(), w, h, radius, density, light, media);
             int save = canvas.save();
             try {
                 canvas.translate(x, y);
                 if (rimOnlyOverlay) {
-                    float band = overlayBand(w, h, density, spec.rimDp);
+                    float band = overlayBand(w, h, density, media ? 3f : spec.rimDp);
                     if (!(band > 0f) || !(w > 2f * band) || !(h > 2f * band)) return false;
                     Path centre = new Path();
                     centre.addRoundRect(band, band, w - band, h - band,
@@ -113,23 +120,31 @@ final class QsCapsuleOptics {
 
     /** The live edge model's uniforms, as GlassDrawable sets them for a shade card. */
     static void uniforms(RuntimeShader s, GlassSpec spec, Tuning t, float w, float h, float radius, float density, boolean light) {
+        uniforms(s, spec, t, w, h, radius, density, light, false);
+    }
+
+    static void uniforms(RuntimeShader s, GlassSpec spec, Tuning t, float w, float h, float radius,
+            float density, boolean light, boolean media) {
         float r = Math.max(0f, Math.min(radius, Math.min(w, h) / 2f));
         s.setFloatUniform("size", w, h);
         s.setFloatUniform("origin", 0f, 0f);
         s.setFloatUniform("corners", r, r, r, r);
-        s.setFloatUniform("bevel", GlassSpec.bevelPx(spec.rimDp, density, w, h));
+        s.setFloatUniform("bevel", GlassSpec.bevelPx(media ? 3f : spec.rimDp, density, w, h));
         s.setFloatUniform("hair", GlassSpec.hairPx(spec.hairDp, density));
         s.setFloatUniform("fringe", spec.fringe);
         s.setFloatUniform("light", spec.lightX, spec.lightY);
-        s.setFloatUniform("specular", spec.specular);
+        s.setFloatUniform("specular", spec.specular * (media ? .65f : 1f));
         s.setFloatUniform("shadow", spec.innerShadow * (light ? t.lightEdge : 1f));
         s.setFloatUniform("hairGain", 1f);
         s.setFloatUniform("decor", t.liveOptics);
         s.setFloatUniform("live", 1f);
-        s.setFloatUniform("sheen", t.liveSheen);
-        s.setFloatUniform("glintGain", t.shadeGlint);
-        s.setFloatUniform("rimGain", 1f);
-        s.setFloatUniform("outline", light ? t.lightOutline : 0f);
+        s.setFloatUniform("sheen", media ? 0f : t.liveSheen);
+        s.setFloatUniform("glintGain", media ? 0f : t.shadeGlint);
+        // Lower-right opposed highlight is the visible second arc on QS capsules; notification
+        // cards keep innerGain=1 in GlassDrawable. Fresnel and the actual lit rim remain.
+        s.setFloatUniform("innerGain", 0f);
+        s.setFloatUniform("rimGain", media ? .55f : 1f);
+        s.setFloatUniform("outline", light ? t.lightOutline * (media ? .5f : 1f) : 0f);
     }
 
     void clear() { synchronized (paints) { paints.clear(); } }

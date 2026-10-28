@@ -251,6 +251,7 @@ public final class GlassDrawable extends Drawable {
         s.setFloatUniform("live", live ? 1f : 0f);
         s.setFloatUniform("sheen", edgeEnabled && live ? t.liveSheen : 0f);
         s.setFloatUniform("glintGain", live ? glint : 1f);
+        s.setFloatUniform("innerGain", 1f);
         s.setFloatUniform("rimGain", live ? rimGain : 1f);
         s.setFloatUniform("outline", edgeEnabled && live ? outline : 0f);
     }

@@ -9,6 +9,7 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.Shadows;
 import org.robolectric.annotation.Config;
 import static org.junit.Assert.*;
+import io.github.igorcv88.oneuiliquidglass.glass.LiquidGlassShader;
 
 @RunWith(RobolectricTestRunner.class) @Config(sdk = 34)
 public class QsCapsuleOpticsTest {
@@ -19,6 +20,13 @@ public class QsCapsuleOpticsTest {
         assertTrue(QsCapsuleOptics.overlayBand(100f, 60f, 2f, 20f) < 60f / 4f);
         assertEquals(0f, QsCapsuleOptics.overlayBand(Float.NaN, 100f, 1f, 20f), 0f);
         assertEquals(0f, QsCapsuleOptics.overlayBand(100f, 100f, 0f, 20f), 0f);
+    }
+    @Test public void qsRemovesOpposedCornerArcWithoutChangingShadeShader(){
+        assertTrue(LiquidGlassShader.SOURCE.contains("* innerGain"));
+        assertFalse(QuickSettingsEdgeLight.usesCompositor("media"));
+        assertFalse(QuickSettingsEdgeLight.usesCompositor("media-empty"));
+        assertTrue(QuickSettingsEdgeLight.usesCompositor("slider"));
+        assertTrue(QuickSettingsEdgeLight.usesCompositor("tile"));
     }
 
     @After public void reset() throws Exception {

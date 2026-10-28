@@ -74,6 +74,22 @@ public class QsTextHooksTest {
         assertEquals(0x1d,last);
         paint.setColor(0xff00aaee);assertNull(QsTextHooks.applyPaint(paint,.5f,true));
     }
+    @Test public void onlyQuickSettingsLabelsLoseNativeGreyAlpha(){
+        Paint p=new Paint();p.setColor(0x80ffffff);
+        Integer before=QsTextHooks.applyLabelPaint(p,1f,true);
+        assertEquals(0x80ffffff,before.intValue());
+        assertEquals(0xff1d1d1d,p.getColor());
+        p.setColor(before);
+        assertEquals(0x80ffffff,p.getColor());
+        assertNull(QsTextHooks.applyPaint(p,0f,true));
+        assertEquals("header paint still has native alpha",0x80ffffff,p.getColor());
+        p.setColor(0x801d1d1d);
+        assertEquals(0x801d1d1d,QsTextHooks.applyLabelPaint(p,1f,true).intValue());
+        assertEquals(0xff1d1d1d,p.getColor());
+        p.setColor(0x8012a0ef);
+        assertNull("colour accents remain native",QsTextHooks.applyLabelPaint(p,1f,true));
+        assertEquals(0x8012a0ef,p.getColor());
+    }
     @Test public void nodeInkFollowsTheAnimatedLevelPerRegion() throws Exception {
         float[] scene={.25f},header={1f};
         QsTextHooks hooks=new QsTextHooks(getClass().getClassLoader(),()->null,()->true,()->QsScene.Tone.LIGHT_SCENE,()->QsScene.Tone.LIGHT_SCENE,

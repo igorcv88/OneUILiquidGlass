@@ -180,6 +180,20 @@ public class QsAdaptiveTest {
             }
         }
     }
+    @Test public void lowProgressUsesEllipticalCornersInsteadOfFlatShoulders(){
+        for(boolean vertical:new boolean[]{true,false}){
+            for(float length:new float[]{1f,10f,30f,60f,85f,100f}){
+                float width=vertical?85f:length,height=vertical?length:85f;
+                long packed=QuickSettingsGlass.sliderCorners(width,height,vertical);
+                float rx=Float.intBitsToFloat((int)(packed>>>32));
+                float ry=Float.intBitsToFloat((int)packed);
+                assertEquals(Math.min(length,85f)<85f?width/2f:42.5f,rx,0f);
+                assertEquals(Math.min(length,85f)<85f?height/2f:42.5f,ry,0f);
+                // The short progress is an oval, not a rounded rectangle with a flat centre.
+                if(length<85f)assertEquals(width/height,rx/ry,.0001f);
+            }
+        }
+    }
     @Test public void thumbWithoutABodyThisFrameUsesTheNativeCentreInsideTheBar(){
         float[] cap=primitive(300,100,1,.78f,280,0,40,100,true,null);
         assertEquals(78,cap[2],1e-3);assertEquals(300,cap[0]+cap[2],1e-3);

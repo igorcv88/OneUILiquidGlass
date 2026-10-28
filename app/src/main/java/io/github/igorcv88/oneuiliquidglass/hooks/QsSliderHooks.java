@@ -12,8 +12,9 @@ import io.github.igorcv88.oneuiliquidglass.glass.*;
  * DZIF's slider primitives (track rect, progress gradient, thumb roundrect), scoped to the exact
  * bar DrawScope, drawn as exactly two surfaces: the glass capsule (Samsung's BoxWithOutline, whose
  * interior QuickSettingsHooks makes transparent) and one white progress shape inside it. The track
- * rect is never drawn; the thumb is drawn as the progress's own moving end cap, so the two white
- * primitives form one shape. The progress keeps the same margin to the capsule on all four sides
+ * rect is never drawn; the body's rounded rect already includes the moving cap, so drawing the
+ * Samsung thumb on top would produce a second antialiased edge at low values. The progress keeps
+ * the same margin to the capsule on all four sides
  * and a full circle at the minimum (QuickSettingsGlass.sliderPrimitive). Drawing only: layout,
  * hit area, drag and the slider's value are Samsung's.
  */
@@ -179,6 +180,7 @@ final class QsSliderHooks {
         Frame f=current.get();if(broken||f==null||p.args[0]!=f.scope)return;
         f.stages |= 1 << stage;
         if(suppressTrack(stage)){p.setResult(null);return;} // No visual track, even for legacy presets.
+        if(stage==2 && f.bodyDrawn){p.setResult(null);return;} // The body is a complete capsule.
         try {
             int last=p.args.length-1, mask=(Integer)p.args[last];
             long offset=(mask&2)!=0?0L:(Long)p.args[2];
@@ -198,7 +200,9 @@ final class QsSliderHooks {
             if(!(g[2]>0)||!(g[3]>0)){p.setResult(null);return;}
             p.args[2]=pack(g[0],g[1]);p.args[3]=pack(g[2],g[3]);
             p.args[last]=explicitGeometryMask(mask,stage!=0);
-            p.args[4]=pack(g[4],g[4]);
+            // At low values a circle-radius round rect becomes a flat-ended trapezoid. Elliptic
+            // corner radii instead keep a smooth oval as the fill shrinks toward zero.
+            p.args[4]=QuickSettingsGlass.sliderCorners(g[2],g[3],f.w<=f.h);
             p.args[1]=stage==1?whiteBrush:QuickSettingsGlass.color(0xffffffff);
         }catch(RuntimeException|LinkageError e){fail(e);}
     }
