@@ -56,7 +56,7 @@ public class QsRefreshTest {
         Scope live=new Scope(true);
         @SuppressWarnings("unchecked") Set<Object> scopes=(Set<Object>)field(QuickSettingsHooks.class,"scopes").get(hooks);
         scopes.add(live);hooks.refresh();
-        for(String key:new String[]{"qs.darkfill","qs.lightfill","qs.idle","qs.lightcolor","qs.darkcolor","qs.track","qs.lightstyle"}){
+        for(String key:new String[]{"qs.darkfill","qs.idle","qs.active","qs.darkcolor","qs.track","qs.lightstyle"}){
             Map<String,String> values=new HashMap<>();values.put("surface.quicksettings.enabled","1");values.put("qs.darkrim",".10");
             values.put(key,key.endsWith("color")?"000000":key.endsWith("style")?"obsidian":".12");
             field(ConfigClient.class,"current").set(null,values);hooks.refresh();

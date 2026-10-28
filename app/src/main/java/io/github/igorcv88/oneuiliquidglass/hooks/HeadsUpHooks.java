@@ -211,6 +211,9 @@ public final class HeadsUpHooks {
         // QS is an independent opt-in surface: no notification-state or drawing hooks are shared.
         quickSettings = new QuickSettingsHooks(loader, () -> enabled, this::resolveConfig);
         quickSettings.install();
+        // A task change re-measures the shown surfaces at once (periodic sampling stays the fallback).
+        BackdropEvents.install(loader);
+        BackdropEvents.add(this::backdropChanged);
         installShade();
         installBarState();
         installScrimClamp();
@@ -621,7 +624,32 @@ public final class HeadsUpHooks {
      * next capture, taken CONFIRM_MS later; a single transient frame or sampling noise changes
      * nothing. Each capture also feeds the header's own gated decision for its band.
      */
-    static final long RESAMPLE_MS = 900, CONFIRM_MS = 150, SCENE_DWELL_MS = 600;
+    static final long RESAMPLE_MS = 900, ACTIVE_RESAMPLE_MS = 250, CONFIRM_MS = 150, SCENE_DWELL_MS = 600;
+    /** Faster right after a touch (an app switch, a scroll may have changed what is behind). */
+    static long resampleInterval(long now) {
+        if (BackdropEvents.burst(now)) return BURST_RESAMPLE_MS;
+        return now - BackdropMotion.lastActive() < POPUP_ACTIVE_MS ? ACTIVE_RESAMPLE_MS : RESAMPLE_MS;
+    }
+    /** Right after a task change the backdrop is still settling: sample this often for BackdropEvents.BURST_MS. */
+    static final long BURST_RESAMPLE_MS = 100;
+    /**
+     * Another task came to the front or the stack changed (BackdropEvents): the open shade captures
+     * now, and every shown pop-up measures on its next frame, instead of waiting for their periodic
+     * samples. Main thread.
+     */
+    private void backdropChanged() {
+        if (Boolean.TRUE.equals(shadeExpanded) && shadeGrid != null && resampleCancel == null) {
+            main.removeCallbacks(resample);
+            resampleShade();
+        }
+        for (State st : new ArrayList<>(states.values())) {
+            View v = st.background.get();
+            if (v == null || !SURFACE_POPUP.equals(st.toneSurface) || !v.isShown()) continue;
+            st.popupMeasureAt = 0;
+            v.removeCallbacks(st.popupPoke);
+            v.postOnAnimation(st.popupPoke);
+        }
+    }
     private final io.github.igorcv88.oneuiliquidglass.glass.ToneGate sceneGate =
             new io.github.igorcv88.oneuiliquidglass.glass.ToneGate(CONFIRM_MS, SCENE_DWELL_MS);
     private final Runnable resample = this::resampleShade;
@@ -658,8 +686,9 @@ public final class HeadsUpHooks {
             long now = android.os.SystemClock.uptimeMillis();
             try { if (grid.takenAt >= shadeGrid.takenAt) offerGrid(grid, now - requested); }
             catch (RuntimeException | LinkageError e) { Probe.error("SHADE_RESAMPLE_FAILED", e); return; }
-            boolean pending = sceneGate.pending() || headerInk.pending();
-            scheduleResample(pending ? Math.max(CONFIRM_MS, Math.min(RESAMPLE_MS, sceneGate.pending() ? sceneGate.confirmIn(now) : CONFIRM_MS)) : RESAMPLE_MS);
+            boolean pending = sceneGate.pending() || headerInk.pending() || shadeHeaderGate.pending();
+            long idle = resampleInterval(now);
+            scheduleResample(pending ? Math.max(CONFIRM_MS, Math.min(idle, sceneGate.pending() ? sceneGate.confirmIn(now) : CONFIRM_MS)) : idle);
         });
         // A capture that cannot be taken answers synchronously: nothing is in flight then.
         if (!landed[0]) resampleCancel = cancel;
@@ -670,11 +699,13 @@ public final class HeadsUpHooks {
         if (!Float.isFinite(whole) || whole < 0f || whole > 1f) return;
         boolean light = ShadeTone.lightBackdrop(whole, shadeScene);
         boolean pendingBefore = sceneGate.pending();
-        boolean commit = sceneGate.offer(light, now) && shadeScene != null && light != shadeScene;
+        Tuning t = Tuning.get();
+        boolean strong = io.github.igorcv88.oneuiliquidglass.glass.ToneGate.strong(whole, (t.styleLo + t.styleHi) * 0.5f);
+        boolean commit = sceneGate.offer(light, now, strong) && shadeScene != null && light != shadeScene;
         if (commit || sceneGate.pending() != pendingBefore)
             Probe.log("SHADE_RESAMPLE", "generation=" + shadeOpens + " luma=" + String.format(java.util.Locale.ROOT, "%.2f", whole)
                     + " reading=" + (light ? "light" : "dark") + " decided=" + (shadeScene == null ? "none" : shadeScene ? "light" : "dark")
-                    + " commit=" + commit + " pending=" + sceneGate.pending() + " sampleAgeMs=" + age);
+                    + " commit=" + commit + " strong=" + strong + " pending=" + sceneGate.pending() + " sampleAgeMs=" + age);
         // The header decides its own band with its own gate; the same capture serves both.
         headerTone(grid);
         if (commit) adoptGrid(grid, "resample", light);
@@ -743,10 +774,37 @@ public final class HeadsUpHooks {
         String textFlag=io.github.igorcv88.oneuiliquidglass.config.ConfigClient.override("textswap");
         boolean headerOn=headerFlag==null?t.headerTone:!"0".equals(headerFlag);
         boolean textOn=textFlag==null?t.textSwap:!"0".equals(textFlag);
-        if(pv==null||!shadeConfigEnabled()||!headerOn||!textOn){restoreHeader();return;}
-        headerInk.update(pv.getRootView(),grid);
+        if(!shadeConfigEnabled()||!headerOn||!textOn){restoreHeader();return;}
+        composeHeader(grid);
+        if(pv!=null)headerInk.update(pv.getRootView(),grid);
     }
-    private void restoreHeader() { headerInk.clear(); }
+    private void restoreHeader() {
+        headerInk.clear();
+        shadeHeaderGate.reset(); shadeHeaderLight = null;
+        if (quickSettings != null) quickSettings.shadeHeader(null);
+    }
+    /**
+     * The clock and date drawn over the notification shade are One UI 9's Compose header
+     * (SecQuickSettingHeader), the same one the QS panel shows: its labels follow this decision,
+     * from the top bands of the capture (where the header rests), while only the shade is open.
+     */
+    private final io.github.igorcv88.oneuiliquidglass.glass.ToneGate shadeHeaderGate =
+            new io.github.igorcv88.oneuiliquidglass.glass.ToneGate(CONFIRM_MS, HeaderToneController.DWELL_MS);
+    private Boolean shadeHeaderLight;
+    private void composeHeader(ToneGrid grid) {
+        if (quickSettings == null) return;
+        float luma = grid.luma(grid.top, grid.top + 4 * grid.band);
+        if (!Float.isFinite(luma) || luma < 0f || luma > 1f) return;
+        Tuning t = Tuning.get();
+        boolean light = ShadeTone.lightBackdrop(luma, shadeHeaderLight);
+        boolean strong = io.github.igorcv88.oneuiliquidglass.glass.ToneGate.strong(luma, (t.styleLo + t.styleHi) * 0.5f);
+        if (!shadeHeaderGate.offer(light, android.os.SystemClock.uptimeMillis(), strong)) return;
+        if (shadeHeaderLight != null && shadeHeaderLight == light) return;
+        shadeHeaderLight = light;
+        Probe.log("SHADE_HEADER_TONE", "generation=" + shadeOpens + " luma=" + String.format(java.util.Locale.ROOT, "%.2f", luma)
+                + " tone=" + (light ? "dark" : "light") + " strong=" + strong);
+        quickSettings.shadeHeader(light);
+    }
     /**
      * First frame of a shade opening: the backdrop tone starts over. A pre-open capture younger than
      * PRE_OPEN_MAX_MS is adopted at once; otherwise one is asked for now, before the panel or any
@@ -1015,7 +1073,7 @@ public final class HeadsUpHooks {
     /** How recent a card's last measurement must be to stand for it at the start of a shade opening. */
     private static final long HOLD_MS = 1500;
     /** While a pop-up enters, how often the backdrop under it is measured again. */
-    private static final long POPUP_ENTER_MS = 100;
+    private static final long POPUP_ENTER_MS = 50;
     /** A pop-up's change of side needs a second measurement this much later, and this long since its last change. */
     private static final long POPUP_CONFIRM_MS = 200, POPUP_DWELL_MS = 800;
     /** How long after the last touch a shown pop-up keeps measuring at POPUP_ENTER_MS. */
@@ -1236,7 +1294,7 @@ public final class HeadsUpHooks {
             // A touch in the last POPUP_ACTIVE_MS may have changed the app behind (home, an app
             // launch): measure as often as while entering. Still for 1 s, the text stayed white on a
             // white app for ~270 ms after a launch (device video, 25/10).
-            boolean active = now - BackdropMotion.lastActive() < POPUP_ACTIVE_MS;
+            boolean active = now - BackdropMotion.lastActive() < POPUP_ACTIVE_MS || BackdropEvents.burst(now);
             long interval = entering || active ? POPUP_ENTER_MS : POPUP_MEASURE_MS;
             // A candidate change waits for its confirming measurement, which is taken early.
             if (popupGate.pending()) interval = Math.min(interval, Math.max(POPUP_ENTER_MS, popupGate.confirmIn(now)));
@@ -1264,10 +1322,12 @@ public final class HeadsUpHooks {
                     long at = android.os.SystemClock.uptimeMillis();
                     boolean light = ShadeTone.lightBackdrop((float) luma, popupScene);
                     boolean pendingBefore = popupGate.pending();
-                    boolean commit = popupGate.offer(light, at) && popupScene != null && light != popupScene;
+                    Tuning tt = Tuning.get();
+                    boolean strong = io.github.igorcv88.oneuiliquidglass.glass.ToneGate.strong((float) luma, (tt.styleLo + tt.styleHi) * 0.5f);
+                    boolean commit = popupGate.offer(light, at, strong) && popupScene != null && light != popupScene;
                     if (commit || popupGate.pending() != pendingBefore)
                         logTone("POPUP_CONTRAST_GATE", v, "sample", (float) luma, -1f, " reading=" + (light ? "light" : "dark")
-                                + " decided=" + (popupScene == null ? "none" : popupScene ? "light" : "dark") + " commit=" + commit
+                                + " decided=" + (popupScene == null ? "none" : popupScene ? "light" : "dark") + " commit=" + commit + " strong=" + strong
                                 + " pending=" + popupGate.pending() + " sampleAgeMs=" + (at - requested));
                     if (!commit) { if (popupGate.pending()) { v.removeCallbacks(popupPoke); v.postDelayed(popupPoke, POPUP_CONFIRM_MS); } return; }
                 } else if (firstSample) popupGate.offer(ShadeTone.lightBackdrop((float) luma, popupScene), android.os.SystemClock.uptimeMillis());
@@ -1336,8 +1396,9 @@ public final class HeadsUpHooks {
             if (m.swap != swapped) { pendingSwap = m.swap; pendingLight = swapLight; }
             else { setForeground(m.swap); setLightStyle(swapLight); }
             applyMeasuredVeil(veil);
-            // No ramp was started (a hidden card, no bridge): the text follows at once.
-            if (veilRamp == null) flushPendingSwap();
+            // The text moves with the start of the veil, not its midpoint: a decided change of side
+            // shows at once (the ramp's midpoint held white text over a white app ~100 ms longer).
+            flushPendingSwap();
         }
         /** The text tone a running ramp applies at its midpoint (null: none pending). */
         Boolean pendingSwap;

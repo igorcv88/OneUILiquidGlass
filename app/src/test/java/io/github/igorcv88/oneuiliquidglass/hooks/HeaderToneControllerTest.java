@@ -53,20 +53,28 @@ public class HeaderToneControllerTest {
         clock.setTranslationY(-300);root.setTranslationY(120);
         assertEquals(40,HeaderToneController.layoutTop(clock));
     }
-    /** A real change: one contrary sample is not enough; the confirming one moves the ink smoothly. */
+    /** A strong change (white page after a black one) applies with the sample that shows it. */
+    @Test public void strongBackdropChangeAppliesWithItsFirstSample() throws Exception {
+        TextView clock=add("header_clock",0xffffffff);root.layout(0,0,500,400);clock.layout(0,0,100,50);
+        ink.update(root,grid(0,0,1));assertEquals(0xffffffff,clock.getCurrentTextColor());
+        idle(200);ink.update(root,grid(1,1,1));
+        assertTrue(InkAnimator.running(clock));
+        idle(300);assertEquals(0xff1d1d1d,clock.getCurrentTextColor());
+    }
+    /** A weak change (near the boundary): one contrary sample is not enough; the confirming one moves the ink. */
     @Test public void realBackdropChangeIsConfirmedThenAnimatedBothWays() throws Exception {
         TextView clock=add("header_clock",0xffffffff);root.layout(0,0,500,400);clock.layout(0,0,100,50);
-        ink.update(root,grid(1,1,1));assertEquals(0xff1d1d1d,clock.getCurrentTextColor());
-        idle(500);ink.update(root,grid(0,0,1));assertEquals("unconfirmed",0xff1d1d1d,clock.getCurrentTextColor());
-        idle(200);ink.update(root,grid(0,0,1));
+        ink.update(root,grid(.7f,.7f,1));assertEquals(0xff1d1d1d,clock.getCurrentTextColor());
+        idle(500);ink.update(root,grid(.4f,.4f,1));assertEquals("unconfirmed",0xff1d1d1d,clock.getCurrentTextColor());
+        idle(200);ink.update(root,grid(.4f,.4f,1));
         // Confirmed: a transition from the colour on screen, not a jump.
         assertTrue(InkAnimator.running(clock));assertEquals(0xff1d1d1d,clock.getCurrentTextColor());
         idle(400);assertFalse(InkAnimator.running(clock));assertEquals(0xffffffff,clock.getCurrentTextColor());
-        // Noise: a single light reading between dark ones changes nothing.
-        idle(500);ink.update(root,grid(1,1,1));idle(200);ink.update(root,grid(0,0,1));idle(400);
+        // Noise: a single weak light reading between dark ones changes nothing.
+        idle(500);ink.update(root,grid(.7f,.7f,1));idle(200);ink.update(root,grid(.4f,.4f,1));idle(400);
         assertEquals(0xffffffff,clock.getCurrentTextColor());
         // And back to light.
-        idle(500);ink.update(root,grid(1,1,1));idle(200);ink.update(root,grid(1,1,1));idle(400);
+        idle(500);ink.update(root,grid(.7f,.7f,1));idle(200);ink.update(root,grid(.7f,.7f,1));idle(400);
         assertEquals(0xff1d1d1d,clock.getCurrentTextColor());
     }
     @Test public void invalidUnlaidOutAndMissingSamplesLeaveNativeInk() throws Exception {

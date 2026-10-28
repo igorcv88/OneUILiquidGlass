@@ -18,8 +18,42 @@ public class QsComposeBoundaryTest {
         assertFalse(render.contains("p.args[2]="));
         assertFalse(render.contains("TextStyle.class"));
     }
-    public static void unrelatedText(long color,Object textStyle,int changed,int defaults) {}
-    @Test public void unknownComposableSignatureIsRejected() throws Exception {
-        assertFalse(QsInkSignature.accepts(getClass().getMethod("unrelatedText",long.class,Object.class,int.class,int.class)));
+    /** DZIF's DrawScope $default bridges, with Compose's parameter types (names are irrelevant here). */
+    public interface Scope {}
+    public static void rectColor(Scope s,long color,long topLeft,long size,float alpha,
+            androidx.compose.ui.graphics.drawscope.DrawStyle style,androidx.compose.ui.graphics.ColorFilter filter,int blend,int mask){}
+    public static void rectBrush(Scope s,androidx.compose.ui.graphics.Brush brush,long topLeft,long size,float alpha,
+            androidx.compose.ui.graphics.drawscope.DrawStyle style,androidx.compose.ui.graphics.ColorFilter filter,int blend,int mask){}
+    public static void roundRectBrush(Scope s,androidx.compose.ui.graphics.Brush brush,long topLeft,long size,long radius,float alpha,
+            androidx.compose.ui.graphics.drawscope.DrawStyle style,androidx.compose.ui.graphics.ColorFilter filter,int blend,int mask){}
+    public static void roundRectColor(Scope s,long color,long topLeft,long size,long radius,
+            androidx.compose.ui.graphics.drawscope.DrawStyle style,float alpha,androidx.compose.ui.graphics.ColorFilter filter,int blend,int mask){}
+    private static java.lang.reflect.Method named(String n){
+        for(java.lang.reflect.Method m:QsComposeBoundaryTest.class.getDeclaredMethods())if(m.getName().equals(n))return m;
+        throw new AssertionError(n);
+    }
+    /**
+     * drawRect-n-J9OG0 is drawRect(color: Color, ...): its colour is a long. Expecting a Brush there
+     * (#78) rejected the track bridge, failed the whole install and left the slider native.
+     */
+    @Test public void sliderPrimitivesMatchTheirComposeSignatures() {
+        assertTrue(QsSliderHooks.primitiveSignature(named("rectColor"),0,Scope.class));
+        assertFalse(QsSliderHooks.primitiveSignature(named("rectBrush"),0,Scope.class));
+        assertTrue(QsSliderHooks.primitiveSignature(named("roundRectBrush"),1,Scope.class));
+        assertTrue(QsSliderHooks.primitiveSignature(named("roundRectColor"),2,Scope.class));
+        assertFalse(QsSliderHooks.primitiveSignature(named("roundRectColor"),1,Scope.class));
+        assertFalse(QsSliderHooks.primitiveSignature(named("roundRectBrush"),2,Scope.class));
+        assertFalse(QsSliderHooks.primitiveSignature(named("roundRectBrush"),1,Object.class));
+    }
+    @Test public void dragNeedsAFingerAndAMovingValue() {
+        assertTrue(QsSliderHooks.drag(100f,140f,true));
+        assertFalse(QsSliderHooks.drag(100f,140f,false));
+        assertFalse(QsSliderHooks.drag(null,140f,true));
+        assertFalse(QsSliderHooks.drag(140f,140.2f,true));
+    }
+    @Test public void tileIconsAndDiscsAreNotRecoloured() throws Exception {
+        Path base=Paths.get("src/main/java/io/github/igorcv88/oneuiliquidglass/hooks");
+        String content=new String(Files.readAllBytes(base.resolve("QsContentHooks.java")), StandardCharsets.UTF_8);
+        assertFalse(content.contains("QSIconKt"));
     }
 }

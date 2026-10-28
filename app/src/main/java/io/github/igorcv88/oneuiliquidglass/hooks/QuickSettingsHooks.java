@@ -112,10 +112,13 @@ public final class QuickSettingsHooks {
         this.startConfig = startConfig;
         this.edge = new QuickSettingsEdgeLight(loader, this::enabled,
                 () -> ConfigClient.flag(ProductFlags.QUICK_SETTINGS), master);
+        // After a drag the released edge regions are rebuilt by the containers' next draw.
+        edge.onRestore(() -> invalidateAll("drag-end"));
+        BackdropEvents.add(() -> QuickSettingsHooks.this.backdrop.event());
         this.backdrop = new QsBackdrop(this::enabled, edge::expansion, () -> { darkRim=null; lightRim=null; invalidateAll("backdrop"); },
                 () -> { QsContentHooks c = QuickSettingsHooks.this.content; if (c != null) c.invalidateDraw(); });
-        this.content = new QsContentHooks(loader, this::enabled, () -> style, backdrop::tone, backdrop::headerTone, backdrop::ink,
-                () -> pending.get()==null ? Kind.NONE : pending.get().kind, this::capture);
+        this.content = new QsContentHooks(loader, this::enabled, () -> style, backdrop::tone, backdrop::headerTone, this::ink,
+                this::capture);
     }
 
     private boolean enabled() {
@@ -173,7 +176,7 @@ public final class QuickSettingsHooks {
                         if (!QuickSettingsGlass.srgb(original)) return;
                         if ((QuickSettingsGlass.argb(original) >>> 24) == 0) return;
                         q = new Pending(f.composer, original, QuickSettingsGlass.color(QuickSettingsGlass.fill(
-                                Kind.CONTAINER, QuickSettingsGlass.argb(original), style.active)), null, f.shape, 0);
+                                Kind.CONTAINER, QuickSettingsGlass.argb(original), backdrop.tone(), style)), null, f.shape, 0);
                     }
                     if (!(p.args[0] instanceof Long) || (Long) p.args[0] != q.background) return;
                     q.fillDone = true;
@@ -311,7 +314,16 @@ public final class QuickSettingsHooks {
                 @Override protected void beforeHookedMethod(MethodHookParam p){
                     if(p.args.length<2||!(p.args[1] instanceof android.view.MotionEvent))return;
                     android.view.MotionEvent e=(android.view.MotionEvent)p.args[1];
-                    if(e.getActionMasked()!=android.view.MotionEvent.ACTION_DOWN||e.getRawY()>=topEdge()||!enabled())return;
+                    int action=e.getActionMasked();
+                    if(action==android.view.MotionEvent.ACTION_UP||action==android.view.MotionEvent.ACTION_CANCEL){
+                        touching=false;
+                        // The drag that hid the panel's edge regions is over: they come back with it.
+                        edge.suppress(false);
+                        return;
+                    }
+                    if(action!=android.view.MotionEvent.ACTION_DOWN)return;
+                    touching=true;
+                    if(e.getRawY()>=topEdge()||!enabled())return;
                     backdrop.gesture();
                 }
             });
@@ -319,6 +331,8 @@ public final class QuickSettingsHooks {
     }
 
     private int topEdgePx;
+    /** A finger is down on SystemUI (main thread input). */
+    private volatile boolean touching;
 
     /**
      * Where a pull-down of the panel starts: 64 dp from the top, about twice One UI's status bar
@@ -341,7 +355,7 @@ public final class QuickSettingsHooks {
             Probe.log("QS_SLIDER_SHAPE_MISSING", "error=" + e.getClass().getSimpleName());
         }
         try { new QsSliderHooks(loader,this::enabled,()->style,()->pillShape!=null||style.outer>=1,
-                this::capture).install(bar); }
+                this::capture,()->touching,()->edge.suppress(true)).install(bar); }
         catch(ReflectiveOperationException|RuntimeException|LinkageError e){Probe.error("QS_SLIDER_HOOK_FAILED",e);}
     }
 
@@ -401,10 +415,11 @@ public final class QuickSettingsHooks {
             boolean circle = a[5] == circleShape;
             Kind kind = QuickSettingsGlass.kind(circle, QuickSettingsGlass.argb(background), QuickSettingsGlass.argb(outline));
             log(kind.name(), a);
-            if (kind == Kind.NONE) return;
+            // Discs and placeholders keep Samsung's colours and outline: only containers are glass.
+            if (kind != Kind.CONTAINER) return;
             boolean dark = dark();
-            // Transparent interior for every container and inactive disc, in every scene (UNKNOWN too).
-            long fill = QuickSettingsGlass.color(QuickSettingsGlass.fill(kind, QuickSettingsGlass.argb(background), style.active));
+            // Containers: transparent, or the faint dark tint over a light backdrop. Discs: Samsung's.
+            long fill = QuickSettingsGlass.color(QuickSettingsGlass.fill(kind, QuickSettingsGlass.argb(background), backdrop.tone(), style));
             boolean outlined = (outlinedDefault || Boolean.TRUE.equals(a[1]))
                     && a[2] instanceof Float && (Float) a[2] > 0f;
             boolean rimmed = outlined && QuickSettingsGlass.rimmed(kind);
@@ -491,6 +506,55 @@ public final class QuickSettingsHooks {
         edge.status(on ? "on" : "off");
         applied = on;
         invalidateAll(on ? "on" : "off");
+    }
+
+    /**
+     * Ink level for QS text at draw time (true: the header's). The panel's own decision while it is
+     * open; otherwise the header follows the notification shade's decision (shadeHeader): the
+     * clock and date shown over the notification shade are this same Compose header, which kept
+     * white over a white app while only the QS backdrop could darken it (device, 28/10; the
+     * legacy QSClockPanelView the shade controller recoloured is not the one on screen).
+     */
+    Float ink(Boolean header) {
+        boolean h = Boolean.TRUE.equals(header);
+        Float own = enabled() ? backdrop.ink(h) : null;
+        if (!h || (own != null && backdrop.open())) return own;
+        float shade = shadeHeaderInk;
+        return Float.isNaN(shade) ? own : shade;
+    }
+
+    /** The notification shade's header decision (true: light backdrop, dark ink); null when it closes. */
+    private volatile float shadeHeaderInk = Float.NaN;
+    private android.animation.ValueAnimator shadeHeaderAnimator;
+
+    /** Main thread, from HeadsUpHooks. A change between two known tones moves smoothly; anything else at once. */
+    public void shadeHeader(Boolean light) {
+        float target = light == null ? Float.NaN : light ? 1f : 0f, from = shadeHeaderInk;
+        if (Float.compare(target, from) == 0) return;
+        if (shadeHeaderAnimator != null) { shadeHeaderAnimator.cancel(); shadeHeaderAnimator = null; }
+        long duration = InkAnimator.duration();
+        Probe.log("QS_HEADER_INK", "source=shade target=" + (light == null ? "native" : light ? "dark" : "light")
+                + " animated=" + (!Float.isNaN(from) && !Float.isNaN(target) && duration > 0));
+        if (Float.isNaN(from) || Float.isNaN(target) || duration <= 0) {
+            shadeHeaderInk = target;
+            content.invalidateDraw();
+            return;
+        }
+        android.animation.ValueAnimator a = android.animation.ValueAnimator.ofFloat(0f, 1f);
+        a.setDuration(io.github.igorcv88.oneuiliquidglass.glass.InkTransition.DURATION_MS);
+        a.addUpdateListener(x -> {
+            if (shadeHeaderAnimator != x) return;
+            try {
+                shadeHeaderInk = from + (target - from) * io.github.igorcv88.oneuiliquidglass.glass.InkTransition.ease(x.getAnimatedFraction());
+                content.invalidateDraw();
+                if (x.getAnimatedFraction() >= 1f) shadeHeaderAnimator = null;
+            } catch (RuntimeException | LinkageError e) {
+                x.cancel(); shadeHeaderAnimator = null; shadeHeaderInk = target;
+                Probe.error("QS_HEADER_INK_FAILED", e);
+            }
+        });
+        shadeHeaderAnimator = a;
+        a.start();
     }
 
     private void invalidateAll(String reason) {

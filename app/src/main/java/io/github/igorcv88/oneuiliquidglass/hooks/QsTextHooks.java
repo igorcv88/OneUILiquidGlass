@@ -111,14 +111,17 @@ final class QsTextHooks {
             XC_MethodHook bind=new XC_MethodHook(){
                 @Override protected void afterHookedMethod(MethodHookParam p){
                     Object target=p.args.length==0?p.getResult():p.args[0];
-                    if(target!=null)headerNodes.put(target,headerElements.get(p.thisObject));
+                    Boolean header=headerElements.get(p.thisObject);
+                    // Same rule as text nodes: an update from an unknown element keeps the node.
+                    if(target!=null&&(header!=null||headerNodes.get(target)==null))headerNodes.put(target,header);
                 }
             };
             XposedBridge.hookMethod(abi.create,bind);XposedBridge.hookMethod(abi.update,bind);
             XposedBridge.hookMethod(abi.draw,new XC_MethodHook(){
                 @Override protected void beforeHookedMethod(MethodHookParam p){
                     p.setObjectExtra("qsHeaderIconPrevious",iconDrawing.get());
-                    Float tone=ready&&headerReady&&headerNodes.get(p.thisObject)!=null&&enabled.getAsBoolean()?level.apply(true):null;
+                    // The header follows the panel or the notification shade: the level function gates it.
+                    Float tone=ready&&headerReady&&headerNodes.get(p.thisObject)!=null?level.apply(true):null;
                     if(tone!=null)iconDrawing.set(tone);
                     else iconDrawing.remove();
                 }
@@ -162,8 +165,25 @@ final class QsTextHooks {
     /** Ink darkness of a registered node at this frame (mid-transition included); null for native ink. */
     Float inkFor(Object node){
         Boolean h=nodes.get(node);
-        if(!ready||h==null||!enabled.getAsBoolean())return null;
-        return level.apply(h);
+        if(!ready||h==null)return null;
+        // Body labels need QS on; the header also follows the notification shade (level gates it).
+        if(!h&&!enabled.getAsBoolean())return null;
+        Float l=level.apply(h);
+        if(h)drawnHeader(node,l);
+        return l;
+    }
+    /** Last header ink logged as drawn (-1 native, 0 light, 1 dark, 2 between): changes only. */
+    private int headerDrawn=Integer.MIN_VALUE;
+    /**
+     * Evidence that the decided header ink reaches the header text actually being drawn (the
+     * Compose clock and date, not a View that may not be on screen): logged when it changes.
+     */
+    private void drawnHeader(Object node,Float l){
+        int bucket=l==null?-1:l<=0f?0:l>=1f?1:2;
+        if(bucket==headerDrawn||bucket==2)return;
+        headerDrawn=bucket;
+        Probe.log("QS_HEADER_TEXT_DRAWN","ink="+(bucket<0?"native":bucket==1?"dark":"light")
+                +" node="+Integer.toHexString(System.identityHashCode(node)));
     }
     static Integer applyPaint(Paint paint,Boolean dark,boolean enabled){
         return applyPaint(paint,dark==null?null:dark?1f:0f,enabled);
@@ -174,8 +194,14 @@ final class QsTextHooks {
         if(mapped==original)return null;
         paint.setColor(mapped);return original;
     }
+    /**
+     * A node keeps its registration when Compose updates it from an element built outside an
+     * allowlisted composable (a label's own scope recomposing alone, e.g. a new Wi-Fi name): only
+     * a node rebound to a known foreign element, or collected, leaves the registry. Otherwise a
+     * tile label lost its ink at its first independent recomposition and stayed white over white.
+     */
     void bindNode(Object node,Boolean isHeader){
-        if(node==null)return;
+        if(node==null||isHeader==null&&nodes.get(node)!=null)return;
         nodes.put(node,isHeader);
     }
     private int installPaint() throws ClassNotFoundException {
@@ -196,11 +222,13 @@ final class QsTextHooks {
                 @Override protected void beforeHookedMethod(MethodHookParam p){
                     if(text){
                         Float tone=drawing.get();if(tone==null)return;
-                        Integer original=applyPaint((Paint)p.args[index],tone,enabled.getAsBoolean());
+                        // The tone was authorised when the node's draw began (inkFor / the header
+                        // gate), including the shade-driven header with QS glass off.
+                        Integer original=applyPaint((Paint)p.args[index],tone,true);
                         if(original!=null)p.setObjectExtra("qsTextColor",original);
                     }else{
                         Float tone=iconDrawing.get();if(tone==null)return;
-                        ColorFilter original=applyIconPaint((Paint)p.args[index],tone,enabled.getAsBoolean());
+                        ColorFilter original=applyIconPaint((Paint)p.args[index],tone,true);
                         if(original!=null)p.setObjectExtra("qsHeaderFilter",original);
                     }
                 }

@@ -30,10 +30,10 @@ public final class InkTransitionTest {
         assertTrue(InkTransition.ease(.55f) - InkTransition.ease(.45f) > InkTransition.ease(.1f) - InkTransition.ease(0f));
     }
     @Test public void durationFollowsTheAnimatorScaleAndStopsWhenOff() {
-        assertEquals(200, InkTransition.duration(1f));
-        assertEquals(100, InkTransition.duration(.5f));
+        assertEquals(120, InkTransition.duration(1f));
+        assertEquals(60, InkTransition.duration(.5f));
         assertEquals(0, InkTransition.duration(0f));
         assertEquals(0, InkTransition.duration(Float.NaN));
-        assertEquals(2000, InkTransition.duration(50f));
+        assertEquals(1200, InkTransition.duration(50f));
     }
 }

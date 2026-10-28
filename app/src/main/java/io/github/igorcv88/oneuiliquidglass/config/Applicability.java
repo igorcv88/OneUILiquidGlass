@@ -101,9 +101,8 @@ public final class Applicability {
             case "qs.track":
             case "qs.lightstyle":
             case "qs.darkfill":
-            case "qs.lightfill":
             case "qs.darkcolor":
-            case "qs.lightcolor":
+            case "qs.active":
             case "qs.idle":
                 return new Result(Kind.READ_ONLY, "Legado sem efeito visual");
             case "sfrefract":

@@ -5,6 +5,8 @@ public final class QsScene {
     public enum Tone { UNKNOWN, DARK_SCENE, LIGHT_SCENE }
     /** Enter the light scene at or above ENTER, leave it below LEAVE: a band of hysteresis. */
     static final float ENTER = .75f, LEAVE = .65f;
+    /** Midpoint of the hysteresis band (the strong-reading distance is measured from it). */
+    public static final float MID = (ENTER + LEAVE) / 2f;
     private Tone tone = Tone.UNKNOWN;
     private long changedAt = Long.MIN_VALUE;
     public Tone tone() { return tone; }

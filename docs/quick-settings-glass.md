@@ -36,13 +36,12 @@ Composer, int, int)`. Chamadores no firmware: `IconTextTileBackground` (cápsula
    tile de uma célula, ou círculo que a Samsung deixa transparente de propósito);
 2. registra para a mesma thread os dois elementos que a função cria em seguida;
 3. no construtor de `BorderModifierNodeElement`, **só em contêineres**, troca a cor do contorno por
-   um contorno óptico uniforme (`QuickSettingsGlass.rim`): branco sobre cenas escuras/coloridas,
-   uma linha escura fina sobre cenas claras (onde o branco desapareceria). Círculos internos mantêm
-   o contorno da Samsung: o grupo de controles se lê como uma peça de vidro;
-4. no construtor de `BackgroundElement`, troca a cor por **transparente** em contêineres e discos
-   inativos, em qualquer cena (inclusive UNKNOWN, antes da classificação), ou pela própria cor
-   Samsung com alpha ≤ 0,90 nos discos ativos. Não existe película branca, cinza ou colorida dentro
-   de cápsula alguma; o desfoque visível é o do painel (backdrop), como nas notificações.
+   a luz basal branca uniforme (`QuickSettingsGlass.rim`) em todas as cenas; nunca é escurecido.
+   Círculos mantêm o contorno da Samsung: o grupo de controles se lê como uma peça de vidro;
+4. no construtor de `BackgroundElement`, **só em contêineres**: transparente sobre cenas
+   escuras/coloridas e enquanto a cena é UNKNOWN; sobre cenas claras, um tom escuro discreto
+   (`qs.lightcolor` #141823 a `qs.lightfill` 10%, teto 18%), o mesmo padrão das notificações. Não
+   existe película branca. Círculos (ativos e inativos) e ícones mantêm as cores da Samsung.
 
 O grande contêiner dos tiles (`QuickTileBox`) chama `BoxWithOutline` com o bit 2 da máscara
 `$default` (parâmetro `contorno`, padrão `true`). Esse bit é aceito e lido como `true`; os demais
@@ -359,18 +358,13 @@ painel e não sobre uma cápsula) usa as quatro bandas superiores **só para a t
 ainda precisam de teste local de contraste no aparelho; não há promessa de contraste mínimo para
 todos os pixels de um vídeo ou wallpaper arbitrário.
 
-Interior das cápsulas e discos inativos: transparente em todas as cenas (após o PR #78). Contorno:
-linha escura #101318 com alpha `qs.lightrim` (0,18) sobre claro; branco com `qs.darkrim` (0,26)
-sobre escuro/colorido; o branco basal do tema enquanto a cena é UNKNOWN. `qs.darkfill`,
-`qs.lightfill`, `qs.darkcolor`, `qs.lightcolor`, `qs.idle`, `qs.track` e `qs.lightstyle` são
-legado: `SettingSpec.validate` ainda aceita valores antigos (importação de perfis), mas `QsStyle`
-os lê e descarta, então nenhum perfil antigo traz a película de volta. O blur continua pertencendo
-ao painel, sem blur por cápsula. Sem amostra válida
-o foreground e o desenho nativos são preservados. Texto neutro preserva o alpha nativo no contexto
-adaptado; cores de destaque, logos sem tint e ícones pretos dos discos ativos são preservados. A espécie ACTIVE/IDLE observada em
-BoxWithOutline é associada ao Painter por identidade, com referências fracas e teto de 64 entradas;
-a associação mantém a tinta correta em recomposições independentes de QSIcon. Glyphs sem estado
-conhecido mantêm conservadoramente a tinta escura nativa, para não inverter um disco claro.
+Interior das cápsulas: transparente sobre escuro/colorido/UNKNOWN, tom escuro discreto sobre claro.
+Contorno: branco com `qs.lightrim` (0,18) sobre claro e `qs.darkrim` (0,26) sobre escuro/colorido.
+`qs.darkfill`, `qs.darkcolor`, `qs.idle`, `qs.active`, `qs.track` e `qs.lightstyle` são legado:
+`SettingSpec.validate` ainda aceita valores antigos (importação de perfis), mas `QsStyle` os lê e
+descarta. `qs.lightfill` antigo acima de 18% é limitado a 18%. O blur continua pertencendo ao painel,
+sem blur por cápsula. Só os **labels** (texto) e o cabeçalho (relógio, data, ações) seguem o fundo;
+ícones dos tiles e círculos ficam nativos (o hook de `QSIcon` foi removido).
 
 `QsContentHooks` não intercepta `Material3.TextKt` nem `Material3.IconKt`. Nenhum hook de
 foreground escreve `$changed`, `$default`, `Composer` ou `TextStyle`. Os argumentos padrão de
@@ -389,9 +383,6 @@ API ausente produz `QS_TEXT_INCOMPATIBLE` e deixa esse caminho inativo. Essa com
 renderização ainda precisa ser confirmada no DEX em execução no aparelho; testes de host não
 executam recomposição real de SystemUI. O fallback não altera o fornecimento de TextStyle.
 
-`QSIcon-fWhpE4E` só altera o long de cor na ABI explícita
-`(Modifier, Painter, String, long, float, boolean, Composer, int) -> void`, com conteúdo tintável.
-Nenhuma máscara é alterada. ABI diferente gera `QS_ICON_INCOMPATIBLE` e ícone nativo.
 Ações do cabeçalho usam os nós Painter criados no escopo dos wrappers Samsung do cabeçalho.
 O filtro neutro é substituído só durante seu desenho e restaurado logo após; display lists também
 são invalidadas. Assim o override não depende de uma recomposição interna de Icon com parâmetros
@@ -513,7 +504,7 @@ em ~1 s no pior caso. Ruído, um quadro transitório ou o movimento da animaçã
 `popuplock=1` (padrão) usa esse portão; `popuplock=0` volta a aplicar cada leitura.
 
 **Transição.** `InkAnimator` (Views) e o nível animado de `QsBackdrop.ink` (Compose) movem o primeiro
-plano em 200 ms × escala de animação do sistema, com easing simétrico (passa rápido pelo cinza do
+plano em 120 ms × escala de animação do sistema, com easing simétrico (passa rápido pelo cinza do
 meio). Escala 0 ou animações desligadas: cor final imediata. Uma nova decisão recomeça da cor que
 está na tela; um rebind da Samsung no meio da transição vence (a transição é descartada e o reparo
 reaplica a cor decidida no próximo pre-draw). Só um relógio de quadro compartilhado, ativo apenas
@@ -529,6 +520,26 @@ enquanto há transição. Cobertura:
 Logs (limitados a mudanças de estado): `SHADE_RESAMPLE`, `QS_RESAMPLE`, `QS_BACKDROP` (com
 `previous=` e `transition=`), `QS_INK_TRANSITION`, `HEADER_INK phase=apply|repair`,
 `POPUP_CONTRAST_GATE`, `TEXT_REAPPLY animated=`, `CHEVRON_TONE target= animated=`.
+
+### Correções após o teste no aparelho (28/10, PR #79)
+
+| Sintoma no aparelho | Causa no código | Correção |
+| --- | --- | --- |
+| Slider largo, com trilho leitoso (nativo) | Desde o #78, `QsSliderHooks.primitiveSignature` exigia `Brush` no 2º parâmetro de `drawRect-n-J9OG0$default`, que é `drawRect(color: Color, …)` (um `long`). Com 2 de 3 primitivas, a instalação inteira falhava (`QS_SLIDER_HOOK_FAILED`) e o slider ficava nativo | Assinatura corrigida (teste com os tipos reais); rejeições logadas em `QS_SLIDER_SIGNATURE`; trilho opcional (corpo/thumb bastam) |
+| Relógio/data brancos na central de notificações | O relógio visível é o cabeçalho Compose (`SecQuickSettingHeader`), o mesmo da central de controle, que só recebia o tom do backdrop do QS (fechado nesse estado). O `QSClockPanelView` recolorido pelo controlador de Views não é o desenhado | O cabeçalho Compose segue a decisão da central de notificações (bandas do topo da captura) enquanto só ela está aberta (`SHADE_HEADER_TONE`, `QS_HEADER_INK`) |
+| Labels brancos sobre branco no QS | Um nó de texto perdia o registro quando seu escopo recompunha sozinho (elemento criado fora dos composables permitidos) | O registro do nó só sai quando ele é coletado |
+| Bordas escurecidas sobre branco | Contorno escuro na cena clara (#79) | Contorno sempre branco; a cápsula recebe tom escuro discreto sobre claro |
+| Ícones/círculos alterados | Hook de `QSIcon` e alpha dos discos | Removidos: ícones e círculos nativos |
+| Contornos das cápsulas ficam na tela ao arrastar o slider | As regiões de borda do compositor (perfil 3) ignoram o alpha de camada do Compose com que a Samsung esmaece os outros controles | Arraste detectado (valor do slider muda com dedo na tela): todas as regiões são **liberadas** (raio 0, invisível, alpha 0; nenhum desenho as recria) até o dedo sair; então `invalidateDraw` em cada nó de fundo as reconstrói (recomposição como fallback). Logs `QS_EDGE_SUPPRESS released=N`, `QS_EDGE_RESTORE` |
+| Player sem cápsula própria | — | O bloco de desenho da arte (arte, gradientes e o conteúdo que ele desenha) é **reduzido uniformemente** (~3 %) em torno do centro até ficar 6 dp dentro do contorno, dentro da própria forma escalada: nada é cortado. Aro de vidro na borda original. A forma vem de cada instância do bloco (construída na composição da página), não de um campo compartilhado. Toque e layout continuam nativos: um controle desenhado por esse bloco pode aparecer até 6 dp mais perto do centro que sua área de toque (`QS_MEDIA_CAPSULE`) |
+| Cor muda ~400 ms depois da troca de fundo | Confirmação obrigatória (150–200 ms + permanência 600–800 ms), troca do texto no meio da rampa do véu, transição de 200 ms, só amostragem periódica | **Evento:** `TaskStackChangeListeners` da SystemUI (troca/abertura de app) dispara captura imediata nas superfícies visíveis e amostragem a cada 100 ms por 600 ms (`BACKDROP_EVENTS_READY`). Leitura forte (≥0,2 do limiar) decide com a própria amostra (permanência mínima 100 ms). Texto troca no início da rampa; transição de 120 ms. Sem evento: 50 ms (pop-up entrando/após toque), 250 ms (centrais após toque), 900 ms parado |
+
+Latência que o código garante e que não garante: com evento de tarefa, o atraso é o da primeira captura útil após o evento (um quadro do compositor mais a cópia de 1/8 de resolução; o conteúdo novo do app pode levar alguns quadros para ser desenhado, coberto pelas capturas de 100 ms). Mudanças sem evento e sem toque (um vídeo ou página que muda sozinha atrás de uma central parada) dependem da amostragem de 900 ms. Nada disso foi medido no aparelho.
+
+Outros pontos verificáveis no log:
+- slider: `QS_SLIDER_READY … track=hidden` só diz que o hook do trilho foi instalado; `QS_SLIDER_STAGE stage=0 action=trackSuppressed` (e `stage=1 bodyDrawn`, `stage=2 capDrawn`) prova que cada primitiva rodou no escopo do slider;
+- cabeçalho: `SHADE_HEADER_TONE` é a decisão; `QS_HEADER_TEXT_DRAWN ink=dark` prova que o texto do cabeçalho Compose foi desenhado com ela. `HEADER_INK … shown=` mostra se as Views antigas (`QSClockPanelView` etc.) estão visíveis; o controlador das Views continua ativo, inofensivo se não estiverem;
+- tom sobre fundo claro: `qs.lightcolor` só aceita cores escuras (luma ≤ 0,35); uma cor clara ou branca de perfil antigo volta para #141823, então não há película clara possível.
 
 ### Validação no SM-S938B / S938BXXUCDZIF (pendente)
 

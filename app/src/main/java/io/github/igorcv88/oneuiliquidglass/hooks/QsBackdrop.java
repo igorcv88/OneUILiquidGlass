@@ -40,7 +40,7 @@ import io.github.igorcv88.oneuiliquidglass.glass.ToneGrid;
 final class QsBackdrop {
     /** A sample this young belongs to the opening that follows it. */
     static final long FRESH_MS = 600;
-    static final long RESAMPLE_MS = 900, CONFIRM_MS = 150, DWELL_MS = 600;
+    static final long RESAMPLE_MS = 900, ACTIVE_RESAMPLE_MS = 250, BURST_RESAMPLE_MS = 100, ACTIVE_WINDOW_MS = 1500, CONFIRM_MS = 150, DWELL_MS = 600;
     private final BooleanSupplier enabled;
     private final DoubleSupplier expansion;
     private final Runnable changed, redraw;
@@ -83,6 +83,8 @@ final class QsBackdrop {
     }
 
     QsScene.Tone tone() { return tone; }
+    /** The panel is open (expanded at all): its own decision is the one on screen. */
+    boolean open() { return shown; }
     QsScene.Tone headerTone() { return headerTone; }
     /** Ink darkness for the panel's text (header: the header band's), or null for native ink. */
     Float ink(boolean headerBand) {
@@ -178,6 +180,13 @@ final class QsBackdrop {
         main.postDelayed(tick, Math.max(16, delay));
     }
 
+    /** A task change (BackdropEvents): capture now instead of at the next periodic sample. */
+    void event() {
+        if (!shown || pending || sampledAt == 0 || !enabled.getAsBoolean()) return;
+        main.removeCallbacks(tick);
+        resample();
+    }
+
     /** One in-session capture; a confirmed change of side moves the ink. */
     private void resample() {
         View v = host.get();
@@ -198,8 +207,8 @@ final class QsBackdrop {
 
     private void resampled(ToneGrid grid, long requested) {
         long now = SystemClock.uptimeMillis();
-        // No capture possible (secure content, capture unavailable): no loop for this opening.
-        if (grid == null) { Probe.log("QS_RESAMPLE", "state=unavailable generation=" + generation); return; }
+        // No capture this time (secure content, a transient failure): try again later, slowly.
+        if (grid == null) { Probe.log("QS_RESAMPLE", "state=unavailable generation=" + generation); schedule(RESAMPLE_MS * 3); return; }
         boolean a = offer(scene, sceneGate, grid.whole(), now);
         boolean b = offer(header, headerGate, headerLuma(grid), now);
         boolean pendingNow = sceneGate.pending() || headerGate.pending();
@@ -210,10 +219,13 @@ final class QsBackdrop {
                     + " pending=" + pendingNow + " sampleAgeMs=" + (now - requested) + " generation=" + generation);
         if (a || b) { sampledAt = now; publish(true); }
         // A candidate is confirmed by the next capture, taken as soon as its gate can accept it.
-        long next = RESAMPLE_MS;
+        long t = SystemClock.uptimeMillis();
+        long idle = BackdropEvents.burst(t) ? BURST_RESAMPLE_MS
+                : t - io.github.igorcv88.oneuiliquidglass.glass.BackdropMotion.lastActive() < ACTIVE_WINDOW_MS ? ACTIVE_RESAMPLE_MS : RESAMPLE_MS;
+        long next = idle;
         if (sceneGate.pending()) next = Math.min(next, sceneGate.confirmIn(now));
         if (headerGate.pending()) next = Math.min(next, headerGate.confirmIn(now));
-        schedule(pendingNow ? Math.max(CONFIRM_MS, next) : RESAMPLE_MS);
+        schedule(pendingNow ? Math.max(CONFIRM_MS, next) : idle);
     }
 
     /** A gated reading for one classifier; true when its decided scene changed. */
@@ -221,7 +233,8 @@ final class QsBackdrop {
         if (s.tone() == QsScene.Tone.UNKNOWN) return s.accept(luma, now) && gate.offer(s.tone() == QsScene.Tone.LIGHT_SCENE, now);
         QsScene.Tone reading = QsScene.classify(luma, s.tone());
         if (reading == QsScene.Tone.UNKNOWN) return false;
-        if (!gate.offer(reading == QsScene.Tone.LIGHT_SCENE, now) || reading == s.tone()) return false;
+        boolean strong = ToneGate.strong(luma, QsScene.MID);
+        if (!gate.offer(reading == QsScene.Tone.LIGHT_SCENE, now, strong) || reading == s.tone()) return false;
         s.force(reading, now);
         return true;
     }

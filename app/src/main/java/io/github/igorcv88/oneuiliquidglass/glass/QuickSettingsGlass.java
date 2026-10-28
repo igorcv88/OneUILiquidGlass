@@ -4,28 +4,27 @@ package io.github.igorcv88.oneuiliquidglass.glass;
  * Colour rules for One UI 9's Compose Quick Settings (BoxWithOutline), free of Android state.
  *
  * <p>The panel behind the controls is already blurred by Samsung, so a capsule is not a surface
- * of its own: its interior is fully transparent (the panel's blur shows through unchanged) and
- * only its outline, a thin optical rim, marks its edge. No white, grey or tinted film is laid
- * inside a capsule, an inactive disc or the empty part of a slider, in any scene, including
- * before the backdrop is classified. The only filled shapes are Samsung's active discs (their
- * own state colour) and the slider's white progress. The only compositor part is the optional
- * edge light and refraction (sfhook profile 3), whose regions are transparent past the
- * outline's bevel. Colours are non-premultiplied ARGB.</p>
+ * of its own: no white or grey film is laid inside it. Over a dark or coloured backdrop the
+ * interior is fully transparent; over a light one it takes a faint dark tint (qs.lightcolor at
+ * qs.lightfill, at most 18 %), the notifications' pattern: the glass reads a little darker than the
+ * page so the labels, which turn dark there, keep their contrast. The outline is always the white
+ * optical rim, never darkened. Samsung's discs (active and inactive) and the tile icons keep their
+ * own colours: only labels follow the backdrop. The only compositor part is the optional edge
+ * light and refraction (sfhook profile 3). Colours are non-premultiplied ARGB.</p>
  */
 public final class QuickSettingsGlass {
     private QuickSettingsGlass() {}
 
-    /** Transparent: what every capsule interior and inactive disc is drawn with. */
+    /** Transparent: a capsule interior over a dark, coloured or not yet classified backdrop. */
     static final int CLEAR = 0x00ffffff;
-    static final float ACTIVE_ALPHA = 0.90f;
+    /** Default tint over light backdrops: the colour and alpha of qs.lightcolor / qs.lightfill. */
+    static final int LIGHT_TINT = 0x141823;
+    static final float LIGHT_FILL = 0.10f, MAX_LIGHT_FILL = 0.18f;
     /**
      * Basal rim alpha: the same all around the outline, so no corner looks lit regardless of what
-     * is behind it. A backdrop-dependent part needs backdrop pixels this Compose path does not
-     * have (docs/quick-settings-glass.md). Over a light scene a white rim vanishes, so the light
-     * scene's rim is a dark hairline ({@link #LIGHT_RIM_COLOR}) instead.
+     * is behind it. White in every scene: a darkened outline read as a drawn border, not glass.
      */
     static final float DARK_RIM = 0.26f, LIGHT_RIM = 0.18f;
-    static final int LIGHT_RIM_COLOR = 0x101318;
     /** Default slider progress thickness: share of the capsule's narrow side. */
     static final float SLIDER_FILL = 0.78f;
 
@@ -54,25 +53,39 @@ public final class QuickSettingsGlass {
     }
 
     /**
-     * The fill replacing Samsung's background: {@code nativeFill} itself for NONE, Samsung's state
-     * colour (at most {@code activeAlpha} opaque) for ACTIVE, transparent for IDLE and CONTAINER.
-     * Independent of the scene and of the Android theme on purpose: an unclassified backdrop
-     * (UNKNOWN) must not show a film that the classification then removes.
+     * The fill replacing Samsung's background. Discs and placeholders keep Samsung's colour. A
+     * container is transparent, except over a light backdrop, where it takes the faint dark tint;
+     * an unclassified backdrop (UNKNOWN) stays transparent rather than guess.
      */
-    public static int fill(Kind kind, int nativeFill, float activeAlpha) {
-        switch (kind) {
-            case NONE: return nativeFill;
-            case ACTIVE: return withAlpha(nativeFill, Math.min(alpha(nativeFill), activeAlpha));
-            default: return CLEAR;
-        }
+    public static int fill(Kind kind, int nativeFill, QsScene.Tone scene, int tint, float alpha) {
+        if (kind != Kind.CONTAINER) return nativeFill;
+        if (scene != QsScene.Tone.LIGHT_SCENE) return CLEAR;
+        return withAlpha(tint, Math.min(MAX_LIGHT_FILL, Float.isFinite(alpha) ? alpha : LIGHT_FILL));
     }
 
-    public static int fill(Kind kind, int nativeFill) { return fill(kind, nativeFill, ACTIVE_ALPHA); }
+    /** Brightest tint accepted over light backdrops (sRGB luma 0-1): anything lighter is a film. */
+    static final float MAX_TINT_LUMA = 0.35f;
 
-    /** Rim colour for the scene; UNKNOWN keeps the theme's basal white until the backdrop is known. */
+    /**
+     * The light-backdrop tint actually used: {@code color} when it is dark, the default otherwise.
+     * A profile from before the tint (qs.lightcolor once styled the veil, possibly white) can never
+     * bring a light film back.
+     */
+    public static int darkTint(int color) {
+        float luma = (0.2126f * ((color >> 16) & 255) + 0.7152f * ((color >> 8) & 255) + 0.0722f * (color & 255)) / 255f;
+        return luma <= MAX_TINT_LUMA ? color & 0xffffff : LIGHT_TINT;
+    }
+
+    public static int fill(Kind kind, int nativeFill, QsScene.Tone scene, QsStyle s) {
+        return fill(kind, nativeFill, scene, s.lightColor, s.lightFill);
+    }
+
+    public static int fill(Kind kind, int nativeFill) { return fill(kind, nativeFill, QsScene.Tone.UNKNOWN, LIGHT_TINT, LIGHT_FILL); }
+
+    /** White rim in every scene; UNKNOWN keeps the theme's basal alpha until the backdrop is known. */
     public static int rim(boolean darkTheme, QsScene.Tone scene, QsStyle s) {
         if (scene == QsScene.Tone.UNKNOWN) return rim(darkTheme);
-        return scene == QsScene.Tone.LIGHT_SCENE ? withAlpha(LIGHT_RIM_COLOR, s.lightRim) : withAlpha(0xffffff, s.darkRim);
+        return withAlpha(0xffffff, scene == QsScene.Tone.LIGHT_SCENE ? s.lightRim : s.darkRim);
     }
 
     public static int withAlpha(int color, float a) {
@@ -103,6 +116,22 @@ public final class QuickSettingsGlass {
         // Unknown glyphs may belong to a native light disc; known inactive glyphs take the body ink.
         if(state==Kind.NONE&&((nativeColor>>16)&255)<128)return nativeColor;
         return ink(nativeColor,darkInk);
+    }
+
+    /**
+     * The active media player inside its glass capsule, for a page of {@code w x h} whose corner
+     * radius is {@code radius}: the player's whole drawing is scaled uniformly about the page centre
+     * so it ends at least {@code inset} from the outline, and keeps its own shape (the page shape
+     * scaled by the same factor). Nothing of Samsung's content is cut: it is resized, not clipped.
+     * Returns {scale, dx, dy, outer radius, rim width}; null when the page is too small (native).
+     */
+    public static float[] mediaCapsule(float w, float h, float radius, float inset, float rimWidth) {
+        if (!(w > 0f) || !(h > 0f) || !Float.isFinite(w) || !Float.isFinite(h) || !(inset > 0f) || !Float.isFinite(inset)) return null;
+        if (inset * 4f >= Math.min(w, h)) return null;
+        float scale = Math.min((w - 2f * inset) / w, (h - 2f * inset) / h);
+        float r = Float.isFinite(radius) ? Math.max(0f, Math.min(radius, Math.min(w, h) / 2f)) : 0f;
+        float rim = Float.isFinite(rimWidth) ? Math.max(0f, Math.min(rimWidth, inset)) : 0f;
+        return new float[] {scale, (w - w * scale) / 2f, (h - h * scale) / 2f, r, rim};
     }
 
     /** Centred envelope inside the native grid cell. Its long axis and hitbox never change. */

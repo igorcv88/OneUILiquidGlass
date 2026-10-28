@@ -21,44 +21,56 @@ public class QsAdaptiveTest {
         assertEquals(LIGHT_SCENE,QsScene.classify(.7f,LIGHT_SCENE));
         assertEquals(DARK_SCENE,QsScene.classify(.7f,DARK_SCENE));
     }
-    /** White, black, blue and unknown backdrops, both Android themes: no film inside any capsule. */
-    @Test public void capsulesAreTransparentInEverySceneIncludingUnknown(){
+    /** Dark, coloured or unknown backdrop: transparent glass. Light: a faint dark tint, never a white film. */
+    @Test public void capsulesAreGlassWithAFaintDarkTintOnlyOverLightBackdrops(){
         QsStyle s=defaults();
-        for(QsScene.Tone scene:QsScene.Tone.values())for(int nativeFill:new int[]{0x33000000,0x1affffff,0xfff2f2f2}){
-            assertEquals(0,QuickSettingsGlass.fill(CONTAINER,nativeFill,s.active)>>>24);
-            assertEquals(0,QuickSettingsGlass.fill(IDLE,nativeFill,s.active)>>>24);
+        for(int nativeFill:new int[]{0x33000000,0x1affffff,0xfff2f2f2}){
+            assertEquals(0,QuickSettingsGlass.fill(CONTAINER,nativeFill,UNKNOWN,s)>>>24);
+            assertEquals(0,QuickSettingsGlass.fill(CONTAINER,nativeFill,DARK_SCENE,s)>>>24);
+            int light=QuickSettingsGlass.fill(CONTAINER,nativeFill,LIGHT_SCENE,s);
+            assertEquals(0x141823,light&0xffffff);
+            assertTrue((light>>>24)>0&&(light>>>24)<=Math.round(.18f*255));
+            // Discs and placeholders keep Samsung's own colour in every scene.
+            for(QsScene.Tone scene:QsScene.Tone.values()){
+                assertEquals(nativeFill,QuickSettingsGlass.fill(ACTIVE,nativeFill,scene,s));
+                assertEquals(nativeFill,QuickSettingsGlass.fill(IDLE,nativeFill,scene,s));
+                assertEquals(nativeFill,QuickSettingsGlass.fill(NONE,nativeFill,scene,s));
+            }
         }
     }
-    @Test public void rimStaysPerceptibleOnLightAndDarkScenes(){
+
+    /** The outline is the white optical rim in every scene: never darkened. */
+    @Test public void rimIsWhiteInEveryScene(){
         QsStyle s=defaults();
-        int light=QuickSettingsGlass.rim(true,LIGHT_SCENE,s),dark=QuickSettingsGlass.rim(true,DARK_SCENE,s);
-        // A white rim vanishes over white: the light scene's rim is a dark hairline.
-        assertTrue(contrast(over(light,0xffffffff),0xffffffff)>1.2);
-        assertTrue(contrast(over(dark,0xff000000),0xff000000)>1.2);
+        for(QsScene.Tone scene:QsScene.Tone.values())for(boolean theme:new boolean[]{true,false})
+            assertEquals(0xffffff,QuickSettingsGlass.rim(theme,scene,s)&0xffffff);
         assertEquals(QuickSettingsGlass.rim(true),QuickSettingsGlass.rim(true,UNKNOWN,s));
     }
+
     @Test public void placeholdersAndActiveStateColoursArePreserved(){
         QsStyle s=defaults();
-        assertEquals(0,QuickSettingsGlass.fill(NONE,0,s.active));
-        assertEquals(0x3e91ff,QuickSettingsGlass.fill(ACTIVE,0xff3e91ff,s.active)&0xffffff);
-        assertEquals(0x99,QuickSettingsGlass.fill(ACTIVE,0x99ffffff,s.active)>>>24);
+        assertEquals(0,QuickSettingsGlass.fill(NONE,0,LIGHT_SCENE,s));
+        assertEquals(0xff3e91ff,QuickSettingsGlass.fill(ACTIVE,0xff3e91ff,LIGHT_SCENE,s));
+        assertEquals(0x99ffffff,QuickSettingsGlass.fill(ACTIVE,0x99ffffff,DARK_SCENE,s));
         assertEquals(0xff12a0ef,QuickSettingsGlass.ink(0xff12a0ef,true));
     }
+
     @Test public void knownInactiveDarkGlyphChangesInkWithoutInvertingAnActiveDiscGlyph(){
         assertEquals(0xffffffff,QuickSettingsGlass.iconInk(0xff1d1d1d,IDLE,false));
         assertEquals(0xff1d1d1d,QuickSettingsGlass.iconInk(0xff1d1d1d,ACTIVE,false));
         assertEquals(0xff1d1d1d,QuickSettingsGlass.iconInk(0xff1d1d1d,NONE,false));
         assertEquals(0xff12a0ef,QuickSettingsGlass.iconInk(0xff12a0ef,IDLE,false));
     }
-    /** Contrast composited on the real backdrop: the capsule adds nothing, the ink carries it. */
+    /** Contrast composited on the real backdrop: capsule tint (light only) under the adapted label. */
     @Test public void foregroundContrastIsCompositedOnRealWhiteBlackAndBlueBackdrops(){
         for(int bg:new int[]{0xffffffff,0xff000000,0xff0000ff}){
             boolean light=bg==0xffffffff;
-            int capsule=QuickSettingsGlass.fill(CONTAINER,0x33000000,defaults().active);
+            int capsule=QuickSettingsGlass.fill(CONTAINER,0x33000000,light?LIGHT_SCENE:DARK_SCENE,defaults());
             int ink=QuickSettingsGlass.ink(0xffffffff,light);
             assertTrue(contrast(over(ink,over(capsule,bg)),over(capsule,bg))>=4.5);
         }
     }
+
     @Test public void transitionalInkKeepsAlphaAndAccents(){
         assertEquals(0x80ffffff,QuickSettingsGlass.ink(0x80eeeeee,0f));
         assertEquals(0x801d1d1d,QuickSettingsGlass.ink(0x80eeeeee,1f));
@@ -69,17 +81,32 @@ public class QsAdaptiveTest {
     }
     @Test public void legacyProfilesCannotRestoreAFilmOrVisualTrack(){
         QsStyle a=defaults();
-        String[][] legacy={{"qs.lightstyle","obsidian"},{"qs.track",".1"},{"qs.lightfill",".66"},{"qs.lightfill",".18"},
-                {"qs.darkfill","1"},{"qs.idle",".12"},{"qs.lightcolor","141823"},{"qs.darkcolor","000000"}};
-        for(String[] kv:legacy){
+        String[][] retired={{"qs.lightstyle","obsidian"},{"qs.track",".1"},{"qs.darkfill","1"},{"qs.idle",".12"},
+                {"qs.darkcolor","000000"},{"qs.active",".2"}};
+        for(String[] kv:retired){
             QsStyle old=new QsStyle(k->k.equals(kv[0])?kv[1]:null);
             assertEquals(kv[0],a,old);
-            for(int nativeFill:new int[]{0x33000000,0x1affffff})
-                assertEquals(0,QuickSettingsGlass.fill(CONTAINER,nativeFill,old.active)>>>24);
+            assertEquals(0,QuickSettingsGlass.fill(CONTAINER,0x33000000,DARK_SCENE,old)>>>24);
         }
+        // An old heavy light veil is capped: a tint, never the opaque obsidian card again.
+        QsStyle heavy=new QsStyle(k->k.equals("qs.lightfill")?".66":null);
+        assertEquals(.18f,heavy.lightFill,1e-6f);
+        assertEquals(0,QuickSettingsGlass.fill(CONTAINER,0x33000000,DARK_SCENE,heavy)>>>24);
         assertNotEquals(a,new QsStyle(k->k.equals("qs.fill")?"0.25":null));
         assertEquals(a,new QsStyle(k->k.equals("qs.fill")?"NaN":null));
         assertEquals(.78f,a.fill,1e-6f);
+    }
+
+    /** An old profile's light or white qs.lightcolor can never become a light film. */
+    @Test public void lightTintIsAlwaysDark(){
+        for(String c:new String[]{"ffffff","f2f2f2","bdbdbd","ffeb3b"}){
+            QsStyle st=new QsStyle(k->k.equals("qs.lightcolor")?c:null);
+            assertEquals(c,0x141823,st.lightColor);
+        }
+        assertEquals(0x000000,new QsStyle(k->k.equals("qs.lightcolor")?"000000":null).lightColor);
+        assertEquals(0x202a40,new QsStyle(k->k.equals("qs.lightcolor")?"202a40":null).lightColor);
+        int light=QuickSettingsGlass.fill(CONTAINER,0x33000000,LIGHT_SCENE,new QsStyle(k->k.equals("qs.lightcolor")?"ffffff":k.equals("qs.lightfill")?".18":null));
+        assertEquals(0x141823,light&0xffffff);
     }
 
     private static float[] primitive(float w,float h,float outer,float fill,float x,float y,float sw,float sh,boolean thumb,float[] body){
