@@ -281,6 +281,11 @@ pendentes; são indícios de associação a investigar, não prova isolada de fa
 comparados por identidade (`==`); não se usa `equals()`. `invalid-radius-tag eligible=false`
 distingue geometria fora de `43 ≤ r < 256` px de falha do hook.
 
+O listener de pré-desenho fica na janela da Central a partir de `panel()`, também com a opção
+desligada (o padrão). Com o efeito inativo, cada frame só confere o gate e libera regiões
+remanescentes; a caminhada pelos ancestrais e a leitura reflexiva de `expansionFraction` rodam apenas
+em snapshots (alternância, callback de configuração, falha) e com o efeito ativo.
+
 `phase=fade` registra somente transições entre host oculto, ancestral escalado/transparente,
 expansão ilegível/abaixo do fade e fade positivo. Variações numéricas dentro da mesma categoria
 não geram logs por frame.

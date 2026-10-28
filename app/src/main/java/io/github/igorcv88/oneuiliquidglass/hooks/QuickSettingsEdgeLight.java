@@ -279,8 +279,9 @@ final class QuickSettingsEdgeLight {
             diagnostic.event(QuickSettingsEdgeDiagnostics.Event.NODE_RELEASED, "");
     }
 
+    /** Runs on every pre-draw while inactive: no copy, and release() does not touch the map. */
     private void releaseAll() {
-        for (Edge e : new ArrayList<>(nodes.values())) e.release();
+        for (Edge e : nodes.values()) if (e.bridge != null) e.release();
     }
 
     /** Compositor edge light wanted and possible: the option, the compositor and its profile 3. */
@@ -402,16 +403,24 @@ final class QuickSettingsEdgeLight {
         refresh();
     }
 
-    private synchronized void refresh() {
-        // Switched off (option, master, compositor): release, do not keep a residual alpha. A later
-        // switch on recomposes the containers (QuickSettingsHooks.refresh), which draws them again.
+    /** Before each frame of the shade window. */
+    private synchronized void refresh() { refresh(false); }
+
+    /**
+     * Switched off (option, master, compositor): release, do not keep a residual alpha. A later
+     * switch on recomposes the containers (QuickSettingsHooks.refresh), which draws them again.
+     * The listener stays on the shade window from panel() on, also with the option off (its
+     * default), so an inactive frame only checks the gate: the ancestor walk and the reflective
+     * expansion read run only for a snapshot (toggle, config callback, failure).
+     */
+    private void refresh(boolean snapshot) {
         boolean on = active();
-        float fade = fade();
         if (!on) {
             releaseAll();
-            observe(false);
+            if (snapshot) { fade(); observe(false); }
             return;
         }
+        float fade = fade();
         int next = Math.round(255f * fade);
         if (next != alpha) {
             alpha = next;
@@ -455,13 +464,13 @@ final class QuickSettingsEdgeLight {
     }
 
     /** Config callbacks with no material toggle still expose changes to effective compositor gates. */
-    synchronized void check() { refresh(); }
+    synchronized void check() { refresh(true); }
 
     /** Also called when there is no region: a failed gate must not make the diagnostics disappear. */
     synchronized void status(String reason) {
         cancelSettled(host.get());
         diagnostic.begin(reason);
-        refresh();
+        refresh(true);
         summary("snapshot");
     }
 
@@ -488,7 +497,7 @@ final class QuickSettingsEdgeLight {
             synchronized (QuickSettingsEdgeLight.this) {
                 settledSnapshot = null;
                 if (host.get() != v) return;
-                refresh();
+                refresh(true);
                 if (shown && lastExpansion >= 0.95f) summary("stabilized");
             }
         };
