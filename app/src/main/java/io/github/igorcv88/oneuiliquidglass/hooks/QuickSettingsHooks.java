@@ -47,7 +47,7 @@ public final class QuickSettingsHooks {
     private final ClassLoader loader;
     private final BooleanSupplier master;
     private final Consumer<android.content.Context> startConfig;
-    /** Callers' recompose scopes, invalidated when the setting changes so the panel follows live. */
+    /** BoxWithOutline's own recompose scopes, invalidated when the setting changes (live switch). */
     private final Set<Object> scopes = Collections.newSetFromMap(new WeakHashMap<>());
     private final Set<String> logged = new HashSet<>();
     private Object circleShape;
@@ -61,11 +61,12 @@ public final class QuickSettingsHooks {
 
     private static final class Pending {
         final Thread thread = Thread.currentThread();
+        final Object composer;
         final long background, fill;
         final Object rim;
         boolean rimDone, fillDone;
-        Pending(long background, long fill, Object rim) {
-            this.background = background; this.fill = fill; this.rim = rim;
+        Pending(Object composer, long background, long fill, Object rim) {
+            this.composer = composer; this.background = background; this.fill = fill; this.rim = rim;
             // Samsung builds no background element for a transparent colour: nothing to recolour.
             fillDone = background == 0L;
         }
@@ -120,6 +121,7 @@ public final class QuickSettingsHooks {
                     Pending q = pending;
                     if (q == null || q.thread != Thread.currentThread() || q.rimDone) return;
                     q.rimDone = true; // The outer box's border is the first one BoxWithOutline builds.
+                    capture(q.composer);
                     if (q.rim != null && p.args[0] instanceof Float && (Float) p.args[0] > 0f) p.args[1] = q.rim;
                 }
             });
@@ -247,9 +249,10 @@ public final class QuickSettingsHooks {
             // A recomposition through Samsung's restart lambda passes our own argument back.
             if (a[4] instanceof Long && (Long) a[4] == IDLE_COLOR) a[4] = 0L;
             bootstrap();
-            if (broken || !master.getAsBoolean()) return;
-            // Captured while the setting is still off too, so that switching it on applies live.
-            capture(a[7]);
+            if (broken) return;
+            // Even with the master or the option off, the border constructor captures this box's
+            // own scope (see capture), so that switching either on later applies live.
+            pending = new Pending(a[7], 0L, 0L, null);
             if (!enabled()) return;
             // Bits 2-32 of the $default mask: Samsung's defaults replace the outlined/width/colour/
             // shape arguments, so what is read here would not be what is drawn.
@@ -265,7 +268,7 @@ public final class QuickSettingsHooks {
             long fill = QuickSettingsGlass.color(QuickSettingsGlass.fill(kind, QuickSettingsGlass.argb(background), dark));
             if (background == 0L && kind == Kind.IDLE) a[4] = background = IDLE_COLOR;
             boolean outlined = Boolean.TRUE.equals(a[1]) && a[2] instanceof Float && (Float) a[2] > 0f;
-            pending = new Pending(background, fill, outlined ? rim(dark) : null);
+            pending = new Pending(a[7], background, fill, outlined ? rim(dark) : null);
         } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
             fail(e);
         }
@@ -286,13 +289,23 @@ public final class QuickSettingsHooks {
         }
     }
 
-    private void capture(Object composer) throws ReflectiveOperationException {
+    /**
+     * Runs inside BoxWithOutline's body (its border constructor), where the composer's current
+     * scope is the box's own restart group, not its caller's: invalidating a caller could skip the
+     * box when Samsung's arguments are unchanged. Marked used so endRestartGroup keeps it; its
+     * restart then executes the body with the forced bit and the hooks run again.
+     */
+    private void capture(Object composer) {
         if (recomposeScope == null || composer == null) return;
-        Object scope = recomposeScope.invoke(composer);
-        if (scope == null) return;
-        // Keep the caller's scope even if it reads no state, so it can be invalidated later.
-        recordUsed.invoke(composer, scope);
-        synchronized (scopes) { scopes.add(scope); }
+        try {
+            Object scope = recomposeScope.invoke(composer);
+            if (scope == null) return;
+            recordUsed.invoke(composer, scope);
+            synchronized (scopes) { scopes.add(scope); }
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
+            recomposeScope = null;
+            Probe.error("QS_SCOPE_CAPTURE_FAILED", e);
+        }
     }
 
     private Object rim(boolean dark) throws ReflectiveOperationException {
@@ -347,7 +360,7 @@ public final class QuickSettingsHooks {
         Probe.log("QS_COMPOSE_REFRESH", "reason=" + reason + " scopes=" + count);
     }
 
-    /** Fail closed: stop recolouring and let every captured caller recompose with Samsung's values. */
+    /** Fail closed: stop recolouring and let every captured box recompose with Samsung's values. */
     private void fail(Throwable e) {
         pending = null;
         if (broken) return;

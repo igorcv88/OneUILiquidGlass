@@ -49,9 +49,11 @@ passa um marcador de alpha 0 (`QuickSettingsGlass.IDLE_MARKER`) para que o eleme
 recolorido. Se o marcador escapasse, não desenharia nada. Ele é removido quando a lambda de
 reinício da Samsung o devolve ao hook.
 
-Ligar ou desligar a opção (ou o master) invalida os escopos de recomposição dos chamadores
-capturados (`RecomposeScopeImpl.invalidateForResult(null)`, pois o `invalidate()` foi removido pelo
-R8): a Central muda ao vivo. Tema claro/escuro é relido sempre que a Samsung recompõe as cores.
+Ligar ou desligar a opção (ou o master) invalida o escopo de recomposição de cada
+`BoxWithOutline` (`RecomposeScopeImpl.invalidateForResult(null)`, pois o `invalidate()` foi removido
+pelo R8): a Central muda ao vivo. O escopo é o da própria caixa, capturado dentro do seu corpo (no
+construtor do contorno), também com a opção ou o master desligados; invalidar o chamador não basta,
+porque com os mesmos argumentos o Compose pularia a caixa. Tema claro/escuro é relido sempre que a Samsung recompõe as cores.
 
 ## Falha fechada
 
