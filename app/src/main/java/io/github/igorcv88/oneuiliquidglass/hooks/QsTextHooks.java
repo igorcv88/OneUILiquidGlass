@@ -207,11 +207,13 @@ final class QsTextHooks {
                 @Override protected void beforeHookedMethod(MethodHookParam p){
                     if(text){
                         Float tone=drawing.get();if(tone==null)return;
-                        Integer original=applyPaint((Paint)p.args[index],tone,enabled.getAsBoolean());
+                        // The tone was authorised when the node's draw began (inkFor / the header
+                        // gate), including the shade-driven header with QS glass off.
+                        Integer original=applyPaint((Paint)p.args[index],tone,true);
                         if(original!=null)p.setObjectExtra("qsTextColor",original);
                     }else{
                         Float tone=iconDrawing.get();if(tone==null)return;
-                        ColorFilter original=applyIconPaint((Paint)p.args[index],tone,enabled.getAsBoolean());
+                        ColorFilter original=applyIconPaint((Paint)p.args[index],tone,true);
                         if(original!=null)p.setObjectExtra("qsHeaderFilter",original);
                     }
                 }

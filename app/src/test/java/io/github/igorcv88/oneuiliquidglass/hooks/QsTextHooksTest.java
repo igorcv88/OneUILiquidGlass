@@ -84,4 +84,17 @@ public class QsTextHooksTest {
         assertEquals(Boolean.FALSE,hooks.toneFor(body));assertEquals(Boolean.TRUE,hooks.toneFor(head));
         scene[0]=.75f;assertEquals(.75f,hooks.inkFor(body),0f);
     }
+    /** QS glass off (the default), shade glass on: the header still takes the shade's ink. */
+    @Test public void headerFollowsTheShadeWithQuickSettingsGlassOff() throws Exception {
+        float[] header={1f};
+        QsTextHooks hooks=new QsTextHooks(getClass().getClassLoader(),()->null,()->false,()->QsScene.Tone.UNKNOWN,()->QsScene.Tone.UNKNOWN,
+                h->h?Float.valueOf(header[0]):null);
+        Field ready=QsTextHooks.class.getDeclaredField("ready");ready.setAccessible(true);ready.set(hooks,true);
+        Object clock=new Object(),label=new Object();hooks.bindNode(clock,true);hooks.bindNode(label,false);
+        assertEquals(1f,hooks.inkFor(clock),0f);
+        assertNull("body labels stay QS-only",hooks.inkFor(label));
+        Paint paint=new Paint();paint.setColor(0xffffffff);
+        assertNotNull(QsTextHooks.applyPaint(paint,hooks.inkFor(clock),true));
+        assertEquals(0xff1d1d1d,paint.getColor());
+    }
 }
