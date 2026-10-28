@@ -140,6 +140,22 @@ public final class QuickSettingsEdgeLightTest {
         assertEquals(0f, (Float) get(edge, "edgeFade"), 0f);
     }
 
+    /** The pre-draw listener stays on the shade window with the option off (its default). */
+    @Test public void inactiveFramesSkipTheExpansionReadAndKeepReleasing() throws Exception {
+        QuickSettingsEdgeLight edge = edge(false, false, true);
+        CountingAdapter adapter = new CountingAdapter();
+        edge.panel(new Controller(host, adapter));
+        Object node = bind(edge);
+        BlurDrawable d = seed(edge, node);
+        int reads = adapter.expansionFraction.reads;
+        for (int i = 0; i < 5; i++) call(edge, "refresh", new Class<?>[0]);
+        assertEquals(reads, adapter.expansionFraction.reads);
+        assertReleased(d);
+        // A snapshot (toggle, config callback) still records the fade inputs.
+        edge.status("off-snapshot");
+        assertTrue(adapter.expansionFraction.reads > reads);
+    }
+
     private QuickSettingsEdgeLight edge(boolean enabled, boolean option, boolean master) throws Exception {
         QuickSettingsEdgeLight e = new QuickSettingsEdgeLight(getClass().getClassLoader(),
                 () -> enabled, () -> option, () -> master);
@@ -197,6 +213,8 @@ public final class QuickSettingsEdgeLightTest {
     }
     public static final class Adapter { public final Flow expansionFraction = new Flow(); }
     public static final class Flow { public Float getValue() { return 1f; } }
+    public static final class CountingAdapter { public final CountingFlow expansionFraction = new CountingFlow(); }
+    public static final class CountingFlow { int reads; public Float getValue() { reads++; return 1f; } }
     public static final class BlurDrawable extends Drawable {
         int radius, alpha = 255;
         @Override public void draw(Canvas canvas) { }
