@@ -66,6 +66,20 @@ public class QsRefreshTest {
         for(java.lang.reflect.Method m:QsContentHooks.class.getDeclaredMethods())
             assertFalse(m.getName(),m.getName().toLowerCase(Locale.ROOT).contains("artwork"));
     }
+    @Test public void sliderInteractionCoversPressReleaseAndCancelWithoutScopeHistory() {
+        assertEquals(Boolean.TRUE,QsSliderHooks.interactionState("androidx.compose.foundation.interaction.PressInteraction$Press"));
+        assertEquals(Boolean.TRUE,QsSliderHooks.interactionState("androidx.compose.foundation.interaction.DragInteraction$Start"));
+        assertEquals(Boolean.FALSE,QsSliderHooks.interactionState("androidx.compose.foundation.interaction.DragInteraction$Cancel"));
+        assertEquals(Boolean.FALSE,QsSliderHooks.interactionState("androidx.compose.foundation.interaction.PressInteraction$Release"));
+        assertNull(QsSliderHooks.interactionState("HoverInteraction$Enter"));
+    }
+    @Test public void knownHeaderToneSwitchesBeforeTheNextDrawWithoutGreyTransition() throws Exception {
+        QuickSettingsHooks hooks=new QuickSettingsHooks(getClass().getClassLoader(),()->true,c->{});
+        hooks.shadeHeader(false);assertEquals(Float.valueOf(0f),hooks.ink(true));
+        hooks.shadeHeader(true);assertEquals(Float.valueOf(1f),hooks.ink(true));
+        hooks.shadeHeader(false);assertEquals(Float.valueOf(0f),hooks.ink(true));
+        assertNull(field(QuickSettingsHooks.class,"shadeHeaderAnimator").get(hooks));
+    }
     public static class DrawNode {
         int invalidations;
         public static void invalidate(Object node){((DrawNode)node).invalidations++;}

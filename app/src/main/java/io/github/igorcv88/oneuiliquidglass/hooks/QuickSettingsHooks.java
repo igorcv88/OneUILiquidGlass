@@ -95,6 +95,7 @@ public final class QuickSettingsHooks {
         final Object edgeShape;
         final float edgeBorder;
         boolean slider;
+        QsOpticsCoverage.Token token;
         Kind kind = Kind.NONE;
         Object sliderShape;
         float outer = 1f;
@@ -185,6 +186,7 @@ public final class QuickSettingsHooks {
                                 Kind.CONTAINER, QuickSettingsGlass.argb(original), backdrop.tone(), style)), null, f.shape, 0);
                     }
                     if (!(p.args[0] instanceof Long) || (Long) p.args[0] != q.background) return;
+                    if (q.token == null && q.edgeShape != null) q.token = edge.selected("media-active");
                     q.fillDone = true;
                     p.args[0] = q.fill;
                     if (q.sliderShape != null) p.args[3] = q.sliderShape;
@@ -192,7 +194,7 @@ public final class QuickSettingsHooks {
                 }
                 @Override protected void afterHookedMethod(MethodHookParam p) {
                     Object q = p.getObjectExtra("oulgEdge");
-                    if (q instanceof Pending) edge.element(p.thisObject, ((Pending) q).edgeShape, ((Pending) q).edgeBorder, ((Pending) q).outer);
+                    if (q instanceof Pending) edge.element(p.thisObject, ((Pending) q).edgeShape, ((Pending) q).edgeBorder, ((Pending) q).outer, ((Pending) q).token);
                 }
             });
             edge.install(background);
@@ -360,8 +362,12 @@ public final class QuickSettingsHooks {
             barPill=null;
             Probe.log("QS_SLIDER_SHAPE_MISSING", "error=" + e.getClass().getSimpleName());
         }
-        try { new QsSliderHooks(loader,this::enabled,()->style,()->pillShape!=null||style.outer>=1,
-                this::capture,()->touching,()->edge.suppress(true)).install(bar); }
+        try {
+            QsSliderHooks sliders = new QsSliderHooks(loader,this::enabled,()->style,()->pillShape!=null||style.outer>=1,
+                    this::capture,()->touching,()->edge.suppress(true));
+            sliders.onInteraction(edge::suppress);
+            sliders.install(bar);
+        }
         catch(ReflectiveOperationException|RuntimeException|LinkageError e){Probe.error("QS_SLIDER_HOOK_FAILED",e);}
     }
 
@@ -434,6 +440,9 @@ public final class QuickSettingsHooks {
                     kind == Kind.CONTAINER ? a[5] : null, outlined ? (Float) a[2] : 0f));
             pending.get().slider = kind == Kind.CONTAINER && barPill != null && a[5] == barPill;
             pending.get().kind = kind;
+            QsContentHooks.Frame owner = content.current();
+            pending.get().token = edge.selected(pending.get().slider ? "slider"
+                    : owner != null && owner.media ? owner.emptyMedia ? "media-empty" : "media-active" : "container");
             if (pending.get().slider) {
                 pending.get().sliderShape = pillShape;
                 pending.get().outer = pillShape != null ? style.outer : 1f;
@@ -480,8 +489,10 @@ public final class QuickSettingsHooks {
     private Object rim(boolean dark) throws ReflectiveOperationException {
         Object cached = dark ? darkRim : lightRim;
         if (cached != null) return cached;
+        // Border and background have no proven one-to-one draw ownership. Keep the full
+        // fallback; shader availability is not evidence that this capsule drew optics.
         Object brush = solidColor.newInstance(QuickSettingsGlass.color(QuickSettingsGlass.basalRim(
-                QuickSettingsGlass.rim(dark, backdrop.tone(), style), QsCapsuleOptics.available())));
+                QuickSettingsGlass.rim(dark, backdrop.tone(), style), false)));
         if (dark) darkRim = brush; else lightRim = brush;
         return brush;
     }
@@ -539,29 +550,11 @@ public final class QuickSettingsHooks {
         float target = light == null ? Float.NaN : light ? 1f : 0f, from = shadeHeaderInk;
         if (Float.compare(target, from) == 0) return;
         if (shadeHeaderAnimator != null) { shadeHeaderAnimator.cancel(); shadeHeaderAnimator = null; }
-        long duration = InkAnimator.duration();
+        // The scene already changed: interpolation would retain unsafe ink for 120 ms.
+        shadeHeaderInk = target;
         Probe.log("QS_HEADER_INK", "source=shade target=" + (light == null ? "native" : light ? "dark" : "light")
-                + " animated=" + (!Float.isNaN(from) && !Float.isNaN(target) && duration > 0));
-        if (Float.isNaN(from) || Float.isNaN(target) || duration <= 0) {
-            shadeHeaderInk = target;
-            content.invalidateDraw();
-            return;
-        }
-        android.animation.ValueAnimator a = android.animation.ValueAnimator.ofFloat(0f, 1f);
-        a.setDuration(io.github.igorcv88.oneuiliquidglass.glass.InkTransition.DURATION_MS);
-        a.addUpdateListener(x -> {
-            if (shadeHeaderAnimator != x) return;
-            try {
-                shadeHeaderInk = from + (target - from) * io.github.igorcv88.oneuiliquidglass.glass.InkTransition.ease(x.getAnimatedFraction());
-                content.invalidateDraw();
-                if (x.getAnimatedFraction() >= 1f) shadeHeaderAnimator = null;
-            } catch (RuntimeException | LinkageError e) {
-                x.cancel(); shadeHeaderAnimator = null; shadeHeaderInk = target;
-                Probe.error("QS_HEADER_INK_FAILED", e);
-            }
-        });
-        shadeHeaderAnimator = a;
-        a.start();
+                + " animated=false");
+        content.invalidateDraw();
     }
 
     private void invalidateAll(String reason) {

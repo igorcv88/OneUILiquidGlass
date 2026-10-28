@@ -26,8 +26,12 @@ final class QsSliderHooks {
     private Method drawContext, size, setSize, getCanvas;
     private Field nativeCanvas;
     private boolean broken, trackHooked;
-    private final boolean[] staged=new boolean[3];
+    private final java.util.Map<Object,Integer> statuses=new java.util.WeakHashMap<>();
     private Object whiteBrush;
+    private final ThreadLocal<Boolean> composing = new ThreadLocal<>();
+    private final java.util.Set<Object> interactionSources = java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>());
+    private Consumer<Boolean> interaction = on -> {};
+    void onInteraction(Consumer<Boolean> listener) { interaction = listener; }
     private final ThreadLocal<Frame> current=new ThreadLocal<>();
     private static final class Frame {
         final Object scope, context;
@@ -40,6 +44,8 @@ final class QsSliderHooks {
         final float outer;
         final float[] geometry=new float[5], body=new float[5];
         boolean bodyDrawn;
+        int stages;
+        float progress = Float.NaN;
         Frame(Object scope,Object context,Canvas canvas,long original,QsDrawTransaction transaction,float w,float h,boolean rtl,QsStyle style,float outer){
             this.scope=scope;this.context=context;this.canvas=canvas;this.original=original;this.transaction=transaction;
             this.w=w;this.h=h;this.rtl=rtl;
@@ -74,6 +80,7 @@ final class QsSliderHooks {
         getCanvas=ctx.getMethod("getCanvas");
         nativeCanvas=Class.forName("androidx.compose.ui.graphics.AndroidCanvas",false,loader).getDeclaredField("internalCanvas");
         nativeCanvas.setAccessible(true);
+        installInteractions();
         boolean[] found=new boolean[3];
         for(Method m:scope.getDeclaredMethods()) {
             String n=m.getName();
@@ -93,23 +100,58 @@ final class QsSliderHooks {
         }
         // Body and thumb carry the geometry; without them the slider stays native. A missing track
         // hook only leaves Samsung's track visible inside the glass.
-        if(!found[1]||!found[2])throw new NoSuchMethodException("slider primitives track="+found[0]+" body="+found[1]+" thumb="+found[2]);
+        if(!found[0]||!found[1]||!found[2])throw new NoSuchMethodException("slider primitives track="+found[0]+" body="+found[1]+" thumb="+found[2]);
         trackHooked=found[0];
+        boolean callerFound=false;
         for(Method m:bar.getDeclaredMethods()) {
             if(m.getName().startsWith("BidirectionalBar-"))XposedBridge.hookMethod(m,new XC_MethodHook(){
                 // The caller's scope: invalidating it re-runs the bar, so its thickness changes live.
                 @Override protected void beforeHookedMethod(MethodHookParam p){
+                    p.setObjectExtra("qsBarPrevious", composing.get()); composing.set(true);
+                    for (Object a : p.args) if (a != null && a.getClass().getName().endsWith("MutableInteractionSourceImpl")) interactionSources.add(a);
                     for(int i=0;i<m.getParameterCount();i++)if(m.getParameterTypes()[i].getName().equals("androidx.compose.runtime.Composer"))capture.accept(p.args[i]);
+                }
+                @Override protected void afterHookedMethod(MethodHookParam p) {
+                    Boolean old=(Boolean)p.getObjectExtra("qsBarPrevious");
+                    if(old==null)composing.remove();else composing.set(old);
                 }
             });
             if(!m.getName().equals("drawBidirectionalBarTrackProgressThumbContent-Uzs9YN0"))continue;
+            callerFound=true;
             XposedBridge.hookMethod(m,new XC_MethodHook(){
                 @Override protected void beforeHookedMethod(MethodHookParam p){begin(p);}
                 @Override protected void afterHookedMethod(MethodHookParam p){end(p);}
             });
             deoptimize(m);
         }
+        if(!callerFound)throw new NoSuchMethodException("drawBidirectionalBarTrackProgressThumbContent-Uzs9YN0");
         Probe.log("QS_SLIDER_READY","surfaces=2 track="+(trackHooked?"hidden":"native")+" thumb=endCap firmware=DZIF");
+    }
+    private void installInteractions() {
+        try {
+            Class<?> source=Class.forName("androidx.compose.foundation.interaction.MutableInteractionSourceImpl",false,loader);
+            XposedBridge.hookAllConstructors(source,new XC_MethodHook(){
+                @Override protected void afterHookedMethod(MethodHookParam p){
+                    if(Boolean.TRUE.equals(composing.get())) interactionSources.add(p.thisObject);
+                }
+            });
+            for(Method m:source.getDeclaredMethods()) if(m.getName().equals("emit")||m.getName().equals("tryEmit"))
+                XposedBridge.hookMethod(m,new XC_MethodHook(){
+                    @Override protected void beforeHookedMethod(MethodHookParam p){
+                        if(!enabled.getAsBoolean()||!interactionSources.contains(p.thisObject)||p.args.length==0||p.args[0]==null)return;
+                        String name=p.args[0].getClass().getName();
+                        Boolean on=interactionState(name);
+                        if(on!=null)try{interaction.accept(on);}catch(RuntimeException|LinkageError e){Probe.error("QS_SLIDER_INTERACTION_FAILED",e);}
+                    }
+                });
+            Probe.log("QS_HOOK_STATUS","family=slider step=interaction ready=true execution=unproven");
+        } catch(ReflectiveOperationException|RuntimeException|LinkageError e){Probe.error("QS_SLIDER_INTERACTION_MISSING",e);}
+    }
+    static Boolean interactionState(String name) {
+        if(name.endsWith("PressInteraction$Press")||name.endsWith("DragInteraction$Start"))return true;
+        if(name.endsWith("PressInteraction$Release")||name.endsWith("PressInteraction$Cancel")
+                ||name.endsWith("DragInteraction$Stop")||name.endsWith("DragInteraction$Cancel"))return false;
+        return null;
     }
     private void begin(XC_MethodHook.MethodHookParam p){
         if(broken||!enabled.getAsBoolean())return;
@@ -135,12 +177,7 @@ final class QsSliderHooks {
     }
     private void primitive(XC_MethodHook.MethodHookParam p,int stage){
         Frame f=current.get();if(broken||f==null||p.args[0]!=f.scope)return;
-        if(!staged[stage]){
-            // Once per stage and process: proof that the primitive really ran in the bar's scope.
-            staged[stage]=true;
-            Probe.log("QS_SLIDER_STAGE","stage="+stage+" action="+(suppressTrack(stage)?"trackSuppressed":stage==1?"bodyDrawn":"capDrawn")
-                    +" size="+Math.round(f.w)+"x"+Math.round(f.h)+" fill="+f.style.fill);
-        }
+        f.stages |= 1 << stage;
         if(suppressTrack(stage)){p.setResult(null);return;} // No visual track, even for legacy presets.
         try {
             int last=p.args.length-1, mask=(Integer)p.args[last];
@@ -154,6 +191,7 @@ final class QsSliderHooks {
             if(stage==1){
                 System.arraycopy(g,0,f.body,0,5);f.bodyDrawn=true;
                 float length=f.w<=f.h?y(extent):x(extent);
+                f.progress=Math.max(0f,Math.min(1f,length/Math.max(f.w,f.h)));
                 Float previous=lengths.put(f.scope,length);
                 if(drag(previous,length,touching.getAsBoolean()))dragged.run();
             }
@@ -166,6 +204,16 @@ final class QsSliderHooks {
     private void end(XC_MethodHook.MethodHookParam p){
         Object extra=p.getObjectExtra("qsSliderFrame");if(!(extra instanceof Frame))return;
         p.setObjectExtra("qsSliderFrame",null);Frame f=(Frame)extra;
+        int bucket = Float.isNaN(f.progress) ? -1 : f.progress <= .01f ? 0 : f.progress >= .99f ? 100 : Math.abs(f.progress-.5f)<.02f ? 50 : 1;
+        int status=(bucket+1)*8+f.stages;
+        Integer old=statuses.put(f.scope,status);
+        if(old==null || old!=status) {
+            Probe.log("QS_SLIDER_STATUS", "id=" + Integer.toHexString(System.identityHashCode(f.scope))
+                    + " role=other stage0=" + ((f.stages&1)!=0) + " stage1=" + ((f.stages&2)!=0)
+                    + " stage2=" + ((f.stages&4)!=0) + " trackHidden=" + ((f.stages&1)!=0)
+                    + " fill=" + f.style.fill + " outer=" + f.outer + " progress=" + f.progress
+                    + " rtl=" + f.rtl + " vertical=" + (f.w<=f.h) + " drawn=" + !p.hasThrowable());
+        }
         current.set((Frame)p.getObjectExtra("qsSliderPrevious"));
         if(current.get()==null)current.remove();
         try{f.transaction.close();}catch(ReflectiveOperationException|RuntimeException|LinkageError e){fail(e);}

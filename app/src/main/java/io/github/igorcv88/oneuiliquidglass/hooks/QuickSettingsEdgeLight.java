@@ -73,7 +73,18 @@ final class QuickSettingsEdgeLight {
     private int blurPx = QuickSettingsGlass.EDGE_BLUR_PX;
     /** Last expansion read (-1: none, or unreadable), for the log; 0 = closed, 1 = open is assumed. */
     private float lastExpansion = -1f;
-    private boolean ready, logged;
+    private boolean ready, logged, compositorBroken, visible;
+    private long hostGeneration;
+    private final QsOpticsCoverage coverage = new QsOpticsCoverage((event, detail) -> {
+        if (!event.equals("QS_OPTICS_PATH") || Probe.trace) Probe.log(event, detail);
+    });
+    synchronized QsOpticsCoverage.Token selected(String role) { return coverage.select(role); }
+    private final ThreadLocal<DrawFrame> drawing = new ThreadLocal<>();
+    private static final class DrawFrame {
+        final Object node, scope;
+        boolean consumed;
+        DrawFrame(Object node, Object scope) { this.node=node; this.scope=scope; }
+    }
     private float ancestorAlpha, edgeFade;
     private boolean shown, scaled;
     /**
@@ -97,7 +108,9 @@ final class QuickSettingsEdgeLight {
         final WeakReference<Object> element;
         final Object shape;
         final float border, outer;
-        Spec(Object element, Object shape, float border, float outer) {
+        final QsOpticsCoverage.Token token;
+        Spec(Object element, Object shape, float border, float outer, QsOpticsCoverage.Token token) {
+            this.token = token;
             this.element = new WeakReference<>(element); this.shape = shape; this.border = border; this.outer = outer;
         }
     }
@@ -108,6 +121,7 @@ final class QuickSettingsEdgeLight {
         Object root;
         float tag = -1f;
         boolean drawn;
+        long mediaSession = -1;
         Edge(Spec spec) { this.spec = spec; }
         void release() {
             if (bridge != null) {
@@ -154,20 +168,16 @@ final class QuickSettingsEdgeLight {
                     .getDeclaredField("internalCanvas");
             nativeCanvas.setAccessible(true);
             member = "BackgroundElement.create";
-            Method create = backgroundElement.getDeclaredMethod("create");
-            member = "BackgroundElement.update";
-            Method update = backgroundElement.getDeclaredMethod("update", nodeBase);
-            // BackgroundNode does not override onDetach; markAsDetached$ui is the node leaving the tree.
+            Class<?> contentScope = Class.forName("androidx.compose.ui.graphics.drawscope.ContentDrawScope", false, loader);
+            QsNodeAbi abi = QsNodeAbi.resolve(backgroundElement, node, contentScope);
+            Method create = abi.create, update = abi.update, draw = abi.draw;
             member = "Modifier.Node.markAsDetached$ui";
             Method detach = nodeBase.getDeclaredMethod("markAsDetached$ui");
-            member = "BackgroundNode.draw";
-            Method draw = null;
-            for (Method m : node.getDeclaredMethods())
-                if (m.getName().equals("draw") && m.getParameterCount() == 1) draw = m;
-            if (draw == null) {
-                Probe.log("QS_EDGE_STATUS", "phase=install ready=false member=" + member);
-                return;
-            }
+            // BackgroundNode.draw paints the background then invokes this concrete drawContent.
+            // Intercept only that exact scope/frame, before it enters descendants.
+            member = "LayoutNodeDrawScope.drawContent";
+            Method drawContent = Class.forName("androidx.compose.ui.node.LayoutNodeDrawScope", false, loader)
+                    .getDeclaredMethod("drawContent");
             try {
                 Class<?> drawNode = Class.forName("androidx.compose.ui.node.DrawModifierNode", false, loader);
                 invalidateDraw = Class.forName("androidx.compose.ui.node.DrawModifierNodeKt", false, loader)
@@ -183,15 +193,44 @@ final class QuickSettingsEdgeLight {
             XposedBridge.hookMethod(detach, new XC_MethodHook() {
                 @Override protected void afterHookedMethod(MethodHookParam p) { unbind(p.thisObject); }
             });
-            XposedBridge.hookMethod(draw, new XC_MethodHook() {
-                // The optics go first: BackgroundNode.draw paints the (tinted or transparent)
-                // background and then the container's content, which must stay above the light.
+            XposedBridge.hookMethod(drawContent, new XC_MethodHook() {
                 @Override protected void beforeHookedMethod(MethodHookParam p) {
-                    draw(p.thisObject, p.args[0]);
-                    optics(p.thisObject, p.args[0]);
+                    DrawFrame f = drawing.get();
+                    if (f == null || f.consumed || f.scope != p.thisObject) return;
+                    f.consumed = true;
+                    optics(f.node, f.scope);
+                    beginMedia(p, f);
+                }
+                @Override protected void afterHookedMethod(MethodHookParam p) {
+                    Object saved = p.getObjectExtra("qsMediaCanvas");
+                    if (saved instanceof android.graphics.Canvas) {
+                        try { ((android.graphics.Canvas) saved).restoreToCount((Integer) p.getObjectExtra("qsMediaSave")); }
+                        catch (RuntimeException | LinkageError e) { Probe.error("QS_MEDIA_CAPSULE_FAILED", e); }
+                    }
                 }
             });
+            XposedBridge.hookMethod(draw, new XC_MethodHook() {
+                @Override protected void beforeHookedMethod(MethodHookParam p) {
+                    p.setObjectExtra("qsEdgePrevious", drawing.get());
+                    if (nodes.containsKey(p.thisObject)) drawing.set(new DrawFrame(p.thisObject, p.args[0]));
+                    else drawing.remove();
+                    draw(p.thisObject, p.args[0]);
+                }
+                @Override protected void afterHookedMethod(MethodHookParam p) {
+                    DrawFrame f = drawing.get();
+                    if (f != null && !f.consumed) {
+                        Edge e = nodes.get(f.node);
+                        if (e != null) coverage.stage(e.spec.token, "fallback", "drawContent-not-reached");
+                    }
+                    DrawFrame old = (DrawFrame) p.getObjectExtra("qsEdgePrevious");
+                    if (old == null) drawing.remove(); else drawing.set(old);
+                }
+            });
+            // Prevent an inlined drawContent from bypassing the optical layer boundary.
+            try { XposedBridge.class.getMethod("deoptimizeMethod", java.lang.reflect.Member.class).invoke(null, draw); }
+            catch (ReflectiveOperationException | RuntimeException ignored) { }
             ready = true;
+            Probe.log("QS_HOOK_STATUS", "family=optics step=drawContent ready=true method=" + drawContent.toGenericString());
             Probe.log("QS_EDGE_READY", "draw=" + draw.toGenericString());
             Probe.log("QS_EDGE_STATUS", "phase=install ready=true host=" + (host.get() != null));
             active();
@@ -199,6 +238,7 @@ final class QuickSettingsEdgeLight {
             if (e instanceof ClassNotFoundException) member = e.getMessage();
             Probe.log("QS_EDGE_STATUS", "phase=install ready=false member=" + member
                     + " error=" + e.getClass().getSimpleName());
+            Probe.log("QS_OPTICS_STATUS", "ready=false step=" + member);
             Probe.error("QS_EDGE_INSTALL_FAILED", e);
         }
     }
@@ -207,14 +247,20 @@ final class QuickSettingsEdgeLight {
     synchronized void element(Object element, Object shape, float borderDp) { element(element, shape, borderDp, 1f); }
 
     synchronized void element(Object element, Object shape, float borderDp, float outer) {
-        if (!ready || shape == null) return;
+        element(element, shape, borderDp, outer, selected("unknown"));
+    }
+
+    synchronized void element(Object element, Object shape, float borderDp, float outer, QsOpticsCoverage.Token token) {
+        if (token == null) token = selected("unknown");
+        if (!ready || shape == null) { coverage.stage(token, "fallback", "not-ready-or-shape"); return; }
+        coverage.stage(token, "registered", "element=" + identity(element));
         purge();
         if (elements.size() >= MAX_PENDING_ELEMENTS) {
             elements.remove(0);
             if (diagnostic.count(QuickSettingsEdgeDiagnostics.Event.PENDING_EVICTED))
                 diagnostic.event(QuickSettingsEdgeDiagnostics.Event.PENDING_EVICTED, "limit=" + MAX_PENDING_ELEMENTS);
         }
-        elements.add(new Spec(element, shape, borderDp, outer));
+        elements.add(new Spec(element, shape, borderDp, outer, token));
         if (diagnostic.count(QuickSettingsEdgeDiagnostics.Event.ELEMENT))
             diagnostic.event(QuickSettingsEdgeDiagnostics.Event.ELEMENT, "element=" + identity(element));
     }
@@ -240,7 +286,9 @@ final class QuickSettingsEdgeLight {
         View old = host.get();
         if (old != view) {
             unwatch(old);
-            releaseAll();
+            closeRegions("host-replaced");
+            nodes.clear(); elements.clear();
+            hostGeneration++;
         }
         host = new WeakReference<>(view instanceof View ? (View) view : null);
         adapter = a;
@@ -276,6 +324,8 @@ final class QuickSettingsEdgeLight {
         if (node == null) return;
         Spec s = elements.isEmpty() ? null : take(element);
         Edge e = nodes.get(node);
+        // Compose can call update twice with the same element (typed and erased bridges).
+        if (s == null && e != null && e.spec.element.get() == element) return;
         if (s == null) {
             // Ordinary Compose backgrounds are not QS candidates. Only diagnose misses while a QS
             // spec is pending or when this node previously belonged to us.
@@ -289,6 +339,7 @@ final class QuickSettingsEdgeLight {
         if (e != null && e.spec == s) return;
         if (e != null) releaseNode(e);
         nodes.put(node, new Edge(s));
+        coverage.stage(s.token, "bound", "element=" + identity(element) + " node=" + identity(node));
         if (diagnostic.count(QuickSettingsEdgeDiagnostics.Event.BIND))
             diagnostic.event(QuickSettingsEdgeDiagnostics.Event.BIND,
                     "element=" + identity(element) + " node=" + identity(node));
@@ -316,7 +367,7 @@ final class QuickSettingsEdgeLight {
         boolean on = enabled.getAsBoolean();
         diagnostic.gate(ready, option.getAsBoolean(), master.getAsBoolean(), on,
                 t.sfRefract, t.sfOptics, host.get() != null);
-        return ready && on && t.sfRefract && t.sfOptics >= MIN_OPTICS && host.get() != null;
+        return ready && !compositorBroken && on && t.sfRefract && t.sfOptics >= MIN_OPTICS && host.get() != null;
     }
 
     private synchronized void draw(Object node, Object scope) {
@@ -326,7 +377,9 @@ final class QuickSettingsEdgeLight {
                 diagnostic.event(QuickSettingsEdgeDiagnostics.Event.UNBOUND_NODE, "pending=" + elements.size());
             return;
         }
-        if (!active() || suppressed) { e.release(); return; }
+        if (!active() || suppressed || fade() <= 0f) { e.release(); return; }
+        alpha = Math.round(255f * edgeFade);
+        if (alpha == 0) { e.release(); return; }
         View v = host.get();
         try {
             long size = (Long) getSize.invoke(scope);
@@ -389,7 +442,7 @@ final class QuickSettingsEdgeLight {
                             "width=" + ow + " height=" + oh + " radius=" + radius + " tag=" + tag);
             }
             watch(v);
-            e.bridge.drawable.setAlpha(Math.max(1, alpha));
+            e.bridge.drawable.setAlpha(alpha);
             // The inner box grown back to the outer one: the RenderNode reports these bounds whatever
             // the inner clip, and the light band then sits on Samsung's outline.
             e.bridge.draw((android.graphics.Canvas) raw, new Rect(Math.round(-out+envelope[0]), Math.round(-out+envelope[1]),
@@ -411,13 +464,11 @@ final class QuickSettingsEdgeLight {
     }
 
     private void fail(Throwable ex) {
-        ready = false;
+        // A compositor failure must not disable the independent APK optical material.
+        compositorBroken = true;
         releaseAll();
-        nodes.clear();
-        elements.clear();
         Probe.error("QS_EDGE_FAILED", ex);
         status("failure");
-        unwatch(host.get());
     }
 
     /** Before each frame of the window: the fade from the expansion and the ancestors, to every region. */
@@ -426,7 +477,10 @@ final class QuickSettingsEdgeLight {
         if (preDraw != null && observed == o && o.isAlive()) return;
         if (observed != null && observed.isAlive() && preDraw != null)
             observed.removeOnPreDrawListener(preDraw);
-        if (preDraw == null) preDraw = () -> { refresh(); return true; };
+        if (preDraw == null) preDraw = () -> {
+            try { refresh(); } catch (RuntimeException | LinkageError e) { fail(e); }
+            return true;
+        };
         observed = o;
         o.addOnPreDrawListener(preDraw);
         refresh();
@@ -443,20 +497,40 @@ final class QuickSettingsEdgeLight {
      * expansion read run only for a snapshot (toggle, config callback, failure).
      */
     private void refresh(boolean snapshot) {
-        boolean on = active() && !suppressed;
-        if (!on) {
-            releaseAll();
-            if (snapshot) { fade(); observe(false); }
-            return;
+        boolean sf = active();
+        boolean on = enabled.getAsBoolean() && ready;
+        if (!on && !snapshot) { closeRegions("disabled"); return; }
+        float f = fade();
+        boolean now = on && f > 0f && Math.round(255f * f) > 0;
+        if (!now) { closeRegions("hidden-or-zero-fade"); observe(false); return; }
+        if (!visible) {
+            visible = true;
+            coverage.begin();
+            for (Edge e : nodes.values()) {
+                e.spec.token.attempted = false; e.spec.token.drawn = false;
+                coverage.adopt(e.spec.token);
+            }
+            for (Spec spec : elements) coverage.adopt(spec.token);
+            redrawNodes();
         }
-        float fade = fade();
-        int next = Math.round(255f * fade);
-        if (next != alpha) {
-            alpha = next;
-            for (Edge e : nodes.values())
-                if (e.bridge != null) e.bridge.drawable.setAlpha(Math.max(1, alpha));
-        }
+        alpha = Math.round(255f * f);
+        if (!sf || suppressed) releaseAll();
+        else for (Edge e : nodes.values()) if (e.bridge != null) e.bridge.drawable.setAlpha(alpha);
         observe(false);
+    }
+
+    private void closeRegions(String reason) {
+        int before = 0;
+        for (Edge e : nodes.values()) if (e.bridge != null) before++;
+        releaseAll();
+        alpha = 0;
+        if (visible || before > 0) {
+            coverage.summary("exit");
+            Probe.log("QS_EDGE_EXIT", "session=" + coverage.session() + " reason=" + reason
+                    + " regionsBefore=" + before + " regionsAfter=0 alphaPositiveAfter=0");
+        }
+        visible = false;
+        cancelSettled(host.get());
     }
 
     private float fade() {
@@ -481,7 +555,7 @@ final class QuickSettingsEdgeLight {
         float expansion = readExpansion();
         lastExpansion = expansion;
         ancestorAlpha = a;
-        edgeFade = scaled || suppressed || expansion < 0f ? 0f : QuickSettingsGlass.edgeFade(a, expansion);
+        edgeFade = scaled || expansion < 0f ? 0f : QuickSettingsGlass.edgeFade(a, expansion);
         return edgeFade;
     }
 
@@ -510,17 +584,22 @@ final class QuickSettingsEdgeLight {
     /** Draws the optics into a glass container's inner box; any failure leaves the capsule as it is. */
     private void optics(Object node, Object scope) {
         QsCapsuleOptics o = optics;
-        if (o == null || !QsCapsuleOptics.available() || !enabled.getAsBoolean()) return;
         Edge e;
         synchronized (this) { e = nodes.isEmpty() ? null : nodes.get(node); }
         if (e == null) return;
+        if (o == null || !QsCapsuleOptics.available() || !enabled.getAsBoolean()) {
+            coverage.stage(e.spec.token, "fallback", "disabled-or-shader"); return;
+        }
+        coverage.stage(e.spec.token, "attempt", "drawContent");
         try {
             long size = (Long) getSize.invoke(scope);
             float w = Float.intBitsToFloat((int) (size >>> 32)), h = Float.intBitsToFloat((int) size);
             float density = (Float) getDensity.invoke(scope);
             Object canvas = contextCanvas.invoke(drawContext.invoke(scope));
             Object raw = nativeCanvas.getDeclaringClass().isInstance(canvas) ? nativeCanvas.get(canvas) : null;
-            if (!(raw instanceof android.graphics.Canvas)) return;
+            if (!(raw instanceof android.graphics.Canvas) || !((android.graphics.Canvas) raw).isHardwareAccelerated()) {
+                coverage.stage(e.spec.token, "fallback", "no-hardware-canvas"); return;
+            }
             int out = QuickSettingsGlass.edgeOutset(e.spec.border, density);
             long outer = ((long) Float.floatToRawIntBits(w + 2 * out) << 32) | (Float.floatToRawIntBits(h + 2 * out) & 0xffffffffL);
             Object corner = topStart.get(e.spec.shape);
@@ -533,9 +612,50 @@ final class QuickSettingsEdgeLight {
                 x = env[0]; y = env[1]; w = env[2] - env[0]; h = env[3] - env[1];
                 radius = Math.min(w, h) / 2f;
             }
-            o.draw(node, (android.graphics.Canvas) raw, x, y, w, h, radius, density, lightScene.getAsBoolean());
+            boolean success = o.draw(node, (android.graphics.Canvas) raw, x, y, w, h, radius, density, lightScene.getAsBoolean());
+            boolean first = !e.spec.token.drawn;
+            coverage.stage(e.spec.token, success ? "drawn" : "fallback", success ? "agsl" : "shader-or-size");
+            if (success && first && Probe.trace) Probe.log("QS_OPTICS_DRAWN", "session=" + coverage.session()
+                    + " id=" + e.spec.token.id + " role=" + e.spec.token.role + " w=" + w + " h=" + h
+                    + " radius=" + radius + " hardware=true light=" + lightScene.getAsBoolean());
+
         } catch (ReflectiveOperationException | RuntimeException | LinkageError ex) {
-            o.fail("geometry", ex);
+            coverage.stage(e.spec.token, "fallback", "geometry");
+            if (Probe.trace) Probe.error("QS_OPTICS_FAILED", "geometry id=" + e.spec.token.id, ex);
+        }
+    }
+
+    /** Parent content transform covers artwork, controls and the empty player equally. */
+    private void beginMedia(XC_MethodHook.MethodHookParam p, DrawFrame f) {
+        Edge e = nodes.get(f.node);
+        if (e == null || !e.spec.token.role.startsWith("media") || !enabled.getAsBoolean()) return;
+        android.graphics.Canvas canvas = null;
+        int save = -1;
+        try {
+            long size = (Long) getSize.invoke(f.scope);
+            float w = Float.intBitsToFloat((int)(size >>> 32)), h = Float.intBitsToFloat((int)size);
+            float density = (Float) getDensity.invoke(f.scope);
+            float[] g = QuickSettingsGlass.mediaCapsule(w, h, 0, QsContentHooks.MEDIA_INSET_DP * density, 0);
+            if (g == null) return;
+            Object wrapper = contextCanvas.invoke(drawContext.invoke(f.scope));
+            Object raw = nativeCanvas.getDeclaringClass().isInstance(wrapper) ? nativeCanvas.get(wrapper) : null;
+            if (!(raw instanceof android.graphics.Canvas)) return;
+            canvas = (android.graphics.Canvas) raw;
+            save = canvas.save();
+            canvas.translate(g[1], g[2]); canvas.scale(g[0], g[0]);
+            p.setObjectExtra("qsMediaCanvas", canvas); p.setObjectExtra("qsMediaSave", save);
+            if (e.mediaSession != coverage.session()) {
+                e.mediaSession = coverage.session();
+                Probe.log("QS_MEDIA_CAPSULE_DRAWN", "session=" + coverage.session() + " id=" + e.spec.token.id
+                        + " state=" + (e.spec.token.role.equals("media-empty") ? "empty" : "active")
+                        + " insetDp=" + QsContentHooks.MEDIA_INSET_DP + " outer=" + w + "x" + h
+                        + " inner=" + (w*g[0]) + "x" + (h*g[0]) + " shader=" + e.spec.token.drawn
+                        + " border=parent-only hitbox=native");
+            }
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError ex) {
+            if (canvas != null && save >= 0) canvas.restoreToCount(save);
+            p.setObjectExtra("qsMediaCanvas", null);
+            Probe.error("QS_MEDIA_CAPSULE_FAILED", ex);
         }
     }
 
@@ -544,8 +664,8 @@ final class QuickSettingsEdgeLight {
         suppressed = on;
         int released = 0;
         if (on) for (Edge e : nodes.values()) if (e.bridge != null) { e.release(); released++; }
-        Probe.log("QS_EDGE_SUPPRESS", "dragging=" + on + " nodes=" + nodes.size() + " released=" + released);
-        if (!on) redrawNodes();
+        Probe.log("QS_EDGE_SUPPRESS", "session=" + coverage.session() + " trigger=slider dragging=" + on + " nodes=" + nodes.size() + " released=" + released);
+        if (!on && enabled.getAsBoolean() && fade() > 0f) redrawNodes();
     }
 
     /** DrawModifierNodeKt.invalidateDraw: the background nodes' own draw runs again (null: unavailable). */
@@ -561,8 +681,9 @@ final class QuickSettingsEdgeLight {
             }
         }
         // Without the draw invalidation, recompose the containers instead.
-        if (invalidateDraw == null) restored.run();
-        Probe.log("QS_EDGE_RESTORE", "nodes=" + nodes.size() + " redrawn=" + n + " recomposed=" + (invalidateDraw == null));
+        if (invalidateDraw == null) try { restored.run(); }
+        catch (RuntimeException | LinkageError e) { Probe.error("QS_EDGE_RESTORE_FAILED", e); }
+        Probe.log("QS_EDGE_RESTORE", "session=" + coverage.session() + " nodes=" + nodes.size() + " invalidated=" + n + " recreated=0" + " recomposed=" + (invalidateDraw == null));
     }
 
     synchronized void configure(int blur) {
@@ -606,12 +727,15 @@ final class QuickSettingsEdgeLight {
         View v = host.get();
         if (v == null) return;
         cancelSettled(v);
+        long ticket = hostGeneration, session = coverage.session();
         settledSnapshot = () -> {
             synchronized (QuickSettingsEdgeLight.this) {
                 settledSnapshot = null;
-                if (host.get() != v) return;
-                refresh(true);
-                if (shown && lastExpansion >= 0.95f) summary("stabilized");
+                if (host.get() != v || hostGeneration != ticket || coverage.session() != session || !visible) return;
+                try {
+                    refresh(true);
+                    if (shown && lastExpansion >= 0.95f) summary("stabilized");
+                } catch (RuntimeException | LinkageError e) { fail(e); }
             }
         };
         v.postDelayed(settledSnapshot, 350);
@@ -623,6 +747,7 @@ final class QuickSettingsEdgeLight {
     }
 
     private void summary(String phase) {
+        coverage.summary(phase);
         int regions = 0, positive = 0, drawn = 0, min = 256, max = 0;
         for (Edge e : nodes.values()) {
             if (e.bridge == null) continue;
@@ -645,7 +770,8 @@ final class QuickSettingsEdgeLight {
 
     private synchronized void detached(View v) {
         cancelSettled(v);
-        releaseAll();
+        closeRegions("detach"); hostGeneration++;
+        suppressed = false;
         shown = false; lastExpansion = -1f; edgeFade = 0f;
         observe(false);
         summary("detach");

@@ -65,7 +65,7 @@ final class QsBackdrop {
     private boolean shown, pending;
     /** When the current sample was taken (uptime), 0 for none. */
     private long sampledAt;
-    private int generation;
+    private int generation, session;
     private Runnable cancel;
     private android.content.Context application;
     private final android.content.ComponentCallbacks configuration = new android.content.ComponentCallbacks() {
@@ -131,6 +131,7 @@ final class QsBackdrop {
     }
 
     private void opened() {
+        session++;
         // The touch that opened the panel already asked for it; its loop starts with the panel.
         if (pending) return;
         if (fresh()) { schedule(RESAMPLE_MS); return; }
@@ -153,8 +154,10 @@ final class QsBackdrop {
         if (v == null || !v.isAttachedToWindow() || !enabled.getAsBoolean() || pending) return;
         pending = true;
         int ticket = ++generation;
+        trace("TONE_CAPTURE_REQUEST", "scene=qs");
         cancel = ShadeTone.prefetch(v, ticket, grid -> {
             if (ticket != generation) return;
+            trace("TONE_CAPTURE_DONE", "scene=qs luma=" + (grid == null ? "unknown" : grid.whole()));
             pending = false; cancel = null;
             if (!enabled.getAsBoolean()) return;
             if (grid == null) forget();
@@ -196,8 +199,10 @@ final class QsBackdrop {
         pending = true;
         int ticket = ++generation;
         long requested = SystemClock.uptimeMillis();
+        trace("TONE_CAPTURE_REQUEST", "scene=qs");
         cancel = ShadeTone.prefetch(v, ticket, grid -> {
             if (ticket != generation) return;
+            trace("TONE_CAPTURE_DONE", "scene=qs luma=" + (grid == null ? "unknown" : grid.whole()));
             pending = false; cancel = null;
             if (!enabled.getAsBoolean() || !shown) return;
             try { resampled(grid, requested); }
@@ -271,44 +276,16 @@ final class QsBackdrop {
         QsScene.Tone before = tone, beforeHeader = headerTone;
         tone = next; headerTone = nextHeader;
         float toScene = level(next), toHeader = level(nextHeader);
-        boolean smooth = animate && shown && !Float.isNaN(sceneInk) && !Float.isNaN(toScene)
-                && !Float.isNaN(headerInk) && !Float.isNaN(toHeader) && InkAnimator.duration() > 0;
         Probe.log("QS_BACKDROP", "state=" + next + " header=" + nextHeader + " previous=" + before + "/" + beforeHeader
-                + " generation=" + generation + " transition=" + (smooth ? "animated" : "immediate"));
+                + " generation=" + generation + " transition=immediate");
         if (inkAnimator != null) { inkAnimator.cancel(); inkAnimator = null; }
-        if (!smooth) {
-            sceneInk = toScene; headerInk = toHeader;
-            changed.run();
-            return;
-        }
-        float fromScene = sceneInk, fromHeader = headerInk;
-        boolean[] recomposed = {false};
-        ValueAnimator a = ValueAnimator.ofFloat(0f, 1f);
-        a.setDuration(io.github.igorcv88.oneuiliquidglass.glass.InkTransition.DURATION_MS);
-        a.addUpdateListener(x -> {
-            if (inkAnimator != x) return;
-            try { inkFrame(x, fromScene, toScene, fromHeader, toHeader, recomposed); }
-            catch (RuntimeException | LinkageError e) {
-                // Fail closed on the final ink: no half-way grey stays on screen.
-                x.cancel(); inkAnimator = null; sceneInk = toScene; headerInk = toHeader;
-                Probe.error("QS_INK_TRANSITION_FAILED", e);
-            }
-        });
-        inkAnimator = a;
-        a.start();
+        sceneInk = toScene; headerInk = toHeader;
+        trace("TONE_COMMIT", "scene=" + next + " tone=" + nextHeader);
+        changed.run();
     }
 
-    private void inkFrame(ValueAnimator x, float fromScene, float toScene, float fromHeader, float toHeader, boolean[] recomposed) {
-        float t = io.github.igorcv88.oneuiliquidglass.glass.InkTransition.ease(x.getAnimatedFraction());
-        sceneInk = fromScene + (toScene - fromScene) * t;
-        headerInk = fromHeader + (toHeader - fromHeader) * t;
-        // Rims and tile icons are composition arguments: switched once, at the midpoint.
-        if (!recomposed[0] && x.getAnimatedFraction() >= .5f) { recomposed[0] = true; changed.run(); }
-        else redraw.run();
-        if (x.getAnimatedFraction() >= 1f) {
-            inkAnimator = null;
-            Probe.log("QS_INK_TRANSITION", "state=" + tone + " header=" + headerTone + " completed=true");
-        }
+    private void trace(String event, String detail) {
+        if (Probe.trace) Probe.log(event, "session=" + session + " generation=" + generation + " " + detail);
     }
 
     private static float level(QsScene.Tone t) {

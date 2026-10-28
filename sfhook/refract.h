@@ -468,7 +468,7 @@ struct oulg_profile { float core; int taps; float ramp; float sat; float tone; f
 // on the light entering. Black adds nothing; a mid-grey (0.5) ~0.42 at the outline, decaying over
 // ~5.5 px; white the cap, over 18 px. Refraction strength (slab A, at most 1.8x magnification at
 // 0.30) and the refracted backdrop's opacity at the outline.
-#define OULG_QS_LIGHT_DEFAULT 0.90f
+#define OULG_QS_LIGHT_DEFAULT 0.0f // APK AGSL owns the contour; SF owns refraction.
 #define OULG_QS_LWIDTH_DEFAULT 18.0f
 #define OULG_QS_LFLOOR_DEFAULT 0.06f
 #define OULG_QS_LCAP_DEFAULT 0.60f

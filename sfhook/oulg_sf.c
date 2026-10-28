@@ -356,6 +356,7 @@ static void layered_blur(struct oulg_profile p[OULG_PROFILES]) {
 // instead of its own edge shader. SELinux may refuse surfaceflinger the write; the boot script and a
 // manual setprop are the fallbacks.
 static int optics_announced;
+static unsigned qs_recognized, qs_compiled;
 static void announce_optics(void) {
     if (optics_announced) return;
     optics_announced = 1;
@@ -419,6 +420,17 @@ void glShaderSource(GLuint shader, GLsizei count, const GLchar *const *strings, 
             int ok = compiles(shader, frag);
             __android_log_print(ANDROID_LOG_INFO, TAG, "REWRITE fragment shader=%u compiled=%d", shader, ok);
             dump_text(ok ? "REWRITE_OK fragment" : "REWRITE_FAILED fragment", shader, frag);
+            // Shader-source interception proves capability compilation, not runtime uniforms or draws.
+            // Profile 3 is selected by a radius tag at draw time, which this hook cannot observe.
+            if (strstr(frag, "oulg_edge")) {
+                pthread_mutex_lock(&health_lock);
+                qs_recognized++; if (ok) qs_compiled++;
+                if (qs_recognized <= 8)
+                    __android_log_print(ANDROID_LOG_INFO, TAG,
+                        "QS_SF_PROFILE3 sfPid=%d start=%llu got=%d rewrite=%d profileTag=3 scope=shader-capability recognized=%u compiled=%u drawn=unmeasured light=%.3f",
+                        getpid(), oulg_start(getpid()), health_got, ok, qs_recognized, qs_compiled, (double)profiles[3].light);
+                pthread_mutex_unlock(&health_lock);
+            }
             free(frag);
             used = ok;
             if (ok) { publish_health(1); announce_optics(); }

@@ -31,7 +31,7 @@ final class QsCapsuleOptics {
     void onFailure(Runnable r) { failed = r == null ? () -> {} : r; }
     private final GlassSpec spec = new GlassSpec();
     private final Map<Object, Paint> paints = new WeakHashMap<>();
-    private boolean logged;
+
 
     /** Whether the optics draw (otherwise the Compose rim alone marks the capsule). */
     static boolean available() { return !broken; }
@@ -40,8 +40,8 @@ final class QsCapsuleOptics {
      * {@code w x h}: the inner box (px), {@code radius} its corner radius, {@code light}: the
      * backdrop is a light scene. Main/render thread of the draw; never throws.
      */
-    void draw(Object node, Canvas canvas, float x, float y, float w, float h, float radius, float density, boolean light) {
-        if (broken || !(w > 2f) || !(h > 2f)) return;
+    boolean draw(Object node, Canvas canvas, float x, float y, float w, float h, float radius, float density, boolean light) {
+        if (broken || !canvas.isHardwareAccelerated() || !(w > 2f) || !(h > 2f)) return false;
         try {
             Paint paint;
             synchronized (paints) {
@@ -57,12 +57,10 @@ final class QsCapsuleOptics {
             int save = canvas.save();
             try { canvas.translate(x, y); canvas.drawRect(0f, 0f, w, h, paint); }
             finally { canvas.restoreToCount(save); }
-            if (!logged) {
-                logged = true;
-                Probe.log("QS_OPTICS_DRAWN", "size=" + Math.round(w) + "x" + Math.round(h) + " radius=" + radius + " light=" + light);
-            }
+            return true;
         } catch (RuntimeException | LinkageError e) {
             fail("shader", e);
+            return false;
         }
     }
 
@@ -75,7 +73,11 @@ final class QsCapsuleOptics {
         broken = true;
         Probe.error("QS_OPTICS_FAILED", step, e);
         Runnable r = failed;
-        new android.os.Handler(android.os.Looper.getMainLooper()).post(r);
+        try {
+            new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+                try { r.run(); } catch (RuntimeException | LinkageError ex) { Probe.error("QS_OPTICS_RESTORE_FAILED", ex); }
+            });
+        } catch (RuntimeException | LinkageError ex) { Probe.error("QS_OPTICS_RESTORE_FAILED", ex); }
     }
 
     /** The live edge model's uniforms, as GlassDrawable sets them for a shade card. */
