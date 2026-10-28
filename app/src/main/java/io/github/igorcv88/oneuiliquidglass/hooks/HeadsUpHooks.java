@@ -1093,6 +1093,12 @@ public final class HeadsUpHooks {
         final ArrayList<View> swappedViews = new ArrayList<>();
         /** Uptime of the last measurement applied to this card (grid or sample), 0 before any. */
         long toneAt;
+        /**
+         * Whether this card already showed a sampled tone in the current surface session, and so
+         * whether the next foreground change is a change (animated) or the first decision (at once:
+         * the first contrast fix must not fade through low-contrast greys). Cleared by setNative.
+         */
+        boolean sampledTone, animateSwap;
         /** Poke that makes an entering pop-up draw (and measure) again: see popupTone. */
         final Runnable popupPoke = this::invalidate;
         final int[] toneXy = new int[2];
@@ -1282,6 +1288,7 @@ public final class HeadsUpHooks {
         }
         /** The theme's own look: no veil, no swapped text; the hysteresis starts on the theme's side. */
         void setNative() {
+            sampledTone = false; animateSwap = false;
             lightBackdrop = !ShadeTone.lightText();
             // At once, never ramped: a ramp would replay the previous opening's (or surface's) veil
             // for VEIL_RAMP_MS on a card that is starting over. Its pending text swap goes with it.
@@ -1306,6 +1313,8 @@ public final class HeadsUpHooks {
             lightBackdrop = m.light;
             if (!shade) popupScene = m.light;
             toneAt = android.os.SystemClock.uptimeMillis();
+            animateSwap = sampledTone;
+            sampledTone = true;
             styleChanged(m.style());
             // A glass style replaces the tint; in the shade the native side's legibility veil darkens
             // it instead (the pop-up's look is left as approved, 26/10).
@@ -1391,7 +1400,7 @@ public final class HeadsUpHooks {
                 // transition; the first tone of a card and a hidden card change at once.
                 View shown = row.get();
                 boolean animate = ("style".equals(reason) || "restore".equals(reason)) && shown != null
-                        && shown.isShown() && shownAlpha(shown) > 0.01f && toneAt > 0;
+                        && shown.isShown() && shownAlpha(shown) > 0.01f && animateSwap;
                 int changed = Foreground.apply(shown, swap, ShadeTone.lightText(), swappedViews, animate);
                 // Recorded only once the walk went through: a failed restore is retried.
                 swapped = swap;
