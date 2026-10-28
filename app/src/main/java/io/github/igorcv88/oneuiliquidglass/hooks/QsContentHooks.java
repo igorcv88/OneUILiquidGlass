@@ -172,8 +172,10 @@ final class QsContentHooks {
                         if(composer+1<p.args.length && p.args[composer+1] instanceof Integer)
                             p.args[composer+1]=((Integer)p.args[composer+1])|1;
                     }
-                    // Color's default bit is index 2 for Text and 3 for Icon. QSIcon has no default mask.
-                    boolean defaults=!qsIcon && (icon ? p.args.length==8 : true);
+                    // Color's default bit is index 2 for Text and 3 for Icon. QSIcon has no default mask,
+                    // nor has DZIF's Icon(AndroidImageBitmap, ...) (6 arguments, $changed last); the
+                    // Painter and ImageVector overloads end in ($changed, $default): 7 arguments.
+                    boolean defaults=!qsIcon && (icon ? p.args.length==7 : true);
                     if(defaults) {
                         int last=p.args.length-1;
                         p.args[last]=((Integer)p.args[last])&~(1<<color);

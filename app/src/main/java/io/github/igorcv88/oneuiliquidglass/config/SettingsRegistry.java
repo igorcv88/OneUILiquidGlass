@@ -113,20 +113,20 @@ public final class SettingsRegistry {
         add(new SettingSpec("sf.qsdepth","Compositor","shade","profundidade (px) da luz vinda de um contorno branco","Quick Settings: profundidade (px) da luz vinda de um contorno branco",SettingSpec.Type.FLOAT,"18",1.5,48,.01,"px","","sfrefract=1",true,"DIAGRAM"));
         add(new SettingSpec("sf.debug","Compositor","all","Tinta diagnóstica magenta/ciano sobre programas elegíveis","Tinta diagnóstica magenta/ciano sobre programas elegíveis",SettingSpec.Type.BOOLEAN,"0",0,1,.01,"","","sfrefract=1",true,"DIAGRAM"));
         add(new SettingSpec("sf.norewrite","Compositor","all","1 desativa a reescrita dos shaders ao compilar","1 desativa a reescrita dos shaders ao compilar",SettingSpec.Type.BOOLEAN,"0",0,1,.01,"","","sfrefract=1",true,"DIAGRAM"));
-        add(new SettingSpec("qs.darkfill","Blur e material","shade","Véu em fundo colorido","Véu em fundo colorido",SettingSpec.Type.FLOAT,".10",0.0,1.0,.01,"","","",false,"DIAGRAM"));
-        add(new SettingSpec("qs.lightfill","Blur e material","shade","Véu em fundo claro","Véu em fundo claro",SettingSpec.Type.FLOAT,".66",0.0,0.9,.01,"","","",false,"DIAGRAM"));
-        add(new SettingSpec("qs.darkcolor","Blur e material","shade","Cor em fundo colorido","Cor em fundo colorido",SettingSpec.Type.RGB,"ffffff",0,1,.01,"","","",false,"DIAGRAM"));
-        add(new SettingSpec("qs.lightcolor","Blur e material","shade","Cor em fundo claro","Cor em fundo claro",SettingSpec.Type.RGB,"141823",0,1,.01,"","","",false,"DIAGRAM"));
-        add(new SettingSpec("qs.idle","Blur e material","shade","Círculos inativos","Círculos inativos",SettingSpec.Type.FLOAT,".08",0.0,1.0,.01,"","","",false,"DIAGRAM"));
-        add(new SettingSpec("qs.active","Blur e material","shade","Opacidade dos círculos ativos","Opacidade dos círculos ativos",SettingSpec.Type.FLOAT,".90",0.0,1.0,.01,"","","",false,"DIAGRAM"));
-        add(new SettingSpec("qs.darkrim","Blur e material","shade","Contorno em fundo colorido","Contorno em fundo colorido",SettingSpec.Type.FLOAT,".26",0.0,1.0,.01,"","","",false,"DIAGRAM"));
-        add(new SettingSpec("qs.lightrim","Blur e material","shade","Contorno em fundo claro","Contorno em fundo claro",SettingSpec.Type.FLOAT,".18",0.0,1.0,.01,"","","",false,"DIAGRAM"));
-        add(new SettingSpec("qs.edgeblur","Blur e material","shade","Desfoque da borda","Desfoque da borda",SettingSpec.Type.FLOAT,"8",1.0,32.0,.01,"px","","",false,"DIAGRAM"));
-        add(new SettingSpec("qs.outer","Blur e material","shade","Espessura da pílula externa","Espessura da pílula externa",SettingSpec.Type.FLOAT,"1",0.5,1.0,.01,"","","",false,"DIAGRAM"));
-        add(new SettingSpec("qs.track","Blur e material","shade","Espessura do trilho","Espessura do trilho",SettingSpec.Type.FLOAT,".88",0.1,1.0,.01,"","","",false,"DIAGRAM"));
-        add(new SettingSpec("qs.fill","Blur e material","shade","Espessura do preenchimento","Espessura do preenchimento",SettingSpec.Type.FLOAT,".88",0.1,1.0,.01,"","","",false,"DIAGRAM"));
-        add(new SettingSpec("qs.lightstyle","Blur e material","shade","Estilo sobre fundo claro","Estilo sobre fundo claro",SettingSpec.Type.ENUM,"obsidian",0,1,.01,"","obsidian,light","",false,"DIAGRAM"));
-        add(new SettingSpec("sf.qslight","Compositor","shade","Intensidade da luz nos controles rápidos","Intensidade da luz nos controles rápidos",SettingSpec.Type.FLOAT,".90",0,2,.01,"","","sfrefract=1",true,"DIAGRAM"));
+        add(new SettingSpec("qs.darkfill","Controles rápidos","shade","Vidro sobre fundo colorido","Opacidade do vidro das cápsulas sobre fundos escuros ou coloridos",SettingSpec.Type.FLOAT,".10",0.0,1.0,.01,"","","",false,"DIAGRAM"));
+        add(new SettingSpec("qs.lightfill","Controles rápidos","shade","Opacidade sobre fundo claro","Opacidade do vidro das cápsulas sobre apps claros",SettingSpec.Type.FLOAT,".66",0.0,0.9,.01,"","","",false,"DIAGRAM"));
+        add(new SettingSpec("qs.darkcolor","Controles rápidos","shade","Cor do vidro sobre fundo colorido","Cor do véu das cápsulas sobre fundos escuros ou coloridos",SettingSpec.Type.RGB,"ffffff",0,1,.01,"","","",false,"DIAGRAM"));
+        add(new SettingSpec("qs.lightcolor","Controles rápidos","shade","Cor da obsidiana","Cor do vidro obsidiana sobre apps claros",SettingSpec.Type.RGB,"141823",0,1,.01,"","","",false,"DIAGRAM"));
+        add(new SettingSpec("qs.idle","Controles rápidos","shade","Círculos desligados","Opacidade do disco atrás dos ícones desligados",SettingSpec.Type.FLOAT,".08",0.0,1.0,.01,"","","",false,"DIAGRAM"));
+        add(new SettingSpec("qs.active","Controles rápidos","shade","Círculos ligados","Opacidade dos discos ligados (a cor continua a da Samsung ou do tema)",SettingSpec.Type.FLOAT,".90",0.0,1.0,.01,"","","",false,"DIAGRAM"));
+        add(new SettingSpec("qs.darkrim","Controles rápidos","shade","Contorno sobre fundo colorido","Intensidade do contorno sobre fundos escuros ou coloridos",SettingSpec.Type.FLOAT,".26",0.0,1.0,.01,"","","",false,"DIAGRAM"));
+        add(new SettingSpec("qs.lightrim","Controles rápidos","shade","Contorno sobre fundo claro","Intensidade do contorno sobre apps claros",SettingSpec.Type.FLOAT,".18",0.0,1.0,.01,"","","",false,"DIAGRAM"));
+        add(new SettingSpec("qs.edgeblur","Controles rápidos","shade","Desfoque da borda","Desfoque do fundo lido pela lente dinâmica no contorno das cápsulas",SettingSpec.Type.INT,"8",1.0,32.0,1,"px","","sfrefract=1",false,"DIAGRAM"));
+        add(new SettingSpec("qs.outer","Controles rápidos","shade","Espessura do slider","Espessura da pílula inteira dos sliders (o toque continua na área da Samsung)",SettingSpec.Type.FLOAT,"1",0.5,1.0,.01,"","","",false,"DIAGRAM"));
+        add(new SettingSpec("qs.track","Controles rápidos","shade","Espessura do trilho","Espessura do trilho dos sliders, independente do preenchimento",SettingSpec.Type.FLOAT,".88",0.1,1.0,.01,"","","",false,"DIAGRAM"));
+        add(new SettingSpec("qs.fill","Controles rápidos","shade","Espessura do preenchimento","Espessura do preenchimento dos sliders, independente do trilho",SettingSpec.Type.FLOAT,".88",0.1,1.0,.01,"","","",false,"DIAGRAM"));
+        add(new SettingSpec("qs.lightstyle","Controles rápidos","shade","Vidro sobre fundo claro","Material das cápsulas sobre apps claros: obsidiana ou vidro claro",SettingSpec.Type.ENUM,"obsidian",0,1,.01,"","obsidian,light","",false,"DIAGRAM"));
+        add(new SettingSpec("sf.qslight","Compositor","shade","Luz pela borda dos controles rápidos","Quick Settings: luz que entra pelo contorno conforme o fundo ali (0 desliga)",SettingSpec.Type.FLOAT,".90",0,2,.01,"","","sfrefract=1",true,"DIAGRAM"));
     }
     private static void add(SettingSpec spec) { if (SPECS.put(spec.key, spec) != null) throw new IllegalStateException(spec.key); }
     public static SettingSpec get(String key) { return SPECS.get(key); }

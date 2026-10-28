@@ -309,35 +309,6 @@ public final class SurfacesPage implements Page {
         list.addView(gate, Ui.match());
 
         Set<String> placed = new HashSet<>();
-        qsToggle=null; qsRow=null;
-        if (surface == Controls.Surface.SHADE) {
-            list.addView(Ui.section(a,t,"Controles rápidos"));
-            LinearLayout qsGate=Ui.card(a,t);
-            qsToggle=new Toggle(a,t);
-            qsRow=Ui.switchRow(a,t,Icon.SHADE,"Vidro nos controles rápidos",null,qsToggle);
-            qsToggle.listener((x,on)->host.model().flag(ProductFlags.QUICK_SETTINGS,on));
-            qsGate.addView(qsRow);list.addView(qsGate,Ui.match());
-            String[][] keys={
-                {"qs.darkfill","qs.darkcolor","qs.lightfill","qs.lightcolor","qs.lightstyle"},
-                {"qs.idle","qs.active"}, {"qs.darkrim","qs.lightrim","qs.edgeblur"},
-                {"qs.outer","qs.track","qs.fill"}, {"sf.qslens","sf.qsbody","sf.qsdepth","sf.qslight"}
-            };
-            String[] names={"Aparência","Círculos","Bordas","Sliders","Avançado"};
-            for(int i=0;i<keys.length;i++) {
-                if(i==4){
-                    String id="shade.quicksettings.advanced";
-                    View[] disclosure=Ui.disclosure(a,t,Icon.LENS,names[i],"Luz e refração da borda",open.contains(id),on->{if(on)open.add(id);else open.remove(id);});
-                    LinearLayout advanced=Ui.card(a,t);advanced.addView(disclosure[0]);
-                    LinearLayout body=(LinearLayout)disclosure[1];
-                    for(String k:keys[i])addRow(body,k,placed);
-                    advanced.addView(body);list.addView(advanced,Ui.match());
-                }else{
-                    list.addView(Ui.section(a,t,names[i]));
-                    list.addView(card(Arrays.asList(keys[i]),placed),Ui.match());
-                }
-            }
-            list.addView(Ui.notice(a,t,Ui.Tone.INFO,"A amostra acima é de notificações. Confira os controles rápidos no aparelho.",null,null),Ui.match());
-        }
         if (!fav.isEmpty()) {
             list.addView(Ui.section(a, t, "Favoritos"));
             list.addView(card(new ArrayList<>(fav), placed), Ui.match());
@@ -362,11 +333,15 @@ public final class SurfacesPage implements Page {
         }
         list.addView(layers, Ui.match());
 
+        qsToggle = null;
+        qsRow = null;
+        if (surface == Controls.Surface.SHADE) quickSettings(a, placed);
+
         list.addView(Ui.section(a, t, "Mais ajustes"));
         LinearLayout groups = Ui.card(a, t);
         boolean any = false;
         for (Controls.Section section : Controls.Section.values()) {
-            if (section == Controls.Section.TECHNICAL) continue;
+            if (section == Controls.Section.TECHNICAL || section == Controls.Section.QUICK_SETTINGS) continue;
             if (section == Controls.Section.LENS_TUNING && mode != Mode.DYNAMIC_LENS) continue;
             List<String> std = new ArrayList<>(), adv = new ArrayList<>();
             for (Controls.Control c : Controls.all()) {
@@ -409,6 +384,61 @@ public final class SurfacesPage implements Page {
         list.addView(footer, Ui.match(t.dp(18), 0));
     }
 
+    /** Groups of the Quick Settings block: title, summary, icon, keys (standard first, then advanced). */
+    private static final Object[][] QS_GROUPS = {
+            {"Vidro", "Cápsulas sobre apps claros e fundos coloridos", Icon.PALETTE,
+                    new String[] {"qs.lightstyle", "qs.lightfill", "qs.darkfill", "qs.lightcolor", "qs.darkcolor"}},
+            {"Sliders", "Pílula, trilho e preenchimento", Icon.LAYERS,
+                    new String[] {"qs.outer", "qs.track", "qs.fill"}},
+            {"Círculos", "Discos atrás dos ícones", Icon.DOT,
+                    new String[] {"qs.idle", "qs.active"}},
+            {"Contorno", "Linha de luz em volta das cápsulas", Icon.CONTRAST,
+                    new String[] {"qs.darkrim", "qs.lightrim"}},
+            {"Luz e refração", "Lente dinâmica", Icon.LENS,
+                    new String[] {"sf.qslight", "sf.qslens", "sf.qsbody", "sf.qsdepth", "qs.edgeblur"}},
+    };
+
+    /**
+     * Controles rápidos, inside Central: its own opt-in, then one collapsed group per part, like
+     * "Mais ajustes". The values apply live on the panel; the preview above shows notifications,
+     * so the switch says so instead of a separate notice.
+     */
+    private void quickSettings(android.app.Activity a, Set<String> placed) {
+        list.addView(Ui.section(a, t, "Controles rápidos"));
+        LinearLayout card = Ui.card(a, t);
+        qsToggle = new Toggle(a, t);
+        qsRow = Ui.switchRow(a, t, Icon.SHADE, "Vidro nos controles rápidos",
+                "Muda na hora · a prévia acima mostra notificações", qsToggle);
+        qsToggle.listener((x, on) -> host.model().flag(ProductFlags.QUICK_SETTINGS, on));
+        card.addView(qsRow);
+        for (Object[] g : QS_GROUPS) {
+            List<String> std = new ArrayList<>(), adv = new ArrayList<>();
+            for (String k : (String[]) g[3]) {
+                Controls.Control c = Controls.get(k);
+                if (c == null || !Controls.editable(k)) continue;
+                (c.tier == Controls.Tier.STANDARD ? std : adv).add(k);
+            }
+            if (std.isEmpty() && adv.isEmpty()) continue;
+            String id = surface.id + ".qs." + g[0];
+            View[] d = Ui.disclosure(a, t, (Icon) g[2], (String) g[0], (String) g[1], open.contains(id), on -> {
+                if (on) open.add(id);
+                else open.remove(id);
+            });
+            card.addView(Ui.divider(a, t, t.dp(72)));
+            card.addView(d[0]);
+            LinearLayout body = (LinearLayout) d[1];
+            for (String k : std) addRow(body, k, placed);
+            if (!adv.isEmpty() && !std.isEmpty()) {
+                TextView label = Ui.text(a, t, "Avançado", Theme.CAPTION, t.inkFaint, true);
+                label.setPadding(t.dp(20), t.dp(14), t.dp(20), t.dp(2));
+                body.addView(label);
+            }
+            for (String k : adv) addRow(body, k, placed);
+            card.addView(body);
+        }
+        list.addView(card, Ui.match());
+    }
+
     private Icon sectionIcon(Controls.Section s) {
         switch (s) {
             case GLASS: return Icon.LAYERS;
@@ -416,6 +446,7 @@ public final class SurfacesPage implements Page {
             case COLOR: return Icon.CONTRAST;
             case BEHAVIOR: return Icon.CLOCK;
             case MOTION: return Icon.PULSE;
+            case QUICK_SETTINGS: return Icon.SHADE;
             default: return Icon.RESTART;
         }
     }

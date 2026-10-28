@@ -329,17 +329,27 @@ Não substituem as capturas e os logs do dispositivo.
 
 A nova captura mede o conteúdo abaixo da janela QS, excluindo a própria janela por SurfaceControl.
 `QsBackdrop` mantém uma requisição cancelável de `ShadeTone.prefetch` por abertura, em escala 0,125;
-a cópia de pixels e a redução para `ToneGrid` continuam no worker. Um toque na borda superior pode
-antecipar a captura. Não há captura, consulta de configuração ou varredura de Views por frame com o
-recurso desligado. Os timestamps são fixados quando as janelas de exclusão são reunidas, antes de
+a cópia de pixels e a redução para `ToneGrid` continuam no worker. A classificação é **global e
+deliberada**: uma decisão para a superfície inteira (cápsulas, contornos, preenchimentos, textos e
+ícones), estável durante a sessão; nenhuma cápsula tem paleta própria.
+
+Abertura e fechamento seguem a expansão do painel (`SecQSPanelComposeAdapter.expansionFraction`,
+lida por `QuickSettingsEdgeLight.expansion()`), não `View.isShown()`: o root Compose pode continuar
+VISIBLE com o painel recolhido. Só com a expansão ilegível a visibilidade decide. No máximo uma
+captura por abertura: o ACTION_DOWN nos 64 dp do topo (o gesto que costuma abrir o painel) antecipa a
+captura antes de a Samsung mostrar o painel; ela é ignorada com o painel aberto ou havendo amostra com
+menos de 600 ms, que é reaproveitada pela abertura seguinte. O fechamento cancela a captura em voo e
+encerra a geração, então um resultado atrasado nunca cai na sessão seguinte. Não há captura,
+consulta de configuração ou leitura da expansão por frame com o recurso desligado. Os timestamps são fixados quando as janelas de exclusão são reunidas, antes de
 enfileirar o worker; uma medição não aceita uma captura anterior à sua inscrição.
 
 `QsScene` separa UNKNOWN / DARK_SCENE / LIGHT_SCENE do tema Android. Entrada em claro: luma sRGB
 ≥ 0,75; saída: < 0,65, com cooldown de 500 ms. Uma amostra com mais de 600 ms não decide uma nova
 abertura; dados seguros indisponíveis mantêm a paleta legada por tema. O estado fica estável durante
 a abertura. Mudanças de configuração/tema invalidam a amostra por ComponentCallbacks e pedem
-uma nova captura; detach cancela a requisição e remove callbacks/listeners. O header QS usa separadamente as quatro bandas superiores, evitando inverter o painel
-inteiro por causa de uma faixa clara no topo. A classificação das cápsulas é global: fotos mistas
+uma nova captura; detach cancela a requisição e remove callbacks/listeners. O header QS (relógio, data e ações, sobre o
+painel e não sobre uma cápsula) usa as quatro bandas superiores **só para a tinta do texto e dos
+ícones**: um ajuste local de contraste, nunca um segundo material. A classificação das cápsulas é global: fotos mistas
 ainda precisam de teste local de contraste no aparelho; não há promessa de contraste mínimo para
 todos os pixels de um vídeo ou wallpaper arbitrário.
 
@@ -380,14 +390,15 @@ a variante clara precisa de inspeção desses logos no dispositivo.
   slider. O clip do host e a área de toque não são substituídos.
 - Trilho: 10–100% da largura/altura da pílula externa; só seu rect recebe geometria e clip próprios.
 - Preenchimento: 10–100% da pílula; o gradiente recebe geometria e raios próprios, preservando a
-  posição de progresso no eixo longo e a direção RTL. O thumb mantém sua proporção de 88% dentro
-  da pílula, independente dos knobs de trilho e fill.
+  posição de progresso no eixo longo e a direção RTL. O thumb é a ponta do preenchimento e segue a
+  espessura dele, como no desenho da Samsung.
 
 A referência é o DEX DZIF, não o nome decompilado normalizado:
 
 | Membro | Escopo |
 | --- | --- |
-| `BidirectionalBar-Ld4roP0` | Marca a composição da pílula externa |
+| `BidirectionalBarKt.PillShape` | Identifica o `BoxWithOutline` do slider por identidade do shape (vale também quando a caixa recompõe sozinha) |
+| `BidirectionalBar-Ld4roP0` | Captura o scope do chamador, para a espessura mudar ao vivo |
 | `drawBidirectionalBarTrackProgressThumbContent-Uzs9YN0` | Transação de Canvas/context size |
 | `DrawScope.drawRect-n-J9OG0$default` | Trilho |
 | `DrawScope.drawRoundRect-ZuiqVtQ$default` | Gradiente de progresso |
@@ -403,9 +414,12 @@ invalid-size, nonhardware-canvas e missing-viewroot também liberam bridges anti
 
 ### Aplicativo e aplicação pendente
 
-Central → Controles rápidos reúne Aparência, Círculos, Bordas, Sliders e Avançado. O opt-in é
-independente do vidro das notificações e permanece false por padrão. A prévia superior ainda é de
-notificações, explicitamente indicada na UI; não é um render QS WYSIWYG.
+Central → Controles rápidos: um cartão próprio, depois de "Camadas do efeito", com o opt-in (o
+subtítulo avisa que muda na hora e que a prévia acima é das notificações) e cinco grupos recolhidos,
+no padrão de "Mais ajustes": Vidro, Sliders, Círculos, Contorno e Luz e refração. Cada controle tem
+ajuda própria. O opt-in é independente do vidro das notificações e permanece false por padrão. Na
+busca, os controles aparecem na seção "Controles rápidos". `qs.edgeblur` só se aplica com a lente
+dinâmica (é o blur das regiões do perfil 3) e aparece inativo fora dela.
 
 `qs.darkfill`, `qs.lightfill`, `qs.darkcolor`, `qs.lightcolor`, `qs.idle`, `qs.active`, `qs.darkrim`,
 `qs.lightrim`, `qs.edgeblur`, `qs.outer`, `qs.track`, `qs.fill` e `qs.lightstyle` são chaves do app,

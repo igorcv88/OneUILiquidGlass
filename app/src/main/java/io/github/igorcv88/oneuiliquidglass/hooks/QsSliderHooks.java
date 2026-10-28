@@ -15,7 +15,6 @@ final class QsSliderHooks {
     private final BooleanSupplier enabled;
     private final BooleanSupplier geometryAvailable;
     private final Supplier<QsStyle> style;
-    private final Consumer<Boolean> composing;
     private final Consumer<Object> capture;
     private Method drawContext, size, setSize, getCanvas;
     private Field nativeCanvas;
@@ -37,8 +36,8 @@ final class QsSliderHooks {
         }
     }
     QsSliderHooks(ClassLoader loader,BooleanSupplier enabled,Supplier<QsStyle> style,BooleanSupplier geometryAvailable,
-            Consumer<Boolean> composing,Consumer<Object> capture){
-        this.loader=loader;this.enabled=enabled;this.style=style;this.composing=composing;this.capture=capture;
+            Consumer<Object> capture){
+        this.loader=loader;this.enabled=enabled;this.style=style;this.capture=capture;
         this.geometryAvailable=geometryAvailable;
     }
     void install(Class<?> bar) throws ReflectiveOperationException {
@@ -67,11 +66,10 @@ final class QsSliderHooks {
         if(primitives!=3)throw new NoSuchMethodException("slider primitives="+primitives);
         for(Method m:bar.getDeclaredMethods()) {
             if(m.getName().startsWith("BidirectionalBar-"))XposedBridge.hookMethod(m,new XC_MethodHook(){
+                // The caller's scope: invalidating it re-runs the bar, so its thickness changes live.
                 @Override protected void beforeHookedMethod(MethodHookParam p){
-                    composing.accept(true);
                     for(int i=0;i<m.getParameterCount();i++)if(m.getParameterTypes()[i].getName().equals("androidx.compose.runtime.Composer"))capture.accept(p.args[i]);
                 }
-                @Override protected void afterHookedMethod(MethodHookParam p){composing.accept(false);}
             });
             if(!m.getName().equals("drawBidirectionalBarTrackProgressThumbContent-Uzs9YN0"))continue;
             XposedBridge.hookMethod(m,new XC_MethodHook(){
@@ -108,7 +106,8 @@ final class QsSliderHooks {
             long offset=(mask&2)!=0?0L:(Long)p.args[2];
             long extent=(mask&4)!=0?pack(f.w,f.h):(Long)p.args[3];
             QsStyle s=f.style;
-            float ratio=stage==0?s.track:stage==1?s.fill:.88f;
+            // The thumb is the fill's end cap: it takes the fill's thickness, as in Samsung's draw.
+            float ratio=stage==0?s.track:s.fill;
             float[] g=QuickSettingsGlass.sliderPrimitive(f.w,f.h,f.outer,ratio,x(offset),y(offset),x(extent),y(extent),stage==2,f.rtl);
             p.args[2]=pack(g[0],g[1]);p.args[3]=pack(g[2],g[3]);
             p.args[last]=explicitGeometryMask(mask,stage!=0);

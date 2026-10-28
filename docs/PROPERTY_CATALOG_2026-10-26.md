@@ -181,17 +181,17 @@ Controles `qs.*` são lidos pelo snapshot `QsStyle` em callbacks de configuraç�
 
 | Chave | Padrão | Tipo/domínio do parser | Controle / consequência |
 | --- | --- | --- | --- |
-| `qs.darkfill` | .10 | 0–1 | Véu em fundo colorido |
-| `qs.lightfill` | .66 | 0–0.90 | Véu em fundo claro |
-| `qs.darkcolor` | ffffff | RGB hexadecimal | Cor em fundo colorido |
-| `qs.lightcolor` | 141823 | RGB hexadecimal | Cor em fundo claro |
-| `qs.idle` | .08 | 0–1 | Círculos inativos |
-| `qs.active` | .90 | 0–1 | Opacidade dos círculos ativos |
-| `qs.darkrim` | .26 | 0–1 | Contorno em fundo colorido |
-| `qs.lightrim` | .18 | 0–1 | Contorno em fundo claro |
-| `qs.edgeblur` | 8 | inteiro 1–32 px | Desfoque da borda |
-| `qs.outer` | 1 | 0.50–1 | Espessura da pílula externa |
-| `qs.track` | .88 | 0.10–1 | Espessura do trilho |
-| `qs.fill` | .88 | 0.10–1 | Espessura do preenchimento |
-| `qs.lightstyle` | obsidian | enum obsidian/light | Estilo sobre fundo claro |
-| `sf.qslight` | .90 | 0–2 | Intensidade da luz nos controles rápidos |
+| `qs.darkfill` | .10 | 0–1 | Opacidade do vidro das cápsulas sobre fundos escuros ou coloridos |
+| `qs.lightfill` | .66 | 0–0.90 | Opacidade do vidro das cápsulas sobre apps claros |
+| `qs.darkcolor` | ffffff | RGB hexadecimal | Cor do véu das cápsulas sobre fundos escuros ou coloridos |
+| `qs.lightcolor` | 141823 | RGB hexadecimal | Cor do vidro obsidiana sobre apps claros |
+| `qs.idle` | .08 | 0–1 | Opacidade do disco atrás dos ícones desligados |
+| `qs.active` | .90 | 0–1 | Opacidade dos discos ligados (a cor continua a da Samsung ou do tema) |
+| `qs.darkrim` | .26 | 0–1 | Intensidade do contorno sobre fundos escuros ou coloridos |
+| `qs.lightrim` | .18 | 0–1 | Intensidade do contorno sobre apps claros |
+| `qs.edgeblur` | 8 | inteiro 1–32 px | Desfoque do fundo lido pela lente dinâmica no contorno das cápsulas |
+| `qs.outer` | 1 | 0.50–1 | Espessura da pílula inteira dos sliders (o toque continua na área da Samsung) |
+| `qs.track` | .88 | 0.10–1 | Espessura do trilho dos sliders, independente do preenchimento |
+| `qs.fill` | .88 | 0.10–1 | Espessura do preenchimento dos sliders, independente do trilho |
+| `qs.lightstyle` | obsidian | enum obsidian/light | Material das cápsulas sobre apps claros: obsidiana ou vidro claro |
+| `sf.qslight` | .90 | 0–2 | Quick Settings: luz que entra pelo contorno conforme o fundo ali (0 desliga) |

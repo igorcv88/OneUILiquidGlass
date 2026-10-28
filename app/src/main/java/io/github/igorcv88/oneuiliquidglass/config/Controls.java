@@ -35,6 +35,8 @@ public final class Controls {
         BEHAVIOR("Comportamento"),
         MOTION("Lente e movimento"),
         LENS_TUNING("Lente dinâmica"),
+        /** Central only, with its own opt-in: drawn as one block of its own (SurfacesPage). */
+        QUICK_SETTINGS("Controles rápidos"),
         TECHNICAL("Técnico");
 
         public final String label;
@@ -229,6 +231,7 @@ public final class Controls {
             BEHAVIOR = Section.BEHAVIOR,
             MOTION = Section.MOTION,
             LENS = Section.LENS_TUNING,
+            QS = Section.QUICK_SETTINGS,
             TECH = Section.TECHNICAL;
     private static final Tier STD = Tier.STANDARD, ADV = Tier.ADVANCED, TEC = Tier.TECHNICAL;
     private static final Preview FAITH = Preview.FAITHFUL,
@@ -603,47 +606,83 @@ public final class Controls {
         put(c("sf.shadelight", "Luz pela borda (lente)").fmt(Format.PERCENT_1).in(LENS, ADV).on(SH)
                 .help("Luz que entra pelo contorno dos cartões da central." + light)
                 .show(BEHAV, Channel.NONE));
-        // Quick Settings has its own opt-in and its own section inside Central.
-        put(c("qs.darkfill", "Véu em fundo colorido").fmt(Format.PERCENT_1).in(COLOR, Tier.STANDARD).on(SH)
-                .help("Ajuste ao vivo dos controles rápidos. A amostra acima representa notificações; confira os controles no aparelho.").show(BEHAV, Channel.NONE));
-        put(c("qs.lightfill", "Véu em fundo claro").fmt(Format.PERCENT_1).in(COLOR, Tier.STANDARD).on(SH)
-                .help("Ajuste ao vivo dos controles rápidos. A amostra acima representa notificações; confira os controles no aparelho.").show(BEHAV, Channel.NONE));
-        put(c("qs.darkcolor", "Cor em fundo colorido").fmt(Format.COLOR).in(COLOR, Tier.STANDARD).on(SH)
-                .help("Ajuste ao vivo dos controles rápidos. A amostra acima representa notificações; confira os controles no aparelho.").show(BEHAV, Channel.NONE));
-        put(c("qs.lightcolor", "Cor em fundo claro").fmt(Format.COLOR).in(COLOR, Tier.STANDARD).on(SH)
-                .help("Ajuste ao vivo dos controles rápidos. A amostra acima representa notificações; confira os controles no aparelho.").show(BEHAV, Channel.NONE));
-        put(c("qs.idle", "Círculos inativos").fmt(Format.PERCENT_1).in(COLOR, Tier.STANDARD).on(SH)
-                .help("Ajuste ao vivo dos controles rápidos. A amostra acima representa notificações; confira os controles no aparelho.").show(BEHAV, Channel.NONE));
-        put(c("qs.active", "Opacidade dos círculos ativos").fmt(Format.PERCENT_1).in(COLOR, Tier.STANDARD).on(SH)
-                .help("Ajuste ao vivo dos controles rápidos. A amostra acima representa notificações; confira os controles no aparelho.").show(BEHAV, Channel.NONE));
-        put(c("qs.darkrim", "Contorno em fundo colorido").fmt(Format.PERCENT_1).in(COLOR, Tier.STANDARD).on(SH)
-                .help("Ajuste ao vivo dos controles rápidos. A amostra acima representa notificações; confira os controles no aparelho.").show(BEHAV, Channel.NONE));
-        put(c("qs.lightrim", "Contorno em fundo claro").fmt(Format.PERCENT_1).in(COLOR, Tier.STANDARD).on(SH)
-                .help("Ajuste ao vivo dos controles rápidos. A amostra acima representa notificações; confira os controles no aparelho.").show(BEHAV, Channel.NONE));
-        put(c("qs.edgeblur", "Desfoque da borda").fmt(Format.PX).in(COLOR, Tier.STANDARD).on(SH)
-                .help("Ajuste ao vivo dos controles rápidos. A amostra acima representa notificações; confira os controles no aparelho.").show(BEHAV, Channel.NONE));
-        put(c("qs.outer", "Espessura da pílula externa").fmt(Format.PERCENT_1).in(COLOR, Tier.STANDARD).on(SH)
-                .help("Mantém a célula e a área de toque da Samsung; o máximo é a altura disponível.").show(BEHAV, Channel.NONE));
-        put(c("qs.track", "Espessura do trilho").fmt(Format.PERCENT_1).in(COLOR, Tier.STANDARD).on(SH)
-                .help("Altera somente o trilho, mantendo o preenchimento independente.").show(BEHAV, Channel.NONE));
-        put(c("qs.fill", "Espessura do preenchimento").fmt(Format.PERCENT_1).in(COLOR, Tier.STANDARD).on(SH)
-                .help("Altera somente o preenchimento, sem mudar o progresso ou o trilho.").show(BEHAV, Channel.NONE));
-        put(c("qs.lightstyle", "Estilo sobre fundo claro").fmt(Format.CHOICE).in(COLOR, Tier.STANDARD).on(SH)
-                .choice("obsidian", "Obsidiana", "Vidro grafite com conteúdo claro")
-                .choice("light", "Claro", "Vidro claro com conteúdo escuro")
-                .help("Ajuste ao vivo dos controles rápidos. A amostra acima representa notificações; confira os controles no aparelho.").show(BEHAV, Channel.NONE));
-        put(c("sf.qslight", "Intensidade da luz nos atalhos").fmt(Format.GAIN).in(LENS, ADV).on(SH)
-                .help("Luz que entra pelo contorno dos controles rápidos; 0 desliga essa contribuição." + restart)
+        // Controles rápidos: opt-in próprio e um bloco próprio dentro da Central (SurfacesPage).
+        // As chaves qs.* valem na hora; as sf.qs* ao reiniciar o userspace, como a lente dinâmica.
+        put(c("qs.darkfill", "Vidro sobre fundo colorido").fmt(Format.PERCENT_1).in(QS, STD).on(SH)
+                .hint("Opacidade das cápsulas sobre fundos escuros ou coloridos")
+                .help("Quanto o vidro das cápsulas cobre o fundo quando ele é escuro ou colorido."
+                        + " Menos deixa o fundo aparecer mais.")
                 .show(BEHAV, Channel.NONE));
-        put(c("sf.qslens", "Refração dos atalhos").fmt(Format.PERCENT_1).in(LENS, ADV).on(SH)
-                .help("Refração do fundo junto ao contorno dos controles dos atalhos rápidos,"
-                        + " mais forte na borda e sumindo para dentro; 0 desliga." + restart)
+        put(c("qs.darkcolor", "Cor do vidro sobre fundo colorido").fmt(Format.COLOR).in(QS, ADV).on(SH)
+                .help("Cor do véu das cápsulas sobre fundos escuros ou coloridos. Branco mantém o"
+                        + " vidro neutro.")
                 .show(BEHAV, Channel.NONE));
-        put(c("sf.qsbody", "Fundo refratado dos atalhos").fmt(Format.PERCENT_1).in(TECH, TEC).on(SH)
-                .help("Opacidade do fundo refratado no contorno dos atalhos rápidos." + restart));
-        put(c("sf.qsdepth", "Alcance da luz nos atalhos").fmt(Format.PX).in(TECH, TEC).on(SH)
-                .help("Quanto a luz de um fundo branco entra pelo contorno dos atalhos rápidos."
-                        + " Fundos mais escuros entram menos." + restart));
+        put(c("qs.lightstyle", "Vidro sobre fundo claro").fmt(Format.CHOICE).in(QS, STD).on(SH)
+                .choice("obsidian", "Obsidiana", "Vidro escuro com texto e ícones claros")
+                .choice("light", "Claro", "Vidro claro com texto e ícones escuros")
+                .help("O que as cápsulas viram quando a central abre sobre um app claro. O fundo é"
+                        + " medido uma vez a cada abertura, e a escolha vale para todas as cápsulas.")
+                .show(BEHAV, Channel.NONE));
+        put(c("qs.lightfill", "Opacidade sobre fundo claro").fmt(Format.PERCENT_1).in(QS, STD).on(SH)
+                .hint("Mais deixa texto e ícones mais legíveis")
+                .help("Quanto o vidro cobre um app claro atrás da central. Mais escurece (obsidiana)"
+                        + " ou clareia (claro) as cápsulas e deixa o conteúdo mais legível.")
+                .show(BEHAV, Channel.NONE));
+        put(c("qs.lightcolor", "Cor da obsidiana").fmt(Format.COLOR).in(QS, ADV).on(SH)
+                .help("Cor do vidro escuro sobre apps claros. Só vale com o estilo Obsidiana.")
+                .show(BEHAV, Channel.NONE));
+        put(c("qs.idle", "Círculos desligados").fmt(Format.PERCENT_1).in(QS, STD).on(SH)
+                .hint("Disco atrás dos ícones inativos")
+                .help("Opacidade do disco atrás dos ícones desligados. 0 deixa só o ícone.")
+                .show(BEHAV, Channel.NONE));
+        put(c("qs.active", "Círculos ligados").fmt(Format.PERCENT_1).in(QS, STD).on(SH)
+                .hint("Opacidade dos discos ativos")
+                .help("Quanto do fundo aparece através dos discos ligados. A cor do disco continua"
+                        + " a da Samsung (ou a do seu tema); só a opacidade muda.")
+                .show(BEHAV, Channel.NONE));
+        put(c("qs.darkrim", "Contorno sobre fundo colorido").fmt(Format.PERCENT_1).in(QS, STD).on(SH)
+                .help("Intensidade da linha de luz em volta das cápsulas sobre fundos escuros ou"
+                        + " coloridos.")
+                .show(BEHAV, Channel.NONE));
+        put(c("qs.lightrim", "Contorno sobre fundo claro").fmt(Format.PERCENT_1).in(QS, STD).on(SH)
+                .help("Intensidade da linha de luz em volta das cápsulas sobre apps claros. Baixa"
+                        + " evita uma segunda linha branca em volta do vidro escuro.")
+                .show(BEHAV, Channel.NONE));
+        put(c("qs.outer", "Espessura do slider").fmt(Format.PERCENT_1).in(QS, STD).on(SH)
+                .hint("Pílula inteira de brilho e volume")
+                .help("Afina a pílula inteira dos sliders. O toque continua na área original da"
+                        + " Samsung; 100% é o máximo, o espaço da grade não permite mais grossa.")
+                .show(BEHAV, Channel.NONE));
+        put(c("qs.track", "Espessura do trilho").fmt(Format.PERCENT_1).in(QS, STD).on(SH)
+                .hint("Faixa de fundo dentro da pílula")
+                .help("Largura da faixa de fundo dentro da pílula, independente da parte que se"
+                        + " move.")
+                .show(BEHAV, Channel.NONE));
+        put(c("qs.fill", "Espessura do preenchimento").fmt(Format.PERCENT_1).in(QS, STD).on(SH)
+                .hint("Parte que se move ao arrastar")
+                .help("Largura da parte que acompanha o dedo, independente do trilho. O valor do"
+                        + " brilho ou do volume não muda.")
+                .show(BEHAV, Channel.NONE));
+        put(c("sf.qslight", "Luz pela borda").fmt(Format.GAIN).in(QS, ADV).on(SH)
+                .help("Luz que entra pelo contorno das cápsulas, vinda do fundo logo atrás: escuro"
+                        + " não acende nada, claro entra mais fundo. 0 desliga." + restart)
+                .show(BEHAV, Channel.NONE));
+        put(c("sf.qslens", "Refração da borda").fmt(Format.PERCENT_1).in(QS, ADV).on(SH)
+                .help("Refração do fundo junto ao contorno das cápsulas, mais forte na borda e"
+                        + " sumindo para dentro; 0 desliga." + restart)
+                .show(BEHAV, Channel.NONE));
+        put(c("sf.qsbody", "Fundo refratado").fmt(Format.PERCENT_1).in(QS, ADV).on(SH)
+                .help("Quanto do fundo refratado aparece no contorno. Alto pode formar um anel mais"
+                        + " claro ou mais escuro que a cápsula." + restart)
+                .show(BEHAV, Channel.NONE));
+        put(c("sf.qsdepth", "Alcance da luz").fmt(Format.PX).in(QS, ADV).on(SH)
+                .help("Quanto a luz de um fundo branco entra pelo contorno. Fundos mais escuros"
+                        + " entram menos." + restart)
+                .show(BEHAV, Channel.NONE));
+        put(c("qs.edgeblur", "Desfoque da borda").fmt(Format.PX).in(QS, ADV).on(SH)
+                .help("Desfoque do fundo que a lente dinâmica lê no contorno. Mais suaviza a luz e"
+                        + " a refração; menos deixa a borda mais nítida.")
+                .show(BEHAV, Channel.NONE));
         put(c("sf.debug", "Tinta de diagnóstico").fmt(Format.TOGGLE).in(TECH, TEC).all()
                 .help("Pinta em magenta e ciano os programas reescritos pela lente. Só para"
                         + " diagnóstico." + restart));

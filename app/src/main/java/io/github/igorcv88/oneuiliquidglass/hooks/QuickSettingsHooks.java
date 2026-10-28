@@ -66,7 +66,12 @@ public final class QuickSettingsHooks {
     private final QsContentHooks content;
     private volatile QsStyle style = QsStyle.read();
     private volatile Object pillShape;
-    private final ThreadLocal<Boolean> barComposition = new ThreadLocal<>();
+    /**
+     * BidirectionalBarKt.PillShape, the shape only the slider passes to BoxWithOutline. Matched by
+     * identity: a box recomposing on its own (a live refresh invalidates its scope) does not run
+     * inside BidirectionalBar, so a call-stack flag would lose the slider there.
+     */
+    private volatile Object barPill;
     private Object circleShape;
     private Method recomposeScope, recordUsed, invalidate, valid;
     private Constructor<?> solidColor;
@@ -107,7 +112,7 @@ public final class QuickSettingsHooks {
         this.startConfig = startConfig;
         this.edge = new QuickSettingsEdgeLight(loader, this::enabled,
                 () -> ConfigClient.flag(ProductFlags.QUICK_SETTINGS), master);
-        this.backdrop = new QsBackdrop(this::enabled, () -> { darkRim=null; lightRim=null; invalidateAll("backdrop"); });
+        this.backdrop = new QsBackdrop(this::enabled, edge::expansion, () -> { darkRim=null; lightRim=null; invalidateAll("backdrop"); });
         this.content = new QsContentHooks(loader, this::enabled, () -> style, backdrop::tone, backdrop::headerTone,
                 () -> pending.get()==null ? Kind.NONE : pending.get().kind, this::capture);
     }
@@ -292,23 +297,50 @@ public final class QuickSettingsHooks {
      * area on every side (DrawTransform.inset's two steps: translate the canvas, shrink the size;
      * getTransform() is stripped by R8) and clip it to a pill, then restore both after the call.
      */
+    /**
+     * The touch that opens the panel starts at the top edge: sampling from its ACTION_DOWN gives the
+     * capture a head start on Samsung's animation. Every SystemUI input event passes here, so the
+     * cheap tests come first; QsBackdrop.gesture() ignores it while the panel is open or a fresh
+     * sample exists, so a tap on the status bar or header does not capture again.
+     */
     private void installPrefetchGesture() {
         try {
             Class<?> receiver=Class.forName("android.view.InputEventReceiver");
             XposedBridge.hookAllMethods(receiver,"dispatchInputEvent",new XC_MethodHook(){
                 @Override protected void beforeHookedMethod(MethodHookParam p){
-                    if(!enabled()||p.args.length<2||!(p.args[1] instanceof android.view.MotionEvent))return;
+                    if(p.args.length<2||!(p.args[1] instanceof android.view.MotionEvent))return;
                     android.view.MotionEvent e=(android.view.MotionEvent)p.args[1];
-                    if(e.getActionMasked()==android.view.MotionEvent.ACTION_DOWN && e.getRawY()<200)backdrop.prefetch();
+                    if(e.getActionMasked()!=android.view.MotionEvent.ACTION_DOWN||e.getRawY()>=topEdge()||!enabled())return;
+                    backdrop.gesture();
                 }
             });
         } catch(ClassNotFoundException|RuntimeException|LinkageError e){Probe.error("QS_PREFETCH_GESTURE_FAILED",e);}
     }
 
+    private int topEdgePx;
+
+    /**
+     * Where a pull-down of the panel starts: 64 dp from the top, about twice One UI's status bar
+     * (its height is an internal resource, not read here).
+     */
+    private int topEdge() {
+        if (topEdgePx <= 0)
+            topEdgePx = Math.round(64f * android.content.res.Resources.getSystem().getDisplayMetrics().density);
+        return topEdgePx;
+    }
+
     private void hookSlider() {
         Class<?> bar=resolve(BAR);if(bar==null)return;
+        try {
+            Field pill=bar.getDeclaredField("PillShape");
+            pill.setAccessible(true);
+            barPill=pill.get(null);
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
+            barPill=null;
+            Probe.log("QS_SLIDER_SHAPE_MISSING", "error=" + e.getClass().getSimpleName());
+        }
         try { new QsSliderHooks(loader,this::enabled,()->style,()->pillShape!=null||style.outer>=1,
-                on->{if(on)barComposition.set(true);else barComposition.remove();},this::capture).install(bar); }
+                this::capture).install(bar); }
         catch(ReflectiveOperationException|RuntimeException|LinkageError e){Probe.error("QS_SLIDER_HOOK_FAILED",e);}
     }
 
@@ -377,7 +409,7 @@ public final class QuickSettingsHooks {
             // The inner box is padded by the outline width only when the outline is on.
             pending.set(new Pending(a[7], background, fill, rimmed ? rim(dark) : null,
                     kind == Kind.CONTAINER ? a[5] : null, outlined ? (Float) a[2] : 0f));
-            pending.get().slider = kind == Kind.CONTAINER && Boolean.TRUE.equals(barComposition.get());
+            pending.get().slider = kind == Kind.CONTAINER && barPill != null && a[5] == barPill;
             pending.get().kind = kind;
             if (pending.get().slider) {
                 pending.get().sliderShape = pillShape;
