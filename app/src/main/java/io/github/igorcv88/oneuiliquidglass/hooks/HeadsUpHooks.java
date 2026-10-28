@@ -566,16 +566,26 @@ public final class HeadsUpHooks {
         return Eligibility.preOpenValid(gesture, gestureDown, gestureUp, now - gestureUpAt, now - grid.takenAt, PRE_OPEN_LIFT_MS, PRE_OPEN_MAX_MS);
     }
     private void adoptGrid(ToneGrid grid, String state) {
+        Tuning t = Tuning.get();
+        float whole = grid.whole();
+        long now = android.os.SystemClock.uptimeMillis();
+        // A new opening decides from its midpoint; a resample keeps the decided scene's hysteresis.
+        boolean scene = whole >= (t.styleLo + t.styleHi) * 0.5f;
+        sceneGate.reset(); sceneGate.offer(scene, now);
+        adoptGrid(grid, state, scene);
+    }
+    private void adoptGrid(ToneGrid grid, String state, boolean scene) {
         shadeGrid = grid;
         long now = android.os.SystemClock.uptimeMillis();
         // One decision for the whole stack (the scene); a card only departs from it where its own
         // bands are clearly light or dark (VeilMath.classify).
-        Tuning t = Tuning.get();
         float whole = grid.whole();
-        shadeScene = whole >= (t.styleLo + t.styleHi) * 0.5f;
+        Boolean previousScene = shadeScene;
+        shadeScene = scene;
         Probe.log("SHADE_PREFETCH", "generation=" + grid.generation + " state=" + state + " tFromOpen=" + (now - shadeOpenAt)
                 + " age=" + (now - grid.takenAt) + " earlyDraws=" + shadeEarlyDraws + " top=" + grid.top + " band=" + grid.band
-                + " scene=" + (shadeScene ? "light" : "dark") + " sceneLuma=" + String.format(java.util.Locale.ROOT, "%.2f", whole));
+                + " scene=" + (shadeScene ? "light" : "dark") + " sceneLuma=" + String.format(java.util.Locale.ROOT, "%.2f", whole)
+                + " previousScene=" + (previousScene == null ? "none" : previousScene ? "light" : "dark"));
         if (Probe.trace && shadeScene) {
             // Theme-tone labels outside the rows (the minimized group's title, section headers),
             // once the shade has finished opening, when the shelf and the group headers are shown.
@@ -600,6 +610,74 @@ public final class HeadsUpHooks {
         if (anchor != null) for (long delay : new long[] { 300, 1000 })
             anchor.postDelayed(() -> { if (gen == shadeOpens) orphanTone(); }, delay);
         panelDim(shadeConfigEnabled() && Tuning.get().textSwap && shadeScene && ShadeTone.lightText());
+        scheduleResample(RESAMPLE_MS);
+    }
+    /**
+     * In-session resampling (SHADE_RESAMPLE). The opening's capture decides the first tone; while the
+     * shade stays open, the backdrop is captured again every RESAMPLE_MS (one low-resolution
+     * capture below the shade window, never per frame, never while the shade is hidden), so a real
+     * change behind it (the app turning from white to black) reaches the header, the cards and their
+     * text. The scene changes only through sceneGate: a different reading must be confirmed by the
+     * next capture, taken CONFIRM_MS later; a single transient frame or sampling noise changes
+     * nothing. Each capture also feeds the header's own gated decision for its band.
+     */
+    static final long RESAMPLE_MS = 900, CONFIRM_MS = 150, SCENE_DWELL_MS = 600;
+    private final io.github.igorcv88.oneuiliquidglass.glass.ToneGate sceneGate =
+            new io.github.igorcv88.oneuiliquidglass.glass.ToneGate(CONFIRM_MS, SCENE_DWELL_MS);
+    private final Runnable resample = this::resampleShade;
+    private Runnable resampleCancel;
+    private int resampleTicket;
+    private void scheduleResample(long delay) {
+        main.removeCallbacks(resample);
+        if (!Boolean.TRUE.equals(shadeExpanded) || shadeGrid == null || resampleCancel != null) return;
+        main.postDelayed(resample, Math.max(16, delay));
+    }
+    private void stopResample() {
+        main.removeCallbacks(resample);
+        resampleTicket++;
+        if (resampleCancel != null) resampleCancel.run();
+        resampleCancel = null;
+    }
+    private void resampleShade() {
+        Tuning t = Tuning.get();
+        if (!shadeConfigEnabled() || !t.shadeAdaptive || !Boolean.TRUE.equals(shadeExpanded) || shadeGrid == null
+                || barState == null || barState != Eligibility.BAR_SHADE) return;
+        View anchor = panelView == null ? null : panelView.get();
+        if (anchor == null || !anchor.isAttachedToWindow()) return;
+        if (!anchor.isShown()) { scheduleResample(RESAMPLE_MS); return; }
+        int generation = shadeOpens, ticket = ++resampleTicket;
+        long requested = android.os.SystemClock.uptimeMillis();
+        boolean[] landed = {false};
+        Runnable cancel = ShadeTone.prefetch(anchor, generation, grid -> {
+            landed[0] = true;
+            if (ticket != resampleTicket) return; // Closed or superseded meanwhile: a late capture is dropped.
+            resampleCancel = null;
+            if (generation != shadeOpens || !Boolean.TRUE.equals(shadeExpanded) || shadeGrid == null) return;
+            // No capture possible (secure content, capture unavailable): no loop for this opening.
+            if (grid == null) { Probe.log("SHADE_RESAMPLE", "generation=" + generation + " state=unavailable"); return; }
+            long now = android.os.SystemClock.uptimeMillis();
+            try { if (grid.takenAt >= shadeGrid.takenAt) offerGrid(grid, now - requested); }
+            catch (RuntimeException | LinkageError e) { Probe.error("SHADE_RESAMPLE_FAILED", e); return; }
+            boolean pending = sceneGate.pending() || headerInk.pending();
+            scheduleResample(pending ? Math.max(CONFIRM_MS, Math.min(RESAMPLE_MS, sceneGate.pending() ? sceneGate.confirmIn(now) : CONFIRM_MS)) : RESAMPLE_MS);
+        });
+        // A capture that cannot be taken answers synchronously: nothing is in flight then.
+        if (!landed[0]) resampleCancel = cancel;
+    }
+    private void offerGrid(ToneGrid grid, long age) {
+        long now = android.os.SystemClock.uptimeMillis();
+        float whole = grid.whole();
+        if (!Float.isFinite(whole) || whole < 0f || whole > 1f) return;
+        boolean light = ShadeTone.lightBackdrop(whole, shadeScene);
+        boolean pendingBefore = sceneGate.pending();
+        boolean commit = sceneGate.offer(light, now) && shadeScene != null && light != shadeScene;
+        if (commit || sceneGate.pending() != pendingBefore)
+            Probe.log("SHADE_RESAMPLE", "generation=" + shadeOpens + " luma=" + String.format(java.util.Locale.ROOT, "%.2f", whole)
+                    + " reading=" + (light ? "light" : "dark") + " decided=" + (shadeScene == null ? "none" : shadeScene ? "light" : "dark")
+                    + " commit=" + commit + " pending=" + sceneGate.pending() + " sampleAgeMs=" + age);
+        // The header decides its own band with its own gate; the same capture serves both.
+        headerTone(grid);
+        if (commit) adoptGrid(grid, "resample", light);
     }
     /** Rows given the scene's text tone by orphanTone, restored when the shade closes. */
     private final java.util.Set<State> orphans = Collections.newSetFromMap(new WeakHashMap<>());
@@ -677,6 +755,7 @@ public final class HeadsUpHooks {
      * text tone changes when the capture lands, instead of a light card turning grey.
      */
     private void beginShadeTone(Object controller) {
+        stopResample();
         int generation = shadeOpens;
         shadeGrid = null; shadeScene = null; shadeOpenAt = android.os.SystemClock.uptimeMillis(); shadeCards = 0; shadeEarlyDraws = 0;
         Tuning t = Tuning.get();
@@ -712,6 +791,7 @@ public final class HeadsUpHooks {
         Probe.log("SHADE_OPEN_END", "generation=" + shadeOpens + " durationMs=" + (android.os.SystemClock.uptimeMillis() - shadeOpenAt)
                 + " cards=" + shadeCards + " earlyDraws=" + shadeEarlyDraws + " sampled=" + (shadeGrid != null)
                 + " intercepted=" + Foreground.interceptions());
+        stopResample();
         shadeGrid = null; shadeOpenAt = 0;
         restoreHeader();
         for (State st : new ArrayList<>(orphans)) st.setForeground(false);
@@ -936,6 +1016,8 @@ public final class HeadsUpHooks {
     private static final long HOLD_MS = 1500;
     /** While a pop-up enters, how often the backdrop under it is measured again. */
     private static final long POPUP_ENTER_MS = 100;
+    /** A pop-up's change of side needs a second measurement this much later, and this long since its last change. */
+    private static final long POPUP_CONFIRM_MS = 200, POPUP_DWELL_MS = 800;
     /** How long after the last touch a shown pop-up keeps measuring at POPUP_ENTER_MS. */
     private static final long POPUP_ACTIVE_MS = 1500;
     private static final String SURFACE_SHADE = "shade", SURFACE_POPUP = "popup";
@@ -1127,17 +1209,18 @@ public final class HeadsUpHooks {
             // A new heads-up arrival on this row starts over: its tone is measured afresh.
             if (!SURFACE_POPUP.equals(toneSurface) || popupToneArrival != popupArrival) {
                 popupToneArrival = popupArrival;
-                toneSurface = SURFACE_POPUP; popupMeasureAt = 0; popupMeasuredAlpha = 0f; popupScene = null;
+                toneSurface = SURFACE_POPUP; popupMeasureAt = 0; popupMeasuredAlpha = 0f; popupScene = null; popupGate.reset();
                 // The pop-up slot is empty or stale: write the current veil before any step from it.
                 pushToneVeil();
                 toneSource = "native";
                 setNative();
                 logTone("POPUP_CONTRAST", v, toneSource, Float.NaN, -1f, "");
             } else setForeground(swapped);
-            // Decided once (popuplock): after the first measurement of this arrival the pop-up keeps
-            // its tone while shown. Measured again on every backdrop change, it switched between
-            // looks over moving content (device, 26/10).
-            if (Tuning.get().popupLock && "sample".equals(toneSource)) return;
+            // Stabilised (popuplock): after the first measurement of this arrival the pop-up keeps
+            // its look until a later measurement reads the other side of the classifier and the next
+            // one, POPUP_CONFIRM_MS on, confirms it (popupGate). Applying every measurement switched
+            // between looks over moving content (device, 26/10); holding the first one for good left
+            // a pop-up dark-on-dark after the app behind it turned black.
             if (!v.isShown()) return;
             v.getLocationOnScreen(toneXy);
             float alpha = shownAlpha(v);
@@ -1149,6 +1232,8 @@ public final class HeadsUpHooks {
             // white app for ~270 ms after a launch (device video, 25/10).
             boolean active = now - BackdropMotion.lastActive() < POPUP_ACTIVE_MS;
             long interval = entering || active ? POPUP_ENTER_MS : POPUP_MEASURE_MS;
+            // A candidate change waits for its confirming measurement, which is taken early.
+            if (popupGate.pending()) interval = Math.min(interval, Math.max(POPUP_ENTER_MS, popupGate.confirmIn(now)));
             if (now - popupMeasureAt < interval) {
                 // Not due yet (the interval grew as the pop-up settled): keep the timer armed for the
                 // rest of it, or the loop would stop once no other draw comes.
@@ -1163,9 +1248,23 @@ public final class HeadsUpHooks {
             v.removeCallbacks(popupPoke);
             v.postDelayed(popupPoke, interval);
             long requested = now;
+            int arrival = popupArrival;
             ShadeTone.measure(v, luma -> {
-                if (!SURFACE_POPUP.equals(toneSurface)) return;
+                if (!SURFACE_POPUP.equals(toneSurface) || arrival != popupArrival) return;
                 boolean firstSample = !"sample".equals(toneSource);
+                if (!firstSample && Tuning.get().popupLock) {
+                    // Only a confirmed change of side moves a pop-up that already has its look;
+                    // readings on the same side keep the veil it has (no creep over moving content).
+                    long at = android.os.SystemClock.uptimeMillis();
+                    boolean light = ShadeTone.lightBackdrop((float) luma, popupScene);
+                    boolean pendingBefore = popupGate.pending();
+                    boolean commit = popupGate.offer(light, at) && popupScene != null && light != popupScene;
+                    if (commit || popupGate.pending() != pendingBefore)
+                        logTone("POPUP_CONTRAST_GATE", v, "sample", (float) luma, -1f, " reading=" + (light ? "light" : "dark")
+                                + " decided=" + (popupScene == null ? "none" : popupScene ? "light" : "dark") + " commit=" + commit
+                                + " pending=" + popupGate.pending() + " sampleAgeMs=" + (at - requested));
+                    if (!commit) { if (popupGate.pending()) { v.removeCallbacks(popupPoke); v.postDelayed(popupPoke, POPUP_CONFIRM_MS); } return; }
+                } else if (firstSample) popupGate.offer(ShadeTone.lightBackdrop((float) luma, popupScene), android.os.SystemClock.uptimeMillis());
                 int before = measuredVeil;
                 boolean wasSwapped = swapped;
                 toneSource = "sample";
@@ -1236,6 +1335,9 @@ public final class HeadsUpHooks {
         boolean pendingLight;
         /** The pop-up's scene: its previous reading of the same backdrop; null at the start of a pop-up. */
         Boolean popupScene;
+        /** Confirms a pop-up's change of side before its look moves (see popupTone). */
+        final io.github.igorcv88.oneuiliquidglass.glass.ToneGate popupGate =
+                new io.github.igorcv88.oneuiliquidglass.glass.ToneGate(POPUP_CONFIRM_MS, POPUP_DWELL_MS);
         /** The card's native region colour (what a veil of 0 shows), for the ramp's endpoints. */
         int nativeTint;
         void flushPendingSwap() {
@@ -1285,12 +1387,17 @@ public final class HeadsUpHooks {
             long sinceSwap = now - swapAt;
             swapAt = now;
             try {
-                int changed = Foreground.apply(row.get(), swap, ShadeTone.lightText(), swappedViews);
+                // A tone change on a card the user is looking at moves its text over a short
+                // transition; the first tone of a card and a hidden card change at once.
+                View shown = row.get();
+                boolean animate = ("style".equals(reason) || "restore".equals(reason)) && shown != null
+                        && shown.isShown() && shownAlpha(shown) > 0.01f && toneAt > 0;
+                int changed = Foreground.apply(shown, swap, ShadeTone.lightText(), swappedViews, animate);
                 // Recorded only once the walk went through: a failed restore is retried.
                 swapped = swap;
-                if (changed > 0 && (Probe.trace || reason.equals("rebind") || reason.equals("detached"))) {
+                if (changed > 0 && (Probe.trace || animate || reason.equals("rebind") || reason.equals("detached"))) {
                     Probe.log("TEXT_REAPPLY", "rowId=" + Integer.toHexString(System.identityHashCode(row.get())) + " reason=" + reason
-                            + " swap=" + swap + " views=" + changed + " sinceLastWalk=" + sinceSwap + " surface=" + toneSurface
+                            + " swap=" + swap + " views=" + changed + " animated=" + animate + " sinceLastWalk=" + sinceSwap + " surface=" + toneSurface
                             + " style=" + (swap ? (lightBackdrop ? "light" : "dark") : "native")
                             + (SURFACE_SHADE.equals(toneSurface) ? " generation=" + shadeOpens : ""));
                 }
