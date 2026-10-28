@@ -17,7 +17,7 @@ The release publishes **only the APK**. It carries the live bundle in `assets/sf
 | `allowed_fingerprints` | `ro.build.fingerprint` values the route was validated on (DZIF only) |
 | `live.prop` | manifest: `version`, `versionCode`, `commit`, `abi`, `sha256_inject`, `sha256_lib`, `sha256_helper` |
 
-`version`/`versionCode` come from `sfhook/live/version.prop` (now `v0.21.0` / `22`). Bump them when anything
+`version`/`versionCode` come from `sfhook/live/version.prop` (now `v0.25.0` / `26`). Bump them when anything
 that ends up in the binaries changes. The injector embeds that version, not the commit, so binaries
 rebuilt from unchanged sources hash the same: an APK update alone does not ask for a reinstall.
 
@@ -42,7 +42,7 @@ precondition or usage; `error=<reason>` says which).
 
 | Command | Does | Keys |
 | --- | --- | --- |
-| `status` | reads only | `helper`, `fingerprint`, `fingerprint_ok`, `bundled_ok`, `bundled_version`, `bundled_versionCode`, `bundled_commit`, `installed_version`, `installed_versionCode`, `installed_commit`, `installed_ok`, `update_needed`, `selftest_ok`, `sf_pid`, `sf_loaded`, `sf_rewrite`, `sf_optics`, `sfrefract` |
+| `status` | reads only | `helper`, `fingerprint`, `fingerprint_ok`, `bundled_ok`, `bundled_version`, `bundled_versionCode`, `bundled_commit`, `installed_version`, `installed_versionCode`, `installed_commit`, `installed_ok`, `update_needed`, `selftest_ok`, `sf_pid`, `sf_generation`, `sf_loaded`, `sf_got`, `sf_rewrite_ok`, `sf_stable`, `sf_rewrite`, `sf_optics`, `sfrefract` |
 | `install` | checks the bundle against its manifest and the fingerprint, then copies the injector to `/data/local/tmp/oulg/`, the library to `/data/misc/surfaceflinger/` (`system_lib_file`) and the manifest | `install`, `version` |
 | `selftest` | the whole injection into a throwaway `/system/bin/sleep`, with the BTI control (`docs/sf-sem-overlay.md`) | `selftest` (`ok`/`failed`), `rc`, `log` |
 | `restart rewrite` / `restart dump` | **restarts the whole userspace** (the app dies with it): stop SurfaceFlinger, clear its shader cache, start it, inject at its entry point, restart the zygote 3 s later. `rewrite` turns the lens on; `dump` only records shaders | `restart=started`, `log` |
@@ -73,6 +73,23 @@ Meaning of the status keys that drive the button:
 The confirmation before `restart` must say that the screen goes black and the userspace restarts
 (~20 s), that open apps close, and that a reboot always returns to the stock compositor.
 
+### Parameter readback versus compiled shader
+
+`getprop debug.oulg.sf.*` changes immediately; GLSL constants do not. The UI must not consider
+matching desired and observed properties proof that the running shader contains those values.
+Before an app-initiated restart, the controller captures **all** compositor inputs, including
+properties owned by Terminal (no saved app override), and the old SurfaceFlinger generation (boot ID, PID, process start ticks). Only after
+the user explicitly checks status and the helper reports an injected **new** SurfaceFlinger with
+refraction/rewrite enabled, GOT acknowledgement, at least one successfully compiled fragment rewrite,
+completion of the bounded monitor, and matching properties does the app persist that input snapshot as its
+last verified restart baseline. Subsequent Terminal changes are pending against that baseline even
+if the user chose “Usar o do terminal” in the conflict dialog. Without a verified baseline, the
+app shows an explicit unverified state, not an “already applied” claim.
+
+This is a verified restart/input readback, **not** proof of a successful shader rewrite for every
+program; a failed injection or unexplained process replacement still requires the injector log and the shader
+rewrite diagnostics. Restarts outside the app cannot safely be acknowledged automatically.
+
 ## What the helper and the injector guarantee
 
 - **Atomic install:** new files are written beside the old ones and renamed over them. Copying over
@@ -91,3 +108,61 @@ The confirmation before `restart` must say that the screen goes black and the us
 - The button and its UI (the app refactor, `docs/HANDOFF_APP_REFACTOR_2026-10-26.md`).
 - Re-injection at boot: the route is manual by design; after a reboot the state is `RESTART`.
 - Play Integrity and Wallet were not re-measured after an injection with the lens on.
+
+## Bounded restart health (v0.25)
+
+The existing SF + zygote restart sequence is preserved. The detached injector now observes the
+transaction until 120 seconds after SF start, instead of ending about 33 seconds into recovery.
+It logs `SF_TRANSITION` with old/new PID and start ticks. This detects replacement; it does not
+identify a crash. A single reinjection is allowed during the first 30 seconds after the zygote
+restart, only after a clean first injection and a minimum 1 second cooldown. A generation caught
+during cooldown is refused rather than delayed past its entry point. A failed attach, a used retry
+budget or an expired retry window stops further injection. There are no additional SF/zygote
+restarts, persistent services, boot hooks or resident watchdogs. A file lock serializes transactions.
+
+The library writes an atomic `oulg_health` record only inside SurfaceFlinger, never in the
+throwaway selftest. Its PID/start ticks bind GOT acknowledgement and successful fragment compilation
+to that process. The root worker writes `oulg_monitor` (PID/start ticks, outcome, boot ID) at the end.
+The helper verifies both against the active process, plus the installed library inode, and repeats
+the process identity check after reading status. Missing files, SELinux write denials, old generations,
+old library inodes and residual `sf.optics=9` cannot confirm an apply. `sf_rewrite` is the requested
+mode; `sf_rewrite_ok` is independent observed compilation evidence. Neither proves every shader
+compiled or that a program linked/drew correctly.
+
+`sf_stable=1` acknowledges the bounded process/GOT observation, not all future process lifetime.
+A fragment may compile on demand after that window; until then the app remains unverified.
+If SF changes after monitoring ends, the next explicit status check detects the loss. No root
+command runs automatically on resume. A reopened app asks for verification before treating the
+stored baseline as current. “Verificar estado” reads only; “Reiniciar lente” is a separate confirmed
+action. Open a notification, wait two minutes after activation and check again.
+
+`log` adds the current health record and a bounded Android logcat tail with epoch timestamps.
+The injector's times are monotonic milliseconds from transaction start; `HEALTH_FINAL` closes the
+window. To investigate an actual replacement, collect the log immediately, contemporaneous init /
+crash-buffer messages and any tombstone with its event time. An older SIGILL is not evidence for a
+new occurrence. This implementation has no device trace explaining the 27 October replacement.
+
+## Export provenance and defaults
+
+Schema 1 remains import-compatible. `desired` contains app overrides only; `observed` records a fresh
+unprivileged property snapshot (including an availability flag), and `verifiedRestart` records the
+historical generation/request time/input snapshot. Those diagnostic sections are **never imported**
+as desired settings. Their timestamps do not imply current health or per-shader compilation.
+A desired-only backup cannot reproduce Terminal-only settings or guarantee the complete appearance.
+
+No defaults are changed by this userspace fix. `semradiuslens=22` remains the accepted test base;
+`core=90 / ramp=1 / taps=48` is a reproduced, visually rejected experiment, not a new-user preset.
+Part C's default promotion remains gated on real-device acceptance of A and B; no automatic profile
+migration is installed. The profile-0 shader work already in PR 68 is left intact.
+
+### Verification for this change
+
+- Host: `tools/live_check.sh` covers current/old PID/start identities, monitor acknowledgement,
+  residual optics, missing rewrite evidence, deleted/wrong inodes and helper installation.
+- Host: `tools/health_check.c` checks native generation parsing/records and retry cooldown/budget.
+- Java: Terminal-only changes (including `sf.edgeblur`), reset-to-default, live settings, complete
+  restart inputs, incomplete operational evidence and diagnostic-export import isolation.
+- Device still required: selftest; install/restart; open tagged cards; wait two minutes; verify
+  current inode + GOT + fragment rewrite + final monitor record. Change props externally, choose
+  “Usar o do terminal”, return Home and apply. Capture health/logcat/tombstone evidence immediately
+  if SF is replaced, including after the monitor window. Compare all three visual profiles.

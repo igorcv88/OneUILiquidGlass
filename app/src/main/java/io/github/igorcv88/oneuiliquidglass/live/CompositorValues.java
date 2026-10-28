@@ -19,7 +19,7 @@ public final class CompositorValues {
         NONE,
         /** Restart requested; the helper has not been asked since. */
         UNVERIFIED,
-        /** Library loaded after the restart and every written value reads back. */
+        /** New stable process, current library, GOT/one rewrite observed; input readback matches. */
         CONFIRMED,
         /** The library is not mapped by the running compositor. */
         NOT_LOADED,
@@ -62,31 +62,92 @@ public final class CompositorValues {
         return out;
     }
 
-    /** commit(): the restart that follows kills this process before an apply() would land. */
+    /**
+     * A getprop readback is not a shader-compile acknowledgement. Once a restart has been
+     * verified, compare ALL compositor properties with that restart's captured inputs, including
+     * properties the user has released to Terminal (which no longer occur in {@code saved}).
+     */
+    public static Map<String, String> pending(
+            Map<String, String> saved,
+            Map<String, String> observed,
+            Map<String, String> compiled) {
+        Map<String, String> out = pending(saved, observed);
+        if (compiled == null) return out; // No verified baseline: report uncertainty separately.
+        for (String shortKey : SfLive.WRITABLE) {
+            String key = "sf." + shortKey;
+            SettingSpec spec = SettingsRegistry.get(key);
+            if (spec == null || out.containsKey(key)) continue;
+            String current = observed.get(key);
+            if (!same(spec, current, compiled.get(key)))
+                out.put(key, current == null || current.isEmpty() ? spec.defaultValue : current);
+        }
+        return out;
+    }
+
+    /** Effective property inputs at the moment the injector is asked to restart. */
+    public static Map<String, String> restartInputs(
+            Map<String, String> observed, Map<String, String> pending) {
+        Map<String, String> values = new TreeMap<>();
+        for (String shortKey : SfLive.WRITABLE) {
+            String key = "sf." + shortKey;
+            SettingSpec spec = SettingsRegistry.get(key);
+            if (spec == null) continue;
+            String current = observed.get(key);
+            values.put(key, current == null || current.isEmpty() ? spec.defaultValue : current);
+        }
+        values.putAll(pending);
+        return values;
+    }
+
     @android.annotation.SuppressLint("ApplySharedPref")
-    public static void recordAttempt(SharedPreferences prefs, Map<String, String> values, long at) {
+    public static void recordCompiled(SharedPreferences prefs, Map<String, String> values, long at, String generation) {
+        prefs.edit().putString("compiledValues", encode(values))
+                .putString("compiledGeneration", generation).putLong("compiledAt", at).commit();
+    }
+
+    public static boolean hasCompiled(SharedPreferences prefs) {
+        return prefs.contains("compiledValues");
+    }
+
+    public static Map<String, String> compiledValues(SharedPreferences prefs) {
+        return decode(prefs.getString("compiledValues", ""));
+    }
+
+    private static String encode(Map<String, String> values) {
         StringBuilder encoded = new StringBuilder();
         for (Map.Entry<String, String> e : values.entrySet())
             encoded.append(e.getKey()).append('=').append(e.getValue()).append('\n');
+        return encoded.toString();
+    }
+
+    private static Map<String, String> decode(String contents) {
+        Map<String, String> out = new TreeMap<>();
+        for (String line : contents.split("\n")) {
+            int eq = line.indexOf('=');
+            if (eq > 0) out.put(line.substring(0, eq), line.substring(eq + 1));
+        }
+        return out;
+    }
+
+    /** commit(): the restart that follows kills this process before an apply() would land. */
+    @android.annotation.SuppressLint("ApplySharedPref")
+    public static void recordAttempt(SharedPreferences prefs, Map<String, String> values, long at, String beforeGeneration) {
         prefs.edit()
                 .putLong("restartRequestedAt", at)
-                .putString("restartValues", encoded.toString())
+                .putString("restartValues", encode(values))
+                .putString("restartBeforePid", beforeGeneration == null ? "" : beforeGeneration)
                 .remove("verifiedAt")
                 .commit();
     }
 
     @android.annotation.SuppressLint("ApplySharedPref")
     public static void clearAttempt(SharedPreferences prefs) {
-        prefs.edit().remove("restartRequestedAt").remove("restartValues").commit();
+        prefs.edit().remove("restartRequestedAt").remove("restartValues")
+                .remove("restartBeforePid").commit();
     }
 
     public static Map<String, String> attemptValues(SharedPreferences prefs) {
-        Map<String, String> out = new TreeMap<>();
-        for (String line : prefs.getString("restartValues", "").split("\n")) {
-            int eq = line.indexOf('=');
-            if (eq > 0) out.put(line.substring(0, eq), line.substring(eq + 1));
-        }
-        return out;
+        return decode(prefs.getString("restartValues", ""));
     }
 
     /**
@@ -98,10 +159,28 @@ public final class CompositorValues {
             Map<String, String> written,
             Map<String, String> status,
             Map<String, String> observed) {
+        return verify(requestedAt, written, status, observed, "");
+    }
+
+    /** The PID check avoids confirming a restart before the compositor actually changed. */
+    public static Outcome verify(
+            long requestedAt,
+            Map<String, String> written,
+            Map<String, String> status,
+            Map<String, String> observed,
+            String beforePid) {
         if (requestedAt <= 0) return Outcome.NONE;
         if (status.isEmpty() || !"1".equals(status.get("helper"))) return Outcome.UNVERIFIED;
-        if (!"1".equals(status.get("sf_loaded")) || !"1".equals(status.get("sfrefract")))
+        if (!"1".equals(status.get("sf_loaded")) || !"1".equals(status.get("sfrefract"))
+                || !"1".equals(status.get("sf_rewrite")))
             return Outcome.NOT_LOADED;
+        if (beforePid != null && !beforePid.isEmpty()
+                && (beforePid.equals(status.get("sf_pid")) || beforePid.equals(status.get("sf_generation")) || status.get("sf_pid") == null))
+            return Outcome.UNVERIFIED;
+        if (!"1".equals(status.get("sf_got")) || !"1".equals(status.get("sf_rewrite_ok"))
+                || !"1".equals(status.get("sf_stable"))
+                || status.getOrDefault("sf_generation", "").isEmpty())
+            return Outcome.UNVERIFIED;
         for (Map.Entry<String, String> e : written.entrySet()) {
             SettingSpec spec = SettingsRegistry.get(e.getKey());
             if (spec == null || !same(spec, e.getValue(), observed.get(e.getKey())))

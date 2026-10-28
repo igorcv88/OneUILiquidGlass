@@ -17,6 +17,7 @@
 //  - temporal: mean |frame - previous frame| in the card for 1/3 px moves of the card over a still
 //    backdrop (lower = steadier under motion; the exact content change is part of it for all);
 //  - ms: SwiftShader time per full-card draw, a relative cost only (CPU rasterizer, not a GPU).
+//  - fillDepth: profile 0's backdrop detail per depth band from the outline (see depthProfile);
 // and comparisons: fill vs clip per profile (same card, two programs), heads-up vs its baseline, and
 // the straight rims' luminance of profile 1 against profile 0 or, with BASE_PF=1, against the
 // baseline's profile 1 (built e.g. with rim=0,spec=0 to isolate the lighting; see rimLift).
@@ -206,12 +207,36 @@ function lumaStats(px) {
   }
   return Object.fromEntries(Object.entries(acc).map(([k, [a, n, m]]) => [k, { mean: +(a / n).toFixed(3), max: +m.toFixed(3) }]));
 }
+// Spatial continuity of profile 0 (heads-up) from the outline inward: backdrop detail at 3-13 px
+// (RMS(box1 - box6), where a magnified downscaled texel shows) per 4 px depth band, along the straight
+// rims only (corners excluded), from 8 px (the box stays inside the card) to past the ramp. maxStep is
+// the largest change between neighbouring bands as a share of the rim value: a sharp rim band over a
+// smeared body reads as one large step; a single continuous curve spreads it over many small ones.
+function depthProfile(px) {
+  const lo = 8, step = 4, hi = Math.ceil((2 * bevel + 20) / step) * step;
+  const bins = Array.from({ length: (hi - lo) / step }, () => [0, 0]);
+  for (let ch = 0; ch < 3; ch++) {
+    const b1 = boxBlur(px, ch, 1).dst, b6 = boxBlur(px, ch, 6).dst;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      if (Math.abs(x + 0.5 - CARD.x - CARD.w / 2) > CARD.w / 2 - CARD.r) continue;
+      const d = depthOf(x, y), b = Math.floor((d - lo) / step);
+      if (d < lo || b >= bins.length) continue;
+      const i = y * W + x; bins[b][0] += (b1[i] - b6[i]) ** 2; bins[b][1]++;
+    }
+  }
+  const detail = bins.map(([a, n]) => +Math.sqrt(a / Math.max(n, 1)).toFixed(2));
+  let maxStep = 0;
+  for (let i = 1; i < detail.length; i++) maxStep = Math.max(maxStep, Math.abs(detail[i] - detail[i - 1]));
+  return { from: lo, step, detail, maxStep: +(maxStep / Math.max(detail[0], 1e-3)).toFixed(3) };
+}
 const report = {};
 for (const [name, r] of Object.entries(res)) {
   if (name === 'plain') continue;
   report[name] = { ...quality(r.px), temporal: temporal(r.frames), ms: +r.ms.toFixed(1) };
   if (png) fs.writeFileSync(`${png}${name}.png`, Buffer.from(r.png.split(',')[1], 'base64'));
 }
+if (res.fill) report.fillDepth = depthProfile(res.fill.px);
+if (res.baseFill) report.baseFillDepth = depthProfile(res.baseFill.px);
 if (res.fill && res.fillKg) report.rimFillKgVsFill = rimLift(res.fillKg.px, res.fill.px);
 if (res.fillKg && res.baseFillKg) report.rimFillKgVsBaseFillKg = rimLift(res.fillKg.px, res.baseFillKg.px);
 if (res.fillKg && res.baseFillKg) report.fillKgVsBaseFillKg = diff(res.fillKg.px, res.baseFillKg.px);

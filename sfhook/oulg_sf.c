@@ -23,6 +23,7 @@
 #include <GLES2/gl2.h>
 #include "refract.h"
 #include "relocs.h"
+#include "health.h"
 
 #define TAG "OULG_SF"
 #define DUMP "/data/misc/surfaceflinger/oulg_shaders.txt"
@@ -165,6 +166,22 @@ static int patch_object(struct dl_phdr_info *info, size_t size, void *self) {
     return 0;
 }
 
+// A process-bound acknowledgement, independent of residual global properties. Failure to
+// write is deliberately unknown to the helper, never evidence of success.
+static pthread_mutex_t health_lock = PTHREAD_MUTEX_INITIALIZER;
+static int health_got, health_rewrite, health_target;
+static void publish_health(int rewrite) {
+    if (!health_target) return;
+    pthread_mutex_lock(&health_lock);
+    health_rewrite |= rewrite;
+    char tmp[128]; snprintf(tmp, sizeof tmp, "%s.%d.tmp", OULG_HEALTH, getpid());
+    FILE *f = fopen(tmp, "w");
+    if (f) {
+        fprintf(f, "%d %llu %d %d\n", getpid(), oulg_start(getpid()), health_got, health_rewrite);
+        if (fclose(f) == 0) rename(tmp, OULG_HEALTH);
+    }
+    pthread_mutex_unlock(&health_lock);
+}
 __attribute__((constructor)) static void loaded(void) {
     __android_log_print(ANDROID_LOG_INFO, TAG, "LOADED pid=%d", getpid());
     hooks[0] = (struct got_hook) { "glShaderSource", (void *) glShaderSource, (void **) &real_shader_source, 0 };
@@ -174,6 +191,11 @@ __attribute__((constructor)) static void loaded(void) {
     // (dzif-port.md), and it is loaded before the entry point; main=0 means that did not hold.
     __android_log_print(main_patched && !prot_failed ? ANDROID_LOG_INFO : ANDROID_LOG_WARN, TAG, "GOT_DONE glShaderSource=%d eglGetProcAddress=%d main=%d protfail=%d",
                         hooks[0].patched, hooks[1].patched, main_patched, prot_failed);
+    char exe[256];
+    ssize_t exe_len = readlink("/proc/self/exe", exe, sizeof exe - 1);
+    if (exe_len > 0) { exe[exe_len] = 0; health_target = !strcmp(exe, "/system/bin/surfaceflinger"); }
+    health_got = main_patched > 0 && !prot_failed && hooks[0].patched > 0 && hooks[1].patched > 0;
+    publish_health(0);
 }
 
 static uint64_t fnv1a(const char *s, size_t n) {
@@ -265,7 +287,8 @@ static float prop_float(const char *name, float fallback) {
 // Optical profiles, read when a shader is compiled like the debug tint. Profile 0 (heads-up; the
 // established material): debug.oulg.sf.core (body blur radius in px, 0 = off), debug.oulg.sf.taps
 // (taps per pixel) and debug.oulg.sf.ramp (depth where the body radius is reached, in bevels)
-// and debug.oulg.sf.hubloom (bloom control of the body disc; 0 restores the plain disc).
+// and debug.oulg.sf.hubloom (bloom control of the body disc; 0 restores the plain disc) and
+// debug.oulg.sf.edgeblur (blur radius at the outline in px, one curve to the core; 0 restores v0.7).
 // Profile 1 (lockscreen): debug.oulg.sf.kgcore, .kgtaps, .kgramp, .kgsat (body saturation),
 // .kgtone (highlight knee), .kgrim (rim reflectance gain), .kgspec (specular strength), .kgflat and
 // .kglevel (transmission flattening toward a luma level), .kgcool (cool tint), .kgtilt (rim tilt at
@@ -285,6 +308,7 @@ static void layered_blur(struct oulg_profile p[OULG_PROFILES]) {
     p[0].taps = (int) prop_float("debug.oulg.sf.taps", OULG_TAPS_DEFAULT);
     p[0].ramp = prop_float("debug.oulg.sf.ramp", OULG_RAMP_DEFAULT);
     p[0].bloom = prop_float("debug.oulg.sf.hubloom", OULG_HU_BLOOM_DEFAULT);
+    p[0].edge = prop_float("debug.oulg.sf.edgeblur", OULG_HU_EDGE_DEFAULT);
     p[1].core = prop_float("debug.oulg.sf.kgcore", OULG_KG_CORE_DEFAULT);
     p[1].taps = (int) prop_float("debug.oulg.sf.kgtaps", OULG_KG_TAPS_DEFAULT);
     p[1].ramp = prop_float("debug.oulg.sf.kgramp", OULG_KG_RAMP_DEFAULT);
@@ -380,7 +404,7 @@ void glShaderSource(GLuint shader, GLsizei count, const GLchar *const *strings, 
             dump_text(ok ? "REWRITE_OK fragment" : "REWRITE_FAILED fragment", shader, frag);
             free(frag);
             used = ok;
-            if (ok) announce_optics();
+            if (ok) { publish_health(1); announce_optics(); }
         }
     }
     if (!used) real_shader_source(shader, count, strings, lengths);

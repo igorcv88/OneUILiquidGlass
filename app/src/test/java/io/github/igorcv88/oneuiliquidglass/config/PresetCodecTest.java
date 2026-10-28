@@ -8,6 +8,17 @@ import java.util.*;
 
 public class PresetCodecTest {
     @Test
+    public void diagnosticSnapshotsNeverBecomeImportedDesiredValues() throws Exception {
+        Map<String, String> desired = Collections.singletonMap("lens", "0.24");
+        String json = PresetCodec.encode(desired, true, "fixture",
+                Collections.singletonMap("sf.core", "90"), true,
+                Collections.singletonMap("sf.core", "48"), "boot:52:700", 123);
+        assertEquals(desired, PresetCodec.parse(json).values);
+        assertTrue(json.contains("verifiedRestart"));
+        assertTrue(json.contains("not per-shader compilation"));
+    }
+
+    @Test
     public void roundTripKeepsFlagsModeAndDesiredWithoutApplying() throws Exception {
         Map<String, String> values = new LinkedHashMap<>();
         values.put("lens", "0.24");

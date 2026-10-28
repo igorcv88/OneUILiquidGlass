@@ -17,7 +17,20 @@ public final class PresetCodec {
 
     public static String encode(Map<String, String> values, boolean enabled, String device)
             throws JSONException {
+        return encode(values, enabled, device, Collections.emptyMap(), false,
+                Collections.emptyMap(), "", 0);
+    }
+
+    public static String encode(Map<String, String> values, boolean enabled, String device,
+            Map<String, String> observed, boolean available, Map<String, String> restartInputs,
+            String generation, long requestedAt) throws JSONException {
         return new JSONObject()
+                .put("provenance", "desired contains app overrides only; observed and verifiedRestart are diagnostic snapshots, never imported")
+                .put("observed", new JSONObject().put("available", available)
+                        .put("capturedAt", System.currentTimeMillis()).put("values", new JSONObject(observed)))
+                .put("verifiedRestart", new JSONObject().put("generation", generation)
+                        .put("requestedAt", requestedAt).put("inputs", new JSONObject(restartInputs))
+                        .put("evidence", "restart inputs, not per-shader compilation or full appearance"))
                 .put("schemaVersion", 1)
                 .put("device", device)
                 .put("timestamp", System.currentTimeMillis())

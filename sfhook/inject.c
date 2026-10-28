@@ -39,12 +39,16 @@
 #include <time.h>
 #include <unistd.h>
 #include <sys/ptrace.h>
+#include <sys/file.h>
 #include <sys/stat.h>
 #include <sys/system_properties.h>
 #include <sys/uio.h>
 #include <sys/xattr.h>
 #include <sys/wait.h>
 #include <asm/ptrace.h>
+
+#include "health.h"
+#include "restart_policy.h"
 
 #define SF_EXE "/system/bin/surfaceflinger"
 #define CACHE_DIR "/data/misc/surfaceflinger/"
@@ -619,6 +623,14 @@ int main(int argc, char **argv) {
     say("oulg_inject %s", OULG_VERSION);
     if (self) return selftest(lib);
     if (restart && !leave_app_cgroup()) { say("still in an app cgroup: refusing to restart (this injector would die with the userspace)"); return 1; }
+    if (restart) {
+        int transaction = open(CACHE_DIR "oulg_restart.lock", O_CREAT | O_RDWR | O_CLOEXEC, 0600);
+        if (transaction < 0 || flock(transaction, LOCK_EX | LOCK_NB) != 0) {
+            say("restart already running or lock unavailable; nothing restarted"); return 1;
+        }
+        // Kept open until this bounded worker exits; the kernel releases the lock on failure.
+        unlink(OULG_HEALTH);
+    }
     pid_t old = find_sf(0);
     say("lib=%s running surfaceflinger pid=%d", lib, old);
     if (probe) {
@@ -649,6 +661,7 @@ int main(int argc, char **argv) {
     // --sfrefract: cleared first, so it reads 1 only after this restart's injection succeeded.
     if (mark) __system_property_set("debug.oulg.sfrefract", "");
     if (restart) {
+        unlink(CACHE_DIR "oulg_monitor");
         pid_t running = old;
         if (__system_property_set("ctl.stop", "surfaceflinger") != 0) { say("setprop ctl.stop failed"); return 1; }
         double stop_deadline = now_ms() + 10000;
@@ -690,18 +703,55 @@ int main(int argc, char **argv) {
     pid_t pid = wait_new_sf(old, now_ms() + timeout * 1e3, 100);
     if (!pid) { if (restart) restart_zygote(started); return 1; }
     int rc = inject_into(pid, lib);
+    double last_injection = now_ms();
     if (!restart) return rc;
     if (mark) say("debug.oulg.sfrefract %s", __system_property_set("debug.oulg.sfrefract", rc == RC_OK ? "1" : "") == 0 ? (rc == RC_OK ? "set to 1" : "cleared") : "not written");
     // The zygote is restarted whatever the injection did: without it the device hangs on the boot
     // animation. If that restart takes surfaceflinger down again, the new one is injected too.
     restart_zygote(started);
-    // A surfaceflinger the zygote restarts is caught at 100 us too: the race is the same.
-    pid_t again = wait_new_sf(pid, now_ms() + 30000, 100);
-    // Only after a clean injection: a failed one is not retried on the new process.
-    if (again && rc == 0) { say("surfaceflinger restarted with the zygote"); rc = inject_into(again, lib); }
-    else if (again) say("surfaceflinger restarted with the zygote; previous injection failed, not retried");
-    // A surfaceflinger that came back without the library must not leave the app in compositor mode.
-    if (mark && again && rc != RC_OK) say("debug.oulg.sfrefract %s", __system_property_set("debug.oulg.sfrefract", "") == 0 ? "cleared" : "not cleared");
-    else say("surfaceflinger pid=%d kept through the zygote restart", pid);
-    return rc;
+    // Bounded transaction, not a resident service. One replacement may be caught at entry
+    // during the first 30 s; a failed injection is never retried. Continue observing until
+    // 120 s after start to catch the previously invisible late replacement.
+    double deadline = started + OULG_MONITOR_MS, retry_until = now_ms() + OULG_RETRY_WINDOW_MS;
+    int retries = 0, failed = rc != RC_OK;
+    pid_t tracked = pid;
+    unsigned long long generation = oulg_start(pid);
+    say("HEALTH_MONITOR pid=%d start=%llu deadline=120s retry_budget=1", pid, generation);
+    while (now_ms() < deadline) {
+        pid_t cur = find_sf(0);
+        unsigned long long cur_start = cur ? oulg_start(cur) : 0;
+        if (cur != tracked || (cur_start && cur_start != generation)) {
+            say("SF_TRANSITION old=%d/%llu new=%d/%llu; cause unknown (correlate init/logcat/tombstone)",
+                tracked, generation, cur, cur_start);
+            if (mark) __system_property_set("debug.oulg.sfrefract", "");
+            if (cur && oulg_retry_allowed(failed, retries, now_ms(), retry_until, last_injection)) {
+                retries++;
+                say("REINJECT attempt=1/1 cooldown=1s; no delayed attach or further retries after failure");
+                rc = inject_into(cur, lib);
+                failed = rc != RC_OK;
+                if (mark && !failed) __system_property_set("debug.oulg.sfrefract", "1");
+            } else if (cur) {
+                failed = 1; rc = 1;
+                say("HEALTH_FAILED replacement not injected; retry window/budget exhausted");
+            }
+            tracked = cur; generation = cur_start;
+        }
+        usleep(now_ms() < retry_until ? 100 : 100000);
+    }
+    pid_t final = find_sf(0);
+    int got = 0, rewrite = 0;
+    int healthy = !failed && final && final == tracked && oulg_start(final) == generation
+                  && oulg_health(final, &got, &rewrite) && got;
+    FILE *result = fopen(CACHE_DIR "oulg_monitor.tmp", "w");
+    if (result) {
+        char boot[64] = "";
+        FILE *boot_file = fopen("/proc/sys/kernel/random/boot_id", "r");
+        if (boot_file) { if (!fgets(boot, sizeof boot, boot_file)) boot[0] = 0; fclose(boot_file); }
+        fprintf(result, "%d %llu %d %s", final, final ? oulg_start(final) : 0, healthy, boot);
+        if (fclose(result) == 0) rename(CACHE_DIR "oulg_monitor.tmp", CACHE_DIR "oulg_monitor");
+    }
+    if (mark && !healthy) __system_property_set("debug.oulg.sfrefract", "");
+    say("HEALTH_FINAL pid=%d start=%llu got=%d rewrite=%d process_stable=%d retries=%d; monitor ended, no resident watchdog",
+        final, final ? oulg_start(final) : 0, got, rewrite, healthy, retries);
+    return healthy ? RC_OK : 1;
 }

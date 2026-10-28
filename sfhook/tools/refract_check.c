@@ -3,7 +3,7 @@
 // fallback), for glslangValidator, including a link of each fragment rewrite against the vertex
 // rewrites. A third argument "0" builds them without the debug tint; a fourth overrides profile 1
 // parameters, e.g. "core=48,taps=24,rim=0,spec=0" (core taps ramp sat tone rim spec flat level cool tilt line ccap fcap cdim glow gradient band
-// bodylens blurexp). Build:
+// bodylens blurexp); hubloom, hucore, hutaps, huramp and huedge set profile 0's. Build:
 // gcc -I.. -o rc refract_check.c
 #include "refract.h"
 static void put(const char *dir, const char *kind, int idx, const char *ext, const char *text) {
@@ -34,6 +34,8 @@ int main(int argc, char **argv) {
         else if (!strcmp(kv, "bodylens")) prof[1].lensbody = v;
         else if (!strcmp(kv, "blurexp")) prof[1].blurexp = v;
         else if (!strcmp(kv, "hubloom")) prof[0].bloom = v;
+        else if (!strcmp(kv, "hucore")) prof[0].core = v; else if (!strcmp(kv, "hutaps")) prof[0].taps = (int) v;
+        else if (!strcmp(kv, "huramp")) prof[0].ramp = v; else if (!strcmp(kv, "huedge")) prof[0].edge = v;
     }
     FILE *f = fopen(argv[1], "rb"); fseek(f, 0, SEEK_END); long n = ftell(f); fseek(f, 0, SEEK_SET);
     char *t = malloc(n + 1); if (fread(t, 1, n, f) != (size_t) n) return 1; t[n] = 0; fclose(f);

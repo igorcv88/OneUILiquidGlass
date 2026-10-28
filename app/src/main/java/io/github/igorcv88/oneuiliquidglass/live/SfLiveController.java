@@ -167,6 +167,21 @@ public final class SfLiveController {
 
     private Map<String, String> restartValues = Collections.emptyMap();
 
+    /** Only an observed, loaded new SF process can establish the compiled-input baseline. */
+    private void confirmCompiled(Map<String, String> status) {
+        android.content.SharedPreferences prefs = activity.getSharedPreferences(
+                "sf_live_ui", Activity.MODE_PRIVATE);
+        long requested = prefs.getLong("restartRequestedAt", 0);
+        if (!io.github.igorcv88.oneuiliquidglass.config.SystemPropertyReader.available()
+                || requested <= prefs.getLong("compiledAt", 0)
+                || !"1".equals(status.get("sf_rewrite"))) return;
+        Map<String, String> inputs = CompositorValues.attemptValues(prefs);
+        if (CompositorValues.verify(requested, inputs, status,
+                io.github.igorcv88.oneuiliquidglass.config.SystemPropertyReader.snapshot(),
+                prefs.getString("restartBeforePid", "")) == CompositorValues.Outcome.CONFIRMED)
+            CompositorValues.recordCompiled(prefs, inputs, requested, status.get("sf_generation"));
+    }
+
     public void log() {
         submit(Action.LOG);
     }
@@ -232,12 +247,17 @@ public final class SfLiveController {
                                 break;
                             case RESTART:
                                 Map<String, String> values = restartValues;
+                                Map<String, String> freshStatus = flow.status();
+                                io.github.igorcv88.oneuiliquidglass.config.SystemPropertyReader.refresh();
+                                if (!io.github.igorcv88.oneuiliquidglass.config.SystemPropertyReader.available())
+                                    throw new IOException("Não foi possível ler os props antes do reinício");
+                                Map<String, String> inputs = CompositorValues.restartInputs(
+                                        io.github.igorcv88.oneuiliquidglass.config.SystemPropertyReader.snapshot(), values);
+                                android.content.SharedPreferences prefs = activity.getSharedPreferences(
+                                        "sf_live_ui", Activity.MODE_PRIVATE);
                                 // Committed before the restart kills this process.
-                                CompositorValues.recordAttempt(
-                                        activity.getSharedPreferences(
-                                                "sf_live_ui", Activity.MODE_PRIVATE),
-                                        values,
-                                        System.currentTimeMillis());
+                                CompositorValues.recordAttempt(prefs, inputs, System.currentTimeMillis(),
+                                        freshStatus.getOrDefault("sf_generation", freshStatus.get("sf_pid")));
                                 flow.applyAndRestart(values, written ->
                                         new io.github.igorcv88.oneuiliquidglass.config.ConfigRepository(activity)
                                                 .adoptWritten(written));
@@ -267,10 +287,11 @@ public final class SfLiveController {
                             default:
                                 status = flow.status();
                                 message =
-                                        "Estado lido do helper. Biblioteca mapeada não comprova"
-                                            + " REWRITE_OK.";
+                                        "Estado lido do helper. Confirmação exige processo estável, GOT e reescrita."
+                                            + " Aguarde 2 minutos após o reinício e verifique novamente.";
                         }
                         io.github.igorcv88.oneuiliquidglass.config.SystemPropertyReader.refresh();
+                        if (action == Action.STATUS) confirmCompiled(status);
                         publish(new Model(false, true, status, message, log));
                     } catch (Exception error) {
                         if (action == Action.RESTART)

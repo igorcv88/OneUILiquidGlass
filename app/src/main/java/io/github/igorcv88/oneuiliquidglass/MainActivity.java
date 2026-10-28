@@ -12,6 +12,7 @@ import android.view.*;
 import android.widget.*;
 
 import io.github.igorcv88.oneuiliquidglass.config.*;
+import io.github.igorcv88.oneuiliquidglass.live.CompositorValues;
 import io.github.igorcv88.oneuiliquidglass.ui.*;
 import io.github.igorcv88.oneuiliquidglass.ui.kit.*;
 
@@ -412,12 +413,18 @@ public final class MainActivity extends Activity implements Host {
         io.execute(() -> {
             try {
                 if (request == REQ_EXPORT) {
-                    String json = PresetCodec.encode(values, enabled, Build.MANUFACTURER + " " + Build.MODEL + " · " + Build.DISPLAY);
+                    SystemPropertyReader.refresh();
+                    android.content.SharedPreferences sf = model.lensPrefs();
+                    String json = PresetCodec.encode(values, enabled,
+                            Build.MANUFACTURER + " " + Build.MODEL + " · " + Build.DISPLAY,
+                            SystemPropertyReader.snapshot(), SystemPropertyReader.available(),
+                            CompositorValues.compiledValues(sf),
+                            sf.getString("compiledGeneration", ""), sf.getLong("compiledAt", 0));
                     try (java.io.OutputStream out = getContentResolver().openOutputStream(uri, "wt")) {
                         if (out == null) throw new java.io.IOException("destino indisponível");
                         out.write(json.getBytes(java.nio.charset.StandardCharsets.UTF_8));
                     }
-                    deliver(() -> feedback("Ajustes exportados"));
+                    deliver(() -> feedback("Ajustes exportados. O perfil restaura os valores salvos no app; os snapshots de diagnóstico não reproduzem toda a aparência."));
                 } else {
                     String data;
                     try (java.io.InputStream in = getContentResolver().openInputStream(uri)) {

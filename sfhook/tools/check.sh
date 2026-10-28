@@ -12,6 +12,8 @@ trap 'rm -rf "$OUT"' EXIT
 cc -std=c99 -Wall -Wextra -Werror -Wno-unused-parameter -I.. -o "$OUT/rc" refract_check.c
 cc -std=c99 -Wall -Wextra -Werror -O2 -o "$OUT/fc" field_check.c -lm
 "$OUT/fc"
+cc -std=c99 -Wall -Wextra -Werror -O2 -o "$OUT/hc" health_check.c
+"$OUT/hc"
 LINE="$("$OUT/rc" "$DUMP" "$OUT")"
 echo "$LINE"
 set -- $EXPECT
