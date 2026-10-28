@@ -43,6 +43,29 @@ public final class CompositorValuesTest {
                         Collections.singletonMap("sf.core", "72")));
     }
 
+    @Test public void aSentValueAwaitsVerificationInsteadOfAnotherRestart() {
+        // The device report: kgcoredim 0.05 compiled, 0.03 saved and sent by a restart that has not
+        // been verified yet. Comparing with the old compile kept "3 % -> 3 %" pending forever and
+        // offered another restart; the sent inputs are the baseline until a status confirms them.
+        Map<String, String> compiled = CompositorValues.restartInputs(
+                Collections.singletonMap("sf.kgcoredim", "0.05"), Collections.emptyMap());
+        Map<String, String> saved = Collections.singletonMap("sf.kgcoredim", "0.03");
+        Map<String, String> observed = Collections.singletonMap("sf.kgcoredim", "0.03");
+        Map<String, String> sent = CompositorValues.restartInputs(observed, saved);
+        assertEquals(Collections.singletonMap("sf.kgcoredim", "0.03"),
+                CompositorValues.pending(saved, observed, compiled));
+        Map<String, String> base = CompositorValues.baseline(2000, 1000, sent, compiled);
+        assertSame(sent, base);
+        assertTrue(CompositorValues.pending(saved, observed, base).isEmpty());
+        // A change made after that restart is pending again.
+        Map<String, String> later = Collections.singletonMap("sf.kgcoredim", "0.02");
+        assertEquals(later, CompositorValues.pending(later, observed, base));
+        // Confirmed (compiledAt >= requestedAt) or never attempted: the compile is the baseline.
+        assertSame(compiled, CompositorValues.baseline(1000, 1000, sent, compiled));
+        assertSame(compiled, CompositorValues.baseline(0, 1000, Collections.emptyMap(), compiled));
+        assertNull(CompositorValues.baseline(0, 0, Collections.emptyMap(), null));
+    }
+
     @Test public void inputsForRestartIncludeExternalValuesAndSavedOverrides() {
         Map<String, String> observed = Collections.singletonMap("sf.taps", "36");
         Map<String, String> writes = Collections.singletonMap("sf.core", "72");

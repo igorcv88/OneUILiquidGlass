@@ -84,6 +84,27 @@ public final class CompositorValues {
         return out;
     }
 
+    /**
+     * The inputs to compare the current properties with: the last restart's when one was requested
+     * after the last confirmed compile (those values were sent; they await verification, not
+     * another restart), else the confirmed compile's, else null (no baseline).
+     */
+    public static Map<String, String> baseline(
+            long requestedAt, long compiledAt, Map<String, String> attempt, Map<String, String> compiled) {
+        if (requestedAt > compiledAt && !attempt.isEmpty()) return attempt;
+        return compiled;
+    }
+
+    public static Map<String, String> baseline(SharedPreferences prefs) {
+        return baseline(prefs.getLong("restartRequestedAt", 0), prefs.getLong("compiledAt", 0),
+                attemptValues(prefs), hasCompiled(prefs) ? compiledValues(prefs) : null);
+    }
+
+    /** A restart was requested and no status since has confirmed what it compiled. */
+    public static boolean awaitingVerification(SharedPreferences prefs) {
+        return prefs.getLong("restartRequestedAt", 0) > prefs.getLong("compiledAt", 0);
+    }
+
     /** Effective property inputs at the moment the injector is asked to restart. */
     public static Map<String, String> restartInputs(
             Map<String, String> observed, Map<String, String> pending) {

@@ -173,7 +173,7 @@ final class LensSheet extends Sheet {
                 Controls.Control c = Controls.get(e.getKey());
                 if (c == null) continue;
                 b.append(b.length() == 0 ? "" : "\n").append(c.title).append(" · ").append(SearchSheet.surfaces(c))
-                        .append(": ").append(ValueFormat.display(c, st.device(e.getKey()))).append(" → ")
+                        .append(": ").append(ValueFormat.display(c, from(e.getKey(), st))).append(" → ")
                         .append(ValueFormat.display(c, e.getValue()));
             }
             card.addView(Ui.text(activity, t, b, Theme.LABEL, t.ink, false));
@@ -189,6 +189,12 @@ final class LensSheet extends Sheet {
         int tools = su() ? View.VISIBLE : View.GONE;
         maintenance.setVisibility(tools);
         this.tools.setVisibility(tools);
+    }
+
+    /** What the compositor runs now: the compiled (or last sent) value, else the property. */
+    private String from(String key, ControlState st) {
+        String compiled = m.compiledCompositor(key);
+        return compiled != null ? compiled : st.device(key);
     }
 
     private void next() {
