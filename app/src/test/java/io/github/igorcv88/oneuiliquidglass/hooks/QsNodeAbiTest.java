@@ -23,6 +23,21 @@ public class QsNodeAbiTest {
         assertEquals(Node.class,abi.create.getReturnType());assertFalse(abi.create.isBridge());
         assertEquals(Node.class,abi.update.getParameterTypes()[0]);assertEquals(Scope.class,abi.draw.getParameterTypes()[0]);
     }
+    /** R8 may leave only the erased bridges (Modifier.Node): accepted, the node is still what they pass. */
+    static class BaseNode {}
+    static class ErasedNode extends BaseNode {public void draw(Scope scope){}}
+    static class ErasedElement {public BaseNode create(){return new ErasedNode();}public void update(BaseNode node){}}
+    @Test public void erasedBridgesAreAcceptedWhenTheTypedOnesAreGone() throws Exception {
+        QsNodeAbi abi=QsNodeAbi.resolve(ErasedElement.class,ErasedNode.class,Scope.class);
+        assertEquals(BaseNode.class,abi.create.getReturnType());
+        assertEquals(BaseNode.class,abi.update.getParameterTypes()[0]);
+    }
+    @Test public void missingMemberNamesItAndListsTheCandidates() {
+        try{QsNodeAbi.resolve(WrongUpdate.class,Node.class,Scope.class);fail();}
+        catch(NoSuchMethodException e){
+            assertTrue(e.getMessage(),e.getMessage().contains(".update candidates=[void(java.lang.Object)]"));
+        }
+    }
     @Test(expected=NoSuchMethodException.class) public void unknownCreateReturnIsRejected() throws Exception {
         QsNodeAbi.resolve(WrongCreate.class,Node.class,Scope.class);
     }

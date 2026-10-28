@@ -173,20 +173,25 @@ final class QsSliderHooks {
     private void fail(Throwable e){if(!broken){broken=true;Probe.error("QS_SLIDER_FAILED",e);}}
     static boolean suppressTrack(int stage){return stage==0;}
     /**
-     * The $default bridges as DZIF ships them: (DrawScope, paint, topLeft, size, [cornerRadius,]
-     * ..., blendMode, mask). Stage 0 is drawRect(color: Color, ...) and stage 2 drawRoundRect(color:
-     * Color, ...), whose colour is a long; stage 1 is drawRoundRect(brush: Brush, ...).
+     * The $default bridges, checked by the parameters this class reads or writes, not by count:
+     * [0] the DrawScope, [1] the paint (a long colour for stages 0 and 2, a Brush for stage 1),
+     * [2] topLeft and [3] size (longs), [4] the corner radius for the round rects (a long), and the
+     * $default mask last (an int). R8 drops parameters a firmware never passes: DZIF's thumb bridge
+     * has no ColorFilter (9 parameters, device log 28/10), and a fixed count of 10 rejected it,
+     * failing the whole slider install. Everything between [4] and the mask is passed through
+     * untouched, so its shape is not required.
      */
     static boolean primitiveSignature(Method m,int stage,Class<?> scope){
         Class<?>[] t=m.getParameterTypes();
-        if(t.length!=(stage==0?9:10)||t[0]!=scope||t[t.length-1]!=int.class)return false;
+        int min=stage==0?5:6;
+        if(t.length<min||t[0]!=scope||t[t.length-1]!=int.class)return false;
         if(stage==1?!t[1].getName().equals("androidx.compose.ui.graphics.Brush"):t[1]!=long.class)return false;
         if(t[2]!=long.class||t[3]!=long.class)return false;
-        if(stage==0)return t[4]==float.class && t[5].getName().equals("androidx.compose.ui.graphics.drawscope.DrawStyle")
-                && t[6].getName().equals("androidx.compose.ui.graphics.ColorFilter") && t[7]==int.class;
-        return t[4]==long.class && t[stage==1?5:6]==float.class
-                && t[stage==1?6:5].getName().equals("androidx.compose.ui.graphics.drawscope.DrawStyle")
-                && t[7].getName().equals("androidx.compose.ui.graphics.ColorFilter") && t[8]==int.class;
+        if(stage!=0&&t[4]!=long.class)return false;
+        // The mask must follow at least one more int (the blend mode) or the alpha/style group.
+        for(int i=stage==0?4:5;i<t.length-1;i++)
+            if(t[i]==long.class)return false; // a fifth long would mean the geometry is not where we write it
+        return true;
     }
     static int explicitGeometryMask(int mask,boolean rounded){return mask&~(2|4|(rounded?8:0));}
     private static float x(long v){return Float.intBitsToFloat((int)(v>>>32));}

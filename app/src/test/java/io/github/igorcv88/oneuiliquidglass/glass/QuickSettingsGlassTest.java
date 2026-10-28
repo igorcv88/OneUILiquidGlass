@@ -136,4 +136,11 @@ public final class QuickSettingsGlassTest {
         assertNull(QuickSettingsGlass.iconLayout(6f, 5f));
         assertNull(QuickSettingsGlass.iconLayout(0f, 0f));
     }
+    @Test public void rimUnderTheOpticsIsAFaintBasalLine() {
+        int rim = QuickSettingsGlass.rim(true);
+        assertEquals(rim, QuickSettingsGlass.basalRim(rim, false));
+        int faint = QuickSettingsGlass.basalRim(rim, true);
+        assertEquals(rim & 0xffffff, faint & 0xffffff);
+        assertTrue((faint >>> 24) > 0 && (faint >>> 24) < (rim >>> 24));
+    }
 }

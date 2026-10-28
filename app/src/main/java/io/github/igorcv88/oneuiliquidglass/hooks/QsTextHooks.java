@@ -43,23 +43,51 @@ final class QsTextHooks {
     static Float level(QsScene.Tone tone){
         return tone==null||tone==QsScene.Tone.UNKNOWN?null:tone==QsScene.Tone.LIGHT_SCENE?1f:0f;
     }
+    /**
+     * Each part installs on its own and reports its own failure with the member it missed
+     * (QS_TEXT_INCOMPATIBLE step=...): one text family, the header icons or the draw invalidation
+     * being absent on a firmware no longer takes every label with it (device log 28/10: one
+     * NoSuchMethodException, no member named, no label adapted).
+     */
     void install(){
-        try {
-            Class<?> node=Class.forName("androidx.compose.ui.node.DrawModifierNode",false,loader);
-            invalidate=Class.forName("androidx.compose.ui.node.DrawModifierNodeKt",false,loader).getMethod("invalidateDraw",node);
-            installText("TextStringSimple");
-            installText("TextAnnotatedString");
-            installHeaderIcons();
-            if(installPaint()==0)throw new NoSuchMethodException("Canvas text ABI");
-            ready=true;
-            // Constructors may be inlined into BasicText by ART; deoptimize their caller only.
+        invalidate=resolveInvalidate();
+        int families=0,paints=0;
+        for(String family:new String[]{"TextStringSimple","TextAnnotatedString"}){
+            try{installText(family);families++;}
+            catch(ReflectiveOperationException|RuntimeException|LinkageError e){Probe.error("QS_TEXT_INCOMPATIBLE","family="+family,e);}
+        }
+        installHeaderIcons();
+        try{paints=installPaint();}
+        catch(ReflectiveOperationException|RuntimeException|LinkageError e){Probe.error("QS_TEXT_INCOMPATIBLE","paint",e);}
+        ready=families>0&&paints>0;
+        if(!ready){nodes.clear();elements.clear();headerNodes.clear();headerElements.clear();}
+        Probe.log("QS_TEXT_STATUS","ready="+ready+" families="+families+" paintHooks="+paints
+                +" headerIcons="+headerReady+" invalidateDraw="+(invalidate!=null));
+        // Constructors may be inlined into BasicText by ART; deoptimize their caller only.
+        try{
             Class<?> basic=Class.forName("androidx.compose.foundation.text.BasicTextKt",false,loader);
             for(Method m:basic.getDeclaredMethods())if(m.getName().startsWith("BasicText"))try{
                 XposedBridge.class.getMethod("deoptimizeMethod",java.lang.reflect.Member.class).invoke(null,m);
             }catch(ReflectiveOperationException|RuntimeException ignored){}
-        }catch(ReflectiveOperationException|RuntimeException|LinkageError e){
-            ready=false;nodes.clear();elements.clear();headerNodes.clear();headerElements.clear();Probe.error("QS_TEXT_INCOMPATIBLE",e);
-        }
+        }catch(ClassNotFoundException|LinkageError ignored){}
+    }
+    /**
+     * DrawModifierNodeKt.invalidateDraw(DrawModifierNode), or any static one-argument method of
+     * that class taking the node interface (R8 may rename or merge it); null when absent: a tone
+     * change then reaches labels on their next redraw (and the recomposition QuickSettingsHooks
+     * runs), not at once.
+     */
+    private Method resolveInvalidate(){
+        try{
+            Class<?> node=Class.forName("androidx.compose.ui.node.DrawModifierNode",false,loader);
+            Class<?> kt=Class.forName("androidx.compose.ui.node.DrawModifierNodeKt",false,loader);
+            try{return kt.getMethod("invalidateDraw",node);}catch(NoSuchMethodException ignored){}
+            for(Method m:kt.getDeclaredMethods())
+                if(java.lang.reflect.Modifier.isStatic(m.getModifiers())&&m.getParameterCount()==1&&m.getParameterTypes()[0]==node
+                        &&m.getReturnType()==void.class){m.setAccessible(true);return m;}
+            Probe.log("QS_TEXT_INCOMPATIBLE","step=invalidateDraw optional=true candidates="+QsNodeAbi.candidates(kt,"invalidateDraw"));
+        }catch(ClassNotFoundException|LinkageError|RuntimeException e){Probe.error("QS_TEXT_INCOMPATIBLE","invalidateDraw",e);}
+        return null;
     }
     private void installText(String family) throws ReflectiveOperationException {
         String base="androidx.compose.foundation.text.modifiers.";
@@ -136,7 +164,7 @@ final class QsTextHooks {
             }catch(ReflectiveOperationException|RuntimeException ignored){}
             headerReady=true;Probe.log("QS_HEADER_ICONS_READY","renderOnly=true");
         }catch(ReflectiveOperationException|RuntimeException|LinkageError e){
-            headerReady=false;headerNodes.clear();headerElements.clear();Probe.error("QS_HEADER_ICONS_INCOMPATIBLE",e);
+            headerReady=false;headerNodes.clear();headerElements.clear();Probe.error("QS_HEADER_ICONS_INCOMPATIBLE","painter",e);
         }
     }
     ColorFilter applyIconPaint(Paint paint,Boolean dark,boolean on){

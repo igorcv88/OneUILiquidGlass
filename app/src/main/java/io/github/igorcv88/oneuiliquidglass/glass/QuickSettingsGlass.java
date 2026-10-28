@@ -88,6 +88,17 @@ public final class QuickSettingsGlass {
         return withAlpha(0xffffff, scene == QsScene.Tone.LIGHT_SCENE ? s.lightRim : s.darkRim);
     }
 
+    /** Share of the rim kept under the glass optics, which draw the directional contour themselves. */
+    static final float RIM_UNDER_OPTICS = 0.4f;
+
+    /**
+     * The Compose outline under the glass optics: a faint basal line (so the capsule never
+     * vanishes on its unlit side) instead of a second rigid line beside the optics' contour.
+     */
+    public static int basalRim(int rim, boolean optics) {
+        return optics ? withAlpha(rim, alpha(rim) * RIM_UNDER_OPTICS) : rim;
+    }
+
     public static int withAlpha(int color, float a) {
         return (Math.round(Math.max(0, Math.min(1, a)) * 255f) << 24) | (color & 0xffffff);
     }

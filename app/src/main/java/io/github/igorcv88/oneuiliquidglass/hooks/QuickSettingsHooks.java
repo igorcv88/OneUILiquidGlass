@@ -65,6 +65,8 @@ public final class QuickSettingsHooks {
     private final QsBackdrop backdrop;
     private final QsContentHooks content;
     private volatile QsStyle style = QsStyle.read();
+    /** The notifications' edge optics, drawn inside every glass container (QsCapsuleOptics). */
+    private final QsCapsuleOptics capsuleOptics = new QsCapsuleOptics();
     private volatile Object pillShape;
     /**
      * BidirectionalBarKt.PillShape, the shape only the slider passes to BoxWithOutline. Matched by
@@ -114,6 +116,8 @@ public final class QuickSettingsHooks {
                 () -> ConfigClient.flag(ProductFlags.QUICK_SETTINGS), master);
         // After a drag the released edge regions are rebuilt by the containers' next draw.
         edge.onRestore(() -> invalidateAll("drag-end"));
+        edge.optics(capsuleOptics, () -> QuickSettingsHooks.this.backdrop != null
+                && QuickSettingsHooks.this.backdrop.tone() == io.github.igorcv88.oneuiliquidglass.glass.QsScene.Tone.LIGHT_SCENE);
         BackdropEvents.add(() -> QuickSettingsHooks.this.backdrop.event());
         this.backdrop = new QsBackdrop(this::enabled, edge::expansion, () -> { darkRim=null; lightRim=null; invalidateAll("backdrop"); },
                 () -> { QsContentHooks c = QuickSettingsHooks.this.content; if (c != null) c.invalidateDraw(); });
@@ -474,7 +478,8 @@ public final class QuickSettingsHooks {
     private Object rim(boolean dark) throws ReflectiveOperationException {
         Object cached = dark ? darkRim : lightRim;
         if (cached != null) return cached;
-        Object brush = solidColor.newInstance(QuickSettingsGlass.color(QuickSettingsGlass.rim(dark, backdrop.tone(), style)));
+        Object brush = solidColor.newInstance(QuickSettingsGlass.color(QuickSettingsGlass.basalRim(
+                QuickSettingsGlass.rim(dark, backdrop.tone(), style), QsCapsuleOptics.available())));
         if (dark) darkRim = brush; else lightRim = brush;
         return brush;
     }

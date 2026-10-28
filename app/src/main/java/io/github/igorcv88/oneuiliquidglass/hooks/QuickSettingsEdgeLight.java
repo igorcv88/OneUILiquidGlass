@@ -184,7 +184,12 @@ final class QuickSettingsEdgeLight {
                 @Override protected void afterHookedMethod(MethodHookParam p) { unbind(p.thisObject); }
             });
             XposedBridge.hookMethod(draw, new XC_MethodHook() {
-                @Override protected void beforeHookedMethod(MethodHookParam p) { draw(p.thisObject, p.args[0]); }
+                // The optics go first: BackgroundNode.draw paints the (tinted or transparent)
+                // background and then the container's content, which must stay above the light.
+                @Override protected void beforeHookedMethod(MethodHookParam p) {
+                    draw(p.thisObject, p.args[0]);
+                    optics(p.thisObject, p.args[0]);
+                }
             });
             ready = true;
             Probe.log("QS_EDGE_READY", "draw=" + draw.toGenericString());
@@ -494,6 +499,36 @@ final class QuickSettingsEdgeLight {
             return value instanceof Float ? (Float) value : -1f;
         } catch (ReflectiveOperationException | RuntimeException e) {
             return -1f;
+        }
+    }
+
+    private QsCapsuleOptics optics;
+    private BooleanSupplier lightScene = () -> false;
+    /** The capsules' glass optics (APK-side, with or without the compositor). */
+    void optics(QsCapsuleOptics o, BooleanSupplier light) { optics = o; lightScene = light == null ? () -> false : light; }
+
+    /** Draws the optics into a glass container's inner box; any failure leaves the capsule as it is. */
+    private void optics(Object node, Object scope) {
+        QsCapsuleOptics o = optics;
+        if (o == null || !QsCapsuleOptics.available() || !enabled.getAsBoolean()) return;
+        Edge e;
+        synchronized (this) { e = nodes.isEmpty() ? null : nodes.get(node); }
+        if (e == null) return;
+        try {
+            long size = (Long) getSize.invoke(scope);
+            float w = Float.intBitsToFloat((int) (size >>> 32)), h = Float.intBitsToFloat((int) size);
+            float density = (Float) getDensity.invoke(scope);
+            Object canvas = contextCanvas.invoke(drawContext.invoke(scope));
+            Object raw = nativeCanvas.getDeclaringClass().isInstance(canvas) ? nativeCanvas.get(canvas) : null;
+            if (!(raw instanceof android.graphics.Canvas)) return;
+            int out = QuickSettingsGlass.edgeOutset(e.spec.border, density);
+            long outer = ((long) Float.floatToRawIntBits(w + 2 * out) << 32) | (Float.floatToRawIntBits(h + 2 * out) & 0xffffffffL);
+            Object corner = topStart.get(e.spec.shape);
+            float radius = corner == null ? Math.min(w, h) / 2f : (Float) toPx.invoke(corner, scope, outer) - out;
+            o.draw(node, (android.graphics.Canvas) raw, w, h, radius, density, lightScene.getAsBoolean());
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError ex) {
+            Probe.error("QS_OPTICS_FAILED", "geometry", ex);
+            optics = null;
         }
     }
 
