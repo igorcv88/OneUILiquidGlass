@@ -99,8 +99,6 @@ final class QsContentHooks {
         // No artwork-only transform or second solid stroke.
         Probe.log("QS_CONTENT_READY","owners="+hooked+" firmware=DZIF");
     }
-    /** The player's distance to its glass capsule (dp), close to the slider progress's margin. */
-    static final float MEDIA_INSET_DP = 6f, MEDIA_RIM_DP = 1.15f;
     private static void deoptimize(Method method) {
         try{XposedBridge.class.getMethod("deoptimizeMethod",java.lang.reflect.Member.class).invoke(null,method);}
         catch(ReflectiveOperationException|RuntimeException ignored){}

@@ -226,7 +226,9 @@ final class HeaderToneController {
         if(!Probe.trace&&logs++>=24)return;
         Probe.log("HEADER_INK","phase="+phase+" id="+ink.id+" class="+v.getClass().getSimpleName()
                 +" view="+Integer.toHexString(System.identityHashCode(v))+" before="+Integer.toHexString(before)
-                +" color="+Integer.toHexString(v.getCurrentTextColor())+" "+extra+" at="+SystemClock.uptimeMillis());
+                +" color="+Integer.toHexString(v.getCurrentTextColor())+" shown="+v.isShown()
+                +" bounds="+v.getWidth()+"x"+v.getHeight()+" y="+layoutTop(v)
+                +" "+extra+" at="+SystemClock.uptimeMillis());
     }
     private void restore(Ink i){
         TextView v=i.view.get();if(v==null)return;

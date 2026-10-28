@@ -64,4 +64,12 @@ public class QsComposeBoundaryTest {
         String content=new String(Files.readAllBytes(base.resolve("QsContentHooks.java")), StandardCharsets.UTF_8);
         assertFalse(content.contains("QSIconKt"));
     }
+    @Test public void mediaDrawDoesNotResizeTheArtworkAndThumbDoesNotOverlayItsBody() throws Exception {
+        Path base=Paths.get("src/main/java/io/github/igorcv88/oneuiliquidglass/hooks");
+        String edge=new String(Files.readAllBytes(base.resolve("QuickSettingsEdgeLight.java")),StandardCharsets.UTF_8);
+        assertFalse(edge.contains("canvas.scale("));
+        assertFalse(edge.contains("MEDIA_INSET_DP"));
+        String slider=new String(Files.readAllBytes(base.resolve("QsSliderHooks.java")),StandardCharsets.UTF_8);
+        assertTrue(slider.contains("stage==2 && f.bodyDrawn"));
+    }
 }

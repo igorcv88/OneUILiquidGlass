@@ -33,6 +33,7 @@ final class QsTextHooks {
     private final ThreadLocal<Object> drawingNode=new ThreadLocal<>();
     private final java.util.Map<Object,String> owners=new java.util.WeakHashMap<>();
     private final java.util.Map<Object,Integer> drawnTones=new java.util.WeakHashMap<>();
+    private volatile long unboundClockLoggedAt;
     private Method invalidate;
     private boolean ready,headerReady;
     QsTextHooks(ClassLoader loader,Supplier<QsContentHooks.Frame> content,BooleanSupplier enabled,
@@ -270,8 +271,18 @@ final class QsTextHooks {
         return applyPaint(paint,dark==null?null:dark?1f:0f,enabled);
     }
     static Integer applyPaint(Paint paint,Float dark,boolean enabled){
+        return applyPaint(paint,dark,enabled,false);
+    }
+    /** Only QS labels: Samsung's semi-transparent native text made dark ink look washed-out. */
+    static Integer applyLabelPaint(Paint paint,Float dark,boolean enabled){
+        return applyPaint(paint,dark,enabled,true);
+    }
+    private static Integer applyPaint(Paint paint,Float dark,boolean enabled,boolean opaqueLabel){
         if(dark==null||!enabled||paint==null||paint.getShader()!=null||paint.getColorFilter()!=null)return null;
         int original=paint.getColor(),mapped=QuickSettingsGlass.ink(original,(float)dark);
+        // Never recolour non-neutral logos or decorative text: ink() leaves those unchanged.
+        if(opaqueLabel && QuickSettingsGlass.neutral(original))
+            mapped=(mapped&0xffffff)|0xff000000;
         if(mapped==original)return null;
         paint.setColor(mapped);return original;
     }
@@ -302,7 +313,13 @@ final class QsTextHooks {
             XposedBridge.hookMethod(m,new XC_MethodHook(){
                 @Override protected void beforeHookedMethod(MethodHookParam p){
                     if(text){
-                        Float tone=drawing.get();if(tone==null)return;
+                        Float tone=drawing.get();
+                        if(tone==null){
+                            // The shade's visible clock may be a distinct, unregistered Compose
+                            // owner. Diagnose actual Canvas paint without logging any text.
+                            if(Probe.trace)probeUnboundClock(p.args,(Paint)p.args[index],owner);
+                            return;
+                        }
                         // The tone was authorised when the node's draw began (inkFor / the header
                         // gate), including the shade-driven header with QS glass off.
                         Paint paint=(Paint)p.args[index];
@@ -313,7 +330,8 @@ final class QsTextHooks {
                         // Header nodes only: whether this run is a time of day (shape, never content).
                         if(owningNode!=null&&Boolean.TRUE.equals(nodes.get(owningNode)))
                             p.setObjectExtra("qsPaintClock",clockText(p.args));
-                        Integer original=applyPaint(paint,tone,true);
+                        Integer original=Boolean.FALSE.equals(nodes.get(owningNode))
+                                ? applyLabelPaint(paint,tone,true) : applyPaint(paint,tone,true);
                         p.setObjectExtra("qsPaintAfter",paint.getColor());
                         if(original!=null)p.setObjectExtra("qsTextColor",original);
                     }else{
@@ -336,6 +354,15 @@ final class QsTextHooks {
         }
         }
         return count;
+    }
+    private void probeUnboundClock(Object[] args,Paint paint,String canvas){
+        if(paint==null||!clockText(args))return;
+        long now=android.os.SystemClock.uptimeMillis();
+        if(now-unboundClockLoggedAt<2000)return;
+        unboundClockLoggedAt=now;
+        Probe.log("QS_CLOCK_CANDIDATE","role=unbound canvas="+canvas
+                +" paint="+Integer.toHexString(paint.getColor())+" alpha="+paint.getAlpha()
+                +" registered=false mutation=false");
     }
     void invalidate(){
         if(invalidate==null)return;

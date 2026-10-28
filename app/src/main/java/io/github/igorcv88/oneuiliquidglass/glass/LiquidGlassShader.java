@@ -46,6 +46,7 @@ public final class LiquidGlassShader {
         uniform float live;
         uniform float sheen;
         uniform float glintGain;
+        uniform float innerGain;
         uniform float rimGain;
         uniform float outline;
 
@@ -92,7 +93,9 @@ public final class LiquidGlassShader {
             // bubble) on pop-ups; it is scaled per surface (debug.oulg.liveglint) without the contour.
             float glint = exp(-g * g) * pow(max(facing, 0.0), 20.0) * 0.30 * glintGain;
             float g2 = (depth - b * 0.34) / (b * 0.20);
-            float inner = exp(-g2 * g2) * pow(max(-facing, 0.0), 16.0) * 0.10;
+            // QS disables this opposed arc: on its translucent pills it reads as a second,
+            // detached reflection at the lower-right corner. Shade cards retain it.
+            float inner = exp(-g2 * g2) * pow(max(-facing, 0.0), 16.0) * 0.10 * innerGain;
 
             float a = (depth - b * 0.60) / (b * 0.45);
             float absorb = exp(-a * a) * far * far * 0.05;

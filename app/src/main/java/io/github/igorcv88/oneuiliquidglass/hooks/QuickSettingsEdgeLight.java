@@ -123,7 +123,6 @@ final class QuickSettingsEdgeLight {
         Object root;
         float tag = -1f;
         boolean drawn;
-        long mediaSession = -1;
         Edge(Spec spec) { this.spec = spec; }
         void release() {
             if (bridge != null) {
@@ -210,14 +209,6 @@ final class QuickSettingsEdgeLight {
                         if (f == null || f.consumed || f.scope != p.thisObject) return;
                         f.consumed = true;
                         optics(f.node, f.scope);
-                        beginMedia(p, f);
-                    }
-                    @Override protected void afterHookedMethod(MethodHookParam p) {
-                        Object saved = p.getObjectExtra("qsMediaCanvas");
-                        if (saved instanceof android.graphics.Canvas) {
-                            try { ((android.graphics.Canvas) saved).restoreToCount((Integer) p.getObjectExtra("qsMediaSave")); }
-                            catch (RuntimeException | LinkageError e) { Probe.error("QS_MEDIA_CAPSULE_FAILED", e); }
-                        }
                     }
                 });
                 boundaryHooked = true;
@@ -402,6 +393,9 @@ final class QuickSettingsEdgeLight {
                 diagnostic.event(QuickSettingsEdgeDiagnostics.Event.UNBOUND_NODE, "pending=" + elements.size());
             return;
         }
+        // The media artwork already occupies the container: an independent SF blur contour
+        // would create a second, wide halo. Its AGSL hairline follows the artwork exactly.
+        if (!usesCompositor(e.spec.token.role)) { e.release(); return; }
         if (!active() || suppressed || fade() <= 0f) { e.release(); return; }
         alpha = Math.round(255f * edgeFade);
         if (alpha == 0) { e.release(); return; }
@@ -602,6 +596,7 @@ final class QuickSettingsEdgeLight {
     }
 
     private QsCapsuleOptics optics;
+    static boolean usesCompositor(String role) { return role == null || !role.startsWith("media"); }
     private BooleanSupplier lightScene = () -> false;
     /** The capsules' glass optics (APK-side, with or without the compositor). */
     void optics(QsCapsuleOptics o, BooleanSupplier light) { optics = o; lightScene = light == null ? () -> false : light; }
@@ -655,8 +650,9 @@ final class QuickSettingsEdgeLight {
                 x = env[0]; y = env[1]; w = env[2] - env[0]; h = env[3] - env[1];
                 radius = Math.min(w, h) / 2f;
             }
+            boolean media = !usesCompositor(e.spec.token.role);
             boolean success = o.draw(node, (android.graphics.Canvas) raw, x, y, w, h, radius,
-                    density, lightScene.getAsBoolean(), rimOnlyOverlay);
+                    density, lightScene.getAsBoolean(), rimOnlyOverlay, media);
             boolean first = !e.spec.token.drawn;
             result(e.spec.token, success, success ? "agsl" : "shader-or-size");
             if (success && first && Probe.trace) Probe.log("QS_OPTICS_DRAWN", "session=" + coverage.session()
@@ -664,44 +660,13 @@ final class QuickSettingsEdgeLight {
                     + " radius=" + radius + " hardware=true layer="
                     + (rimOnlyOverlay ? "after-node-rim" : "drawContent")
                     + " light=" + lightScene.getAsBoolean());
+            if (success && first && media) Probe.log("QS_MEDIA_EDGE_DRAWN", "session=" + coverage.session()
+                    + " id=" + e.spec.token.id + " role=" + e.spec.token.role
+                    + " insetDp=0 border=native-artwork-edge compositor=false");
 
         } catch (ReflectiveOperationException | RuntimeException | LinkageError ex) {
             result(e.spec.token, false, "geometry");
             if (Probe.trace) Probe.error("QS_OPTICS_FAILED", "geometry id=" + e.spec.token.id, ex);
-        }
-    }
-
-    /** Parent content transform covers artwork, controls and the empty player equally. */
-    private void beginMedia(XC_MethodHook.MethodHookParam p, DrawFrame f) {
-        Edge e = nodes.get(f.node);
-        if (e == null || !e.spec.token.role.startsWith("media") || !enabled.getAsBoolean()) return;
-        android.graphics.Canvas canvas = null;
-        int save = -1;
-        try {
-            long size = (Long) getSize.invoke(f.scope);
-            float w = Float.intBitsToFloat((int)(size >>> 32)), h = Float.intBitsToFloat((int)size);
-            float density = (Float) getDensity.invoke(f.scope);
-            float[] g = QuickSettingsGlass.mediaCapsule(w, h, 0, QsContentHooks.MEDIA_INSET_DP * density, 0);
-            if (g == null) return;
-            Object wrapper = contextCanvas.invoke(drawContext.invoke(f.scope));
-            Object raw = nativeCanvas.getDeclaringClass().isInstance(wrapper) ? nativeCanvas.get(wrapper) : null;
-            if (!(raw instanceof android.graphics.Canvas)) return;
-            canvas = (android.graphics.Canvas) raw;
-            save = canvas.save();
-            canvas.translate(g[1], g[2]); canvas.scale(g[0], g[0]);
-            p.setObjectExtra("qsMediaCanvas", canvas); p.setObjectExtra("qsMediaSave", save);
-            if (e.mediaSession != coverage.session()) {
-                e.mediaSession = coverage.session();
-                Probe.log("QS_MEDIA_CAPSULE_DRAWN", "session=" + coverage.session() + " id=" + e.spec.token.id
-                        + " state=" + (e.spec.token.role.equals("media-empty") ? "empty" : "active")
-                        + " insetDp=" + QsContentHooks.MEDIA_INSET_DP + " outer=" + w + "x" + h
-                        + " inner=" + (w*g[0]) + "x" + (h*g[0]) + " shader=" + e.spec.token.drawn
-                        + " border=parent-only hitbox=native");
-            }
-        } catch (ReflectiveOperationException | RuntimeException | LinkageError ex) {
-            if (canvas != null && save >= 0) canvas.restoreToCount(save);
-            p.setObjectExtra("qsMediaCanvas", null);
-            Probe.error("QS_MEDIA_CAPSULE_FAILED", ex);
         }
     }
 
