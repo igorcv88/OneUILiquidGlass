@@ -92,7 +92,7 @@ O interruptor `sfrefract` **não comprova** que o binário nativo foi carregado:
 | `textswap` | 1 | booleano | Troca cor do texto em material claro/escuro oposto ao tema |
 | `headertone` | 1 | booleano | Ajusta relógio/data/operadora da central ao fundo |
 | `icontone` | 1 | booleano | Ajusta ícone monocromático da notificação ao texto |
-| `popuplock` | 1 | booleano | Trava o estilo/contraste do pop-up na decisão inicial, inclusive no compositor |
+| `popuplock` | 1 | booleano | Estabiliza o contraste do pop-up: só muda com mudança real do fundo, confirmada por uma segunda leitura |
 | `orphandraw` | 1 | booleano | Aplica o tom das linhas minimizadas já no primeiro desenho da central |
 | `popuptone` | 1 | booleano | Véu medido do backdrop do pop-up APK-only |
 | `shadescaleveil` | 115 | inteiro 0–255 | Véu de fallback quando shade card é escalado |
@@ -177,21 +177,21 @@ Observar que as propriedades `lightglass` e `shadelightglass` se aplicam a super
 
 ## Controles rápidos — pós-PR #75
 
-Controles `qs.*` são lidos pelo snapshot `QsStyle` em callbacks de configuração e aplicam ao vivo. As cores são hipóteses iniciais ajustáveis para teste no aparelho. `sf.qslight` exige aplicação do shader pelo fluxo de userspace.
+Controles `qs.*` são lidos pelo snapshot `QsStyle` em callbacks de configuração e aplicam ao vivo. O interior das cápsulas e dos discos desligados é sempre transparente: `qs.darkfill`, `qs.lightfill`, `qs.darkcolor`, `qs.lightcolor`, `qs.idle`, `qs.track` e `qs.lightstyle` são legado, preservados apenas para importar/exportar perfis, e não são lidos. `sf.qslight` exige aplicação do shader pelo fluxo de userspace.
 
 | Chave | Padrão | Tipo/domínio do parser | Controle / consequência |
 | --- | --- | --- | --- |
-| `qs.darkfill` | .10 | 0–0.18 | Opacidade do vidro das cápsulas sobre fundos escuros ou coloridos |
-| `qs.lightfill` | .10 | 0–0.18 | Opacidade do vidro das cápsulas sobre apps claros |
-| `qs.darkcolor` | ffffff | RGB hexadecimal | Cor do véu das cápsulas sobre fundos escuros ou coloridos |
-| `qs.lightcolor` | 141823 | RGB hexadecimal | Cor do véu translúcido sobre apps claros |
-| `qs.idle` | .04 | 0–0.12 | Opacidade do disco atrás dos ícones desligados |
+| `qs.darkfill` | 0 | 0–0.18 | Legado sem efeito visual; o interior das cápsulas é sempre transparente |
+| `qs.lightfill` | 0 | 0–0.18 | Legado sem efeito visual; o interior das cápsulas é sempre transparente |
+| `qs.darkcolor` | ffffff | RGB hexadecimal | Legado sem efeito visual; o interior das cápsulas é sempre transparente |
+| `qs.lightcolor` | 141823 | RGB hexadecimal | Legado sem efeito visual; o interior das cápsulas é sempre transparente |
+| `qs.idle` | 0 | 0–0.12 | Legado sem efeito visual; discos desligados são sempre transparentes |
 | `qs.active` | .90 | 0–1 | Opacidade dos discos ligados (a cor continua a da Samsung ou do tema) |
 | `qs.darkrim` | .26 | 0–1 | Intensidade do contorno sobre fundos escuros ou coloridos |
-| `qs.lightrim` | .18 | 0–1 | Intensidade do contorno sobre apps claros |
+| `qs.lightrim` | .18 | 0–1 | Intensidade do contorno escuro sobre apps claros |
 | `qs.edgeblur` | 8 | inteiro 1–32 px | Desfoque do fundo lido pela lente dinâmica no contorno das cápsulas |
 | `qs.outer` | 1 | 0.50–1 | Espessura da pílula inteira dos sliders (o toque continua na área da Samsung) |
 | `qs.track` | .88 | 0.10–1 | Legado sem efeito visual; preservado para importar e exportar perfis |
-| `qs.fill` | .88 | 0.10–1 | Espessura do preenchimento branco dentro da cápsula externa |
+| `qs.fill` | .78 | 0.10–1 | Espessura do preenchimento branco dentro da cápsula; a mesma margem vale nas pontas |
 | `qs.lightstyle` | light | enum obsidian/light | Legado sem efeito visual; ambos usam vidro translúcido e tinta adaptativa |
 | `sf.qslight` | .90 | 0–2 | Quick Settings: luz que entra pelo contorno conforme o fundo ali (0 desliga) |

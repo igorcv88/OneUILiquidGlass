@@ -47,23 +47,31 @@ public class QsRefreshTest {
         assertEquals(8,QsSliderHooks.explicitGeometryMask(110,false)&8);
         assertEquals(208,QsSliderHooks.explicitGeometryMask(208,true));
     }
-    @Test public void cachedArtworkDisplayListIsInvalidatedAndUnrelatedRebindReleasesIt() throws Exception {
-        QsContentHooks content=new QsContentHooks(getClass().getClassLoader(),()->true,()->null,
-                ()->io.github.igorcv88.oneuiliquidglass.glass.QsScene.Tone.UNKNOWN,
-                ()->io.github.igorcv88.oneuiliquidglass.glass.QsScene.Tone.UNKNOWN,
-                ()->io.github.igorcv88.oneuiliquidglass.glass.QuickSettingsGlass.Kind.NONE,scope->{});
-        field(QsContentHooks.class,"invalidateDraw").set(content,DrawNode.class.getMethod("invalidate",Object.class));
-        DrawNode node=new DrawNode();content.bindArtwork(node,true);content.bindArtwork(node,true);
-        content.invalidateArtwork();assertEquals(1,node.invalidations);
-        content.invalidateArtwork();assertEquals(2,node.invalidations);
-        content.bindArtwork(node,false);content.invalidateArtwork();assertEquals(2,node.invalidations);
+    @Test public void retiredFilmKeysNeitherRecomposeNorReachTheDrawPath() throws Exception {
+        QuickSettingsHooks hooks=new QuickSettingsHooks(getClass().getClassLoader(),()->true,context->{});
+        field(QuickSettingsHooks.class,"ready").set(hooks,true);
+        field(QuickSettingsHooks.class,"applied").set(hooks,true);
+        field(QuickSettingsHooks.class,"invalidate").set(hooks,Scope.class.getMethod("invalidateForResult",Object.class));
+        field(QuickSettingsHooks.class,"valid").set(hooks,Scope.class.getMethod("getValid"));
+        Scope live=new Scope(true);
+        @SuppressWarnings("unchecked") Set<Object> scopes=(Set<Object>)field(QuickSettingsHooks.class,"scopes").get(hooks);
+        scopes.add(live);hooks.refresh();
+        for(String key:new String[]{"qs.darkfill","qs.lightfill","qs.idle","qs.lightcolor","qs.darkcolor","qs.track","qs.lightstyle"}){
+            Map<String,String> values=new HashMap<>();values.put("surface.quicksettings.enabled","1");values.put("qs.darkrim",".10");
+            values.put(key,key.endsWith("color")?"000000":key.endsWith("style")?"obsidian":".12");
+            field(ConfigClient.class,"current").set(null,values);hooks.refresh();
+        }
+        assertEquals(0,live.invalidations);
+        // The media artwork veil is gone with the films: no global DrawWithContent hook remains.
+        for(java.lang.reflect.Method m:QsContentHooks.class.getDeclaredMethods())
+            assertFalse(m.getName(),m.getName().toLowerCase(Locale.ROOT).contains("artwork"));
     }
     public static class DrawNode {
         int invalidations;
         public static void invalidate(Object node){((DrawNode)node).invalidations++;}
     }
     private void setValues(String fill) throws Exception {
-        Map<String,String> values=new HashMap<>();values.put("surface.quicksettings.enabled","1");values.put("qs.darkfill",fill);
+        Map<String,String> values=new HashMap<>();values.put("surface.quicksettings.enabled","1");values.put("qs.darkrim",fill);
         field(ConfigClient.class,"current").set(null,values);
     }
     private static Field field(Class<?> c,String name) throws Exception {Field f=c.getDeclaredField(name);f.setAccessible(true);return f;}

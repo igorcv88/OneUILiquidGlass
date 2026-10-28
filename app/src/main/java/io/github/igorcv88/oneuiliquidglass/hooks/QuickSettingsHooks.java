@@ -112,8 +112,9 @@ public final class QuickSettingsHooks {
         this.startConfig = startConfig;
         this.edge = new QuickSettingsEdgeLight(loader, this::enabled,
                 () -> ConfigClient.flag(ProductFlags.QUICK_SETTINGS), master);
-        this.backdrop = new QsBackdrop(this::enabled, edge::expansion, () -> { darkRim=null; lightRim=null; invalidateAll("backdrop"); });
-        this.content = new QsContentHooks(loader, this::enabled, () -> style, backdrop::tone, backdrop::headerTone,
+        this.backdrop = new QsBackdrop(this::enabled, edge::expansion, () -> { darkRim=null; lightRim=null; invalidateAll("backdrop"); },
+                () -> { QsContentHooks c = QuickSettingsHooks.this.content; if (c != null) c.invalidateDraw(); });
+        this.content = new QsContentHooks(loader, this::enabled, () -> style, backdrop::tone, backdrop::headerTone, backdrop::ink,
                 () -> pending.get()==null ? Kind.NONE : pending.get().kind, this::capture);
     }
 
@@ -172,7 +173,7 @@ public final class QuickSettingsHooks {
                         if (!QuickSettingsGlass.srgb(original)) return;
                         if ((QuickSettingsGlass.argb(original) >>> 24) == 0) return;
                         q = new Pending(f.composer, original, QuickSettingsGlass.color(QuickSettingsGlass.fill(
-                                Kind.CONTAINER, QuickSettingsGlass.argb(original), dark(), backdrop.tone(), style)), null, f.shape, 0);
+                                Kind.CONTAINER, QuickSettingsGlass.argb(original), style.active)), null, f.shape, 0);
                     }
                     if (!(p.args[0] instanceof Long) || (Long) p.args[0] != q.background) return;
                     q.fillDone = true;
@@ -402,7 +403,8 @@ public final class QuickSettingsHooks {
             log(kind.name(), a);
             if (kind == Kind.NONE) return;
             boolean dark = dark();
-            long fill = QuickSettingsGlass.color(QuickSettingsGlass.fill(kind, QuickSettingsGlass.argb(background), dark, backdrop.tone(), style));
+            // Transparent interior for every container and inactive disc, in every scene (UNKNOWN too).
+            long fill = QuickSettingsGlass.color(QuickSettingsGlass.fill(kind, QuickSettingsGlass.argb(background), style.active));
             boolean outlined = (outlinedDefault || Boolean.TRUE.equals(a[1]))
                     && a[2] instanceof Float && (Float) a[2] > 0f;
             boolean rimmed = outlined && QuickSettingsGlass.rimmed(kind);
@@ -492,7 +494,7 @@ public final class QuickSettingsHooks {
     }
 
     private void invalidateAll(String reason) {
-        content.invalidateArtwork();
+        content.invalidateDraw();
         if (invalidate == null) {
             Probe.log("QS_COMPOSE_REFRESH", "reason=" + reason + " live=false (applies on the next composition)");
             return;

@@ -453,9 +453,11 @@ public final class Controls {
                 .show(BEHAV, Channel.NONE));
 
         // Comportamento
-        put(c("popuplock", "Contraste fixo ao chegar").fmt(Format.TOGGLE).in(BEHAVIOR, ADV)
+        put(c("popuplock", "Contraste estável").fmt(Format.TOGGLE).in(BEHAVIOR, ADV)
                 .on(HU)
-                .help("O tom do pop-up é decidido quando ele chega e mantido enquanto aparece.")
+                .help("O tom do pop-up é decidido quando ele chega e só muda quando o fundo muda de"
+                        + " verdade, confirmado por uma segunda leitura; a troca é suave. Desligado,"
+                        + " cada leitura vale na hora.")
                 .show(BEHAV, Channel.NONE));
         put(c("orphandraw", "Tom certo desde o primeiro quadro").fmt(Format.TOGGLE)
                 .in(BEHAVIOR, ADV).on(SH)
@@ -608,27 +610,18 @@ public final class Controls {
                 .show(BEHAV, Channel.NONE));
         // Controles rápidos: opt-in próprio e um bloco próprio dentro da Central (SurfacesPage).
         // As chaves qs.* valem na hora; as sf.qs* ao reiniciar o userspace, como a lente dinâmica.
-        put(c("qs.darkfill", "Vidro sobre fundo colorido").fmt(Format.PERCENT_1).in(QS, STD).on(SH)
-                .hint("Opacidade das cápsulas sobre fundos escuros ou coloridos")
-                .help("Quanto o vidro das cápsulas cobre o fundo quando ele é escuro ou colorido."
-                        + " Menos deixa o fundo aparecer mais.")
-                .show(BEHAV, Channel.NONE));
-        put(c("qs.darkcolor", "Cor do vidro sobre fundo colorido").fmt(Format.COLOR).in(QS, ADV).on(SH)
-                .help("Cor do véu das cápsulas sobre fundos escuros ou coloridos. Branco mantém o"
-                        + " vidro neutro.")
-                .show(BEHAV, Channel.NONE));
+        // Retired films: the capsule and inactive-disc interiors are transparent in every scene.
+        // Kept read-only so older profiles import and export unchanged; QsStyle never reads them.
+        for (String[] k : new String[][] {
+                {"qs.darkfill", "Véu sobre fundo colorido (descontinuado)"},
+                {"qs.lightfill", "Véu sobre fundo claro (descontinuado)"},
+                {"qs.darkcolor", "Cor do véu escuro (descontinuado)"},
+                {"qs.lightcolor", "Cor do véu claro (descontinuado)"},
+                {"qs.idle", "Disco desligado (descontinuado)"}})
+            put(c(k[0], k[1]).fmt(Format.READONLY).in(QS, Tier.INTERNAL).on(SH)
+                    .help("Preservado em perfis; o interior das cápsulas é sempre vidro transparente."));
         put(c("qs.lightstyle", "Estilo antigo (descontinuado)").fmt(Format.READONLY)
                 .in(QS, Tier.INTERNAL).on(SH).help("Preservado em perfis; ambos os valores usam tinta adaptativa."));
-        put(c("qs.lightfill", "Opacidade sobre fundo claro").fmt(Format.PERCENT_1).in(QS, STD).on(SH)
-                .help("Contribuição translúcida da cápsula sobre apps claros, limitada a 18%. O desfoque pertence ao painel.")
-                .show(BEHAV, Channel.NONE));
-        put(c("qs.lightcolor", "Cor do vidro sobre fundo claro").fmt(Format.COLOR).in(QS, ADV).on(SH)
-                .help("Cor do véu translúcido sobre apps claros; texto e ícones usam contraste adaptativo.")
-                .show(BEHAV, Channel.NONE));
-        put(c("qs.idle", "Círculos desligados").fmt(Format.PERCENT_1).in(QS, STD).on(SH)
-                .hint("Disco atrás dos ícones inativos")
-                .help("Opacidade do disco atrás dos ícones desligados. 0 deixa só o ícone.")
-                .show(BEHAV, Channel.NONE));
         put(c("qs.active", "Círculos ligados").fmt(Format.PERCENT_1).in(QS, STD).on(SH)
                 .hint("Opacidade dos discos ativos")
                 .help("Quanto do fundo aparece através dos discos ligados. A cor do disco continua"
@@ -639,8 +632,8 @@ public final class Controls {
                         + " coloridos.")
                 .show(BEHAV, Channel.NONE));
         put(c("qs.lightrim", "Contorno sobre fundo claro").fmt(Format.PERCENT_1).in(QS, STD).on(SH)
-                .help("Intensidade da linha de luz em volta das cápsulas sobre apps claros. Baixa"
-                        + " evita uma segunda linha branca em volta do vidro escuro.")
+                .help("Intensidade da linha escura em volta das cápsulas sobre apps claros, onde uma"
+                        + " linha branca sumiria. O interior continua transparente.")
                 .show(BEHAV, Channel.NONE));
         put(c("qs.outer", "Espessura do slider").fmt(Format.PERCENT_1).in(QS, STD).on(SH)
                 .hint("Pílula inteira de brilho e volume")
@@ -651,7 +644,8 @@ public final class Controls {
                 .in(QS, Tier.INTERNAL).on(SH).help("Preservado em perfis, sem superfície desenhada."));
         put(c("qs.fill", "Espessura do preenchimento").fmt(Format.PERCENT_1).in(QS, STD).on(SH)
                 .hint("Parte que se move ao arrastar")
-                .help("Largura da parte que acompanha o dedo, dentro da cápsula externa. O valor do"
+                .help("Largura da parte branca que acompanha o dedo, dentro da cápsula de vidro; a"
+                        + " mesma margem vale nas pontas e no mínimo ela fica um círculo. O valor do"
                         + " brilho ou do volume não muda.")
                 .show(BEHAV, Channel.NONE));
         put(c("sf.qslight", "Luz pela borda").fmt(Format.GAIN).in(QS, ADV).on(SH)

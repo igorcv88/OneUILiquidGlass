@@ -8,7 +8,15 @@ import de.robv.android.xposed.XposedBridge;
 import io.github.igorcv88.oneuiliquidglass.diagnostics.Probe;
 import io.github.igorcv88.oneuiliquidglass.glass.*;
 
-/** DZIF's track rect, progress gradient and thumb roundrect, scoped to the exact bar DrawScope. */
+/**
+ * DZIF's slider primitives (track rect, progress gradient, thumb roundrect), scoped to the exact
+ * bar DrawScope, drawn as exactly two surfaces: the glass capsule (Samsung's BoxWithOutline, whose
+ * interior QuickSettingsHooks makes transparent) and one white progress shape inside it. The track
+ * rect is never drawn; the thumb is drawn as the progress's own moving end cap, so the two white
+ * primitives form one shape. The progress keeps the same margin to the capsule on all four sides
+ * and a full circle at the minimum (QuickSettingsGlass.sliderPrimitive). Drawing only: layout,
+ * hit area, drag and the slider's value are Samsung's.
+ */
 final class QsSliderHooks {
     private final ClassLoader loader;
     private final BooleanSupplier enabled;
@@ -29,7 +37,8 @@ final class QsSliderHooks {
         final boolean rtl;
         final QsStyle style;
         final float outer;
-        final float[] geometry=new float[5];
+        final float[] geometry=new float[5], body=new float[5];
+        boolean bodyDrawn;
         Frame(Object scope,Object context,Canvas canvas,long original,QsDrawTransaction transaction,float w,float h,boolean rtl,QsStyle style,float outer){
             this.scope=scope;this.context=context;this.canvas=canvas;this.original=original;this.transaction=transaction;
             this.w=w;this.h=h;this.rtl=rtl;
@@ -77,7 +86,7 @@ final class QsSliderHooks {
             });
             deoptimize(m);
         }
-        Probe.log("QS_SLIDER_READY","primitives="+primitives+" surfaces=2 firmware=DZIF");
+        Probe.log("QS_SLIDER_READY","primitives="+primitives+" surfaces=2 track=hidden thumb=endCap firmware=DZIF");
     }
     private void begin(XC_MethodHook.MethodHookParam p){
         if(broken||!enabled.getAsBoolean())return;
@@ -86,13 +95,16 @@ final class QsSliderHooks {
             Object raw=nativeCanvas.getDeclaringClass().isInstance(c)?nativeCanvas.get(c):null;
             if(!(raw instanceof Canvas))return;
             Canvas canvas=(Canvas)raw;long original=(Long)size.invoke(context);
-            float w=x(original),h=y(original),m=QuickSettingsGlass.sliderInset(w,h);
-            if(w<=0||h<=0)return;
-            // Keep the established longitudinal inset; transverse dimensions belong to each primitive.
-            float iw=w<=h?w:w-2*m, ih=w<=h?h-2*m:h;
+            float w=x(original),h=y(original);
+            if(!(w>0)||!(h>0)||!Float.isFinite(w)||!Float.isFinite(h))return;
             QsStyle snapshot=style.get();
+            float outer=geometryAvailable.getAsBoolean()?snapshot.outer:1f;
+            // The progress's margin to the capsule, also kept at both ends of the long axis: the
+            // native progress is computed over this shorter length, so 100 % ends inside the glass.
+            float m=Math.min(QuickSettingsGlass.sliderMargin(Math.min(w,h),outer,snapshot.fill),Math.max(w,h)/4f);
+            float iw=w<=h?w:w-2*m, ih=w<=h?h-2*m:h;
             Frame frame=new Frame(p.args[0],context,canvas,original,new QsDrawTransaction(canvas,context,setSize,original),iw,ih,
-                    "Rtl".equals(String.valueOf(p.args[3])),snapshot,geometryAvailable.getAsBoolean()?snapshot.outer:1f);
+                    "Rtl".equals(String.valueOf(p.args[3])),snapshot,outer);
             p.setObjectExtra("qsSliderFrame",frame);p.setObjectExtra("qsSliderPrevious",current.get());current.set(frame);
             canvas.translate(w<=h?0:m,w<=h?m:0);
             setSize.invoke(context,pack(iw,ih));
@@ -107,9 +119,10 @@ final class QsSliderHooks {
             long extent=(mask&4)!=0?pack(f.w,f.h):(Long)p.args[3];
             QsStyle s=f.style;
             // The thumb is the fill's end cap: it takes the fill's thickness, as in Samsung's draw.
-            float ratio=s.fill;
-            float[] g=QuickSettingsGlass.sliderPrimitive(f.w,f.h,f.outer,ratio,x(offset),y(offset),x(extent),y(extent),stage==2,f.rtl,f.geometry);
-            if(stage==1&&!QuickSettingsGlass.sliderBodyVisible(g[2],g[3],f.w<=f.h)){p.setResult(null);return;}
+            float[] g=QuickSettingsGlass.sliderPrimitive(f.w,f.h,f.outer,s.fill,x(offset),y(offset),x(extent),y(extent),
+                    stage==2,f.bodyDrawn?f.body:null,f.geometry);
+            if(!(g[2]>0)||!(g[3]>0)){p.setResult(null);return;}
+            if(stage==1){System.arraycopy(g,0,f.body,0,5);f.bodyDrawn=true;}
             p.args[2]=pack(g[0],g[1]);p.args[3]=pack(g[2],g[3]);
             p.args[last]=explicitGeometryMask(mask,stage!=0);
             p.args[4]=pack(g[4],g[4]);

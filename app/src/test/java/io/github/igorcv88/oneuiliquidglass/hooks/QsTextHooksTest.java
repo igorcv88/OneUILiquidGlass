@@ -58,4 +58,28 @@ public class QsTextHooksTest {
         scene[0]=QsScene.Tone.UNKNOWN;assertNull(hooks.toneFor(qs));
         hooks.bindNode(qs,null);scene[0]=QsScene.Tone.LIGHT_SCENE;assertNull(hooks.toneFor(qs));
     }
+    @Test public void transitionLevelsInterpolateNeutralInkAndRestoreThePaint(){
+        Paint paint=new Paint();paint.setColor(0xb3ffffff);
+        int last=0xff;
+        for(float level=0f;level<=1.0001f;level+=.1f){
+            Integer saved=QsTextHooks.applyPaint(paint,Math.min(1f,level),true);
+            int c=paint.getColor();
+            assertEquals(0xb3,c>>>24);
+            assertTrue((c&255)<=last);last=c&255;
+            if(saved!=null)paint.setColor(saved);
+            assertEquals(0xb3ffffff,paint.getColor());
+        }
+        assertEquals(0x1d,last);
+        paint.setColor(0xff00aaee);assertNull(QsTextHooks.applyPaint(paint,.5f,true));
+    }
+    @Test public void nodeInkFollowsTheAnimatedLevelPerRegion() throws Exception {
+        float[] scene={.25f},header={1f};
+        QsTextHooks hooks=new QsTextHooks(getClass().getClassLoader(),()->null,()->true,()->QsScene.Tone.LIGHT_SCENE,()->QsScene.Tone.LIGHT_SCENE,
+                h->h?header[0]:scene[0]);
+        Field ready=QsTextHooks.class.getDeclaredField("ready");ready.setAccessible(true);ready.set(hooks,true);
+        Object body=new Object(),head=new Object();hooks.bindNode(body,false);hooks.bindNode(head,true);
+        assertEquals(.25f,hooks.inkFor(body),0f);assertEquals(1f,hooks.inkFor(head),0f);
+        assertEquals(Boolean.FALSE,hooks.toneFor(body));assertEquals(Boolean.TRUE,hooks.toneFor(head));
+        scene[0]=.75f;assertEquals(.75f,hooks.inkFor(body),0f);
+    }
 }

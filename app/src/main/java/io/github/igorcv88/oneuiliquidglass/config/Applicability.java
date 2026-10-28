@@ -100,6 +100,11 @@ public final class Applicability {
         switch (key) {
             case "qs.track":
             case "qs.lightstyle":
+            case "qs.darkfill":
+            case "qs.lightfill":
+            case "qs.darkcolor":
+            case "qs.lightcolor":
+            case "qs.idle":
                 return new Result(Kind.READ_ONLY, "Legado sem efeito visual");
             case "sfrefract":
             case "sf.optics":
