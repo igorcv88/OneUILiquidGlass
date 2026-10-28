@@ -98,6 +98,9 @@ public final class Applicability {
         boolean band = standard && on("livelens") || capture;
         boolean snell = "snell".equals(v("profile"));
         switch (key) {
+            case "qs.track":
+            case "qs.lightstyle":
+                return new Result(Kind.READ_ONLY, "Legado sem efeito visual");
             case "sfrefract":
             case "sf.optics":
             case "sf.norewrite":

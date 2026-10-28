@@ -387,9 +387,9 @@ public final class SurfacesPage implements Page {
     /** Groups of the Quick Settings block: title, summary, icon, keys (standard first, then advanced). */
     private static final Object[][] QS_GROUPS = {
             {"Vidro", "Cápsulas sobre apps claros e fundos coloridos", Icon.PALETTE,
-                    new String[] {"qs.lightstyle", "qs.lightfill", "qs.darkfill", "qs.lightcolor", "qs.darkcolor"}},
+                    new String[] {"qs.lightfill", "qs.darkfill", "qs.lightcolor", "qs.darkcolor"}},
             {"Sliders", "Pílula, trilho e preenchimento", Icon.LAYERS,
-                    new String[] {"qs.outer", "qs.track", "qs.fill"}},
+                    new String[] {"qs.outer", "qs.fill"}},
             {"Círculos", "Discos atrás dos ícones", Icon.DOT,
                     new String[] {"qs.idle", "qs.active"}},
             {"Contorno", "Linha de luz em volta das cápsulas", Icon.CONTRAST,
