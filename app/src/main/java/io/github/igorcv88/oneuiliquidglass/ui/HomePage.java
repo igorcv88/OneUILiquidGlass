@@ -26,6 +26,8 @@ public final class HomePage implements Page {
     private final LinearLayout masterRow;
     private final Map<Controls.Surface, LinearLayout> rows = new EnumMap<>(Controls.Surface.class);
     private final Map<Controls.Surface, Toggle> toggles = new EnumMap<>(Controls.Surface.class);
+    private final Toggle quickSettingsToggle;
+    private final LinearLayout quickSettingsRow;
     private final TextView testResult;
     private String noticeKey = "";
 
@@ -76,7 +78,7 @@ public final class HomePage implements Page {
 
         LinearLayout masterCard = Ui.card(a, t);
         master = new Toggle(a, t);
-        masterRow = Ui.switchRow(a, t, Icon.BELL, "Vidro nas notificações", "", master);
+        masterRow = Ui.switchRow(a, t, Icon.BELL, "Vidro no SystemUI", "", master);
         master.listener((tg, on) -> {
             host.model().master(on);
             host.feedback(on ? "Vidro ligado" : "Vidro desligado");
@@ -105,6 +107,16 @@ public final class HomePage implements Page {
             rows.put(s, r);
             toggles.put(s, tg);
         }
+        surfaces.addView(Ui.divider(a, t, t.dp(72)));
+        quickSettingsToggle = new Toggle(a, t);
+        quickSettingsToggle.setContentDescription("Vidro nos controles rápidos");
+        quickSettingsToggle.listener((tg, on) -> {
+            host.model().flag(ProductFlags.QUICK_SETTINGS, on);
+            host.feedback(on ? "Controles rápidos: vidro ligado" : "Controles rápidos: vidro desligado");
+        });
+        quickSettingsRow = Ui.listRow(a, t, Icon.SHADE, "Controles rápidos", "Experimental · desativado por padrão", quickSettingsToggle);
+        quickSettingsRow.setOnClickListener(v -> quickSettingsToggle.toggleByUser());
+        surfaces.addView(quickSettingsRow);
         content.addView(surfaces, Ui.match());
 
         content.addView(Ui.section(a, t, "Teste"));
@@ -190,6 +202,11 @@ public final class HomePage implements Page {
             String sub = !st.enabled ? "Vidro desligado" : !on ? "Desligado" : changed == 0 ? "Padrão" : changed == 1 ? "1 ajuste personalizado" : changed + " ajustes personalizados";
             Ui.setSubtitle(rows.get(s), sub);
         }
+        boolean quickOn = "1".equals(st.shown(ProductFlags.QUICK_SETTINGS));
+        quickSettingsToggle.set(quickOn, true);
+        Ui.enable(quickSettingsToggle, st.enabled);
+        Ui.setSubtitle(quickSettingsRow, !st.enabled ? "Vidro desligado" : quickOn
+                ? "Ativo · teste os tiles no aparelho" : "Experimental · desativado por padrão");
         notice(st, sync);
     }
 

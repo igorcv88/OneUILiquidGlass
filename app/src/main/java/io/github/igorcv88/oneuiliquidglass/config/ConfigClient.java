@@ -20,7 +20,8 @@ public final class ConfigClient {
     }
 
     public static boolean flag(String key) {
-        return !"0".equals(current.get(key));
+        String value = current.get(key);
+        return value == null ? ProductFlags.defaultEnabled(key) : !"0".equals(value);
     }
 
     public static long revision() {
