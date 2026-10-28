@@ -137,11 +137,12 @@ compiled or that a program linked/drew correctly.
 
 `sf_stable=1` acknowledges the bounded process/GOT observation, not all future process lifetime.
 A fragment may compile on demand after that window; until then the app remains unverified.
-If SF changes after monitoring ends, the next explicit status check detects the loss. One
-read-only status runs automatically per app-initiated restart: when the app is in the foreground
-125 s after the request (the monitor's 120 s plus margin), it checks root (granted to this APK for the
-restart itself) and reads `status`, which records the baseline when the restart is confirmed. Nothing
-else runs on resume, and an unconfirmed result is not re-read automatically. A reopened app asks for
+If SF changes after monitoring ends, the next explicit status check detects the loss. After an
+app-initiated restart, up to three read-only status reads run automatically while the app is in the
+foreground: 125, 155 and 185 s after the request (the monitor's 120 s start only once SurfaceFlinger
+has stopped). Each checks root (granted to this APK for the restart itself) and reads `status`,
+which records the baseline when the restart is confirmed; reads stop as soon as it is. A read due
+while a lens or root operation runs is deferred 5 s and not counted. Nothing else runs on resume. A reopened app asks for
 verification before treating the stored baseline as current. “Verificar estado” reads only; “Reiniciar lente” is a separate confirmed
 action. Open a notification, wait two minutes after activation and check again.
 

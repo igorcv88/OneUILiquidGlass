@@ -230,19 +230,24 @@ public final class AppModel {
     }
 
     private final Runnable verifyRestart = this::verifyRestartNow;
+    /** Automatic status reads per restart, 30 s apart from 125 s after the request. */
+    private static final int AUTO_VERIFY_TRIES = 3;
+    private static final long AUTO_VERIFY_FIRST_MS = 125_000, AUTO_VERIFY_GAP_MS = 30_000, AUTO_VERIFY_BUSY_MS = 5_000;
 
     /**
      * After a restart requested from the app, reads the helper's status once the injector's
-     * 120 s health monitor has ended, so the parameters it sent are confirmed (or not) without
-     * the user having to ask; a status read before that cannot report a stable process.
+     * 120 s health monitor should have ended, so the parameters it sent are confirmed (or not)
+     * without the user having to ask; a status read before that cannot report a stable process.
+     * The monitor's clock starts only after SurfaceFlinger stopped (up to ~15 s after the request),
+     * so up to three reads are made, 30 s apart, and each counts only once it is actually issued.
      */
     public void scheduleRestartVerification() {
         main.removeCallbacks(verifyRestart);
         SharedPreferences p = lensPrefs();
-        // Once per restart: an unconfirmed result stays visible, it is not re-read on every resume.
-        if (!CompositorValues.awaitingVerification(p)
-                || p.getLong("autoVerifiedFor", 0) == p.getLong("restartRequestedAt", 0)) return;
-        long due = p.getLong("restartRequestedAt", 0) + 125_000 - System.currentTimeMillis();
+        if (!CompositorValues.awaitingVerification(p) || autoVerifyTries(p) >= AUTO_VERIFY_TRIES) return;
+        long requested = p.getLong("restartRequestedAt", 0);
+        long due = requested + AUTO_VERIFY_FIRST_MS + autoVerifyTries(p) * AUTO_VERIFY_GAP_MS
+                - System.currentTimeMillis();
         main.postDelayed(verifyRestart, Math.max(due, 0));
     }
 
@@ -250,15 +255,28 @@ public final class AppModel {
         main.removeCallbacks(verifyRestart);
     }
 
+    private static int autoVerifyTries(SharedPreferences p) {
+        return p.getLong("autoVerifiedFor", 0) == p.getLong("restartRequestedAt", 0)
+                ? p.getInt("autoVerifyTries", 0) : 0;
+    }
+
     private void verifyRestartNow() {
         if (activity.isFinishing() || activity.isDestroyed()) return;
         SharedPreferences p = lensPrefs();
-        if (!CompositorValues.awaitingVerification(p)) return;
-        p.edit().putLong("autoVerifiedFor", p.getLong("restartRequestedAt", 0)).apply();
+        if (!CompositorValues.awaitingVerification(p) || autoVerifyTries(p) >= AUTO_VERIFY_TRIES) return;
+        // A running lens or root operation would drop the request: retry shortly, uncounted.
+        if (lens.model().busy || root.busy()) {
+            main.postDelayed(verifyRestart, AUTO_VERIFY_BUSY_MS);
+            return;
+        }
+        p.edit().putLong("autoVerifiedFor", p.getLong("restartRequestedAt", 0))
+                .putInt("autoVerifyTries", autoVerifyTries(p) + 1).apply();
         // The restart killed this process: root was granted to it before (the restart itself ran
         // through su), so the check does not ask again.
         if (root.granted()) lens.status();
-        else if (!root.busy()) root.check(ok -> { if (ok) lens.status(); });
+        else root.check(ok -> { if (ok) lens.status(); });
+        // The next read, if this one does not confirm the restart (checked when it is due).
+        scheduleRestartVerification();
     }
 
     /** With no acknowledged restart, equal setprop values do not prove the shader uses them. */
