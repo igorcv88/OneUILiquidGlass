@@ -57,14 +57,7 @@ final class QsTextHooks {
         Class<?> element=Class.forName(base+family+"Element",false,loader);
         Class<?> node=Class.forName(base+family+"Node",false,loader);
         Class<?> scope=Class.forName("androidx.compose.ui.graphics.drawscope.ContentDrawScope",false,loader);
-        Method create=null;
-        for(Method m:element.getDeclaredMethods())if(m.getName().equals("create") && m.getParameterCount()==0
-                && m.getReturnType()==node && !m.isBridge())create=m;
-        if(create==null)throw new NoSuchMethodException(family+" create");
-        Method update=element.getDeclaredMethod("update",node);
-        Method draw=node.getDeclaredMethod("draw",scope);
-        if(!node.isAssignableFrom(create.getReturnType()) || update.getReturnType()!=void.class || draw.getReturnType()!=void.class)
-            throw new NoSuchMethodException(family+" node ABI");
+        QsNodeAbi abi=QsNodeAbi.resolve(element,node,scope);
         XposedBridge.hookAllConstructors(element,new XC_MethodHook(){
             @Override protected void afterHookedMethod(MethodHookParam p){
                 QsContentHooks.Frame f=content.get();
@@ -76,8 +69,8 @@ final class QsTextHooks {
                 bindNode(p.args.length==0?p.getResult():p.args[0],elements.get(p.thisObject));
             }
         };
-        XposedBridge.hookMethod(create,bind);XposedBridge.hookMethod(update,bind);
-        XposedBridge.hookMethod(draw,new XC_MethodHook(){
+        XposedBridge.hookMethod(abi.create,bind);XposedBridge.hookMethod(abi.update,bind);
+        XposedBridge.hookMethod(abi.draw,new XC_MethodHook(){
             @Override protected void beforeHookedMethod(MethodHookParam p){
                 p.setObjectExtra("qsTextPrevious",drawing.get());
                 p.setObjectExtra("qsIconPrevious",iconDrawing.get());iconDrawing.remove();
@@ -99,12 +92,7 @@ final class QsTextHooks {
             Class<?> element=Class.forName("androidx.compose.ui.draw.PainterElement",false,loader);
             Class<?> node=Class.forName("androidx.compose.ui.draw.PainterNode",false,loader);
             Class<?> scope=Class.forName("androidx.compose.ui.graphics.drawscope.ContentDrawScope",false,loader);
-            Method create=null;
-            for(Method m:element.getDeclaredMethods())if(m.getName().equals("create")&&m.getParameterCount()==0
-                    &&m.getReturnType()==node&&!m.isBridge())create=m;
-            if(create==null)throw new NoSuchMethodException("PainterElement.create");
-            Method update=element.getDeclaredMethod("update",node),draw=node.getDeclaredMethod("draw",scope);
-            if(update.getReturnType()!=void.class||draw.getReturnType()!=void.class)throw new NoSuchMethodException("PainterNode ABI");
+            QsNodeAbi abi=QsNodeAbi.resolve(element,node,scope);
             XposedBridge.hookAllConstructors(element,new XC_MethodHook(){
                 @Override protected void afterHookedMethod(MethodHookParam p){
                     QsContentHooks.Frame f=content.get();
@@ -117,8 +105,8 @@ final class QsTextHooks {
                     if(target!=null)headerNodes.put(target,headerElements.get(p.thisObject));
                 }
             };
-            XposedBridge.hookMethod(create,bind);XposedBridge.hookMethod(update,bind);
-            XposedBridge.hookMethod(draw,new XC_MethodHook(){
+            XposedBridge.hookMethod(abi.create,bind);XposedBridge.hookMethod(abi.update,bind);
+            XposedBridge.hookMethod(abi.draw,new XC_MethodHook(){
                 @Override protected void beforeHookedMethod(MethodHookParam p){
                     p.setObjectExtra("qsHeaderIconPrevious",iconDrawing.get());
                     QsScene.Tone tone=header.get();

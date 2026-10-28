@@ -118,17 +118,22 @@ public final class QuickSettingsGlass {
         sw=Math.max(0,sw);sh=Math.max(0,sh);
         if(w<=h){
             x=(w-narrow)/2;sw=narrow;
-            if(thumb)sh=Math.min(sh,narrow);
+            if(thumb){sh=narrow;y=Math.max(0,Math.min(h-narrow,y));}
         }else{
             y=(h-narrow)/2;sh=narrow;
-            if(thumb){float next=Math.min(sw,narrow);if(!rtl)x+=sw-next;sw=next;}
+            if(thumb){if(!rtl)x+=sw-narrow;sw=narrow;x=Math.max(0,Math.min(w-narrow,x));}
         }
         x=Math.max(0,Math.min(w,x));y=Math.max(0,Math.min(h,y));
         sw=Math.min(sw,w-x);sh=Math.min(sh,h-y);
-        // Empty progress is empty, not a fabricated logical minimum. The native thumb remains
-        // a separate end-cap of the same white surface; the outer glass is never suppressed.
+        // A full circular handle survives even when native progress extent is zero. Clamp only
+        // the handle at the boundary, never the logical value or the native body coordinates.
         out[0]=x;out[1]=y;out[2]=sw;out[3]=sh;out[4]=Math.min(sw,sh)/2;
         return out;
+    }
+
+    /** Below one diameter the circular handle is the white surface; no flattened body is drawn. */
+    public static boolean sliderBodyVisible(float width,float height,boolean vertical){
+        return width>0&&height>0&&(vertical?height>=width:width>=height);
     }
 
     /**

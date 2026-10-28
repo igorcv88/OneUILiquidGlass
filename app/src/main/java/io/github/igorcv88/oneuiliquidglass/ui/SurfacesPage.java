@@ -388,7 +388,7 @@ public final class SurfacesPage implements Page {
     private static final Object[][] QS_GROUPS = {
             {"Vidro", "Cápsulas sobre apps claros e fundos coloridos", Icon.PALETTE,
                     new String[] {"qs.lightfill", "qs.darkfill", "qs.lightcolor", "qs.darkcolor"}},
-            {"Sliders", "Pílula, trilho e preenchimento", Icon.LAYERS,
+            {"Sliders", "Cápsula externa e preenchimento branco", Icon.LAYERS,
                     new String[] {"qs.outer", "qs.fill"}},
             {"Círculos", "Discos atrás dos ícones", Icon.DOT,
                     new String[] {"qs.idle", "qs.active"}},

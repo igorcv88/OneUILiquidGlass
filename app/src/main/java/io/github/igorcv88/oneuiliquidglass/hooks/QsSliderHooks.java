@@ -109,6 +109,7 @@ final class QsSliderHooks {
             // The thumb is the fill's end cap: it takes the fill's thickness, as in Samsung's draw.
             float ratio=s.fill;
             float[] g=QuickSettingsGlass.sliderPrimitive(f.w,f.h,f.outer,ratio,x(offset),y(offset),x(extent),y(extent),stage==2,f.rtl,f.geometry);
+            if(stage==1&&!QuickSettingsGlass.sliderBodyVisible(g[2],g[3],f.w<=f.h)){p.setResult(null);return;}
             p.args[2]=pack(g[0],g[1]);p.args[3]=pack(g[2],g[3]);
             p.args[last]=explicitGeometryMask(mask,stage!=0);
             p.args[4]=pack(g[4],g[4]);
