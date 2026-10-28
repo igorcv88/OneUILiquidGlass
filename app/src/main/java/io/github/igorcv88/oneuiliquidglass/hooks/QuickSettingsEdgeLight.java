@@ -525,10 +525,17 @@ final class QuickSettingsEdgeLight {
             long outer = ((long) Float.floatToRawIntBits(w + 2 * out) << 32) | (Float.floatToRawIntBits(h + 2 * out) & 0xffffffffL);
             Object corner = topStart.get(e.spec.shape);
             float radius = corner == null ? Math.min(w, h) / 2f : (Float) toPx.invoke(corner, scope, outer) - out;
-            o.draw(node, (android.graphics.Canvas) raw, w, h, radius, density, lightScene.getAsBoolean());
+            float x = 0f, y = 0f;
+            if (e.spec.outer < 1f) {
+                // A thinner slider capsule (qs.outer, QsPillShape): the optics follow its envelope,
+                // a centred pill inside the native box, as the compositor region does.
+                float[] env = QuickSettingsGlass.envelope(w, h, e.spec.outer);
+                x = env[0]; y = env[1]; w = env[2] - env[0]; h = env[3] - env[1];
+                radius = Math.min(w, h) / 2f;
+            }
+            o.draw(node, (android.graphics.Canvas) raw, x, y, w, h, radius, density, lightScene.getAsBoolean());
         } catch (ReflectiveOperationException | RuntimeException | LinkageError ex) {
-            Probe.error("QS_OPTICS_FAILED", "geometry", ex);
-            optics = null;
+            o.fail("geometry", ex);
         }
     }
 

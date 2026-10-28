@@ -26,6 +26,9 @@ import io.github.igorcv88.oneuiliquidglass.glass.Tuning;
  */
 final class QsCapsuleOptics {
     private static volatile boolean broken;
+    /** Runs once, on the main thread, when the optics stop: the full rim comes back. */
+    private volatile Runnable failed = () -> {};
+    void onFailure(Runnable r) { failed = r == null ? () -> {} : r; }
     private final GlassSpec spec = new GlassSpec();
     private final Map<Object, Paint> paints = new WeakHashMap<>();
     private boolean logged;
@@ -37,7 +40,7 @@ final class QsCapsuleOptics {
      * {@code w x h}: the inner box (px), {@code radius} its corner radius, {@code light}: the
      * backdrop is a light scene. Main/render thread of the draw; never throws.
      */
-    void draw(Object node, Canvas canvas, float w, float h, float radius, float density, boolean light) {
+    void draw(Object node, Canvas canvas, float x, float y, float w, float h, float radius, float density, boolean light) {
         if (broken || !(w > 2f) || !(h > 2f)) return;
         try {
             Paint paint;
@@ -51,15 +54,28 @@ final class QsCapsuleOptics {
             }
             RuntimeShader s = (RuntimeShader) paint.getShader();
             uniforms(s, spec, Tuning.get(), w, h, radius, density, light);
-            canvas.drawRect(0f, 0f, w, h, paint);
+            int save = canvas.save();
+            try { canvas.translate(x, y); canvas.drawRect(0f, 0f, w, h, paint); }
+            finally { canvas.restoreToCount(save); }
             if (!logged) {
                 logged = true;
                 Probe.log("QS_OPTICS_DRAWN", "size=" + Math.round(w) + "x" + Math.round(h) + " radius=" + radius + " light=" + light);
             }
         } catch (RuntimeException | LinkageError e) {
-            broken = true;
-            Probe.error("QS_OPTICS_FAILED", "shader", e);
+            fail("shader", e);
         }
+    }
+
+    /**
+     * Stops the optics for this process (any capsule) and hands the outline back: the attenuated
+     * rim brushes are dropped and the containers recomposed by {@link #failed}.
+     */
+    void fail(String step, Throwable e) {
+        if (broken) return;
+        broken = true;
+        Probe.error("QS_OPTICS_FAILED", step, e);
+        Runnable r = failed;
+        new android.os.Handler(android.os.Looper.getMainLooper()).post(r);
     }
 
     /** The live edge model's uniforms, as GlassDrawable sets them for a shade card. */

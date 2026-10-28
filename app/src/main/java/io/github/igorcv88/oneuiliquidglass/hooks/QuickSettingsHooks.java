@@ -116,6 +116,8 @@ public final class QuickSettingsHooks {
                 () -> ConfigClient.flag(ProductFlags.QUICK_SETTINGS), master);
         // After a drag the released edge regions are rebuilt by the containers' next draw.
         edge.onRestore(() -> invalidateAll("drag-end"));
+        // Optics gone (shader or geometry failure): full-strength rims again, recomposed now.
+        capsuleOptics.onFailure(() -> { darkRim = null; lightRim = null; invalidateAll("optics-failed"); });
         edge.optics(capsuleOptics, () -> QuickSettingsHooks.this.backdrop != null
                 && QuickSettingsHooks.this.backdrop.tone() == io.github.igorcv88.oneuiliquidglass.glass.QsScene.Tone.LIGHT_SCENE);
         BackdropEvents.add(() -> QuickSettingsHooks.this.backdrop.event());
