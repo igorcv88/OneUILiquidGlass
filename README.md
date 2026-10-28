@@ -19,7 +19,9 @@
   <strong>Glass material, optical edges and optional compositor refraction for Samsung SystemUI notifications.</strong>
 </p>
 
-One UI Liquid Glass is an independent **LSPosed module** for Samsung's notification surfaces: detailed heads-up pop-ups, lockscreen notification cards and the expanded notification shade. It preserves SystemUI's native content and interaction while changing the cards' backdrop and glass material. Brief/Edge Lighting pop-ups and the music player are outside the current scope.
+One UI Liquid Glass is an independent **LSPosed module** for Samsung's notification surfaces: detailed heads-up pop-ups, lockscreen notification cards and the expanded notification shade. It preserves SystemUI's native content and interaction while changing the cards' backdrop and glass material. Brief/Edge Lighting pop-ups and playback-control redesigns are outside the current scope.
+
+An **experimental, opt-in Quick Settings surface** recolours One UI 9's Compose Quick Settings (tiles, circles, tile group, sliders, empty media card) with a translucent veil and an optical rim over Samsung's own panel blur. It keeps Samsung's layout and interactions and is **off by default** pending physical validation on One UI 9. See [Quick Settings implementation and validation](docs/quick-settings-glass.md).
 
 The release is a single APK:
 
@@ -46,6 +48,7 @@ explicit, confirmed restart and are reported as pending until then.
 | **Detailed heads-up** | Live blur, edge lighting and a motion-gated captured lens band in APK-only mode; optional compositor lens and layered blur with the KernelSU add-on |
 | **Lockscreen** | Blur attached to the card geometry, independent light/dark material, compositor profile when installed; optional glass treatment for the notification overflow pill |
 | **Expanded shade** | Independent card blur, backdrop-dependent tone and text/icon adaptation, with controls to keep cards legible over light and dark content |
+| **Quick Settings (experimental)** | Translucent veil and gradient rim on Samsung's Compose controls, active state kept, applied and removed live; separate off-by-default toggle |
 | **Diagnostics** | SystemUI lifecycle and material logs (`OULG`), optional performance/trace logging, compositor logs (`OULG_SF`) and safe fallbacks |
 
 The optical material and the real refraction path are different. APK-only edge highlights simulate the look of a lens; only an eligible compositor shader or a captured sampled backdrop can actually displace content behind a card. The sampled band is motion-gated because capture latency can make moving content appear to trail the card.
@@ -72,6 +75,8 @@ Download the binaries only from [GitHub Releases](https://github.com/igorcv88/On
    ```
 
 4. Use the app's test-notification button to inspect the visual result. The current button schedules a BigText notification after five seconds; the proposed larger test with action buttons is described in the handoff.
+
+To test the new Quick Settings material, also enable **Início → Ambientes → Controles rápidos**. The toggle does not change the existing notification surface flags.
 
 For the **optional compositor refraction**, the app installs the bundled binaries, runs a self-test in a throwaway process and then restarts the userspace with the library loaded into SurfaceFlinger (root helper `oulg-live.sh`, [docs/sf-live-app.md](docs/sf-live-app.md)). It is redone after every reboot.
 

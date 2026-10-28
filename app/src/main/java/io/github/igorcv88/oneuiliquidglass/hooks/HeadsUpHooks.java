@@ -51,6 +51,7 @@ public final class HeadsUpHooks {
     private Field clipTopField, clipBottomField, actualHeightField, expandRunningField;
     private boolean drawHook;
     private boolean shadeHook;
+    private QuickSettingsHooks quickSettings;
     private boolean blurEnvironmentReported;
     private final boolean samsungBlur = SemBlurBridge.available();
     private final GlassSpec spec = new GlassSpec();
@@ -115,6 +116,7 @@ public final class HeadsUpHooks {
     private void resolveConfig(android.content.Context context) {
         io.github.igorcv88.oneuiliquidglass.config.ConfigClient.start(context, value -> {
             enabled = value;
+            if (quickSettings != null) quickSettings.refresh();
             if (!shadeConfigEnabled()) { panelDim(false); restoreHeader(); orphanTone(); }
             for (State state : new ArrayList<>(states.values())) {
                 if (!enabled || !state.surfaceEnabled()) state.release();
@@ -205,6 +207,9 @@ public final class HeadsUpHooks {
         };
         for (String n : new String[]{"cancelAppearDrawing", "cancelAppearAnimation"}) hook(rowClass, n, exitCancel);
         new HeaderGapHooks(loader, rowClass, () -> enabled).install();
+        // QS is an independent opt-in surface: no notification-state or drawing hooks are shared.
+        quickSettings = new QuickSettingsHooks(loader, () -> enabled, this::resolveConfig);
+        quickSettings.install();
         installShade();
         installBarState();
         installScrimClamp();

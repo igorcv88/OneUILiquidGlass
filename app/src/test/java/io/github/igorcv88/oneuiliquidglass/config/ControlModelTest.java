@@ -171,6 +171,9 @@ public class ControlModelTest {
         assertEquals("0", m.get("surface.shade.enabled"));
         assertEquals("1", m.get("surface.headsup.enabled"));
         assertEquals("1", m.get("surface.keyguard.feature.glint.enabled"));
+        assertEquals("0", m.get(ProductFlags.QUICK_SETTINGS));
+        assertEquals("1", state(Collections.emptyMap(), Collections.singletonMap(ProductFlags.QUICK_SETTINGS, "1"))
+                .shown(ProductFlags.QUICK_SETTINGS));
         assertEquals("1", m.get("enabled"));
     }
 

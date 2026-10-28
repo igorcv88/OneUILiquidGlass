@@ -117,6 +117,9 @@ public class SettingsRegistryTest {
 
     @Test
     public void productFlagsAreNotPropertiesAndHaveSurfaceScope() {
+        assertTrue(ProductFlags.known(ProductFlags.QUICK_SETTINGS));
+        assertFalse(ProductFlags.defaultEnabled(ProductFlags.QUICK_SETTINGS));
+        assertTrue(ProductFlags.defaultEnabled("surface.shade.enabled"));
         for (String surface : ProductFlags.SURFACES) {
             assertTrue(ProductFlags.known("surface." + surface + ".enabled"));
             for (String feature : ProductFlags.FEATURES)
