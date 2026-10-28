@@ -9,7 +9,10 @@ package io.github.igorcv88.oneuiliquidglass.glass;
  * them from the shade scrim.</p>
  */
 public final class GlassSpec {
-    public final float blurDp = 16f;
+    public final float blurDp;
+    public GlassSpec() { this(16f); }
+    /** A separate radius for compact control surfaces; notification defaults stay unchanged. */
+    public GlassSpec(float blurDp) { this.blurDp = blurDp; }
     public final int lightBlurColor = 0x3dffffff;
     public final int darkBlurColor = 0x47101216;
     public final int lightFill = 0x0fffffff;

@@ -76,7 +76,7 @@ public final class ControlState {
         if (key.equals("enabled")) return enabled ? "1" : "0";
         if (ProductFlags.known(key)) {
             String d = drafts.get(key), v = d != null ? d : saved.get(key);
-            return "0".equals(v) ? "0" : "1";
+            return v == null ? (ProductFlags.defaultEnabled(key) ? "1" : "0") : v;
         }
         if (helperOwned(key)) return device(key);
         String d = drafts.get(key);
@@ -128,6 +128,7 @@ public final class ControlState {
                 m.put(k, shown(k));
             }
         }
+        m.put(ProductFlags.QUICK_SETTINGS, shown(ProductFlags.QUICK_SETTINGS));
         m.put("enabled", enabled ? "1" : "0");
         return m;
     }
