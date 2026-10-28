@@ -9,6 +9,8 @@ import java.lang.ref.WeakReference;
 import java.util.*;
 import io.github.igorcv88.oneuiliquidglass.diagnostics.Probe;
 import io.github.igorcv88.oneuiliquidglass.glass.QuickSettingsGlass;
+import io.github.igorcv88.oneuiliquidglass.glass.ToneGrid;
+import io.github.igorcv88.oneuiliquidglass.glass.ShadeTone;
 
 /** Fixed header targets, checked before draw. No row walk or global TextView interception. */
 final class HeaderToneController {
@@ -24,6 +26,7 @@ final class HeaderToneController {
         final String id;
         ColorStateList original;
         int applied;
+        Boolean localLight;
         Ink(TextView v,String id){view=new WeakReference<>(v);this.id=id;original=v.getTextColors();applied=v.getCurrentTextColor();}
     }
     private WeakReference<View> root=new WeakReference<>(null);
@@ -31,6 +34,13 @@ final class HeaderToneController {
     private final List<Runnable> checks=new ArrayList<>();
     private ViewTreeObserver observer;
     private boolean light;
+    private ToneGrid grid;
+    private final int[] location=new int[2];
+    void update(View host,ToneGrid sample){
+        if(sample==null)return;
+        if(grid==null || grid.generation!=sample.generation)for(Ink i:inks)i.localLight=null;
+        update(host,false,sample);
+    }
     private int generation, repairs;
     private final ViewTreeObserver.OnPreDrawListener draw=()->{repair();return true;};
     private final View.OnAttachStateChangeListener attach=new View.OnAttachStateChangeListener(){
@@ -38,7 +48,8 @@ final class HeaderToneController {
         @Override public void onViewDetachedFromWindow(View v){clear();}
     };
 
-    void update(View host,boolean lightBackdrop){
+    void update(View host,boolean lightBackdrop){ update(host,lightBackdrop,null); }
+    private void update(View host,boolean lightBackdrop,ToneGrid sample){
         if(root.get()!=host){
             clear();root=new WeakReference<>(host);host.addOnAttachStateChangeListener(attach);
             observer=host.getViewTreeObserver();observer.addOnPreDrawListener(draw);
@@ -53,7 +64,7 @@ final class HeaderToneController {
                 checks.add(check);host.postDelayed(check,delay);
             }
         }
-        light=lightBackdrop;repair();
+        grid=sample;light=lightBackdrop;repair();
     }
     private void acquire(){
         View host=root.get();if(host==null)return;
@@ -74,11 +85,20 @@ final class HeaderToneController {
         if(lost)acquire();
         for(Ink i:inks){
             TextView v=i.view.get();if(v==null)continue;
+            boolean local=light;
+            if(grid!=null){
+                if(v.getHeight()<=0)continue; // No stale/global fallback before layout.
+                v.getLocationOnScreen(location);
+                float luma=grid.luma(location[1],location[1]+v.getHeight());
+                if(!Float.isFinite(luma)||luma<0||luma>1)continue;
+                local=ShadeTone.lightBackdrop(luma,i.localLight);
+                i.localLight=local;
+            }
             int current=v.getCurrentTextColor();
             if(current!=i.applied)i.original=v.getTextColors();
             boolean action=i.id.equals("noti_setting")||i.id.equals("clear_all");
             int nativeColor=i.original.getColorForState(v.getDrawableState(),i.original.getDefaultColor());
-            int desired=action&&!light?nativeColor:QuickSettingsGlass.ink(nativeColor,light);
+            int desired=action&&!local?nativeColor:QuickSettingsGlass.ink(nativeColor,local);
             if(current!=desired){
                 if(repairs++<5)log("repair",i,v,0);
                 v.setTextColor(desired);
@@ -97,6 +117,6 @@ final class HeaderToneController {
         if(host!=null){for(Runnable r:checks)host.removeCallbacks(r);host.removeOnAttachStateChangeListener(attach);}
         checks.clear();
         if(observer!=null&&observer.isAlive())observer.removeOnPreDrawListener(draw);
-        observer=null;for(Ink i:inks)restore(i);inks.clear();root.clear();repairs=0;
+        observer=null;grid=null;for(Ink i:inks)restore(i);inks.clear();root.clear();repairs=0;
     }
 }
