@@ -26,7 +26,17 @@ public final class Probe {
         Log.i("OULG", "v=1 t=" + SystemClock.elapsedRealtime() + " event=" + event + " " + detail);
     }
     public static void error(String event, Throwable error) {
-        log(event, "error=" + error.getClass().getSimpleName());
+        error(event, null, error);
+    }
+    /**
+     * The exception's class and message (a NoSuchMethodException names the member that is
+     * missing), plus what was being done; never a stack trace or user data.
+     */
+    public static void error(String event, String step, Throwable error) {
+        String message = error.getMessage();
+        if (message != null && message.length() > 600) message = message.substring(0, 600) + "…";
+        log(event, (step == null ? "" : "step=" + step + " ") + "error=" + error.getClass().getSimpleName()
+                + (message == null ? "" : " message=" + message.replace('\n', ' ')));
     }
     private static String prop(String key) {
         try {

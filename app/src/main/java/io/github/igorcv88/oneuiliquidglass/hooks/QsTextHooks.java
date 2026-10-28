@@ -30,6 +30,9 @@ final class QsTextHooks {
     private final ThreadLocal<Float> iconDrawing=new ThreadLocal<>();
     private final SparseArray<ColorFilter> iconFilters=new SparseArray<>();
     private final ThreadLocal<Float> drawing=new ThreadLocal<>();
+    private final ThreadLocal<Object> drawingNode=new ThreadLocal<>();
+    private final java.util.Map<Object,String> owners=new java.util.WeakHashMap<>();
+    private final java.util.Map<Object,Integer> drawnTones=new java.util.WeakHashMap<>();
     private Method invalidate;
     private boolean ready,headerReady;
     QsTextHooks(ClassLoader loader,Supplier<QsContentHooks.Frame> content,BooleanSupplier enabled,
@@ -43,23 +46,51 @@ final class QsTextHooks {
     static Float level(QsScene.Tone tone){
         return tone==null||tone==QsScene.Tone.UNKNOWN?null:tone==QsScene.Tone.LIGHT_SCENE?1f:0f;
     }
+    /**
+     * Each part installs on its own and reports its own failure with the member it missed
+     * (QS_TEXT_INCOMPATIBLE step=...): one text family, the header icons or the draw invalidation
+     * being absent on a firmware no longer takes every label with it (device log 28/10: one
+     * NoSuchMethodException, no member named, no label adapted).
+     */
     void install(){
-        try {
-            Class<?> node=Class.forName("androidx.compose.ui.node.DrawModifierNode",false,loader);
-            invalidate=Class.forName("androidx.compose.ui.node.DrawModifierNodeKt",false,loader).getMethod("invalidateDraw",node);
-            installText("TextStringSimple");
-            installText("TextAnnotatedString");
-            installHeaderIcons();
-            if(installPaint()==0)throw new NoSuchMethodException("Canvas text ABI");
-            ready=true;
-            // Constructors may be inlined into BasicText by ART; deoptimize their caller only.
+        invalidate=resolveInvalidate();
+        int families=0,paints=0;
+        for(String family:new String[]{"TextStringSimple","TextAnnotatedString"}){
+            try{installText(family);families++;}
+            catch(ReflectiveOperationException|RuntimeException|LinkageError e){Probe.error("QS_TEXT_INCOMPATIBLE","family="+family,e);}
+        }
+        installHeaderIcons();
+        try{paints=installPaint();}
+        catch(ReflectiveOperationException|RuntimeException|LinkageError e){Probe.error("QS_TEXT_INCOMPATIBLE","paint",e);}
+        ready=families>0&&paints>0;
+        if(!ready){nodes.clear();elements.clear();headerNodes.clear();headerElements.clear();}
+        Probe.log("QS_TEXT_STATUS","ready="+ready+" families="+families+" paintHooks="+paints
+                +" headerIcons="+headerReady+" invalidateDraw="+(invalidate!=null));
+        // Constructors may be inlined into BasicText by ART; deoptimize their caller only.
+        try{
             Class<?> basic=Class.forName("androidx.compose.foundation.text.BasicTextKt",false,loader);
             for(Method m:basic.getDeclaredMethods())if(m.getName().startsWith("BasicText"))try{
                 XposedBridge.class.getMethod("deoptimizeMethod",java.lang.reflect.Member.class).invoke(null,m);
             }catch(ReflectiveOperationException|RuntimeException ignored){}
-        }catch(ReflectiveOperationException|RuntimeException|LinkageError e){
-            ready=false;nodes.clear();elements.clear();headerNodes.clear();headerElements.clear();Probe.error("QS_TEXT_INCOMPATIBLE",e);
-        }
+        }catch(ClassNotFoundException|LinkageError ignored){}
+    }
+    /**
+     * DrawModifierNodeKt.invalidateDraw(DrawModifierNode), or any static one-argument method of
+     * that class taking the node interface (R8 may rename or merge it); null when absent: a tone
+     * change then reaches labels on their next redraw (and the recomposition QuickSettingsHooks
+     * runs), not at once.
+     */
+    private Method resolveInvalidate(){
+        try{
+            Class<?> node=Class.forName("androidx.compose.ui.node.DrawModifierNode",false,loader);
+            Class<?> kt=Class.forName("androidx.compose.ui.node.DrawModifierNodeKt",false,loader);
+            try{return kt.getMethod("invalidateDraw",node);}catch(NoSuchMethodException ignored){}
+            for(Method m:kt.getDeclaredMethods())
+                if(java.lang.reflect.Modifier.isStatic(m.getModifiers())&&m.getParameterCount()==1&&m.getParameterTypes()[0]==node
+                        &&m.getReturnType()==void.class){m.setAccessible(true);return m;}
+            Probe.log("QS_TEXT_INCOMPATIBLE","step=invalidateDraw optional=true candidates="+QsNodeAbi.candidates(kt,"invalidateDraw"));
+        }catch(ClassNotFoundException|LinkageError|RuntimeException e){Probe.error("QS_TEXT_INCOMPATIBLE","invalidateDraw",e);}
+        return null;
     }
     private void installText(String family) throws ReflectiveOperationException {
         String base="androidx.compose.foundation.text.modifiers.";
@@ -70,24 +101,38 @@ final class QsTextHooks {
         XposedBridge.hookAllConstructors(element,new XC_MethodHook(){
             @Override protected void afterHookedMethod(MethodHookParam p){
                 QsContentHooks.Frame f=content.get();
-                if(f!=null)elements.put(p.thisObject,f.header);
+                if(f!=null) {
+                    elements.put(p.thisObject,f.header);
+                    if (Probe.trace) Probe.log("QS_TEXT_PATH", "family=" + family + " role=" + (f.header ? "header-unverified" : "label")
+                            + " id=" + Integer.toHexString(System.identityHashCode(p.thisObject)) + " registered=true bound=false drawn=false");
+                }
             }
         });
         XC_MethodHook bind=new XC_MethodHook(){
             @Override protected void afterHookedMethod(MethodHookParam p){
-                bindNode(p.args.length==0?p.getResult():p.args[0],elements.get(p.thisObject));
+                Object node=p.args.length==0?p.getResult():p.args[0];
+                bindNode(node,elements.get(p.thisObject));
+                if (node != null && nodes.get(node) != null) {
+                    owners.put(node, family);
+                    if (Probe.trace) Probe.log("QS_TEXT_PATH", "family=" + family + " id=" + Integer.toHexString(System.identityHashCode(node))
+                            + " element=" + Integer.toHexString(System.identityHashCode(p.thisObject)) + " registered=true bound=true drawn=false");
+                }
             }
         };
         XposedBridge.hookMethod(abi.create,bind);XposedBridge.hookMethod(abi.update,bind);
         XposedBridge.hookMethod(abi.draw,new XC_MethodHook(){
             @Override protected void beforeHookedMethod(MethodHookParam p){
                 p.setObjectExtra("qsTextPrevious",drawing.get());
+                p.setObjectExtra("qsTextNodePrevious",drawingNode.get());
+                drawingNode.set(p.thisObject);
                 p.setObjectExtra("qsIconPrevious",iconDrawing.get());iconDrawing.remove();
                 Float tone=inkFor(p.thisObject);
                 // An unrelated nested node must not inherit the outer node's ownership.
                 if(tone==null)drawing.remove();else drawing.set(tone);
             }
             @Override protected void afterHookedMethod(MethodHookParam p){
+                Object previousNode=p.getObjectExtra("qsTextNodePrevious");
+                if(previousNode==null)drawingNode.remove();else drawingNode.set(previousNode);
                 Float previousIcon=(Float)p.getObjectExtra("qsIconPrevious");
                 if(previousIcon==null)iconDrawing.remove();else iconDrawing.set(previousIcon);
                 Float previous=(Float)p.getObjectExtra("qsTextPrevious");
@@ -136,7 +181,7 @@ final class QsTextHooks {
             }catch(ReflectiveOperationException|RuntimeException ignored){}
             headerReady=true;Probe.log("QS_HEADER_ICONS_READY","renderOnly=true");
         }catch(ReflectiveOperationException|RuntimeException|LinkageError e){
-            headerReady=false;headerNodes.clear();headerElements.clear();Probe.error("QS_HEADER_ICONS_INCOMPATIBLE",e);
+            headerReady=false;headerNodes.clear();headerElements.clear();Probe.error("QS_HEADER_ICONS_INCOMPATIBLE","painter",e);
         }
     }
     ColorFilter applyIconPaint(Paint paint,Boolean dark,boolean on){
@@ -169,21 +214,27 @@ final class QsTextHooks {
         // Body labels need QS on; the header also follows the notification shade (level gates it).
         if(!h&&!enabled.getAsBoolean())return null;
         Float l=level.apply(h);
-        if(h)drawnHeader(node,l);
+
         return l;
     }
-    /** Last header ink logged as drawn (-1 native, 0 light, 1 dark, 2 between): changes only. */
-    private int headerDrawn=Integer.MIN_VALUE;
-    /**
-     * Evidence that the decided header ink reaches the header text actually being drawn (the
-     * Compose clock and date, not a View that may not be on screen): logged when it changes.
-     */
-    private void drawnHeader(Object node,Float l){
-        int bucket=l==null?-1:l<=0f?0:l>=1f?1:2;
-        if(bucket==headerDrawn||bucket==2)return;
-        headerDrawn=bucket;
-        Probe.log("QS_HEADER_TEXT_DRAWN","ink="+(bucket<0?"native":bucket==1?"dark":"light")
-                +" node="+Integer.toHexString(System.identityHashCode(node)));
+    /** Called only after a Canvas text primitive completed, never merely on node entry. */
+    private void painted(Object node, int original, int result, String canvas) {
+        if (node == null) return;
+        int bucket = result & 0xffffff;
+        Integer previous = drawnTones.put(node, bucket);
+        if (previous != null && previous == bucket) return;
+        boolean h = Boolean.TRUE.equals(nodes.get(node));
+        String detail = "family=" + owners.get(node) + " role=" + (h ? "header-unverified" : "label")
+                + " id=" + Integer.toHexString(System.identityHashCode(node))
+                + " registered=true bound=true drawn=true originalTone=" + Integer.toHexString(original)
+                + " finalTone=" + Integer.toHexString(result) + " canvas=" + canvas;
+        if (Probe.trace) {
+            Probe.log("QS_TEXT_PATH", detail);
+            Probe.log("INK_DRAWN", detail);
+        }
+        if (h) Probe.log("QS_HEADER_TEXT_DRAWN", detail + " ink="
+                + (bucket == QuickSettingsGlass.DARK_INK ? "dark" : bucket == 0xffffff ? "light" : "native")
+                + " clockVerified=false");
     }
     static Integer applyPaint(Paint paint,Boolean dark,boolean enabled){
         return applyPaint(paint,dark==null?null:dark?1f:0f,enabled);
@@ -224,7 +275,12 @@ final class QsTextHooks {
                         Float tone=drawing.get();if(tone==null)return;
                         // The tone was authorised when the node's draw began (inkFor / the header
                         // gate), including the shade-driven header with QS glass off.
-                        Integer original=applyPaint((Paint)p.args[index],tone,true);
+                        Paint paint=(Paint)p.args[index];
+                        if (paint == null) return;
+                        p.setObjectExtra("qsPaintBefore",paint.getColor());
+                        p.setObjectExtra("qsPaintNode",drawingNode.get());
+                        Integer original=applyPaint(paint,tone,true);
+                        p.setObjectExtra("qsPaintAfter",paint.getColor());
                         if(original!=null)p.setObjectExtra("qsTextColor",original);
                     }else{
                         Float tone=iconDrawing.get();if(tone==null)return;
@@ -233,6 +289,9 @@ final class QsTextHooks {
                     }
                 }
                 @Override protected void afterHookedMethod(MethodHookParam p){
+                    if(text && !p.hasThrowable() && p.getObjectExtra("qsPaintBefore") instanceof Integer)
+                        painted(p.getObjectExtra("qsPaintNode"), (Integer)p.getObjectExtra("qsPaintBefore"),
+                                (Integer)p.getObjectExtra("qsPaintAfter"), owner);
                     Object original=p.getObjectExtra("qsTextColor");
                     if(original instanceof Integer)((Paint)p.args[index]).setColor((Integer)original);
                     Object filter=p.getObjectExtra("qsHeaderFilter");

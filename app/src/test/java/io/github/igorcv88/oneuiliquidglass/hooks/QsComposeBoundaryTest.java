@@ -28,6 +28,11 @@ public class QsComposeBoundaryTest {
             androidx.compose.ui.graphics.drawscope.DrawStyle style,androidx.compose.ui.graphics.ColorFilter filter,int blend,int mask){}
     public static void roundRectColor(Scope s,long color,long topLeft,long size,long radius,
             androidx.compose.ui.graphics.drawscope.DrawStyle style,float alpha,androidx.compose.ui.graphics.ColorFilter filter,int blend,int mask){}
+    /** S938BXXUCDZIF, device log 28/10: R8 dropped the ColorFilter of the thumb's bridge (9 parameters). */
+    public static void roundRectColorDzif(Scope s,long color,long topLeft,long size,long radius,
+            androidx.compose.ui.graphics.drawscope.DrawStyle style,float alpha,int blend,int mask){}
+    public static void roundRectNoRadius(Scope s,long color,long topLeft,long size,float alpha,int blend,int mask){}
+    public static void roundRectExtraLong(Scope s,long color,long topLeft,long size,long radius,long extra,int mask){}
     private static java.lang.reflect.Method named(String n){
         for(java.lang.reflect.Method m:QsComposeBoundaryTest.class.getDeclaredMethods())if(m.getName().equals(n))return m;
         throw new AssertionError(n);
@@ -41,6 +46,9 @@ public class QsComposeBoundaryTest {
         assertFalse(QsSliderHooks.primitiveSignature(named("rectBrush"),0,Scope.class));
         assertTrue(QsSliderHooks.primitiveSignature(named("roundRectBrush"),1,Scope.class));
         assertTrue(QsSliderHooks.primitiveSignature(named("roundRectColor"),2,Scope.class));
+        assertTrue("DZIF thumb bridge",QsSliderHooks.primitiveSignature(named("roundRectColorDzif"),2,Scope.class));
+        assertFalse(QsSliderHooks.primitiveSignature(named("roundRectNoRadius"),2,Scope.class));
+        assertFalse(QsSliderHooks.primitiveSignature(named("roundRectExtraLong"),2,Scope.class));
         assertFalse(QsSliderHooks.primitiveSignature(named("roundRectColor"),1,Scope.class));
         assertFalse(QsSliderHooks.primitiveSignature(named("roundRectBrush"),2,Scope.class));
         assertFalse(QsSliderHooks.primitiveSignature(named("roundRectBrush"),1,Object.class));

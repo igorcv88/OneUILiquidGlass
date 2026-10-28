@@ -127,7 +127,7 @@ public final class QuickSettingsEdgeLightTest {
         assertFalse(ShadowLog.getLogsForTag("OULG").stream()
                 .anyMatch(log -> log.msg.contains("phase=region-visible")));
         // A retained display list intentionally uses 1/255, not permanent full opacity.
-        assertTrue(d.getAlpha() <= 1);
+        assertReleased(d);
     }
 
     @Test public void hostDetachAndHostReplacementReleaseRegionsAndRemoveObservers() throws Exception {
@@ -160,7 +160,7 @@ public final class QuickSettingsEdgeLightTest {
                 .anyMatch(log -> log.msg.contains("alphaSentMin=102") && log.msg.contains("edgeFade=0.4")));
         host.setScaleX(.9f);
         edge.status("scale-test");
-        assertEquals(1, d.getAlpha());
+        assertReleased(d);
         assertEquals(0f, (Float) get(edge, "edgeFade"), 0f);
     }
 
@@ -189,7 +189,7 @@ public final class QuickSettingsEdgeLightTest {
     }
 
     @Test public void invalidSizeReleasesAnAlreadyAllocatedRegion() throws Exception {
-        QuickSettingsEdgeLight edge=edge(true,true,true);Object node=bind(edge);BlurDrawable d=seed(edge,node);
+        QuickSettingsEdgeLight edge=edge(true,true,true);edge.panel(new Controller(host,new Adapter()));Object node=bind(edge);BlurDrawable d=seed(edge,node);
         set(edge,"getSize",EmptyScope.class.getMethod("size"));
         call(edge,"draw",new Class<?>[]{Object.class,Object.class},node,new EmptyScope());
         assertReleased(d);
@@ -199,6 +199,7 @@ public final class QuickSettingsEdgeLightTest {
     @Test public void softwareCanvasAndMissingRootReleaseOldRegions() throws Exception {
         for(boolean hardware:new boolean[]{false,true}) {
             QuickSettingsEdgeLight edge=edge(true,true,true);
+            edge.panel(new Controller(host,new Adapter()));
             Object element=new Object(),node=new Object();
             edge.element(element,new Shape(),1);
             call(edge,"bind",new Class<?>[]{Object.class,Object.class},element,node);
@@ -209,7 +210,7 @@ public final class QuickSettingsEdgeLightTest {
             set(edge,"nativeCanvas",CanvasWrapper.class.getField("raw"));
             set(edge,"topStart",Shape.class.getField("corner"));
             set(edge,"toPx",Corner.class.getMethod("radius",Object.class,long.class));
-            if(hardware)set(edge,"host",new WeakReference<>(new RootlessView(activity)));
+            if(hardware){RootlessView v=new RootlessView(activity);activity.setContentView(v);set(edge,"host",new WeakReference<>(v));}
             call(edge,"draw",new Class<?>[]{Object.class,Object.class},node,new Scope(hardware));
             assertReleased(d);
             assertEquals(true,get(edge,"ready"));
@@ -217,6 +218,85 @@ public final class QuickSettingsEdgeLightTest {
             assertTrue(ShadowLog.getLogsForTag("OULG").stream().anyMatch(log->log.msg.contains("reason="+reason)));
         }
     }
+
+    @Test public void closeReleasesAndLateDrawCannotRecreateThenReopenInvalidates() throws Exception {
+        QuickSettingsEdgeLight edge=edge(true,true,true);
+        MutableAdapter adapter=new MutableAdapter();
+        edge.panel(new Controller(host,adapter));
+        Object node=bind(edge); BlurDrawable d=seed(edge,node);
+        adapter.expansionFraction.value=0f;
+        edge.check(); assertReleased(d);
+        assertNull(get(nodes(edge).get(node),"bridge"));
+        call(edge,"draw",new Class<?>[]{Object.class,Object.class},node,new EmptyScope());
+        assertNull(get(nodes(edge).get(node),"bridge"));
+        assertTrue(ShadowLog.getLogsForTag("OULG").stream().anyMatch(l -> l.msg.contains("event=QS_EDGE_EXIT")
+                && l.msg.contains("regionsAfter=0 alphaPositiveAfter=0")));
+        int[] invalidations={0}; edge.onRestore(()->invalidations[0]++);
+        adapter.expansionFraction.value=1f; edge.check();
+        assertEquals(1,invalidations[0]);
+    }
+    @Test public void hiddenAndZeroAncestorAlphaReleaseWithoutOneAlphaGuard() throws Exception {
+        for(boolean hidden:new boolean[]{true,false}) {
+            host.setVisibility(View.VISIBLE);host.setAlpha(1f);
+            QuickSettingsEdgeLight edge=edge(true,true,true);edge.panel(new Controller(host,new Adapter()));
+            Object node=bind(edge);BlurDrawable d=seed(edge,node);
+            if(hidden)host.setVisibility(View.INVISIBLE);else host.setAlpha(0f);
+            edge.check();assertReleased(d);
+            edge.suppress(true);edge.suppress(false);
+            assertNull(get(nodes(edge).get(node),"bridge"));
+        }
+    }
+    /**
+     * The AGSL path honours a drag like the compositor path: faded capsules draw no light and
+     * report nothing (their outline state stays), the dragged slider's container still draws, and
+     * every reported result reaches the per-capsule outline owner.
+     */
+    @Test public void dragSkipsOpticsOfFadedCapsulesButNotTheSlider() throws Exception {
+        Field broken = QsCapsuleOptics.class.getDeclaredField("broken"); broken.setAccessible(true);
+        Object wasBroken = broken.get(null); broken.set(null, false);
+        try {
+            QuickSettingsEdgeLight edge = edge(true, true, true);
+            edge.panel(new Controller(host, new Adapter()));
+            edge.optics(new QsCapsuleOptics(), () -> false);
+            java.util.List<String> results = new java.util.ArrayList<>();
+            edge.onOptics((t, drawn, session) -> results.add(t.role + ":" + drawn));
+            Object tile = new Object(), slider = new Object(), tileNode = new Object(), sliderNode = new Object();
+            edge.element(tile, new Shape(), 1, 1f, edge.selected("container"));
+            edge.element(slider, new Shape(), 1, 1f, edge.selected("slider"));
+            call(edge, "bind", new Class<?>[]{Object.class, Object.class}, tile, tileNode);
+            call(edge, "bind", new Class<?>[]{Object.class, Object.class}, slider, sliderNode);
+            set(edge,"getSize",Scope.class.getMethod("size"));set(edge,"getDensity",Scope.class.getMethod("density"));
+            set(edge,"drawContext",Scope.class.getMethod("context"));
+            set(edge,"contextCanvas",DrawContext.class.getMethod("canvas"));
+            set(edge,"nativeCanvas",CanvasWrapper.class.getField("raw"));
+            set(edge,"topStart",Shape.class.getField("corner"));
+            set(edge,"toPx",Corner.class.getMethod("radius",Object.class,long.class));
+            Class<?>[] sig = {Object.class, Object.class};
+            // A software canvas cannot run the shader: an honest failure, reported for both.
+            call(edge, "optics", sig, tileNode, new Scope(false));
+            call(edge, "optics", sig, sliderNode, new Scope(false));
+            assertEquals(java.util.Arrays.asList("container:false", "slider:false"), results);
+            results.clear();
+            edge.suppress(true);
+            call(edge, "optics", sig, tileNode, new Scope(false));
+            call(edge, "optics", sig, sliderNode, new Scope(false));
+            assertEquals("only the dragged slider's container is drawn", java.util.Collections.singletonList("slider:false"), results);
+            results.clear();
+            edge.suppress(false);
+            call(edge, "optics", sig, tileNode, new Scope(false));
+            assertEquals(java.util.Collections.singletonList("container:false"), results);
+        } finally { broken.set(null, wasBroken); }
+    }
+    @Test public void duplicateUpdateOfSameElementDoesNotLoseBinding() throws Exception {
+        QuickSettingsEdgeLight edge=edge(true,true,true);
+        Object element=new Object(),node=new Object();edge.element(element,new Object(),1);
+        call(edge,"bind",new Class<?>[]{Object.class,Object.class},element,node);
+        BlurDrawable d=seed(edge,node);
+        call(edge,"bind",new Class<?>[]{Object.class,Object.class},element,node);
+        assertNotNull(get(nodes(edge).get(node),"bridge"));assertTrue(d.isVisible());
+    }
+    public static class MutableAdapter { public final MutableFlow expansionFraction=new MutableFlow(); }
+    public static class MutableFlow { float value=1f; public Float getValue(){return value;} }
 
     public static class EmptyScope { public long size(){return 0L;} }
     public static class Shape { public final Corner corner=new Corner(); }
