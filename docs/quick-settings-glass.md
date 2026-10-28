@@ -77,14 +77,29 @@ mesmo motor, com um perfil próprio:
   continua sendo o contorno do Compose, então sem o compositor nada muda.
 - **Onde é desenhada.** No `BackgroundNode.draw` do próprio fundo do contêiner (o nó é ligado ao
   elemento recolorido em `BackgroundElement.create/update`), dentro da display list do Compose: a
-  região acompanha layout, rolagem e transformações. O raio vem de
-  `CornerSize.toPx-TmRCtEA(Density, tamanho)` da forma que a Samsung passou ao `BoxWithOutline`.
+  região acompanha layout, rolagem e transformações.
+- **Geometria.** O fundo fica na caixa interna, recuada pela largura do contorno (no dump do S938B,
+  4 px: caixa externa `[48,404][708,694]`, interna `[52,408][704,690]`). A região é a caixa interna
+  estendida por `QuickSettingsGlass.edgeOutset` (a largura em dp × densidade, arredondada como o
+  `padding` do Compose), com o raio da forma da Samsung calculado no tamanho externo
+  (`CornerSize.toPx-TmRCtEA`). A faixa de luz (4,5 px a partir da borda externa) fica sobre o anel do
+  contorno, não 4 px para dentro.
+- **Ligação por identidade.** `BackgroundElement.equals` compara cor, brush, alpha e forma, e todo
+  fundo de contêiner é o mesmo véu sobre `RectangleShape`: um mapa por igualdade juntaria todos
+  numa chave (e pegaria qualquer fundo igual em outro ponto do SystemUI). Os elementos ficam numa
+  lista de referências fracas comparada por `==`, e saem dela ao serem ligados ao nó.
+- **Ciclo de vida.** Um `BackgroundBlurDrawable` fica no conjunto forte do agregador do
+  `ViewRootImpl` enquanto estiver visível com alpha e raio > 0, mesmo quando o `RenderNode` deixa de
+  ser desenhado (vira um retângulo vazio, reenviado a cada frame). Por isso a região é liberada
+  (`BackgroundBlurBridge.release`: raio 0, invisível, alpha 0) quando o nó sai da árvore
+  (`Modifier.Node.markAsDetached$ui`), é religado a outro elemento ou substituído, quando o efeito é
+  desligado (opção, master ou compositor) e quando um hook falha. Só o fade transitório mantém
+  alpha ≥ 1/255, para a região não sumir quando o painel volta sem regravar a display list.
 - **Fade.** Uma região de blur ignora o alpha de quem a desenha. Antes de cada frame da janela, o
   alpha das regiões é o alpha acumulado dos ancestrais do painel × `edgeFade(expansão)`
-  (`SecQSPanelComposeAdapter.expansionFraction`: 0 abaixo de 60 %, inteira a partir de 95 %). Um
-  ancestral com escala ≠ 1 apaga a luz: a marca exige pixels inteiros, como nos cards da central.
-  O alpha nunca vai a 0 no drawable (mínimo 1/255), para a região não sumir quando o painel volta sem
-  regravar a display list.
+  (`SecQSPanelComposeAdapter.expansionFraction`: 0 abaixo de 60 %, inteira a partir de 95 %). Se a
+  expansão não puder ser lida, a luz dinâmica fica em 0, não em "aberta". Um ancestral com escala
+  ≠ 1 apaga a luz: a marca exige pixels inteiros, como nos cards da central.
 - **Condição.** Opção ligada, `debug.oulg.sfrefract=1` e `debug.oulg.sf.optics ≥ 10` (o pacote
   v0.26 anuncia 10). Sem isso, nenhuma região é criada.
 

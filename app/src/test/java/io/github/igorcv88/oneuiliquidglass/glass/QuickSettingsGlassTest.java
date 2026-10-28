@@ -97,4 +97,17 @@ public final class QuickSettingsGlassTest {
         float a = QuickSettingsGlass.edgeFade(1f, 0.7f), b = QuickSettingsGlass.edgeFade(1f, 0.8f);
         assertTrue(a > 0f && a < b && b < 1f);
     }
+
+    @Test public void edgeRegionCoversSamsungsOutline() {
+        // S938B dump: the Wi-Fi pill's outer box [48,404][708,694], its inner box [52,408][704,690]:
+        // a 4 px outline at density 3.5 (GRID_BORDER ~1.14 dp). Inner + 2 x outset = outer.
+        int out = QuickSettingsGlass.edgeOutset(4f / 3.5f, 3.5f);
+        assertEquals(4, out);
+        assertEquals(708 - 48, (704 - 52) + 2 * out);
+        assertEquals(694 - 404, (690 - 408) + 2 * out);
+        // The outer pill (290 px high) keeps a tag the compositor reads.
+        assertTrue(QuickSettingsGlass.edgeTag((694 - 404) / 2f) > 0f);
+        // No outline: the region is the inner box itself.
+        assertEquals(0, QuickSettingsGlass.edgeOutset(0f, 3.5f));
+    }
 }

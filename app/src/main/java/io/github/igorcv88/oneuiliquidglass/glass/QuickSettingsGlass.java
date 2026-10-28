@@ -89,6 +89,15 @@ public final class QuickSettingsGlass {
     }
 
     /**
+     * Px from the background's inner box out to the container's outer edge: Samsung pads the inner
+     * box by the outline width, and Compose rounds a dp padding to whole px (roundToPx). 0 when the
+     * outline is off. The edge-light region is the inner box grown by this on every side.
+     */
+    public static int edgeOutset(float borderDp, float density) {
+        return borderDp > 0f && density > 0f ? Math.round(borderDp * density) : 0;
+    }
+
+    /**
      * Edge-light region alpha: the accumulated alpha of the panel's ancestor views times the panel's
      * own expansion, which Compose fades and moves without telling the region (a blur region ignores
      * the alpha of what draws it). Fully in from 95 % expanded, gone below 60 %.

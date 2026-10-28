@@ -77,12 +77,13 @@ public final class QuickSettingsHooks {
         final Object composer;
         final long background, fill;
         final Object rim;
-        /** A glass container's shape, for its compositor edge light; null for circles. */
+        /** A glass container's shape and outline width (dp), for its edge light; null for circles. */
         final Object edgeShape;
+        final float edgeBorder;
         boolean rimDone, fillDone;
-        Pending(Object composer, long background, long fill, Object rim, Object edgeShape) {
+        Pending(Object composer, long background, long fill, Object rim, Object edgeShape, float edgeBorder) {
             this.composer = composer; this.background = background; this.fill = fill; this.rim = rim;
-            this.edgeShape = edgeShape;
+            this.edgeShape = edgeShape; this.edgeBorder = edgeBorder;
             // Samsung builds no background element for a transparent colour: nothing to recolour.
             fillDone = background == 0L;
         }
@@ -145,11 +146,11 @@ public final class QuickSettingsHooks {
                     if (!(p.args[0] instanceof Long) || (Long) p.args[0] != q.background) return;
                     q.fillDone = true;
                     p.args[0] = q.fill;
-                    if (q.edgeShape != null) p.setObjectExtra("oulgEdge", q.edgeShape);
+                    if (q.edgeShape != null) p.setObjectExtra("oulgEdge", q);
                 }
                 @Override protected void afterHookedMethod(MethodHookParam p) {
-                    Object shape = p.getObjectExtra("oulgEdge");
-                    if (shape != null) edge.element(p.thisObject, shape);
+                    Object q = p.getObjectExtra("oulgEdge");
+                    if (q instanceof Pending) edge.element(p.thisObject, ((Pending) q).edgeShape, ((Pending) q).edgeBorder);
                 }
             });
             edge.install(background);
@@ -346,7 +347,7 @@ public final class QuickSettingsHooks {
             if (broken) return;
             // Even with the master or the option off, the border constructor captures this box's
             // own scope (see capture), so that switching either on later applies live.
-            pending.set(new Pending(a[7], 0L, 0L, null, null));
+            pending.set(new Pending(a[7], 0L, 0L, null, null, 0f));
             if (!enabled()) return;
             // Bits 4-32 of the $default mask: Samsung's defaults replace the width/colour/shape
             // arguments, so what is read here would not be what is drawn. Bit 2 (outlined, default
@@ -365,8 +366,9 @@ public final class QuickSettingsHooks {
             boolean outlined = (outlinedDefault || Boolean.TRUE.equals(a[1]))
                     && a[2] instanceof Float && (Float) a[2] > 0f;
             boolean rimmed = outlined && QuickSettingsGlass.rimmed(kind);
+            // The inner box is padded by the outline width only when the outline is on.
             pending.set(new Pending(a[7], background, fill, rimmed ? rim(dark) : null,
-                    kind == Kind.CONTAINER ? a[5] : null));
+                    kind == Kind.CONTAINER ? a[5] : null, outlined ? (Float) a[2] : 0f));
         } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
             fail(e);
         }
