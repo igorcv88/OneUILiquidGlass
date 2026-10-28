@@ -455,18 +455,28 @@ final class QuickSettingsEdgeLight {
         }
         // An expansion that cannot be read is not taken as "open": no dynamic light rather than one
         // that may outlive the panel's fade.
-        float expansion = -1f;
-        try {
-            Object flow = expansionField == null || adapter == null ? null : expansionField.get(adapter);
-            Object value = flow == null || flowValue == null ? null : flowValue.invoke(flow);
-            if (value instanceof Float) expansion = (Float) value;
-        } catch (ReflectiveOperationException | RuntimeException e) {
-            expansion = -1f;
-        }
+        float expansion = readExpansion();
         lastExpansion = expansion;
         ancestorAlpha = a;
         edgeFade = scaled || expansion < 0f ? 0f : QuickSettingsGlass.edgeFade(a, expansion);
         return edgeFade;
+    }
+
+    /**
+     * SecQSPanelComposeAdapter.expansionFraction (0 closed, 1 open), -1 before panel() or when it
+     * cannot be read. Also the opening signal of the backdrop sampling (QsBackdrop): the compose
+     * root may stay VISIBLE while the panel is collapsed.
+     */
+    synchronized float expansion() { return readExpansion(); }
+
+    private float readExpansion() {
+        try {
+            Object flow = expansionField == null || adapter == null ? null : expansionField.get(adapter);
+            Object value = flow == null || flowValue == null ? null : flowValue.invoke(flow);
+            return value instanceof Float ? (Float) value : -1f;
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            return -1f;
+        }
     }
 
     synchronized void configure(int blur) {

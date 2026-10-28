@@ -200,6 +200,9 @@ public final class Applicability {
                 return "1".equals(v("shadetone"))
                         ? new Result(Kind.NEEDS_RESTART, restartReason())
                         : inactive("Use o mapa de tons da lente na central");
+            case "qs.edgeblur":
+                // The blur of the profile-3 regions: only the dynamic lens draws them. Live.
+                return lens ? ACTIVE : inactive(NEEDS_LENS);
             default:
                 if (key.startsWith("sf."))
                     return lens
