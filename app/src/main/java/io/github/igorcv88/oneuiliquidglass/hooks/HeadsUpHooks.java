@@ -211,6 +211,9 @@ public final class HeadsUpHooks {
         // QS is an independent opt-in surface: no notification-state or drawing hooks are shared.
         quickSettings = new QuickSettingsHooks(loader, () -> enabled, this::resolveConfig);
         quickSettings.install();
+        // A task change re-measures the shown surfaces at once (periodic sampling stays the fallback).
+        BackdropEvents.install(loader);
+        BackdropEvents.add(this::backdropChanged);
         installShade();
         installBarState();
         installScrimClamp();
@@ -624,7 +627,28 @@ public final class HeadsUpHooks {
     static final long RESAMPLE_MS = 900, ACTIVE_RESAMPLE_MS = 250, CONFIRM_MS = 150, SCENE_DWELL_MS = 600;
     /** Faster right after a touch (an app switch, a scroll may have changed what is behind). */
     static long resampleInterval(long now) {
+        if (BackdropEvents.burst(now)) return BURST_RESAMPLE_MS;
         return now - BackdropMotion.lastActive() < POPUP_ACTIVE_MS ? ACTIVE_RESAMPLE_MS : RESAMPLE_MS;
+    }
+    /** Right after a task change the backdrop is still settling: sample this often for BackdropEvents.BURST_MS. */
+    static final long BURST_RESAMPLE_MS = 100;
+    /**
+     * Another task came to the front or the stack changed (BackdropEvents): the open shade captures
+     * now, and every shown pop-up measures on its next frame, instead of waiting for their periodic
+     * samples. Main thread.
+     */
+    private void backdropChanged() {
+        if (Boolean.TRUE.equals(shadeExpanded) && shadeGrid != null && resampleCancel == null) {
+            main.removeCallbacks(resample);
+            resampleShade();
+        }
+        for (State st : new ArrayList<>(states.values())) {
+            View v = st.background.get();
+            if (v == null || !SURFACE_POPUP.equals(st.toneSurface) || !v.isShown()) continue;
+            st.popupMeasureAt = 0;
+            v.removeCallbacks(st.popupPoke);
+            v.postOnAnimation(st.popupPoke);
+        }
     }
     private final io.github.igorcv88.oneuiliquidglass.glass.ToneGate sceneGate =
             new io.github.igorcv88.oneuiliquidglass.glass.ToneGate(CONFIRM_MS, SCENE_DWELL_MS);
@@ -1270,7 +1294,7 @@ public final class HeadsUpHooks {
             // A touch in the last POPUP_ACTIVE_MS may have changed the app behind (home, an app
             // launch): measure as often as while entering. Still for 1 s, the text stayed white on a
             // white app for ~270 ms after a launch (device video, 25/10).
-            boolean active = now - BackdropMotion.lastActive() < POPUP_ACTIVE_MS;
+            boolean active = now - BackdropMotion.lastActive() < POPUP_ACTIVE_MS || BackdropEvents.burst(now);
             long interval = entering || active ? POPUP_ENTER_MS : POPUP_MEASURE_MS;
             // A candidate change waits for its confirming measurement, which is taken early.
             if (popupGate.pending()) interval = Math.min(interval, Math.max(POPUP_ENTER_MS, popupGate.confirmIn(now)));

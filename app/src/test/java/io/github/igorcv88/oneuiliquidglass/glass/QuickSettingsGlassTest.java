@@ -29,12 +29,23 @@ public final class QuickSettingsGlassTest {
             assertEquals(0, QuickSettingsGlass.fill(Kind.CONTAINER, nativeFill) >>> 24);
     }
 
-    @Test public void mediaCapsuleInsetsThePlayerInsideItsOutline() {
-        float[] g = QuickSettingsGlass.mediaCapsule(436f, 400f, 70f, 21f, 4f);
-        assertArrayEquals(new float[] {21f, 49f, 70f, 4f}, g, 1e-4f);
-        // The inner corner never goes negative; a radius beyond the shape is the pill's.
-        assertEquals(0f, QuickSettingsGlass.mediaCapsule(436f, 400f, 10f, 21f, 4f)[1], 0f);
-        assertEquals(200f, QuickSettingsGlass.mediaCapsule(436f, 400f, 900f, 21f, 4f)[2], 0f);
+    /** The whole player is resized into the capsule (nothing cut), centred, at least the inset from the outline. */
+    @Test public void mediaCapsuleResizesThePlayerInsideItsOutline() {
+        for (float[] page : new float[][] {{436f, 400f}, {1000f, 300f}, {300f, 900f}}) {
+            float w = page[0], h = page[1], inset = 21f;
+            float[] g = QuickSettingsGlass.mediaCapsule(w, h, 70f, inset, 4f);
+            float s = g[0], dx = g[1], dy = g[2];
+            assertTrue(s > 0f && s < 1f);
+            // The scaled content rect: inside the outline by at least the inset, centred.
+            assertTrue(dx >= inset - 1e-3f && dy >= inset - 1e-3f);
+            assertEquals(w, dx + w * s + dx, 1e-3f);
+            assertEquals(h, dy + h * s + dy, 1e-3f);
+            // Uniform: the player keeps its proportions (no stretched artwork or text).
+            assertEquals(Math.min((w - 2 * inset) / w, (h - 2 * inset) / h), s, 1e-6f);
+            assertEquals(70f, g[3], 0f);
+            assertEquals(4f, g[4], 0f);
+        }
+        assertEquals(200f, QuickSettingsGlass.mediaCapsule(436f, 400f, 900f, 21f, 4f)[3], 0f);
         assertNull(QuickSettingsGlass.mediaCapsule(60f, 400f, 30f, 21f, 4f));
         assertNull(QuickSettingsGlass.mediaCapsule(Float.NaN, 400f, 30f, 21f, 4f));
         assertNull(QuickSettingsGlass.mediaCapsule(436f, 400f, 30f, 0f, 4f));

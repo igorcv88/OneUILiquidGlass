@@ -34,7 +34,7 @@ public final class ToneGate {
     /** Distance from the classifier's midpoint beyond which one reading is a decision by itself. */
     public static final float STRONG = 0.2f;
     /** Shortest time between two changes, even for strong readings (no ping-pong between frames). */
-    public static final long STRONG_DWELL_MS = 150;
+    public static final long STRONG_DWELL_MS = 100;
 
     /** Whether {@code luma} is far enough from {@code mid} to need no confirmation. */
     public static boolean strong(float luma, float mid) {

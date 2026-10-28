@@ -55,8 +55,8 @@ public final class ToneGateTest {
         g.offer(false, 0);
         assertTrue(g.offer(true, 200, true));
         assertEquals(Boolean.TRUE, g.tone());
-        assertFalse("within the strong dwell", g.offer(false, 300, true));
-        assertTrue(g.offer(false, 350, true));
+        assertFalse("within the strong dwell", g.offer(false, 250, true));
+        assertTrue(g.offer(false, 300, true));
         assertTrue(ToneGate.strong(.95f, .7f));
         assertFalse(ToneGate.strong(.8f, .7f));
         assertFalse(ToneGate.strong(Float.NaN, .7f));

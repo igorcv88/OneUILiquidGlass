@@ -26,6 +26,7 @@ final class QsSliderHooks {
     private Method drawContext, size, setSize, getCanvas;
     private Field nativeCanvas;
     private boolean broken, trackHooked;
+    private final boolean[] staged=new boolean[3];
     private Object whiteBrush;
     private final ThreadLocal<Frame> current=new ThreadLocal<>();
     private static final class Frame {
@@ -134,6 +135,12 @@ final class QsSliderHooks {
     }
     private void primitive(XC_MethodHook.MethodHookParam p,int stage){
         Frame f=current.get();if(broken||f==null||p.args[0]!=f.scope)return;
+        if(!staged[stage]){
+            // Once per stage and process: proof that the primitive really ran in the bar's scope.
+            staged[stage]=true;
+            Probe.log("QS_SLIDER_STAGE","stage="+stage+" action="+(suppressTrack(stage)?"trackSuppressed":stage==1?"bodyDrawn":"capDrawn")
+                    +" size="+Math.round(f.w)+"x"+Math.round(f.h)+" fill="+f.style.fill);
+        }
         if(suppressTrack(stage)){p.setResult(null);return;} // No visual track, even for legacy presets.
         try {
             int last=p.args.length-1, mask=(Integer)p.args[last];

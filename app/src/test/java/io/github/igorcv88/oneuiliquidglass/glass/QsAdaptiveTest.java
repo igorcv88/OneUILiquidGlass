@@ -97,6 +97,18 @@ public class QsAdaptiveTest {
         assertEquals(.78f,a.fill,1e-6f);
     }
 
+    /** An old profile's light or white qs.lightcolor can never become a light film. */
+    @Test public void lightTintIsAlwaysDark(){
+        for(String c:new String[]{"ffffff","f2f2f2","bdbdbd","ffeb3b"}){
+            QsStyle st=new QsStyle(k->k.equals("qs.lightcolor")?c:null);
+            assertEquals(c,0x141823,st.lightColor);
+        }
+        assertEquals(0x000000,new QsStyle(k->k.equals("qs.lightcolor")?"000000":null).lightColor);
+        assertEquals(0x202a40,new QsStyle(k->k.equals("qs.lightcolor")?"202a40":null).lightColor);
+        int light=QuickSettingsGlass.fill(CONTAINER,0x33000000,LIGHT_SCENE,new QsStyle(k->k.equals("qs.lightcolor")?"ffffff":k.equals("qs.lightfill")?".18":null));
+        assertEquals(0x141823,light&0xffffff);
+    }
+
     private static float[] primitive(float w,float h,float outer,float fill,float x,float y,float sw,float sh,boolean thumb,float[] body){
         return QuickSettingsGlass.sliderPrimitive(w,h,outer,fill,x,y,sw,sh,thumb,body,new float[5]);
     }

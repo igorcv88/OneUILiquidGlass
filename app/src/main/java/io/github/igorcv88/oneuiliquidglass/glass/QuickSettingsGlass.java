@@ -63,6 +63,19 @@ public final class QuickSettingsGlass {
         return withAlpha(tint, Math.min(MAX_LIGHT_FILL, Float.isFinite(alpha) ? alpha : LIGHT_FILL));
     }
 
+    /** Brightest tint accepted over light backdrops (sRGB luma 0-1): anything lighter is a film. */
+    static final float MAX_TINT_LUMA = 0.35f;
+
+    /**
+     * The light-backdrop tint actually used: {@code color} when it is dark, the default otherwise.
+     * A profile from before the tint (qs.lightcolor once styled the veil, possibly white) can never
+     * bring a light film back.
+     */
+    public static int darkTint(int color) {
+        float luma = (0.2126f * ((color >> 16) & 255) + 0.7152f * ((color >> 8) & 255) + 0.0722f * (color & 255)) / 255f;
+        return luma <= MAX_TINT_LUMA ? color & 0xffffff : LIGHT_TINT;
+    }
+
     public static int fill(Kind kind, int nativeFill, QsScene.Tone scene, QsStyle s) {
         return fill(kind, nativeFill, scene, s.lightColor, s.lightFill);
     }
@@ -106,16 +119,19 @@ public final class QuickSettingsGlass {
     }
 
     /**
-     * The active media player inside its glass capsule: {inset, inner radius, outer radius, rim
-     * width} for a page of {@code w x h} whose own corner radius is {@code radius}; null when the
-     * page is too small to inset (the player stays as Samsung draws it).
+     * The active media player inside its glass capsule, for a page of {@code w x h} whose corner
+     * radius is {@code radius}: the player's whole drawing is scaled uniformly about the page centre
+     * so it ends at least {@code inset} from the outline, and keeps its own shape (the page shape
+     * scaled by the same factor). Nothing of Samsung's content is cut: it is resized, not clipped.
+     * Returns {scale, dx, dy, outer radius, rim width}; null when the page is too small (native).
      */
     public static float[] mediaCapsule(float w, float h, float radius, float inset, float rimWidth) {
         if (!(w > 0f) || !(h > 0f) || !Float.isFinite(w) || !Float.isFinite(h) || !(inset > 0f) || !Float.isFinite(inset)) return null;
         if (inset * 4f >= Math.min(w, h)) return null;
+        float scale = Math.min((w - 2f * inset) / w, (h - 2f * inset) / h);
         float r = Float.isFinite(radius) ? Math.max(0f, Math.min(radius, Math.min(w, h) / 2f)) : 0f;
         float rim = Float.isFinite(rimWidth) ? Math.max(0f, Math.min(rimWidth, inset)) : 0f;
-        return new float[] {inset, Math.max(0f, r - inset), r, rim};
+        return new float[] {scale, (w - w * scale) / 2f, (h - h * scale) / 2f, r, rim};
     }
 
     /** Centred envelope inside the native grid cell. Its long axis and hitbox never change. */

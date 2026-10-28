@@ -25,7 +25,8 @@ public final class QsStyle {
     public QsStyle(Function<String, String> values) {
         this.values = values;
         lightFill = Math.min(QuickSettingsGlass.MAX_LIGHT_FILL, number("qs.lightfill", QuickSettingsGlass.LIGHT_FILL));
-        lightColor = color("qs.lightcolor", QuickSettingsGlass.LIGHT_TINT);
+        // Only a dark tint: an old light or white qs.lightcolor falls back to the default.
+        lightColor = QuickSettingsGlass.darkTint(color("qs.lightcolor", QuickSettingsGlass.LIGHT_TINT));
         darkRim = number("qs.darkrim", .26f); lightRim = number("qs.lightrim", .18f);
         edgeBlur = Math.round(number("qs.edgeblur", 8));
         outer = number("qs.outer", 1);

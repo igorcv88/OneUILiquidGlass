@@ -79,10 +79,16 @@ final class QuickSettingsEdgeLight {
     /**
      * A slider is being dragged: Samsung fades every other control with a Compose layer alpha,
      * which a blur region does not see, so their edge regions stayed on screen as empty glass
-     * outlines over the home screen (device screenshot, 28/10). Every region fades out until the
-     * finger lifts.
+     * outlines over the home screen (device screenshot, 28/10). While suppressed every region is
+     * released (radius 0, invisible, alpha 0: gone from the compositor, not just dimmed) and no
+     * draw creates one; when the finger lifts, {@link #restored} recomposes the containers, whose
+     * next draw builds the regions again (the same path as switching the effect on).
      */
     private boolean suppressed;
+    private Runnable restored = () -> {};
+    void onRestore(Runnable r) { restored = r == null ? () -> {} : r; }
+    /** Whether regions may exist now (tests and diagnostics). */
+    synchronized boolean suppressed() { return suppressed; }
     private View.OnAttachStateChangeListener attachListener;
     private Runnable settledSnapshot;
 
@@ -162,6 +168,11 @@ final class QuickSettingsEdgeLight {
                 Probe.log("QS_EDGE_STATUS", "phase=install ready=false member=" + member);
                 return;
             }
+            try {
+                Class<?> drawNode = Class.forName("androidx.compose.ui.node.DrawModifierNode", false, loader);
+                invalidateDraw = Class.forName("androidx.compose.ui.node.DrawModifierNodeKt", false, loader)
+                        .getMethod("invalidateDraw", drawNode);
+            } catch (ReflectiveOperationException | LinkageError e) { invalidateDraw = null; }
             member = "Xposed hooks";
             XposedBridge.hookMethod(create, new XC_MethodHook() {
                 @Override protected void afterHookedMethod(MethodHookParam p) { bind(p.thisObject, p.getResult()); }
@@ -310,7 +321,7 @@ final class QuickSettingsEdgeLight {
                 diagnostic.event(QuickSettingsEdgeDiagnostics.Event.UNBOUND_NODE, "pending=" + elements.size());
             return;
         }
-        if (!active()) { e.release(); return; }
+        if (!active() || suppressed) { e.release(); return; }
         View v = host.get();
         try {
             long size = (Long) getSize.invoke(scope);
@@ -427,7 +438,7 @@ final class QuickSettingsEdgeLight {
      * expansion read run only for a snapshot (toggle, config callback, failure).
      */
     private void refresh(boolean snapshot) {
-        boolean on = active();
+        boolean on = active() && !suppressed;
         if (!on) {
             releaseAll();
             if (snapshot) { fade(); observe(false); }
@@ -489,8 +500,27 @@ final class QuickSettingsEdgeLight {
     synchronized void suppress(boolean on) {
         if (suppressed == on) return;
         suppressed = on;
-        Probe.log("QS_EDGE_SUPPRESS", "dragging=" + on + " regions=" + nodes.size());
-        refresh();
+        int released = 0;
+        if (on) for (Edge e : nodes.values()) if (e.bridge != null) { e.release(); released++; }
+        Probe.log("QS_EDGE_SUPPRESS", "dragging=" + on + " nodes=" + nodes.size() + " released=" + released);
+        if (!on) redrawNodes();
+    }
+
+    /** DrawModifierNodeKt.invalidateDraw: the background nodes' own draw runs again (null: unavailable). */
+    private Method invalidateDraw;
+
+    /** Rebuilds released regions: each background node draws again, which creates its region. */
+    private void redrawNodes() {
+        int n = 0;
+        if (invalidateDraw != null) {
+            for (Object node : new ArrayList<>(nodes.keySet())) {
+                try { invalidateDraw.invoke(null, node); n++; }
+                catch (ReflectiveOperationException | RuntimeException e) { invalidateDraw = null; Probe.error("QS_EDGE_REDRAW_FAILED", e); break; }
+            }
+        }
+        // Without the draw invalidation, recompose the containers instead.
+        if (invalidateDraw == null) restored.run();
+        Probe.log("QS_EDGE_RESTORE", "nodes=" + nodes.size() + " redrawn=" + n + " recomposed=" + (invalidateDraw == null));
     }
 
     synchronized void configure(int blur) {

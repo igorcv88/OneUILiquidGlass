@@ -168,7 +168,22 @@ final class QsTextHooks {
         if(!ready||h==null)return null;
         // Body labels need QS on; the header also follows the notification shade (level gates it).
         if(!h&&!enabled.getAsBoolean())return null;
-        return level.apply(h);
+        Float l=level.apply(h);
+        if(h)drawnHeader(node,l);
+        return l;
+    }
+    /** Last header ink logged as drawn (-1 native, 0 light, 1 dark, 2 between): changes only. */
+    private int headerDrawn=Integer.MIN_VALUE;
+    /**
+     * Evidence that the decided header ink reaches the header text actually being drawn (the
+     * Compose clock and date, not a View that may not be on screen): logged when it changes.
+     */
+    private void drawnHeader(Object node,Float l){
+        int bucket=l==null?-1:l<=0f?0:l>=1f?1:2;
+        if(bucket==headerDrawn||bucket==2)return;
+        headerDrawn=bucket;
+        Probe.log("QS_HEADER_TEXT_DRAWN","ink="+(bucket<0?"native":bucket==1?"dark":"light")
+                +" node="+Integer.toHexString(System.identityHashCode(node)));
     }
     static Integer applyPaint(Paint paint,Boolean dark,boolean enabled){
         return applyPaint(paint,dark==null?null:dark?1f:0f,enabled);

@@ -40,7 +40,7 @@ import io.github.igorcv88.oneuiliquidglass.glass.ToneGrid;
 final class QsBackdrop {
     /** A sample this young belongs to the opening that follows it. */
     static final long FRESH_MS = 600;
-    static final long RESAMPLE_MS = 900, ACTIVE_RESAMPLE_MS = 250, ACTIVE_WINDOW_MS = 1500, CONFIRM_MS = 150, DWELL_MS = 600;
+    static final long RESAMPLE_MS = 900, ACTIVE_RESAMPLE_MS = 250, BURST_RESAMPLE_MS = 100, ACTIVE_WINDOW_MS = 1500, CONFIRM_MS = 150, DWELL_MS = 600;
     private final BooleanSupplier enabled;
     private final DoubleSupplier expansion;
     private final Runnable changed, redraw;
@@ -180,6 +180,13 @@ final class QsBackdrop {
         main.postDelayed(tick, Math.max(16, delay));
     }
 
+    /** A task change (BackdropEvents): capture now instead of at the next periodic sample. */
+    void event() {
+        if (!shown || pending || sampledAt == 0 || !enabled.getAsBoolean()) return;
+        main.removeCallbacks(tick);
+        resample();
+    }
+
     /** One in-session capture; a confirmed change of side moves the ink. */
     private void resample() {
         View v = host.get();
@@ -212,8 +219,9 @@ final class QsBackdrop {
                     + " pending=" + pendingNow + " sampleAgeMs=" + (now - requested) + " generation=" + generation);
         if (a || b) { sampledAt = now; publish(true); }
         // A candidate is confirmed by the next capture, taken as soon as its gate can accept it.
-        long idle = SystemClock.uptimeMillis() - io.github.igorcv88.oneuiliquidglass.glass.BackdropMotion.lastActive() < ACTIVE_WINDOW_MS
-                ? ACTIVE_RESAMPLE_MS : RESAMPLE_MS;
+        long t = SystemClock.uptimeMillis();
+        long idle = BackdropEvents.burst(t) ? BURST_RESAMPLE_MS
+                : t - io.github.igorcv88.oneuiliquidglass.glass.BackdropMotion.lastActive() < ACTIVE_WINDOW_MS ? ACTIVE_RESAMPLE_MS : RESAMPLE_MS;
         long next = idle;
         if (sceneGate.pending()) next = Math.min(next, sceneGate.confirmIn(now));
         if (headerGate.pending()) next = Math.min(next, headerGate.confirmIn(now));

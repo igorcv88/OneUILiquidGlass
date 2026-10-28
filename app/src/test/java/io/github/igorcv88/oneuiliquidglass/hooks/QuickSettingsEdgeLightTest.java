@@ -73,6 +73,30 @@ public final class QuickSettingsEdgeLightTest {
         assertTrue(nodes(edge).isEmpty());
     }
 
+    /** A slider drag removes every region from the compositor (not 1/255), and the lift rebuilds them. */
+    @Test public void dragReleasesEveryRegionAndLiftRedrawsTheNodes() throws Exception {
+        QuickSettingsEdgeLight edge = edge(true, true, true);
+        edge.panel(new Controller(host, new Adapter()));
+        Object n1 = bind(edge), n2 = bind(edge);
+        BlurDrawable a = seed(edge, n1), b = seed(edge, n2);
+        int[] restored = {0};
+        edge.onRestore(() -> restored[0]++);
+        edge.suppress(true);
+        assertReleased(a); assertReleased(b);
+        assertEquals(0, a.getAlpha()); assertEquals(0, b.getAlpha());
+        assertNull(get(nodes(edge).get(n1), "bridge"));
+        assertTrue(edge.suppressed());
+        // Refreshes during the drag keep them released.
+        edge.status("drag-frame");
+        assertNull(get(nodes(edge).get(n1), "bridge"));
+        edge.suppress(false);
+        assertFalse(edge.suppressed());
+        // No Compose runtime here: without invalidateDraw the containers are recomposed instead.
+        assertEquals(1, restored[0]);
+        edge.suppress(false);
+        assertEquals("idempotent", 1, restored[0]);
+    }
+
     @Test public void everyInactiveGateReleasesAnExistingDrawable() throws Exception {
         for (String gate : new String[]{"option-off", "master-off", "sfrefract-off", "optics-version", "missing-host", "not-ready"}) {
             set(tuning, "sfRefract", true); set(tuning, "sfOptics", 11);
