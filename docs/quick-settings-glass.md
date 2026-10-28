@@ -70,11 +70,26 @@ mesmo motor, com um perfil próprio:
   programa FillRRect e, como `r + 0,5`, 0,30–0,45 no programa de clip, livres nos dois. 0,875 e
   0,375 são exatos em fp16 até 256 px (`field_check`: 852 raios de 43 a 256 px, os dois programas e
   o uniform fp16; nenhuma marca dos perfis 0–2 nem raio inteiro decodifica como 3).
-- **Shader.** Perfil 3: sem refração nem blur extra. Numa faixa de `OULG_QS_LWIDTH_DEFAULT` (4,5 px)
-  a partir do contorno, a luz é `ganho × (luma − piso) / (1 − piso)`, limitada a um teto e tingida em
-  35 % pela cor do fundo naquele ponto; fora da faixa, transparente. Preto não soma nada, um glifo
-  branco cruzando a borda acende só aquele trecho, e não há direção nem canto embutidos. A luz basal
-  continua sendo o contorno do Compose, então sem o compositor nada muda.
+- **Luz que entra pela borda (v0.27, `oulg_glow`, compartilhada por todos os perfis).** O campo dá,
+  para cada pixel, a profundidade `d` a partir do contorno e o ponto mais próximo do contorno; o
+  shader lê o fundo ali (2 px para dentro) e calcula `u = (luma − piso) / (1 − piso)`. A luz que entra
+  é `min(ganho × u, teto)` e decai para dentro como `exp(−d / λ)`, com
+  `λ = 1,5 + (qsdepth − 1,5) × u²` px: trecho escuro não acende nada (só o contorno basal do Compose),
+  cinza médio penetra pouco, branco penetra fundo. É um campo contínuo: sem faixa de largura fixa e
+  sem linha interna (o decaimento é monótono a partir do contorno). `λ ≤ r/4` e um corte suave entre
+  2,5 λ e 4 λ zeram a luz antes da profundidade `r`, onde o ponto mais próximo do contorno salta
+  (eixo medial do retângulo interno). Cor: branco tingido em 35 % pela cor do fundo naquele trecho.
+  Conteúdo em movimento move a luz. Medido no host (pílula 720 × 300, r 145, padrões): a luz cai a
+  10 % do valor no contorno em 6,5 / 12,5 / 24,5 / 42,5 px para luma 0,25 / 0,5 / 0,75 / 1,0.
+- **Refração (v0.27, perfil 3).** O mesmo deslocamento de laje do perfil 1
+  (`−n · A · bisel · t²(3 − 2t)`, `t = 1 − d/bisel`, bisel = `clamp(0,42 r, 16, 56)`), com força própria
+  `sf.qslens` (padrão 0,30; o clamp do C limita a 0,5, a cota sem dobra do `field_check`): o fundo
+  junto ao contorno é visto pela borda do vidro, deslocado para dentro em até `A × bisel` (16,8 px na
+  pílula) e ampliado no máximo `1/(1 − 1,5 A)` ≈ 1,8×. Esse fundo refratado é desenhado com opacidade
+  `sf.qsbody × (1 − S(d/bisel))` (padrão 0,35 no contorno, S a smootherstep quíntica) e some no fim do
+  bisel; dali para dentro a região é transparente e o painel da Samsung aparece como antes.
+  `sf.qslens=0` desliga a refração e o fundo refratado (sobra só a luz).
+- A luz basal continua sendo o contorno do Compose, então sem o compositor nada muda.
 - **Onde é desenhada.** No `BackgroundNode.draw` do próprio fundo do contêiner (o nó é ligado ao
   elemento recolorido em `BackgroundElement.create/update`), dentro da display list do Compose: a
   região acompanha layout, rolagem e transformações.
@@ -82,8 +97,8 @@ mesmo motor, com um perfil próprio:
   4 px: caixa externa `[48,404][708,694]`, interna `[52,408][704,690]`). A região é a caixa interna
   estendida por `QuickSettingsGlass.edgeOutset` (a largura em dp × densidade, arredondada como o
   `padding` do Compose), com o raio da forma da Samsung calculado no tamanho externo
-  (`CornerSize.toPx-TmRCtEA`). A faixa de luz (4,5 px a partir da borda externa) fica sobre o anel do
-  contorno, não 4 px para dentro.
+  (`CornerSize.toPx-TmRCtEA`). A profundidade da luz e da refração é medida a partir da borda
+  externa, sobre o anel do contorno, não 4 px para dentro.
 - **Ligação por identidade.** `BackgroundElement.equals` compara cor, brush, alpha e forma, e todo
   fundo de contêiner é o mesmo véu sobre `RectangleShape`: um mapa por igualdade juntaria todos
   numa chave (e pegaria qualquer fundo igual em outro ponto do SystemUI). Os elementos ficam numa
@@ -100,22 +115,50 @@ mesmo motor, com um perfil próprio:
   (`SecQSPanelComposeAdapter.expansionFraction`: 0 abaixo de 60 %, inteira a partir de 95 %). Se a
   expansão não puder ser lida, a luz dinâmica fica em 0, não em "aberta". Um ancestral com escala
   ≠ 1 apaga a luz: a marca exige pixels inteiros, como nos cards da central.
-- **Condição.** Opção ligada, `debug.oulg.sfrefract=1` e `debug.oulg.sf.optics ≥ 10` (o pacote
-  v0.26 anuncia 10). Sem isso, nenhuma região é criada.
+- **Condição.** Opção ligada, `debug.oulg.sfrefract=1` e `debug.oulg.sf.optics ≥ 10`. A refração e
+  a luz contínua exigem a biblioteca v0.27 (anuncia 11); com a v0.26 a região continua sendo só a
+  faixa de luz antiga. Sem isso, nenhuma região é criada.
 
-Verificação no host: `sfhook/tools/edge_check.mjs` renderiza os dois programas reescritos em WebGL2
-(Chromium headless) e confere corpo transparente, borda apagada sobre preto, borda uniforme sobre
-cinza (oito trechos iguais), resposta local a uma barra branca na borda inferior (acesa nela, zero a
-60 px e na borda superior) e FillRRect = clip.
+### Outras superfícies
 
-### Círculos transparentes
+A mesma `oulg_glow` entra nos perfis 0 (pop-up), 1 (bloqueio) e 2 (cartões da central), por cima do
+material de cada um (`oulg_light`), com ganho próprio: `sf.hulight` 0,40, `sf.kglight` 0,35,
+`sf.shadelight` 0,30; profundidade 12 px, piso 0,10 e teto 0,28 em comum. São mais fracos que na
+Central porque esses materiais já têm aro (contorno e Fresnel do perfil 1, ótica de borda do módulo
+no perfil 0) e o perfil 2 carrega texto. Ganho 0 não emite código para o perfil: o desenho é o da
+v0.26 bit a bit (`edge_check` compara com o `refract.h` de referência).
 
-Para tiles grandes `DeviceControl` (SmartThings), `NearByDevice` e `MyDeviceTileService`, a Samsung
-passa cor transparente ao círculo do ícone (`QuickTileKt`: `z15` → `Color.Transparent`) e posiciona o
-ícone para um layout sem disco. A primeira versão criava um disco ali (marcador de alpha 0), o que
-expunha um recuo pensado para ícone solto: era o "círculo do SmartThings encostado na borda". Agora
-um círculo transparente fica transparente. O Quick Share do QuickShort é um tile grande comum, com
-disco nativo da Samsung, por isso já estava alinhado.
+Verificação no host: `sfhook/tools/edge_check.mjs <dir> [referência]` monta os programas com vários
+conjuntos de parâmetros e renderiza FillRRect e clip em WebGL2 (Chromium headless). Confere: luz zero
+sobre preto; oito trechos iguais sobre cinza; profundidade a 10 % crescente com a luma e o branco
+≥ 2,5× o cinza; nenhuma subida para dentro (nem linha interna nem faixa) nas colunas e na diagonal
+do canto; barra branca acende só o trecho que cruza e a luz acompanha a barra deslocada; nada além
+de 4 λ; refração: a linha de origem do fundo segue o deslocamento da laje dentro da precisão de 8
+bits, em ordem estrita (sem dobra nem duplicação), opacidade conforme a fórmula e nada além do
+bisel; perfis 0–2: a luz muda só a faixa externa (nada além de 48 px), nada sobre preto, e com ganho
+0 o resultado é idêntico ao da referência; FillRRect = clip.
+
+### Círculos transparentes e alinhamento do DeviceControl
+
+Para tiles grandes `DeviceControl` (SmartThings, Google Home), `NearByDevice` e `MyDeviceTileService`
+(`isNoBgTile`), a Samsung passa cor transparente ao círculo do ícone (`QuickTileKt`: `z15` →
+`Color.Transparent`) e o ícone do app preenche a mesma caixa quadrada que o disco ocupa nos outros
+tiles. O módulo não cria disco ali, nem aro.
+
+O desalinhamento vinha do layout da própria Samsung. `QuickTileKt` (lambda do conteúdo do tile)
+chama `IconTextTile-v3dQN_U(…, start, gap, iconSize, …)` com:
+
+| Tile | `start` | `gap` (ícone → texto) | posição x do ícone (multi-célula) |
+| --- | --- | --- | --- |
+| comum (Quick Share, Wi-Fi…) | `Dp.Unspecified` | 5 dp | `(altura − ícone) / 2`: centrado na altura, mesmo recuo inicial |
+| `isNoBgTile` | 6 dp | 0 | 6 dp fixos |
+
+A caixa do ícone tem o mesmo tamanho nos dois casos (calculada antes, sem depender de `isNoBgTile`).
+O hook em `IconTextTile-v3dQN_U` troca só o par `(6 dp, 0)`, que é o único rastro de `isNoBgTile` ali,
+pelo par dos tiles comuns `(Unspecified, 5 dp)` (`QuickSettingsGlass.iconLayout`): ícone e rótulo
+ficam onde ficariam num tile com disco. Não depende de spec, provedor (SmartThings ou Google Home),
+nome de app ou posição; vale após reordenar ou trocar o provedor. O escopo do chamador é capturado
+para que ligar/desligar a opção reposicione ao vivo; desligado, os argumentos são os da Samsung.
 
 Não há mudança de layout, `Modifier`, `Composer`, semântica, ordem de desenho ou gestos. Não há
 desenho por frame nem região de blur do compositor: o blur é o do próprio painel Samsung. Por isso
@@ -141,16 +184,16 @@ Samsung recompõe as cores. O recuo dos sliders vale a partir do próximo redese
 
 ## Limites conhecidos
 
-- O material é véu + contorno de luz basal sobre o blur que a Samsung já aplica ao painel. Não há
-  blur próprio por elemento nem refração do conteúdo atrás dos controles.
-- A luz que depende do fundo só existe com o compositor (perfil 3, acima). Só com o APK, a borda
-  é apenas a luz basal uniforme. Os parâmetros do perfil 3 são constantes (`OULG_QS_*`), sem
-  propriedades `debug.oulg.sf.*` até a validação no aparelho.
-- Não validado no aparelho: a ordem entre as regiões da Central e o blur do próprio painel
-  (se o blur da Samsung for desenhado depois, cobre a luz), o significado de `expansionFraction` e
-  fades internos do Compose (modo de edição, detalhes), que o alpha da região não acompanha.
-- O SmartThings (e outros tiles `DeviceControl`/`NearByDevice`/`MyDevice`) fica sem disco, como na
-  Samsung; um disco com o mesmo recuo do Quick Share exigiria alterar o layout desses tiles.
+- O material é véu + contorno de luz basal sobre o blur que a Samsung já aplica ao painel. A
+  refração junto ao contorno e a luz que depende do fundo só existem com o compositor (perfil 3);
+  só com o APK, a borda é apenas a luz basal uniforme.
+- O fundo refratado é o fundo real com o blur leve da região (8 px), sem o escurecimento/tinta do
+  painel da Samsung: sobre fundo claro a borda refratada fica mais clara que o painel, sobre fundo
+  escuro, mais escura. `sf.qsbody` controla quanto disso aparece.
+- Ganhos fixos no código: teto e piso da luz (`OULG_QS_LCAP/LFLOOR`, `OULG_EDGE_*`); só ganho,
+  profundidade, força da refração e opacidade são propriedades.
+- O SmartThings/Google Home (e outros `DeviceControl`/`NearByDevice`/`MyDevice`) fica sem disco,
+  como na Samsung; só a posição do ícone e do rótulo segue a dos tiles com disco.
 - O player com mídia tocando (`MediaPlayerKt`) não passa por `BoxWithOutline`; só o estado vazio
   recebe o material.
 - A cor do preenchimento dos sliders e os ícones permanecem os da Samsung.
@@ -165,15 +208,33 @@ Samsung recompõe as cores. O recuo dos sliders vale a partir do próximo redese
    carregar os hooks.
 2. `logcat -d -s OULG | grep 'QS_'` deve conter `QS_COMPOSE_READY`, `QS_COMPOSE_ACTIVE` e linhas
    `QS_BOX` com `ACTIVE`, `IDLE` e `CONTAINER` (uma delas com `mask=2`, o grupo de tiles) e
-   `QS_SLIDER_READY`. Sem `QS_BOX`, o caminho não foi atingido. Com o compositor v0.26:
-   `QS_EDGE_READY`, `QS_EDGE_PANEL host=true expansion=true` e `QS_EDGE_REGION ... expansion=1.0`
-   com a Central aberta. `setprop debug.oulg.sf.debug 1` antes de reiniciar o compositor pinta as
-   regiões marcadas de magenta: com o perfil 3, só a faixa da borda deve aparecer.
+   `QS_SLIDER_READY`, `QS_ICON_TILE_READY` e, com um tile DeviceControl grande na tela,
+   `QS_ICON_TILE noDisc …`. Sem `QS_BOX`, o caminho não foi atingido. Com o compositor v0.27
+   (`getprop debug.oulg.sf.optics` = 11): `QS_EDGE_READY`, `QS_EDGE_PANEL host=true expansion=true`
+   e `QS_EDGE_REGION ... expansion=1.0` com a Central aberta. `setprop debug.oulg.sf.debug 1` antes
+   de reiniciar o compositor pinta as regiões marcadas de magenta.
 3. Abrir/fechar a Central 20 vezes, devagar e rápido; alternar Wi-Fi/Bluetooth e tiles pequenos;
    arrastar brilho e volume; mídia vazia e tocando; modo de edição; tema claro/escuro; rotação.
 4. Desligar a opção com a Central aberta: tudo deve voltar às cores Samsung
    (`QS_COMPOSE_REFRESH reason=off scopes=N`, N > 0).
 5. Coletar screenshots claro/escuro e o log acima.
+
+## O que só o aparelho decide (S25 Ultra)
+
+Nada abaixo é verificável no host; os testes sintéticos só provam a matemática do shader.
+
+- Se o blur do painel da Samsung é desenhado antes das regiões da Central (senão cobre luz e
+  refração).
+- Se a refração parece vidro ou um anel de fundo sem tinta em volta dos controles (`sf.qsbody`,
+  `sf.qslens`), e se fica sutil sobre papéis de parede claros e escuros.
+- Se a profundidade da luz (`sf.qsdepth`) lê como luz entrando e não como halo; se o conteúdo em
+  movimento (rolagem de app atrás, vídeo) move a luz sem cintilar.
+- Perfis 0–2 com a luz nova: pop-up, cartões do bloqueio e da central sem segunda linha junto ao
+  contorno já ajustado, e sem perda de legibilidade do texto junto à borda. `sf.hulight`,
+  `sf.kglight`, `sf.shadelight` = 0 devolvem o desenho da v0.26.
+- Alinhamento do Google Home/SmartThings igual ao do Quick Share, nas duas posições do grid e após
+  trocar o provedor; tamanho visual do ícone do app em relação ao glifo dos tiles com disco.
+- Que a reescrita v0.27 compila no driver do aparelho (`REWRITE_OK`, sem `REWRITE_FAILED`).
 
 ## Rollback
 

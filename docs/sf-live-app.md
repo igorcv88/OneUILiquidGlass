@@ -17,7 +17,7 @@ The release publishes **only the APK**. It carries the live bundle in `assets/sf
 | `allowed_fingerprints` | `ro.build.fingerprint` values the route was validated on (DZIF only) |
 | `live.prop` | manifest: `version`, `versionCode`, `commit`, `abi`, `sha256_inject`, `sha256_lib`, `sha256_helper` |
 
-`version`/`versionCode` come from `sfhook/live/version.prop` (now `v0.26.0` / `27`). Bump them when anything
+`version`/`versionCode` come from `sfhook/live/version.prop` (now `v0.27.0` / `28`). Bump them when anything
 that ends up in the binaries changes. The injector embeds that version, not the commit, so binaries
 rebuilt from unchanged sources hash the same: an APK update alone does not ask for a reinstall.
 

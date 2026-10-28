@@ -25,9 +25,10 @@ import io.github.igorcv88.oneuiliquidglass.glass.Tuning;
  * (sfhook profile 3, debug.oulg.sf.optics >= 10). The module's Compose path recolours Samsung's
  * containers but has no pixels of what is behind the shade window; the compositor has them. Each
  * glass container gets a blur region tagged for profile 3, which the rewritten shader turns into
- * light along the outline in proportion to the luma right behind it, and leaves transparent
- * elsewhere. The module's basal rim and veil stay as they are, so without the compositor (APK
- * only) nothing changes.
+ * light entering from the outline (deeper the brighter the backdrop right behind it) and, from
+ * library v0.27 (optics 11), a refraction of the backdrop over the outline's bevel; past the bevel
+ * the region is transparent. The module's basal rim and veil stay as they are, so without the
+ * compositor (APK only) nothing changes.
  *
  * <p>The region is drawn from the container's own background node (BackgroundNode.draw), inside
  * Compose's display list: its RenderNode follows every layout, scroll and transform of the
@@ -235,7 +236,7 @@ final class QuickSettingsEdgeLight {
             }
             if (tag != e.tag) {
                 float[] radii = {tag, tag, tag, tag, tag, tag, tag, tag};
-                // No region colour: the shader draws the light; the body stays transparent.
+                // No region colour: the shader draws the light and the refracted bevel; past it, nothing.
                 e.bridge.update(QuickSettingsGlass.EDGE_BLUR_PX, 0, radii);
                 e.tag = tag;
             }

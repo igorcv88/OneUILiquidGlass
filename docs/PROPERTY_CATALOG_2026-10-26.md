@@ -4,7 +4,7 @@
 
 **Atualização de integração (main após #57):** `lensregiondiff`/gate `region` foram removidos; `popuplock` e `orphandraw` foram adicionados. O inventário ativo agora tem 103 propriedades. O interruptor `sfrefract` pertence ao helper live e não pode ser persistido pela ponte do APK.
 
-**Abrangência:** 74 chaves parseadas em Java (incluindo `sf.optics`), 30 mencionadas no leitor da biblioteca C (incluindo a mesma `sf.optics`), **103 propriedades distintas**. O módulo também tem um controle global `glass/enabled` nas SharedPreferences, fora de `debug.oulg.*`. As configurações independentes de perfil, as condições de ativação, os comandos de teste e as ações de recuperação também devem aparecer no APK.
+**Abrangência:** 74 chaves parseadas em Java (incluindo `sf.optics`), 36 mencionadas no leitor da biblioteca C (incluindo a mesma `sf.optics`), **109 propriedades distintas**. O módulo também tem um controle global `glass/enabled` nas SharedPreferences, fora de `debug.oulg.*`. As configurações independentes de perfil, as condições de ativação, os comandos de teste e as ações de recuperação também devem aparecer no APK.
 
 Prefixo omitido nas tabelas: cada entrada abaixo significa `debug.oulg.<chave>`. **L:** `Tuning` atualiza aproximadamente a cada 1 s dentro de SystemUI, mas algumas mudanças exigem recriação de material/invalidação de View. **C:** SurfaceFlinger lê ao compilar shader; mudar `setprop` não recompila o shader existente. **R:** leitura de estado; não oferecer escrita normal. Padrões são do código, não do telefone, do serviço de boot nem dos overrides do usuário.
 
@@ -141,6 +141,12 @@ Observar que as propriedades `lightglass` e `shadelightglass` se aplicam a super
 | `sf.kgglow` | 0.70 | Lockscreen: largura do glow do aro |
 | `sf.shadecap` | 0.55 | Perfil 2 shade: teto da luminância para texto claro |
 | `sf.shadelift` | 0.45 | Perfil 2 shade: piso da luminância para texto escuro |
+| `sf.hulight` | 0.40 | Heads-up: luz que entra pelo contorno conforme o fundo ali (0 restaura v0.26) |
+| `sf.kglight` | 0.35 | Lockscreen: luz que entra pelo contorno conforme o fundo ali (0 restaura v0.26) |
+| `sf.shadelight` | 0.30 | Perfil 2 shade: luz que entra pelo contorno conforme o fundo ali (0 restaura v0.26) |
+| `sf.qslens` | 0.30 | Quick Settings: refração do fundo junto ao contorno (0 desliga a refração e o fundo refratado) |
+| `sf.qsbody` | 0.35 | Quick Settings: opacidade do fundo refratado no contorno |
+| `sf.qsdepth` | 18 | Quick Settings: profundidade (px) da luz vinda de um contorno branco |
 | `sf.debug` | 0 | Tinta diagnóstica magenta/ciano sobre programas elegíveis |
 | `sf.norewrite` | 0 | 1 desativa a reescrita dos shaders ao compilar |
 | `sf.optics` | 9 anunciado pela lib | R, handshake; já listado em Java |

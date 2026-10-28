@@ -5,8 +5,8 @@ package io.github.igorcv88.oneuiliquidglass.glass;
  *
  * <p>The panel behind the controls is already blurred by Samsung, so the material here is a light
  * veil and a basal rim drawn by Compose, not a second blur. The only compositor part is the optional
- * edge light (sfhook profile 3), whose regions are transparent but for the outline. Colours are
- * non-premultiplied ARGB.</p>
+ * edge light and refraction (sfhook profile 3), whose regions are transparent past the outline's
+ * bevel. Colours are non-premultiplied ARGB.</p>
  */
 public final class QuickSettingsGlass {
     private QuickSettingsGlass() {}
@@ -74,6 +74,21 @@ public final class QuickSettingsGlass {
         float narrow = Math.min(width, height);
         return narrow > 0f ? narrow * (1f - SLIDER_FILL) / 2f : 0f;
     }
+
+    /**
+     * IconTextTile's icon start and label gap (dp) for Samsung's no-disc tiles (isNoBgTile:
+     * DeviceControl, NearByDevice, MyDevice; the provider app's icon fills the same square box the
+     * disc does): Samsung passes start 6 dp and gap 0, every other large tile Dp.Unspecified (the
+     * icon centred in the tile's height, the same inset on the start side) and 5 dp. The pair is
+     * that flag's only trace in IconTextTile; returned in the disc tiles' layout, so the icon and
+     * the label line up with Quick Share's whatever app provides the icon and wherever it sits.
+     * Null for any other pair (left as Samsung passes it).
+     */
+    public static float[] iconLayout(float start, float gap) {
+        return start == NO_DISC_START && gap == NO_DISC_GAP ? new float[]{Float.NaN, DISC_GAP} : null;
+    }
+
+    static final float NO_DISC_START = 6f, NO_DISC_GAP = 0f, DISC_GAP = 5f;
 
     /** Blur radius of an edge-light region: only the luma right at the outline matters, kept local. */
     public static final int EDGE_BLUR_PX = 8;
