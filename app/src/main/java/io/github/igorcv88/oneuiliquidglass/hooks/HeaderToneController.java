@@ -140,7 +140,8 @@ final class HeaderToneController {
         if(!Float.isFinite(luma)||luma<0||luma>1)return;
         boolean light=ShadeTone.lightBackdrop(luma,g.light);
         boolean was=g.light!=null;
-        if(!g.gate.offer(light,now))return;
+        io.github.igorcv88.oneuiliquidglass.glass.Tuning t=io.github.igorcv88.oneuiliquidglass.glass.Tuning.get();
+        if(!g.gate.offer(light,now,ToneGate.strong(luma,(t.styleLo+t.styleHi)*.5f)))return;
         if(was&&g.light==light)return;
         g.light=light;
         transition(g,was,"sample luma="+String.format(Locale.ROOT,"%.2f",luma)+" rows="+top+"-"+bottom);
@@ -170,7 +171,7 @@ final class HeaderToneController {
             boolean shown=animate&&v.isShown();
             InkAnimator.run(v,new Text(v),desired,shown,null);
             log("apply",i,v,before,"tone="+(g.light?"dark":"light")+" target="+Integer.toHexString(desired)
-                    +" animated="+shown+" "+reason);
+                    +" animated="+shown+" shown="+v.isShown()+" alpha="+v.getAlpha()+" "+reason);
         }
     }
     private static final class Text implements InkAnimator.Target {

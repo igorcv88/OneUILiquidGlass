@@ -25,7 +25,7 @@ final class QsSliderHooks {
     private final Consumer<Object> capture;
     private Method drawContext, size, setSize, getCanvas;
     private Field nativeCanvas;
-    private boolean broken;
+    private boolean broken, trackHooked;
     private Object whiteBrush;
     private final ThreadLocal<Frame> current=new ThreadLocal<>();
     private static final class Frame {
@@ -45,10 +45,23 @@ final class QsSliderHooks {
             this.style=style;this.outer=outer;
         }
     }
+    /** A finger is down (any SystemUI input), and what to call when a bar moves under it. */
+    private final BooleanSupplier touching;
+    private final Runnable dragged;
+    /** Last native body length per bar DrawScope: a change under a finger is a drag. */
+    private final java.util.Map<Object,Float> lengths=new java.util.WeakHashMap<>();
     QsSliderHooks(ClassLoader loader,BooleanSupplier enabled,Supplier<QsStyle> style,BooleanSupplier geometryAvailable,
             Consumer<Object> capture){
+        this(loader,enabled,style,geometryAvailable,capture,()->false,()->{});
+    }
+    QsSliderHooks(ClassLoader loader,BooleanSupplier enabled,Supplier<QsStyle> style,BooleanSupplier geometryAvailable,
+            Consumer<Object> capture,BooleanSupplier touching,Runnable dragged){
         this.loader=loader;this.enabled=enabled;this.style=style;this.capture=capture;
-        this.geometryAvailable=geometryAvailable;
+        this.geometryAvailable=geometryAvailable;this.touching=touching;this.dragged=dragged;
+    }
+    /** Whether a bar's value moved while a finger is down (the user is dragging it). */
+    static boolean drag(Float previous,float length,boolean touching){
+        return touching&&previous!=null&&Math.abs(previous-length)>.5f;
     }
     void install(Class<?> bar) throws ReflectiveOperationException {
         Constructor<?> solid=Class.forName("androidx.compose.ui.graphics.SolidColor",false,loader).getDeclaredConstructor(long.class);
@@ -60,18 +73,27 @@ final class QsSliderHooks {
         getCanvas=ctx.getMethod("getCanvas");
         nativeCanvas=Class.forName("androidx.compose.ui.graphics.AndroidCanvas",false,loader).getDeclaredField("internalCanvas");
         nativeCanvas.setAccessible(true);
-        int primitives=0;
+        boolean[] found=new boolean[3];
         for(Method m:scope.getDeclaredMethods()) {
             String n=m.getName();
             int stage=n.equals("drawRect-n-J9OG0$default")?0:n.equals("drawRoundRect-ZuiqVtQ$default")?1
                     :n.equals("drawRoundRect-u-Aw5IA$default")?2:-1;
-            if(stage<0 || !primitiveSignature(m,stage,scope))continue;
+            if(stage<0)continue;
+            if(!primitiveSignature(m,stage,scope)){
+                // Logged with its real parameter list: a mismatch here once left the whole slider
+                // native from #78 on (the track check expected a Brush where DZIF passes a colour).
+                Probe.log("QS_SLIDER_SIGNATURE","stage="+stage+" accepted=false method="+m.toGenericString());
+                continue;
+            }
             XposedBridge.hookMethod(m,new XC_MethodHook(){
                 @Override protected void beforeHookedMethod(MethodHookParam p){primitive(p,stage);}
             });
-            primitives++;deoptimize(m);
+            found[stage]=true;deoptimize(m);
         }
-        if(primitives!=3)throw new NoSuchMethodException("slider primitives="+primitives);
+        // Body and thumb carry the geometry; without them the slider stays native. A missing track
+        // hook only leaves Samsung's track visible inside the glass.
+        if(!found[1]||!found[2])throw new NoSuchMethodException("slider primitives track="+found[0]+" body="+found[1]+" thumb="+found[2]);
+        trackHooked=found[0];
         for(Method m:bar.getDeclaredMethods()) {
             if(m.getName().startsWith("BidirectionalBar-"))XposedBridge.hookMethod(m,new XC_MethodHook(){
                 // The caller's scope: invalidating it re-runs the bar, so its thickness changes live.
@@ -86,7 +108,7 @@ final class QsSliderHooks {
             });
             deoptimize(m);
         }
-        Probe.log("QS_SLIDER_READY","primitives="+primitives+" surfaces=2 track=hidden thumb=endCap firmware=DZIF");
+        Probe.log("QS_SLIDER_READY","surfaces=2 track="+(trackHooked?"hidden":"native")+" thumb=endCap firmware=DZIF");
     }
     private void begin(XC_MethodHook.MethodHookParam p){
         if(broken||!enabled.getAsBoolean())return;
@@ -122,7 +144,12 @@ final class QsSliderHooks {
             float[] g=QuickSettingsGlass.sliderPrimitive(f.w,f.h,f.outer,s.fill,x(offset),y(offset),x(extent),y(extent),
                     stage==2,f.bodyDrawn?f.body:null,f.geometry);
             if(!(g[2]>0)||!(g[3]>0)){p.setResult(null);return;}
-            if(stage==1){System.arraycopy(g,0,f.body,0,5);f.bodyDrawn=true;}
+            if(stage==1){
+                System.arraycopy(g,0,f.body,0,5);f.bodyDrawn=true;
+                float length=f.w<=f.h?y(extent):x(extent);
+                Float previous=lengths.put(f.scope,length);
+                if(drag(previous,length,touching.getAsBoolean()))dragged.run();
+            }
             p.args[2]=pack(g[0],g[1]);p.args[3]=pack(g[2],g[3]);
             p.args[last]=explicitGeometryMask(mask,stage!=0);
             p.args[4]=pack(g[4],g[4]);
@@ -138,10 +165,15 @@ final class QsSliderHooks {
     }
     private void fail(Throwable e){if(!broken){broken=true;Probe.error("QS_SLIDER_FAILED",e);}}
     static boolean suppressTrack(int stage){return stage==0;}
+    /**
+     * The $default bridges as DZIF ships them: (DrawScope, paint, topLeft, size, [cornerRadius,]
+     * ..., blendMode, mask). Stage 0 is drawRect(color: Color, ...) and stage 2 drawRoundRect(color:
+     * Color, ...), whose colour is a long; stage 1 is drawRoundRect(brush: Brush, ...).
+     */
     static boolean primitiveSignature(Method m,int stage,Class<?> scope){
         Class<?>[] t=m.getParameterTypes();
         if(t.length!=(stage==0?9:10)||t[0]!=scope||t[t.length-1]!=int.class)return false;
-        if(stage==2?t[1]!=long.class:!t[1].getName().equals("androidx.compose.ui.graphics.Brush"))return false;
+        if(stage==1?!t[1].getName().equals("androidx.compose.ui.graphics.Brush"):t[1]!=long.class)return false;
         if(t[2]!=long.class||t[3]!=long.class)return false;
         if(stage==0)return t[4]==float.class && t[5].getName().equals("androidx.compose.ui.graphics.drawscope.DrawStyle")
                 && t[6].getName().equals("androidx.compose.ui.graphics.ColorFilter") && t[7]==int.class;

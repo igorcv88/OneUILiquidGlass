@@ -177,18 +177,18 @@ Observar que as propriedades `lightglass` e `shadelightglass` se aplicam a super
 
 ## Controles rápidos — pós-PR #75
 
-Controles `qs.*` são lidos pelo snapshot `QsStyle` em callbacks de configuração e aplicam ao vivo. O interior das cápsulas e dos discos desligados é sempre transparente: `qs.darkfill`, `qs.lightfill`, `qs.darkcolor`, `qs.lightcolor`, `qs.idle`, `qs.track` e `qs.lightstyle` são legado, preservados apenas para importar/exportar perfis, e não são lidos. `sf.qslight` exige aplicação do shader pelo fluxo de userspace.
+Controles `qs.*` são lidos pelo snapshot `QsStyle` em callbacks de configuração e aplicam ao vivo. Cápsulas são vidro transparente sobre fundos escuros/coloridos e recebem um tom escuro discreto (`qs.lightfill`/`qs.lightcolor`, teto 18%) sobre apps claros; o contorno é sempre a luz branca; círculos e ícones mantêm as cores da Samsung. `qs.darkfill`, `qs.darkcolor`, `qs.idle`, `qs.active`, `qs.track` e `qs.lightstyle` são legado, preservados apenas para importar/exportar perfis, e não têm efeito.
 
 | Chave | Padrão | Tipo/domínio do parser | Controle / consequência |
 | --- | --- | --- | --- |
 | `qs.darkfill` | 0 | 0–0.18 | Legado sem efeito visual; o interior das cápsulas é sempre transparente |
-| `qs.lightfill` | 0 | 0–0.18 | Legado sem efeito visual; o interior das cápsulas é sempre transparente |
+| `qs.lightfill` | .10 | 0–0.18 | Tom escuro das cápsulas sobre apps claros (transparentes sobre fundos escuros/coloridos) |
 | `qs.darkcolor` | ffffff | RGB hexadecimal | Legado sem efeito visual; o interior das cápsulas é sempre transparente |
-| `qs.lightcolor` | 141823 | RGB hexadecimal | Legado sem efeito visual; o interior das cápsulas é sempre transparente |
+| `qs.lightcolor` | 141823 | RGB hexadecimal | Cor do tom das cápsulas sobre apps claros |
 | `qs.idle` | 0 | 0–0.12 | Legado sem efeito visual; discos desligados são sempre transparentes |
-| `qs.active` | .90 | 0–1 | Opacidade dos discos ligados (a cor continua a da Samsung ou do tema) |
+| `qs.active` | .90 | 0–1 | Legado sem efeito visual; os círculos mantêm as cores da Samsung |
 | `qs.darkrim` | .26 | 0–1 | Intensidade do contorno sobre fundos escuros ou coloridos |
-| `qs.lightrim` | .18 | 0–1 | Intensidade do contorno escuro sobre apps claros |
+| `qs.lightrim` | .18 | 0–1 | Intensidade do contorno de luz sobre apps claros |
 | `qs.edgeblur` | 8 | inteiro 1–32 px | Desfoque do fundo lido pela lente dinâmica no contorno das cápsulas |
 | `qs.outer` | 1 | 0.50–1 | Espessura da pílula inteira dos sliders (o toque continua na área da Samsung) |
 | `qs.track` | .88 | 0.10–1 | Legado sem efeito visual; preservado para importar e exportar perfis |

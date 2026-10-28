@@ -23,14 +23,18 @@ public final class QsBackdropTest {
         assertEquals(io.github.igorcv88.oneuiliquidglass.glass.QsScene.Tone.LIGHT_SCENE, scene.tone());
         assertFalse("hysteresis band", QsBackdrop.offer(scene, gate, .70f, 1000));
         assertFalse(gate.pending());
-        assertFalse("one dark capture", QsBackdrop.offer(scene, gate, .1f, 2000));
+        // A weak reading (near the boundary) needs its confirming capture; noise drops it.
+        assertFalse("one weak dark capture", QsBackdrop.offer(scene, gate, .55f, 2000));
         assertTrue(gate.pending());
         assertFalse("noise back to light", QsBackdrop.offer(scene, gate, .9f, 2100));
         assertFalse(gate.pending());
-        assertFalse(QsBackdrop.offer(scene, gate, .1f, 3000));
-        assertTrue("confirmed", QsBackdrop.offer(scene, gate, .1f, 3000 + QsBackdrop.CONFIRM_MS));
+        assertFalse(QsBackdrop.offer(scene, gate, .55f, 3000));
+        assertTrue("confirmed", QsBackdrop.offer(scene, gate, .55f, 3000 + QsBackdrop.CONFIRM_MS));
         assertEquals(io.github.igorcv88.oneuiliquidglass.glass.QsScene.Tone.DARK_SCENE, scene.tone());
+        // A strong reading (white page after a dark one) applies with that capture.
+        assertTrue("strong", QsBackdrop.offer(scene, gate, .98f, 4000));
+        assertEquals(io.github.igorcv88.oneuiliquidglass.glass.QsScene.Tone.LIGHT_SCENE, scene.tone());
         assertFalse("invalid sample", QsBackdrop.offer(scene, gate, Float.NaN, 5000));
-        assertEquals(io.github.igorcv88.oneuiliquidglass.glass.QsScene.Tone.DARK_SCENE, scene.tone());
+        assertEquals(io.github.igorcv88.oneuiliquidglass.glass.QsScene.Tone.LIGHT_SCENE, scene.tone());
     }
 }

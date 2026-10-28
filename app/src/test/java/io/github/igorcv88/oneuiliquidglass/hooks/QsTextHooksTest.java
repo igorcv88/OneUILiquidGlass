@@ -56,7 +56,9 @@ public class QsTextHooksTest {
         }
         enabled[0]=true;scene[0]=QsScene.Tone.DARK_SCENE;assertEquals(Boolean.FALSE,hooks.toneFor(qs));
         scene[0]=QsScene.Tone.UNKNOWN;assertNull(hooks.toneFor(qs));
-        hooks.bindNode(qs,null);scene[0]=QsScene.Tone.LIGHT_SCENE;assertNull(hooks.toneFor(qs));
+        // A recomposition from an element built outside the allowlisted owners keeps the node QS's.
+        hooks.bindNode(qs,null);scene[0]=QsScene.Tone.LIGHT_SCENE;assertEquals(Boolean.TRUE,hooks.toneFor(qs));
+        hooks.bindNode(other,null);assertNull(hooks.toneFor(other));
     }
     @Test public void transitionLevelsInterpolateNeutralInkAndRestoreThePaint(){
         Paint paint=new Paint();paint.setColor(0xb3ffffff);

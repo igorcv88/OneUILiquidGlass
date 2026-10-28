@@ -610,30 +610,31 @@ public final class Controls {
                 .show(BEHAV, Channel.NONE));
         // Controles rápidos: opt-in próprio e um bloco próprio dentro da Central (SurfacesPage).
         // As chaves qs.* valem na hora; as sf.qs* ao reiniciar o userspace, como a lente dinâmica.
-        // Retired films: the capsule and inactive-disc interiors are transparent in every scene.
-        // Kept read-only so older profiles import and export unchanged; QsStyle never reads them.
+        // Retired: white films over dark backdrops and inactive discs, and the disc opacity (discs
+        // keep Samsung's colours). Read-only so older profiles import and export unchanged.
         for (String[] k : new String[][] {
                 {"qs.darkfill", "Véu sobre fundo colorido (descontinuado)"},
-                {"qs.lightfill", "Véu sobre fundo claro (descontinuado)"},
                 {"qs.darkcolor", "Cor do véu escuro (descontinuado)"},
-                {"qs.lightcolor", "Cor do véu claro (descontinuado)"},
-                {"qs.idle", "Disco desligado (descontinuado)"}})
+                {"qs.idle", "Disco desligado (descontinuado)"},
+                {"qs.active", "Círculos ligados (descontinuado)"}})
             put(c(k[0], k[1]).fmt(Format.READONLY).in(QS, Tier.INTERNAL).on(SH)
-                    .help("Preservado em perfis; o interior das cápsulas é sempre vidro transparente."));
+                    .help("Preservado em perfis; sem efeito: cápsulas são vidro e os círculos ficam com as cores da Samsung."));
         put(c("qs.lightstyle", "Estilo antigo (descontinuado)").fmt(Format.READONLY)
                 .in(QS, Tier.INTERNAL).on(SH).help("Preservado em perfis; ambos os valores usam tinta adaptativa."));
-        put(c("qs.active", "Círculos ligados").fmt(Format.PERCENT_1).in(QS, STD).on(SH)
-                .hint("Opacidade dos discos ativos")
-                .help("Quanto do fundo aparece através dos discos ligados. A cor do disco continua"
-                        + " a da Samsung (ou a do seu tema); só a opacidade muda.")
+        put(c("qs.lightfill", "Tom sobre fundo claro").fmt(Format.PERCENT_1).in(QS, STD).on(SH)
+                .hint("Escurece levemente as cápsulas sobre apps claros")
+                .help("Quanto as cápsulas escurecem sobre apps claros, para os textos escuros terem"
+                        + " contraste. Sobre fundos escuros ou coloridos elas ficam transparentes. Máximo 18%.")
+                .show(BEHAV, Channel.NONE));
+        put(c("qs.lightcolor", "Cor do tom sobre fundo claro").fmt(Format.COLOR).in(QS, ADV).on(SH)
+                .help("Cor do tom das cápsulas sobre apps claros.")
                 .show(BEHAV, Channel.NONE));
         put(c("qs.darkrim", "Contorno sobre fundo colorido").fmt(Format.PERCENT_1).in(QS, STD).on(SH)
                 .help("Intensidade da linha de luz em volta das cápsulas sobre fundos escuros ou"
                         + " coloridos.")
                 .show(BEHAV, Channel.NONE));
         put(c("qs.lightrim", "Contorno sobre fundo claro").fmt(Format.PERCENT_1).in(QS, STD).on(SH)
-                .help("Intensidade da linha escura em volta das cápsulas sobre apps claros, onde uma"
-                        + " linha branca sumiria. O interior continua transparente.")
+                .help("Intensidade da linha de luz em volta das cápsulas sobre apps claros.")
                 .show(BEHAV, Channel.NONE));
         put(c("qs.outer", "Espessura do slider").fmt(Format.PERCENT_1).in(QS, STD).on(SH)
                 .hint("Pílula inteira de brilho e volume")

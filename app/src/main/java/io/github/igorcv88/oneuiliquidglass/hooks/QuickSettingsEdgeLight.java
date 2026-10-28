@@ -76,6 +76,13 @@ final class QuickSettingsEdgeLight {
     private boolean ready, logged;
     private float ancestorAlpha, edgeFade;
     private boolean shown, scaled;
+    /**
+     * A slider is being dragged: Samsung fades every other control with a Compose layer alpha,
+     * which a blur region does not see, so their edge regions stayed on screen as empty glass
+     * outlines over the home screen (device screenshot, 28/10). Every region fades out until the
+     * finger lifts.
+     */
+    private boolean suppressed;
     private View.OnAttachStateChangeListener attachListener;
     private Runnable settledSnapshot;
 
@@ -458,7 +465,7 @@ final class QuickSettingsEdgeLight {
         float expansion = readExpansion();
         lastExpansion = expansion;
         ancestorAlpha = a;
-        edgeFade = scaled || expansion < 0f ? 0f : QuickSettingsGlass.edgeFade(a, expansion);
+        edgeFade = scaled || suppressed || expansion < 0f ? 0f : QuickSettingsGlass.edgeFade(a, expansion);
         return edgeFade;
     }
 
@@ -477,6 +484,13 @@ final class QuickSettingsEdgeLight {
         } catch (ReflectiveOperationException | RuntimeException e) {
             return -1f;
         }
+    }
+
+    synchronized void suppress(boolean on) {
+        if (suppressed == on) return;
+        suppressed = on;
+        Probe.log("QS_EDGE_SUPPRESS", "dragging=" + on + " regions=" + nodes.size());
+        refresh();
     }
 
     synchronized void configure(int blur) {
