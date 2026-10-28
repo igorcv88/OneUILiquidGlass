@@ -86,6 +86,12 @@ last verified restart baseline. Subsequent Terminal changes are pending against 
 if the user chose “Usar o do terminal” in the conflict dialog. Without a verified baseline, the
 app shows an explicit unverified state, not an “already applied” claim.
 
+Between the restart request and that confirmation, the inputs **sent** by the restart are the
+baseline, not the previous compile: a value that went out with the restart awaits verification, it
+is not pending again, and the panel does not offer another restart for it (before, “3 % → 3 %” stayed
+pending and every “Aplicar” restarted again without ever confirming). The pending list shows the
+baseline value on the left (what the compositor compiled or was last sent), not the current property.
+
 This is a verified restart/input readback, **not** proof of a successful shader rewrite for every
 program; a failed injection or unexplained process replacement still requires the injector log and the shader
 rewrite diagnostics. Restarts outside the app cannot safely be acknowledged automatically.
@@ -131,9 +137,12 @@ compiled or that a program linked/drew correctly.
 
 `sf_stable=1` acknowledges the bounded process/GOT observation, not all future process lifetime.
 A fragment may compile on demand after that window; until then the app remains unverified.
-If SF changes after monitoring ends, the next explicit status check detects the loss. No root
-command runs automatically on resume. A reopened app asks for verification before treating the
-stored baseline as current. “Verificar estado” reads only; “Reiniciar lente” is a separate confirmed
+If SF changes after monitoring ends, the next explicit status check detects the loss. One
+read-only status runs automatically per app-initiated restart: when the app is in the foreground
+125 s after the request (the monitor's 120 s plus margin), it checks root (granted to this APK for the
+restart itself) and reads `status`, which records the baseline when the restart is confirmed. Nothing
+else runs on resume, and an unconfirmed result is not re-read automatically. A reopened app asks for
+verification before treating the stored baseline as current. “Verificar estado” reads only; “Reiniciar lente” is a separate confirmed
 action. Open a notification, wait two minutes after activation and check again.
 
 `log` adds the current health record and a bounded Android logcat tail with epoch timestamps.

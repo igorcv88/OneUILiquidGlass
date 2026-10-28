@@ -220,7 +220,45 @@ public final class AppModel {
     public Map<String, String> pendingCompositor() {
         SharedPreferences p = lensPrefs();
         return CompositorValues.pending(state().saved, SystemPropertyReader.snapshot(),
-                CompositorValues.hasCompiled(p) ? CompositorValues.compiledValues(p) : null);
+                CompositorValues.baseline(p));
+    }
+
+    /** The value the compositor last compiled (or was last sent) for a key; null when unknown. */
+    public String compiledCompositor(String key) {
+        Map<String, String> b = CompositorValues.baseline(lensPrefs());
+        return b == null ? null : b.get(key);
+    }
+
+    private final Runnable verifyRestart = this::verifyRestartNow;
+
+    /**
+     * After a restart requested from the app, reads the helper's status once the injector's
+     * 120 s health monitor has ended, so the parameters it sent are confirmed (or not) without
+     * the user having to ask; a status read before that cannot report a stable process.
+     */
+    public void scheduleRestartVerification() {
+        main.removeCallbacks(verifyRestart);
+        SharedPreferences p = lensPrefs();
+        // Once per restart: an unconfirmed result stays visible, it is not re-read on every resume.
+        if (!CompositorValues.awaitingVerification(p)
+                || p.getLong("autoVerifiedFor", 0) == p.getLong("restartRequestedAt", 0)) return;
+        long due = p.getLong("restartRequestedAt", 0) + 125_000 - System.currentTimeMillis();
+        main.postDelayed(verifyRestart, Math.max(due, 0));
+    }
+
+    public void cancelRestartVerification() {
+        main.removeCallbacks(verifyRestart);
+    }
+
+    private void verifyRestartNow() {
+        if (activity.isFinishing() || activity.isDestroyed()) return;
+        SharedPreferences p = lensPrefs();
+        if (!CompositorValues.awaitingVerification(p)) return;
+        p.edit().putLong("autoVerifiedFor", p.getLong("restartRequestedAt", 0)).apply();
+        // The restart killed this process: root was granted to it before (the restart itself ran
+        // through su), so the check does not ask again.
+        if (root.granted()) lens.status();
+        else if (!root.busy()) root.check(ok -> { if (ok) lens.status(); });
     }
 
     /** With no acknowledged restart, equal setprop values do not prove the shader uses them. */

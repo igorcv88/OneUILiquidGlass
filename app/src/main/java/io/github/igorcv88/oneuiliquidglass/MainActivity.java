@@ -201,12 +201,14 @@ public final class MainActivity extends Activity implements Host {
     protected void onResume() {
         super.onResume();
         model.refreshObserved(null);
+        model.scheduleRestartVerification();
         handler.removeCallbacks(poll);
         handler.post(poll);
     }
 
     @Override
     protected void onPause() {
+        model.cancelRestartVerification();
         handler.removeCallbacks(poll);
         super.onPause();
     }
