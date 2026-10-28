@@ -11,15 +11,15 @@ package io.github.igorcv88.oneuiliquidglass.glass;
 public final class QuickSettingsGlass {
     private QuickSettingsGlass() {}
 
-    static final float DARK_FILL = 0.10f, LIGHT_FILL = 0.30f;
-    static final float DARK_IDLE = 0.08f, LIGHT_IDLE = 0.22f;
+    static final float DARK_FILL = 0.10f, LIGHT_FILL = 0.10f;
+    static final float DARK_IDLE = 0.04f, LIGHT_IDLE = 0.04f;
     static final float ACTIVE_ALPHA = 0.90f;
     /**
      * Basal rim alpha: the same all around the outline, so no corner looks lit regardless of what
      * is behind it. A backdrop-dependent part needs backdrop pixels this Compose path does not
      * have (docs/quick-settings-glass.md).
      */
-    static final float DARK_RIM = 0.26f, LIGHT_RIM = 0.45f;
+    static final float DARK_RIM = 0.26f, LIGHT_RIM = 0.18f;
     /** Slider track and fill: share of the slider's narrow side, centred, inside the glass pill. */
     static final float SLIDER_FILL = 0.88f;
 
@@ -67,7 +67,7 @@ public final class QuickSettingsGlass {
         if (scene == QsScene.Tone.UNKNOWN) return fill(kind, nativeFill, darkTheme);
         if (kind == Kind.IDLE) return withAlpha(0xffffff, s.idle);
         if (scene == QsScene.Tone.LIGHT_SCENE)
-            return withAlpha(s.lightGlass ? 0xf4f5f7 : s.lightColor, s.lightFill);
+            return withAlpha(s.lightColor, s.lightFill);
         return withAlpha(s.darkColor, s.darkFill);
     }
 

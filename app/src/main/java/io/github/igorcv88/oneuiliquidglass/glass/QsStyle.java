@@ -17,15 +17,16 @@ public final class QsStyle {
     public static QsStyle read() { return new QsStyle(ConfigClient::override); }
     public QsStyle(Function<String, String> values) {
         this.values = values;
-        darkFill = number("qs.darkfill", .10f); lightFill = number("qs.lightfill", .66f);
-        idle = number("qs.idle", .08f); active = number("qs.active", .90f);
+        darkFill = Math.min(.18f, number("qs.darkfill", .10f)); lightFill = Math.min(.18f, number("qs.lightfill", .10f));
+        idle = Math.min(.12f, number("qs.idle", .04f)); active = number("qs.active", .90f);
         darkRim = number("qs.darkrim", .26f); lightRim = number("qs.lightrim", .18f);
         edgeBlur = Math.round(number("qs.edgeblur", 8));
-        outer = number("qs.outer", 1); track = number("qs.track", .88f); fill = number("qs.fill", .88f);
+        outer = number("qs.outer", 1); track = number("qs.track", .88f); // Legacy profile round-trip only; never drawn. fill = number("qs.fill", .88f);
         darkColor = color("qs.darkcolor", 0xffffff); lightColor = color("qs.lightcolor", 0x141823);
-        lightGlass = "light".equals(prop("qs.lightstyle"));
+        prop("qs.lightstyle"); // Legacy obsidian/light is accepted; both now use adaptive ink.
+        lightGlass = true;
         fingerprint = darkFill+":"+lightFill+":"+idle+":"+active+":"+darkRim+":"+lightRim+":"
-                +edgeBlur+":"+outer+":"+track+":"+fill+":"+darkColor+":"+lightColor+":"+lightGlass;
+                +edgeBlur+":"+outer+":"+fill+":"+darkColor+":"+lightColor+":"+lightGlass;
     }
     private String prop(String key) {
         String s = values.apply(key);
