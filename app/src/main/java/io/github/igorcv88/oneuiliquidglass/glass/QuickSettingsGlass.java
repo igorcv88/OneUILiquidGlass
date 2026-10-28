@@ -104,7 +104,13 @@ public final class QuickSettingsGlass {
     /** Native progress coordinates are retained on the long axis; only thickness is independent. */
     public static float[] sliderPrimitive(float w,float h,float outer,float ratio,
             float x,float y,float sw,float sh,boolean thumb,boolean rtl) {
-        float narrow=Math.min(w,h)*Math.max(.5f,Math.min(1f,outer))*Math.max(.1f,Math.min(1f,ratio));
+        if(!Float.isFinite(w)||!Float.isFinite(h)||w<=0||h<=0
+                ||!Float.isFinite(x)||!Float.isFinite(y)||!Float.isFinite(sw)||!Float.isFinite(sh))
+            return new float[]{0,0,0,0,0};
+        outer=Float.isFinite(outer)?Math.max(.5f,Math.min(1f,outer)):1f;
+        ratio=Float.isFinite(ratio)?Math.max(.1f,Math.min(1f,ratio)):.88f;
+        float narrow=Math.min(w,h)*outer*ratio;
+        sw=Math.max(0,sw);sh=Math.max(0,sh);
         if(w<=h){
             x=(w-narrow)/2;sw=narrow;
             if(thumb)sh=Math.min(sh,narrow);
@@ -112,7 +118,11 @@ public final class QuickSettingsGlass {
             y=(h-narrow)/2;sh=narrow;
             if(thumb){float next=Math.min(sw,narrow);if(!rtl)x+=sw-next;sw=next;}
         }
-        return new float[]{x,y,Math.max(0,sw),Math.max(0,sh),narrow/2};
+        x=Math.max(0,Math.min(w,x));y=Math.max(0,Math.min(h,y));
+        sw=Math.min(sw,w-x);sh=Math.min(sh,h-y);
+        // Empty progress is empty, not a fabricated logical minimum. The native thumb remains
+        // a separate end-cap of the same white surface; the outer glass is never suppressed.
+        return new float[]{x,y,sw,sh,Math.min(sw,sh)/2};
     }
 
     /**
