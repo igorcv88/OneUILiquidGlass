@@ -6,28 +6,32 @@ import io.github.igorcv88.oneuiliquidglass.config.ConfigClient;
 import io.github.igorcv88.oneuiliquidglass.config.SettingSpec;
 import io.github.igorcv88.oneuiliquidglass.config.SettingsRegistry;
 
-/** Immutable provider snapshot. Read on configuration events, never from a draw callback. */
+/**
+ * Immutable provider snapshot. Read on configuration events, never from a draw callback.
+ *
+ * <p>Retired keys are read and discarded, never applied: qs.darkfill, qs.lightfill, qs.darkcolor, qs.lightcolor and
+ * qs.idle (the capsule and inactive-disc films; every capsule interior is transparent now),
+ * qs.track (the third slider surface) and qs.lightstyle. They stay in the catalogue only so that
+ * older profiles import and export unchanged; no stored value can bring a film back.</p>
+ */
 public final class QsStyle {
-    public final float darkFill, lightFill, idle, active, darkRim, lightRim, outer, track, fill;
-    public final int darkColor, lightColor, edgeBlur;
-    public final boolean lightGlass;
+    public final float active, darkRim, lightRim, outer, fill;
+    public final int edgeBlur;
     private final String fingerprint;
     private final Function<String, String> values;
 
     public static QsStyle read() { return new QsStyle(ConfigClient::override); }
     public QsStyle(Function<String, String> values) {
         this.values = values;
-        darkFill = Math.min(.18f, number("qs.darkfill", .10f)); lightFill = Math.min(.18f, number("qs.lightfill", .10f));
-        idle = Math.min(.12f, number("qs.idle", .04f)); active = number("qs.active", .90f);
+        active = number("qs.active", .90f);
         darkRim = number("qs.darkrim", .26f); lightRim = number("qs.lightrim", .18f);
         edgeBlur = Math.round(number("qs.edgeblur", 8));
-        outer = number("qs.outer", 1); track = number("qs.track", .88f); // Legacy profile round-trip only; never drawn.
-        fill = number("qs.fill", .88f);
-        darkColor = color("qs.darkcolor", 0xffffff); lightColor = color("qs.lightcolor", 0x141823);
-        prop("qs.lightstyle"); // Legacy obsidian/light is accepted; both now use adaptive ink.
-        lightGlass = true;
-        fingerprint = darkFill+":"+lightFill+":"+idle+":"+active+":"+darkRim+":"+lightRim+":"
-                +edgeBlur+":"+outer+":"+fill+":"+darkColor+":"+lightColor+":"+lightGlass;
+        outer = number("qs.outer", 1);
+        fill = number("qs.fill", QuickSettingsGlass.SLIDER_FILL);
+        // Registered for profile round-trips only: read and discarded, so no stored value can draw.
+        prop("qs.darkfill"); prop("qs.lightfill"); prop("qs.darkcolor"); prop("qs.lightcolor"); prop("qs.idle");
+        prop("qs.track"); prop("qs.lightstyle");
+        fingerprint = active+":"+darkRim+":"+lightRim+":"+edgeBlur+":"+outer+":"+fill;
     }
     private String prop(String key) {
         String s = values.apply(key);
@@ -39,10 +43,6 @@ public final class QsStyle {
             SettingSpec spec = SettingsRegistry.get(key);
             return Float.parseFloat(spec.validate(prop(key)));
         } catch (IllegalArgumentException | NullPointerException e) { return fallback; }
-    }
-    private int color(String key, int fallback) {
-        try { return Integer.parseInt(SettingsRegistry.get(key).validate(prop(key)), 16); }
-        catch (IllegalArgumentException | NullPointerException e) { return fallback; }
     }
     @Override public boolean equals(Object o) { return o instanceof QsStyle && fingerprint.equals(((QsStyle)o).fingerprint); }
     @Override public int hashCode() { return Objects.hash(fingerprint); }

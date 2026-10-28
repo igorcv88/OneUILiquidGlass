@@ -22,17 +22,26 @@ final class QsTextHooks {
     private final Supplier<QsContentHooks.Frame> content;
     private final BooleanSupplier enabled;
     private final Supplier<QsScene.Tone> scene, header;
+    /** Ink darkness per region (true: header band), animated by QsBackdrop; null: native ink. */
+    private final Function<Boolean,Float> level;
     private final QsTextTargets elements=new QsTextTargets();
     private final QsTextTargets nodes=new QsTextTargets();
     private final QsTextTargets headerElements=new QsTextTargets(), headerNodes=new QsTextTargets();
-    private final ThreadLocal<Boolean> iconDrawing=new ThreadLocal<>();
+    private final ThreadLocal<Float> iconDrawing=new ThreadLocal<>();
     private final SparseArray<ColorFilter> iconFilters=new SparseArray<>();
-    private final ThreadLocal<Boolean> drawing=new ThreadLocal<>();
+    private final ThreadLocal<Float> drawing=new ThreadLocal<>();
     private Method invalidate;
     private boolean ready,headerReady;
     QsTextHooks(ClassLoader loader,Supplier<QsContentHooks.Frame> content,BooleanSupplier enabled,
             Supplier<QsScene.Tone> scene,Supplier<QsScene.Tone> header){
-        this.loader=loader;this.content=content;this.enabled=enabled;this.scene=scene;this.header=header;
+        this(loader,content,enabled,scene,header,h->level((h?header:scene).get()));
+    }
+    QsTextHooks(ClassLoader loader,Supplier<QsContentHooks.Frame> content,BooleanSupplier enabled,
+            Supplier<QsScene.Tone> scene,Supplier<QsScene.Tone> header,Function<Boolean,Float> level){
+        this.loader=loader;this.content=content;this.enabled=enabled;this.scene=scene;this.header=header;this.level=level;
+    }
+    static Float level(QsScene.Tone tone){
+        return tone==null||tone==QsScene.Tone.UNKNOWN?null:tone==QsScene.Tone.LIGHT_SCENE?1f:0f;
     }
     void install(){
         try {
@@ -74,14 +83,14 @@ final class QsTextHooks {
             @Override protected void beforeHookedMethod(MethodHookParam p){
                 p.setObjectExtra("qsTextPrevious",drawing.get());
                 p.setObjectExtra("qsIconPrevious",iconDrawing.get());iconDrawing.remove();
-                Boolean tone=toneFor(p.thisObject);
+                Float tone=inkFor(p.thisObject);
                 // An unrelated nested node must not inherit the outer node's ownership.
                 if(tone==null)drawing.remove();else drawing.set(tone);
             }
             @Override protected void afterHookedMethod(MethodHookParam p){
-                Boolean previousIcon=(Boolean)p.getObjectExtra("qsIconPrevious");
+                Float previousIcon=(Float)p.getObjectExtra("qsIconPrevious");
                 if(previousIcon==null)iconDrawing.remove();else iconDrawing.set(previousIcon);
-                Boolean previous=(Boolean)p.getObjectExtra("qsTextPrevious");
+                Float previous=(Float)p.getObjectExtra("qsTextPrevious");
                 if(previous==null)drawing.remove();else drawing.set(previous);
             }
         });
@@ -109,13 +118,12 @@ final class QsTextHooks {
             XposedBridge.hookMethod(abi.draw,new XC_MethodHook(){
                 @Override protected void beforeHookedMethod(MethodHookParam p){
                     p.setObjectExtra("qsHeaderIconPrevious",iconDrawing.get());
-                    QsScene.Tone tone=header.get();
-                    if(ready&&headerReady&&headerNodes.get(p.thisObject)!=null&&enabled.getAsBoolean()&&tone!=QsScene.Tone.UNKNOWN)
-                        iconDrawing.set(tone==QsScene.Tone.LIGHT_SCENE);
+                    Float tone=ready&&headerReady&&headerNodes.get(p.thisObject)!=null&&enabled.getAsBoolean()?level.apply(true):null;
+                    if(tone!=null)iconDrawing.set(tone);
                     else iconDrawing.remove();
                 }
                 @Override protected void afterHookedMethod(MethodHookParam p){
-                    Boolean previous=(Boolean)p.getObjectExtra("qsHeaderIconPrevious");
+                    Float previous=(Float)p.getObjectExtra("qsHeaderIconPrevious");
                     if(previous==null)iconDrawing.remove();else iconDrawing.set(previous);
                 }
             });
@@ -129,25 +137,40 @@ final class QsTextHooks {
         }
     }
     ColorFilter applyIconPaint(Paint paint,Boolean dark,boolean on){
+        return applyIconPaint(paint,dark==null?null:dark?1f:0f,on);
+    }
+    ColorFilter applyIconPaint(Paint paint,Float dark,boolean on){
         if(dark==null||!on||paint==null||paint.getShader()!=null)return null;
         ColorFilter original=paint.getColorFilter();
         Integer nativeColor=Foreground.filterColor(original);
         if(nativeColor==null)return null; // Untinted painters/logos remain untouched.
-        int mapped=QuickSettingsGlass.ink(nativeColor,dark);
+        int mapped=QuickSettingsGlass.ink(nativeColor,(float)dark);
         if(mapped==nativeColor)return null;
         ColorFilter filter=iconFilters.get(mapped);
-        if(filter==null){filter=new PorterDuffColorFilter(mapped,PorterDuff.Mode.SRC_IN);iconFilters.put(mapped,filter);}
+        if(filter==null){
+            // Bounded: a transition walks through at most a few dozen greys.
+            if(iconFilters.size()>=96)iconFilters.clear();
+            filter=new PorterDuffColorFilter(mapped,PorterDuff.Mode.SRC_IN);iconFilters.put(mapped,filter);
+        }
         paint.setColorFilter(filter);return original;
     }
+    /** Decided tone of a registered node (true: dark ink); null for native ink. */
     Boolean toneFor(Object node){
+        Float level=inkFor(node);
+        return level==null?null:level>=.5f;
+    }
+    /** Ink darkness of a registered node at this frame (mid-transition included); null for native ink. */
+    Float inkFor(Object node){
         Boolean h=nodes.get(node);
         if(!ready||h==null||!enabled.getAsBoolean())return null;
-        QsScene.Tone tone=(h?header:scene).get();
-        return tone==QsScene.Tone.UNKNOWN?null:tone==QsScene.Tone.LIGHT_SCENE;
+        return level.apply(h);
     }
     static Integer applyPaint(Paint paint,Boolean dark,boolean enabled){
+        return applyPaint(paint,dark==null?null:dark?1f:0f,enabled);
+    }
+    static Integer applyPaint(Paint paint,Float dark,boolean enabled){
         if(dark==null||!enabled||paint==null||paint.getShader()!=null||paint.getColorFilter()!=null)return null;
-        int original=paint.getColor(),mapped=QuickSettingsGlass.ink(original,dark);
+        int original=paint.getColor(),mapped=QuickSettingsGlass.ink(original,(float)dark);
         if(mapped==original)return null;
         paint.setColor(mapped);return original;
     }
@@ -172,11 +195,11 @@ final class QsTextHooks {
             XposedBridge.hookMethod(m,new XC_MethodHook(){
                 @Override protected void beforeHookedMethod(MethodHookParam p){
                     if(text){
-                        Boolean tone=drawing.get();if(tone==null)return;
+                        Float tone=drawing.get();if(tone==null)return;
                         Integer original=applyPaint((Paint)p.args[index],tone,enabled.getAsBoolean());
                         if(original!=null)p.setObjectExtra("qsTextColor",original);
                     }else{
-                        Boolean tone=iconDrawing.get();if(tone==null)return;
+                        Float tone=iconDrawing.get();if(tone==null)return;
                         ColorFilter original=applyIconPaint((Paint)p.args[index],tone,enabled.getAsBoolean());
                         if(original!=null)p.setObjectExtra("qsHeaderFilter",original);
                     }

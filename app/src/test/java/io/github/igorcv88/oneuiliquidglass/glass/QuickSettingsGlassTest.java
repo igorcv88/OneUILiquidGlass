@@ -8,7 +8,7 @@ public final class QuickSettingsGlassTest {
     @Test public void invisibleRectanglesStayNative() {
         // One-cell tile areas pass transparent colours: no glass is drawn around icon and label.
         assertEquals(Kind.NONE, QuickSettingsGlass.kind(false, 0, 0));
-        assertEquals(0, QuickSettingsGlass.fill(Kind.NONE, 0, true));
+        assertEquals(0, QuickSettingsGlass.fill(Kind.NONE, 0));
     }
 
     @Test public void circlesFollowSamsungsStateColour() {
@@ -20,21 +20,23 @@ public final class QuickSettingsGlassTest {
     }
 
     @Test public void activeKeepsItsHueAndBecomesSlightlyTranslucent() {
-        int out = QuickSettingsGlass.fill(Kind.ACTIVE, 0xff3e91ff, true);
+        int out = QuickSettingsGlass.fill(Kind.ACTIVE, 0xff3e91ff);
         assertEquals(0x3e91ff, out & 0xffffff);
         assertEquals(Math.round(QuickSettingsGlass.ACTIVE_ALPHA * 255f), out >>> 24);
         // Already translucent active colours are never made more opaque.
-        assertEquals(0x99, QuickSettingsGlass.fill(Kind.ACTIVE, 0x99ffffff, true) >>> 24);
+        assertEquals(0x99, QuickSettingsGlass.fill(Kind.ACTIVE, 0x99ffffff) >>> 24);
     }
 
-    @Test public void containersAndIdleCirclesTakeAWhiteVeil() {
+    @Test public void containersAndIdleCirclesAreTransparentGlass() {
         assertEquals(Kind.CONTAINER, QuickSettingsGlass.kind(false, 0x66000000, 0));
         assertEquals(Kind.CONTAINER, QuickSettingsGlass.kind(false, 0, 0x0dffffff));
-        int dark = QuickSettingsGlass.fill(Kind.CONTAINER, 0x66000000, true);
-        int light = QuickSettingsGlass.fill(Kind.CONTAINER, 0x66000000, false);
-        assertEquals(0xffffff, dark & 0xffffff);
-        assertEquals(light >>> 24, dark >>> 24);
-        assertTrue((QuickSettingsGlass.fill(Kind.IDLE, 0x33000000, true) >>> 24) > 0);
+        // No film of any colour: whatever Samsung passes, the interior is fully transparent.
+        for (int nativeFill : new int[] {0x66000000, 0x33ffffff, 0xffffffff, 0x0d141823}) {
+            assertEquals(0, QuickSettingsGlass.fill(Kind.CONTAINER, nativeFill) >>> 24);
+            assertEquals(0, QuickSettingsGlass.fill(Kind.IDLE, nativeFill) >>> 24);
+            for (float active : new float[] {0f, .5f, 1f})
+                assertEquals(0, QuickSettingsGlass.fill(Kind.CONTAINER, nativeFill, active) >>> 24);
+        }
     }
 
     @Test public void rimIsAUniformBasalWhite() {
@@ -52,14 +54,15 @@ public final class QuickSettingsGlassTest {
         assertFalse(QuickSettingsGlass.rimmed(Kind.NONE));
     }
 
-    @Test public void sliderFillIsCentredOnTheNarrowSide() {
-        // A vertical slider 180 x 540 px: 6 % of its width on every side, 88 % of the width left.
-        float inset = QuickSettingsGlass.sliderInset(180f, 540f);
-        assertEquals(10.8f, inset, 1e-3f);
-        assertEquals(0.88f * 180f, 180f - 2f * inset, 1e-3f);
-        // Horizontal: the same rule on the height.
-        assertEquals(inset, QuickSettingsGlass.sliderInset(540f, 180f), 1e-6f);
-        assertEquals(0f, QuickSettingsGlass.sliderInset(0f, 100f), 0f);
+    @Test public void sliderMarginIsTheSameOnEverySideOfTheProgress() {
+        // A vertical slider 180 px wide, full capsule, progress 78 %: 11 % of the width each side.
+        assertEquals(19.8f, QuickSettingsGlass.sliderMargin(180f, 1f, .78f), 1e-3f);
+        // A thinner capsule (outer 0.5) adds its own transparent cell margin outside the pill.
+        assertEquals(180f * .5f * .11f + 45f, QuickSettingsGlass.sliderMargin(180f, .5f, .78f), 1e-3f);
+        assertEquals(0f, QuickSettingsGlass.sliderMargin(0f, 1f, .78f), 0f);
+        assertEquals(0f, QuickSettingsGlass.sliderMargin(Float.NaN, 1f, .78f), 0f);
+        // Invalid ratios fall back to the default instead of a negative or infinite margin.
+        assertEquals(QuickSettingsGlass.sliderMargin(180f, 1f, .78f), QuickSettingsGlass.sliderMargin(180f, 1f, Float.NaN), 0f);
     }
 
     @Test public void composeColourPackingRoundTrips() {

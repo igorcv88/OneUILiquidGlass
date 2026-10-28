@@ -33,14 +33,14 @@ final class QsContentHooks {
     }
     private final java.util.List<IconState> icons=new java.util.ArrayList<>();
     private final Consumer<Object> capture;
-    private Method invalidateDraw;
+    private final java.util.function.Function<Boolean,Float> level;
     private QsTextHooks text;
-    private final java.util.List<java.lang.ref.WeakReference<Object>> artworkNodes=new java.util.ArrayList<>();
     QsContentHooks(ClassLoader loader, BooleanSupplier enabled, Supplier<QsStyle> style,
             Supplier<QsScene.Tone> scene, Supplier<QsScene.Tone> headerScene,
+            java.util.function.Function<Boolean,Float> level,
             Supplier<QuickSettingsGlass.Kind> circle, Consumer<Object> capture) {
         this.loader=loader; this.enabled=enabled; this.style=style; this.scene=scene; this.headerScene=headerScene; this.capture=capture;
-        this.circle=circle;
+        this.circle=circle; this.level=level;
     }
     Frame current() { return content.get(); }
     private Class<?> optional(String name) {
@@ -97,49 +97,11 @@ final class QsContentHooks {
                     if(f!=null && f.media && !f.background && p.args.length==2) f.shape=p.args[1];
                 }
             });
-        text = new QsTextHooks(loader, this::current, enabled, scene, headerScene);
+        text = new QsTextHooks(loader, this::current, enabled, scene, headerScene, level);
         text.install();
         hookQsIcon(prefix+"tiles.QSIconKt");
-        hookArtwork(prefix+"media.components.MediaArtworkKt$$ExternalSyntheticLambda4");
+        // No veil over the media artwork either: the capsule interior is transparent in every scene.
         Probe.log("QS_CONTENT_READY","owners="+hooked+" firmware=DZIF");
-    }
-    private void hookArtwork(String name) {
-        Class<?> c=optional(name);if(c==null){Probe.log("QS_ARTWORK_MISSING","firmware=DZIF");return;}
-        try {
-            Class<?> node=Class.forName("androidx.compose.ui.node.DrawModifierNode",false,loader);
-            invalidateDraw=Class.forName("androidx.compose.ui.node.DrawModifierNodeKt",false,loader).getMethod("invalidateDraw",node);
-            Class<?> element=Class.forName("androidx.compose.ui.draw.DrawWithContentElement",false,loader);
-            java.lang.reflect.Field block=element.getDeclaredField("onDraw");block.setAccessible(true);
-            for(Method m:element.getDeclaredMethods())if(m.getName().equals("create")||m.getName().equals("update"))
-                XposedBridge.hookMethod(m,new XC_MethodHook(){
-                    @Override protected void afterHookedMethod(MethodHookParam p){
-                        try{bindArtwork(p.args.length==0?p.getResult():p.args[0],c.isInstance(block.get(p.thisObject)));}
-                        catch(ReflectiveOperationException|RuntimeException e){Probe.error("QS_ARTWORK_BIND_FAILED",e);}
-                    }
-                });
-            Method context=Class.forName("androidx.compose.ui.graphics.drawscope.DrawScope",false,loader).getMethod("getDrawContext");
-            Method canvas=context.getReturnType().getMethod("getCanvas");
-            java.lang.reflect.Field raw=Class.forName("androidx.compose.ui.graphics.AndroidCanvas",false,loader).getDeclaredField("internalCanvas");
-            raw.setAccessible(true);
-            for(Method m:c.getDeclaredMethods())if(m.getName().equals("invoke")&&m.getParameterCount()==1)
-                XposedBridge.hookMethod(m,new XC_MethodHook(){
-                    private boolean failed;
-                    private boolean logged;
-                    @Override protected void afterHookedMethod(MethodHookParam p){
-                        if(failed||!enabled.getAsBoolean()||scene.get()!=QsScene.Tone.LIGHT_SCENE)return;
-                        try{
-                            Object wrapper=canvas.invoke(context.invoke(p.args[0]));
-                            Object nativeCanvas=raw.get(wrapper);
-                            if(nativeCanvas instanceof android.graphics.Canvas) {
-                                ((android.graphics.Canvas)nativeCanvas).drawColor(QuickSettingsGlass.fill(
-                                        QuickSettingsGlass.Kind.CONTAINER,0,false,scene.get(),style.get()));
-                                if(!logged){logged=true;Probe.log("QS_ARTWORK_APPLIED","scene=light");}
-                            }
-                        }catch(ReflectiveOperationException|RuntimeException|LinkageError e){failed=true;Probe.error("QS_ARTWORK_FAILED",e);}
-                    }
-                });
-            Probe.log("QS_ARTWORK_READY","firmware=DZIF");
-        }catch(ReflectiveOperationException|RuntimeException|LinkageError e){Probe.error("QS_ARTWORK_FAILED",e);}
     }
     private void hookQsIcon(String name) {
         Class<?> c=optional(name); if(c==null) return;
@@ -182,26 +144,8 @@ final class QsContentHooks {
             return QuickSettingsGlass.Kind.NONE;
         }
     }
-    void bindArtwork(Object node,boolean target) {
-        if(node==null)return;
-        synchronized(artworkNodes){
-            artworkNodes.removeIf(ref->ref.get()==null||ref.get()==node);
-            if(target){
-                if(artworkNodes.size()>=32)artworkNodes.remove(0);
-                artworkNodes.add(new java.lang.ref.WeakReference<>(node));
-            }
-        }
-    }
-    /** A Compose recomposition alone may reuse the same draw block. Dirty its display list too. */
-    void invalidateArtwork() {
+    /** Text and header icons re-read the ink at draw time: dirty their draw, no recomposition. */
+    void invalidateDraw() {
         if(text!=null)text.invalidate();
-        if(invalidateDraw==null)return;
-        synchronized(artworkNodes){
-            for(java.util.Iterator<java.lang.ref.WeakReference<Object>> it=artworkNodes.iterator();it.hasNext();){
-                Object node=it.next().get();if(node==null){it.remove();continue;}
-                try{invalidateDraw.invoke(null,node);}
-                catch(ReflectiveOperationException|RuntimeException e){it.remove();Probe.error("QS_ARTWORK_INVALIDATE_FAILED",e);}
-            }
-        }
     }
 }
