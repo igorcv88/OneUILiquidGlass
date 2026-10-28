@@ -21,7 +21,7 @@
 
 One UI Liquid Glass is an independent **LSPosed module** for Samsung's notification surfaces: detailed heads-up pop-ups, lockscreen notification cards and the expanded notification shade. It preserves SystemUI's native content and interaction while changing the cards' backdrop and glass material. Brief/Edge Lighting pop-ups and playback-control redesigns are outside the current scope.
 
-An **experimental, opt-in Quick Settings surface** recolours One UI 9's Compose Quick Settings (tiles, circles, tile group, sliders, empty media card) with a translucent veil and an optical rim over Samsung's own panel blur. It keeps Samsung's layout and interactions and is **off by default** pending physical validation on One UI 9. See [Quick Settings implementation and validation](docs/quick-settings-glass.md).
+An **experimental, opt-in Quick Settings surface** recolours One UI 9's Compose Quick Settings (tiles, circles, tile group, sliders, empty media card) with a translucent veil and a basal light rim on the outer containers, over Samsung's own panel blur. It keeps Samsung's layout and interactions and is **off by default** pending physical validation on One UI 9. See [Quick Settings implementation and validation](docs/quick-settings-glass.md).
 
 The release is a single APK:
 
@@ -48,7 +48,7 @@ explicit, confirmed restart and are reported as pending until then.
 | **Detailed heads-up** | Live blur, edge lighting and a motion-gated captured lens band in APK-only mode; optional compositor lens and layered blur with the KernelSU add-on |
 | **Lockscreen** | Blur attached to the card geometry, independent light/dark material, compositor profile when installed; optional glass treatment for the notification overflow pill |
 | **Expanded shade** | Independent card blur, backdrop-dependent tone and text/icon adaptation, with controls to keep cards legible over light and dark content |
-| **Quick Settings (experimental)** | Translucent veil and gradient rim on Samsung's Compose controls, active state kept, applied and removed live; separate off-by-default toggle |
+| **Quick Settings (experimental)** | Translucent veil and basal rim on Samsung's Compose containers (not on the circles inside them), inset slider track, active state kept, applied and removed live; separate off-by-default toggle |
 | **Diagnostics** | SystemUI lifecycle and material logs (`OULG`), optional performance/trace logging, compositor logs (`OULG_SF`) and safe fallbacks |
 
 The optical material and the real refraction path are different. APK-only edge highlights simulate the look of a lens; only an eligible compositor shader or a captured sampled backdrop can actually displace content behind a card. The sampled band is motion-gated because capture latency can make moving content appear to trail the card.
