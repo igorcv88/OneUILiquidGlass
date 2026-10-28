@@ -80,6 +80,8 @@ final class QuickSettingsEdgeLight {
     });
     synchronized QsOpticsCoverage.Token selected(String role) { return coverage.select(role); }
     private final ThreadLocal<DrawFrame> drawing = new ThreadLocal<>();
+    /** LayoutNodeDrawScope.drawContent, when hooked, places optics between background and content. */
+    private boolean contentBoundary;
     private static final class DrawFrame {
         final Object node, scope;
         boolean consumed;
@@ -175,9 +177,16 @@ final class QuickSettingsEdgeLight {
             Method detach = nodeBase.getDeclaredMethod("markAsDetached$ui");
             // BackgroundNode.draw paints the background then invokes this concrete drawContent.
             // Intercept only that exact scope/frame, before it enters descendants.
-            member = "LayoutNodeDrawScope.drawContent";
-            Method drawContent = Class.forName("androidx.compose.ui.node.LayoutNodeDrawScope", false, loader)
-                    .getDeclaredMethod("drawContent");
+            // Optional: if absent/inlined, draw a bevel-only overlay after BackgroundNode.draw.
+            // Drawing at the start can be hidden by Samsung's background and falsely report success.
+            Method drawContent = null;
+            try {
+                drawContent = Class.forName("androidx.compose.ui.node.LayoutNodeDrawScope", false, loader)
+                        .getDeclaredMethod("drawContent");
+            } catch (ReflectiveOperationException | LinkageError e) {
+                Probe.log("QS_HOOK_STATUS", "family=optics step=drawContent ready=false fallback=after-node-rim error="
+                        + e.getClass().getSimpleName());
+            }
             try {
                 Class<?> drawNode = Class.forName("androidx.compose.ui.node.DrawModifierNode", false, loader);
                 invalidateDraw = Class.forName("androidx.compose.ui.node.DrawModifierNodeKt", false, loader)
@@ -193,22 +202,29 @@ final class QuickSettingsEdgeLight {
             XposedBridge.hookMethod(detach, new XC_MethodHook() {
                 @Override protected void afterHookedMethod(MethodHookParam p) { unbind(p.thisObject); }
             });
-            XposedBridge.hookMethod(drawContent, new XC_MethodHook() {
-                @Override protected void beforeHookedMethod(MethodHookParam p) {
-                    DrawFrame f = drawing.get();
-                    if (f == null || f.consumed || f.scope != p.thisObject) return;
-                    f.consumed = true;
-                    optics(f.node, f.scope);
-                    beginMedia(p, f);
-                }
-                @Override protected void afterHookedMethod(MethodHookParam p) {
-                    Object saved = p.getObjectExtra("qsMediaCanvas");
-                    if (saved instanceof android.graphics.Canvas) {
-                        try { ((android.graphics.Canvas) saved).restoreToCount((Integer) p.getObjectExtra("qsMediaSave")); }
-                        catch (RuntimeException | LinkageError e) { Probe.error("QS_MEDIA_CAPSULE_FAILED", e); }
+            boolean boundaryHooked = false;
+            if (drawContent != null) try {
+                XposedBridge.hookMethod(drawContent, new XC_MethodHook() {
+                    @Override protected void beforeHookedMethod(MethodHookParam p) {
+                        DrawFrame f = drawing.get();
+                        if (f == null || f.consumed || f.scope != p.thisObject) return;
+                        f.consumed = true;
+                        optics(f.node, f.scope);
+                        beginMedia(p, f);
                     }
-                }
-            });
+                    @Override protected void afterHookedMethod(MethodHookParam p) {
+                        Object saved = p.getObjectExtra("qsMediaCanvas");
+                        if (saved instanceof android.graphics.Canvas) {
+                            try { ((android.graphics.Canvas) saved).restoreToCount((Integer) p.getObjectExtra("qsMediaSave")); }
+                            catch (RuntimeException | LinkageError e) { Probe.error("QS_MEDIA_CAPSULE_FAILED", e); }
+                        }
+                    }
+                });
+                boundaryHooked = true;
+            } catch (RuntimeException | LinkageError ex) {
+                Probe.log("QS_HOOK_STATUS", "family=optics step=drawContent ready=false fallback=after-node-rim error="
+                        + ex.getClass().getSimpleName());
+            }
             XposedBridge.hookMethod(draw, new XC_MethodHook() {
                 @Override protected void beforeHookedMethod(MethodHookParam p) {
                     p.setObjectExtra("qsEdgePrevious", drawing.get());
@@ -219,8 +235,15 @@ final class QuickSettingsEdgeLight {
                 @Override protected void afterHookedMethod(MethodHookParam p) {
                     DrawFrame f = drawing.get();
                     if (f != null && !f.consumed) {
-                        Edge e = nodes.get(f.node);
-                        if (e != null) result(e.spec.token, false, "drawContent-not-reached");
+                        if (!p.hasThrowable()) {
+                            // Guaranteed to be above Samsung's background. The optics draw clips
+                            // itself to the bevel so a late draw cannot cover centre labels.
+                            f.consumed = true;
+                            optics(f.node, f.scope, true);
+                        } else {
+                            Edge e = nodes.get(f.node);
+                            if (e != null) result(e.spec.token, false, "background-draw-threw");
+                        }
                     }
                     DrawFrame old = (DrawFrame) p.getObjectExtra("qsEdgePrevious");
                     if (old == null) drawing.remove(); else drawing.set(old);
@@ -229,8 +252,10 @@ final class QuickSettingsEdgeLight {
             // Prevent an inlined drawContent from bypassing the optical layer boundary.
             try { XposedBridge.class.getMethod("deoptimizeMethod", java.lang.reflect.Member.class).invoke(null, draw); }
             catch (ReflectiveOperationException | RuntimeException ignored) { }
+            contentBoundary = boundaryHooked;
             ready = true;
-            Probe.log("QS_HOOK_STATUS", "family=optics step=drawContent ready=true method=" + drawContent.toGenericString());
+            Probe.log("QS_HOOK_STATUS", "family=optics step=" + (contentBoundary ? "drawContent" : "after-node-rim")
+                    + " ready=true method=" + (contentBoundary ? drawContent.toGenericString() : draw.toGenericString()));
             Probe.log("QS_EDGE_READY", "draw=" + draw.toGenericString());
             Probe.log("QS_EDGE_STATUS", "phase=install ready=true host=" + (host.get() != null));
             active();
@@ -593,7 +618,9 @@ final class QuickSettingsEdgeLight {
     }
 
     /** Draws the optics into a glass container's inner box; any failure leaves the capsule as it is. */
-    private void optics(Object node, Object scope) {
+    private void optics(Object node, Object scope) { optics(node, scope, false); }
+
+    private void optics(Object node, Object scope, boolean rimOnlyOverlay) {
         QsCapsuleOptics o = optics;
         Edge e;
         boolean dragging;
@@ -606,7 +633,7 @@ final class QuickSettingsEdgeLight {
         if (o == null || !QsCapsuleOptics.available() || !enabled.getAsBoolean()) {
             coverage.stage(e.spec.token, "fallback", "disabled-or-shader"); return;
         }
-        coverage.stage(e.spec.token, "attempt", "drawContent");
+        coverage.stage(e.spec.token, "attempt", rimOnlyOverlay ? "after-node-rim" : "drawContent");
         try {
             long size = (Long) getSize.invoke(scope);
             float w = Float.intBitsToFloat((int) (size >>> 32)), h = Float.intBitsToFloat((int) size);
@@ -628,12 +655,15 @@ final class QuickSettingsEdgeLight {
                 x = env[0]; y = env[1]; w = env[2] - env[0]; h = env[3] - env[1];
                 radius = Math.min(w, h) / 2f;
             }
-            boolean success = o.draw(node, (android.graphics.Canvas) raw, x, y, w, h, radius, density, lightScene.getAsBoolean());
+            boolean success = o.draw(node, (android.graphics.Canvas) raw, x, y, w, h, radius,
+                    density, lightScene.getAsBoolean(), rimOnlyOverlay);
             boolean first = !e.spec.token.drawn;
             result(e.spec.token, success, success ? "agsl" : "shader-or-size");
             if (success && first && Probe.trace) Probe.log("QS_OPTICS_DRAWN", "session=" + coverage.session()
                     + " id=" + e.spec.token.id + " role=" + e.spec.token.role + " w=" + w + " h=" + h
-                    + " radius=" + radius + " hardware=true light=" + lightScene.getAsBoolean());
+                    + " radius=" + radius + " hardware=true layer="
+                    + (rimOnlyOverlay ? "after-node-rim" : "drawContent")
+                    + " light=" + lightScene.getAsBoolean());
 
         } catch (ReflectiveOperationException | RuntimeException | LinkageError ex) {
             result(e.spec.token, false, "geometry");

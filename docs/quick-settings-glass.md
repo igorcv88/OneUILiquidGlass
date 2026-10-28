@@ -55,10 +55,10 @@ contorno nativo `#0dffffff`. Se o usuário definir uma imagem própria para o gr
 `IconProgressBar → BidirectionalBar` mantém seu layout Samsung vertical ou horizontal. Exatamente
 duas superfícies: a cápsula de vidro (interior transparente, igual às demais) e uma forma branca de
 progresso. O rect do trilho não é executado no DrawScope identificado. O progresso tem espessura
-`qs.fill` (padrão 0,78) da cápsula, centrado, e a **mesma margem** nas duas pontas do eixo longo
+`qs.fill` (padrão 0,85) da cápsula, centrado, e a **mesma margem** nas duas pontas do eixo longo
 (a transação de `DrawContext` encurta a área pela margem, então 100% termina dentro do vidro). O
-corpo é um retângulo arredondado de raio = metade da espessura; abaixo de um diâmetro (0%, 1%, 2%…)
-ele é um círculo completo ancorado na ponta de onde o progresso nativo parte. O thumb é desenhado
+corpo é um retângulo arredondado, que encolhe gradualmente abaixo de um diâmetro e desaparece
+em 0% (sem bolinha residual). O thumb é desenhado
 como a tampa da ponta móvel desse mesmo corpo, então as duas primitivas brancas formam uma forma
 só. Canvas/context size são restaurados mesmo em erro. Layout, valor, hitbox e arraste permanecem
 nativos.

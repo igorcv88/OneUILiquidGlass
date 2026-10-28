@@ -94,7 +94,7 @@ public class QsAdaptiveTest {
         assertEquals(0,QuickSettingsGlass.fill(CONTAINER,0x33000000,DARK_SCENE,heavy)>>>24);
         assertNotEquals(a,new QsStyle(k->k.equals("qs.fill")?"0.25":null));
         assertEquals(a,new QsStyle(k->k.equals("qs.fill")?"NaN":null));
-        assertEquals(.78f,a.fill,1e-6f);
+        assertEquals(.85f,a.fill,1e-6f);
     }
 
     /** An old profile's light or white qs.lightcolor can never become a light film. */
@@ -115,8 +115,8 @@ public class QsAdaptiveTest {
 
     /**
      * 0-100 %, vertical and horizontal, LTR and RTL, every permitted thickness: the progress is one
-     * rounded shape, never flattened, inside the glass, at the native value, and the thumb is its
-     * end cap (no third surface).
+     * rounded shape inside the glass at exactly the native value (empty at 0 %, shorter than one
+     * diameter below it), and the thumb is its end cap, never longer than it (no third surface).
      */
     @Test public void twoSurfaceGeometryAcrossRangeDirectionsAndPermittedThickness(){
         for(boolean vertical:new boolean[]{true,false})for(boolean rtl:new boolean[]{true,false})
@@ -129,6 +129,12 @@ public class QsAdaptiveTest {
                     float sw=vertical?w:w*p,sh=vertical?h*p:h;
                     float[] body=primitive(w,h,outer,fill,x,y,sw,sh,false,null);
                     float[] cap=primitive(w,h,outer,fill,x,y,sw,sh,true,body);
+                    float nativeLen=len*p;
+                    if(nativeLen<=.5f){
+                        assertArrayEquals("0 %: nothing drawn",new float[5],body,0);
+                        assertArrayEquals("0 %: no residual cap",new float[5],cap,0);
+                        continue;
+                    }
                     for(float[] g:new float[][]{body,cap}){
                         for(float v:g)assertTrue(Float.isFinite(v));
                         assertTrue(g[2]>0&&g[3]>0);
@@ -139,30 +145,38 @@ public class QsAdaptiveTest {
                         assertEquals((vertical?w:h)-d,2*(vertical?g[0]:g[1]),1e-3);
                     }
                     float lo=vertical?body[1]:body[0],hi=lo+(vertical?body[3]:body[2]);
-                    float nativeLen=len*p;
-                    // Never flattened: at least one diameter; the native length otherwise.
-                    assertEquals(Math.max(d,nativeLen),hi-lo,1e-3);
+                    // Exactly the native length: no minimum diameter.
+                    assertEquals(nativeLen,hi-lo,1e-3);
                     // Anchored at the native start edge.
                     if(vertical)assertEquals(h,hi,1e-3);else if(rtl)assertEquals(w,hi,1e-3);else assertEquals(0,lo,1e-3);
-                    // The cap is a circle at the moving end, inside the body: one white shape.
-                    assertEquals(cap[2],cap[3],1e-3);
+                    // The cap is at the moving end, inside the body: a circle once the body is one diameter long.
+                    assertEquals(Math.min(d,nativeLen),vertical?cap[3]:cap[2],1e-3);
                     float clo=vertical?cap[1]:cap[0],chi=clo+(vertical?cap[3]:cap[2]);
                     assertTrue(clo>=lo-1e-3&&chi<=hi+1e-3);
                     // At 100 % both ends touch the bar and either is the moving one; the cap is inside anyway.
                     if(p<1){if(vertical||rtl)assertEquals(lo,clo,1e-3);else assertEquals(hi,chi,1e-3);}
-                    // The value shown matches the native value once it exceeds one diameter.
-                    if(nativeLen>=d){
-                        if(vertical)assertEquals(y,lo,1e-3);else if(rtl)assertEquals(x,lo,1e-3);else assertEquals(sw,hi,1e-3);
-                    }
+                    // The value shown is the native value.
+                    if(vertical)assertEquals(y,lo,1e-3);else if(rtl)assertEquals(x,lo,1e-3);else assertEquals(sw,hi,1e-3);
                 }
     }
-    @Test public void minimumIsACircleThatStaysStableAcrossTheFirstPercent(){
+    /**
+     * Device, 28/10 (QS_SLIDER_STATUS progress=0.0): 0 % still showed a disc because the body grew
+     * to one diameter. Now 0 % is empty, the thumb has no cap, and low values shrink smoothly with a
+     * rounded end (radius half the shorter side), never a fixed circle.
+     */
+    @Test public void zeroIsEmptyAndLowValuesShrinkWithoutAResidualCircle(){
         for(boolean vertical:new boolean[]{true,false}){
-            float w=vertical?100:300,h=vertical?300:100;float[] first=null;
-            for(float p:new float[]{0,.001f,.01f,.02f}){
-                float[] body=primitive(w,h,1,.78f,0,vertical?h*(1-p):0,vertical?w:w*p,vertical?h*p:h,false,null);
-                assertEquals(78,body[2],1e-3);assertEquals(78,body[3],1e-3);assertEquals(39,body[4],1e-3);
-                if(first==null)first=body.clone();else assertArrayEquals(first,body,1e-3f);
+            float w=vertical?100:300,h=vertical?300:100;float previous=-1;
+            for(float p:new float[]{0,.01f,.05f,.1f,.2f,.3f}){
+                float[] body=primitive(w,h,1,.88f,0,vertical?h*(1-p):0,vertical?w:w*p,vertical?h*p:h,false,null);
+                float[] cap=primitive(w,h,1,.88f,0,vertical?h*(1-p):0,vertical?w:w*p,vertical?h*p:h,true,body);
+                float length=vertical?body[3]:body[2];
+                if(p==0){assertArrayEquals(new float[5],body,0);assertArrayEquals(new float[5],cap,0);continue;}
+                assertEquals(300*p,length,1e-3);
+                assertTrue("monotonic",length>previous);previous=length;
+                assertEquals(88,vertical?body[2]:body[3],1e-3);
+                assertEquals(Math.min(88,length)/2,body[4],1e-3);
+                assertTrue("cap never longer than the body",(vertical?cap[3]:cap[2])<=length+1e-3);
             }
         }
     }

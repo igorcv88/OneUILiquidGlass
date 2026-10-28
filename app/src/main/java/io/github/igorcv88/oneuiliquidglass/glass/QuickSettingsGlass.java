@@ -26,7 +26,7 @@ public final class QuickSettingsGlass {
      */
     static final float DARK_RIM = 0.26f, LIGHT_RIM = 0.18f;
     /** Default slider progress thickness: share of the capsule's narrow side. */
-    static final float SLIDER_FILL = 0.78f;
+    static final float SLIDER_FILL = 0.85f;
 
     /** What a BoxWithOutline call draws, decided from Samsung's own arguments. */
     public enum Kind {
@@ -175,13 +175,13 @@ public final class QuickSettingsGlass {
      * (the white progress, a rounded bar) or the thumb (its end cap). Results go to {@code out}
      * as {x, y, width, height, radius}; an invalid input yields all zeros.
      *
-     * <p>Long axis: the native body interval [a, b] is kept; one shorter than the progress
-     * thickness (the minimum, 0 % included) grows to a full circle anchored at the end of the bar
-     * the native body starts from, so the white shape never flattens or loses its curvature, and
-     * it never shows a value the slider does not have beyond that one diameter. The thumb is the
-     * body's moving end cap ({@code body} = the body drawn in this frame, {x, y, w, h, r}) so the
-     * two primitives read as one surface; without a body this frame, the native thumb's centre,
-     * clamped inside the bar. Transverse axis: the progress thickness, centred.</p>
+     * <p>Long axis: the native body interval [a, b] is kept as it is. Below one progress
+     * thickness the shape shortens with it (its rounded end follows, radius = half the shorter
+     * side) and at 0 % it is empty: no residual circle (device, 28/10: progress=0.0 still showed a
+     * disc). The thumb is the body's moving end cap ({@code body} = the body this frame, {x, y, w,
+     * h, r}; an empty body gives an empty cap), never longer than the body, so the two primitives
+     * read as one surface; with no body primitive this frame, the native thumb's centre, clamped
+     * inside the bar. Transverse axis: the progress thickness, centred.</p>
      */
     public static float[] sliderPrimitive(float w,float h,float outer,float ratio,
             float x,float y,float sw,float sh,boolean thumb,float[] body,float[] out) {
@@ -194,19 +194,19 @@ public final class QuickSettingsGlass {
         float across=((vertical?w:h)-narrow)/2f;
         float a=vertical?y:x, ext=Math.max(0,vertical?sh:sw);
         float lo, hi;
-        if(thumb&&body!=null&&body[2]>0&&body[3]>0){
+        if(thumb&&body!=null){
+            if(!(body[2]>0)||!(body[3]>0)){java.util.Arrays.fill(out,0);return out;}
             float bLo=vertical?body[1]:body[0], bHi=bLo+(vertical?body[3]:body[2]);
+            float cap=Math.min(narrow,bHi-bLo);
             // The cap sits at the end that moves: the one farther from the bar's own edge.
             boolean anchoredLow=bLo<=len-bHi;
-            lo=anchoredLow?bHi-narrow:bLo; hi=lo+narrow;
+            lo=anchoredLow?bHi-cap:bLo; hi=lo+cap;
         }else if(thumb){
             float c=Math.max(0,Math.min(len,a+ext/2f));
             lo=c-narrow/2f; hi=lo+narrow;
         }else{
             lo=Math.max(0,Math.min(len,a)); hi=Math.max(lo,Math.min(len,a+ext));
-            if(hi-lo<narrow){
-                if(lo<=len-hi){hi=lo+narrow;}else{lo=hi-narrow;}
-            }
+            if(!(hi-lo>0.5f)){java.util.Arrays.fill(out,0);return out;}
         }
         // Keep the whole shape inside the bar; the native interval itself is never moved otherwise.
         if(lo<0){hi-=lo;lo=0;}

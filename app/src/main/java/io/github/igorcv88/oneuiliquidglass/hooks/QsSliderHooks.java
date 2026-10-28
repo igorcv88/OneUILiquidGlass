@@ -187,14 +187,15 @@ final class QsSliderHooks {
             // The thumb is the fill's end cap: it takes the fill's thickness, as in Samsung's draw.
             float[] g=QuickSettingsGlass.sliderPrimitive(f.w,f.h,f.outer,s.fill,x(offset),y(offset),x(extent),y(extent),
                     stage==2,f.bodyDrawn?f.body:null,f.geometry);
-            if(!(g[2]>0)||!(g[3]>0)){p.setResult(null);return;}
             if(stage==1){
+                // Recorded even when empty (0 %): the thumb then has no cap to draw either.
                 System.arraycopy(g,0,f.body,0,5);f.bodyDrawn=true;
                 float length=f.w<=f.h?y(extent):x(extent);
                 f.progress=Math.max(0f,Math.min(1f,length/Math.max(f.w,f.h)));
                 Float previous=lengths.put(f.scope,length);
                 if(drag(previous,length,touching.getAsBoolean()))dragged.run();
             }
+            if(!(g[2]>0)||!(g[3]>0)){p.setResult(null);return;}
             p.args[2]=pack(g[0],g[1]);p.args[3]=pack(g[2],g[3]);
             p.args[last]=explicitGeometryMask(mask,stage!=0);
             p.args[4]=pack(g[4],g[4]);

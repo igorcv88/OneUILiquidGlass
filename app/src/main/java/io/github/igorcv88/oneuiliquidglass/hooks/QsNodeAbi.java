@@ -7,7 +7,8 @@ import java.lang.reflect.Modifier;
  * Resolve the complete node contract before installing any hooks for that family. Each member is
  * matched by name and by what the hooks need (an instance method, the node or the draw scope as
  * its argument or result), preferring the exactly typed method and accepting the erased bridge R8
- * may leave in its place (update(Modifier.Node), create() returning Modifier.Node). A miss names
+ * may leave in its place (update(Modifier.Node), create() returning Modifier.Node) and the
+ * narrowed draw scope it may specialise to (draw(LayoutNodeDrawScope)). A miss names
  * the member and lists the candidates the firmware actually has.
  */
 final class QsNodeAbi {
@@ -26,13 +27,28 @@ final class QsNodeAbi {
         for(Method m:node.getDeclaredMethods()){
             if(Modifier.isStatic(m.getModifiers()))continue;
             if(m.getName().equals("draw")&&m.getParameterCount()==1&&m.getReturnType()==void.class
-                    &&m.getParameterTypes()[0].isAssignableFrom(scope)
-                    &&(draw==null||m.getParameterTypes()[0]==scope&&!m.isBridge()))draw=m;
+                    &&drawScope(m.getParameterTypes()[0],scope)
+                    &&(draw==null||rank(m,scope)>rank(draw,scope)))draw=m;
         }
         if(create==null)throw new NoSuchMethodException(element.getName()+".create candidates="+candidates(element,"create"));
         if(update==null)throw new NoSuchMethodException(element.getName()+".update candidates="+candidates(element,"update"));
         if(draw==null)throw new NoSuchMethodException(node.getName()+".draw candidates="+candidates(node,"draw"));
         return new QsNodeAbi(create,update,draw);
+    }
+    /**
+     * The draw parameter is the scope, a supertype of it (an erased bridge), or a concrete class
+     * implementing it: DZIF's R8 narrowed {@code draw(ContentDrawScope)} to
+     * {@code draw(LayoutNodeDrawScope)}, its only implementation (device log 28/10 18:49,
+     * candidates=[void(androidx.compose.ui.node.LayoutNodeDrawScope)]). Object is never accepted.
+     */
+    static boolean drawScope(Class<?> type,Class<?> scope){
+        return type!=Object.class&&(type.isAssignableFrom(scope)||scope.isAssignableFrom(type));
+    }
+    /** Exact scope first, then a narrowed concrete scope, then a supertype; a bridge loses a tie. */
+    private static int rank(Method m,Class<?> scope){
+        Class<?> t=m.getParameterTypes()[0];
+        int r=t==scope?3:scope.isAssignableFrom(t)?2:1;
+        return r*2+(m.isBridge()?0:1);
     }
     /** {@code type} is the node itself or a supertype more specific than Object (Modifier.Node). */
     static boolean specific(Class<?> type,Class<?> node){

@@ -1352,7 +1352,7 @@ public final class HeadsUpHooks {
             lightBackdrop = !ShadeTone.lightText();
             // At once, never ramped: a ramp would replay the previous opening's (or surface's) veil
             // for VEIL_RAMP_MS on a card that is starting over. Its pending text swap goes with it.
-            pendingSwap = null;
+            pendingSwap = null; pendingLightStyle = null;
             if (veilRamp != null) { veilRamp.cancel(); veilRamp = null; }
             setForeground(false);
             setLightStyle(false);
@@ -1383,7 +1383,7 @@ public final class HeadsUpHooks {
             int da = Math.abs((veil >>> 24) - (measuredVeil >>> 24));
             boolean sameColour = veil == 0 || measuredVeil == 0 || (veil & 0x00ffffff) == (measuredVeil & 0x00ffffff);
             if (veil == measuredVeil || (!transition && sameColour && da < 4 && m.swap == swapped)) {
-                if (pendingSwap == null) { setForeground(m.swap); setLightStyle(swapLight); }
+                if (pendingSwap == null && pendingLightStyle == null) { setForeground(m.swap); setLightStyle(swapLight); }
                 return;
             }
             // A ramp still running ends here (applying its own pending swap) before this one starts.
@@ -1395,10 +1395,29 @@ public final class HeadsUpHooks {
             }
             if (m.swap != swapped) { pendingSwap = m.swap; pendingLight = swapLight; }
             else { setForeground(m.swap); setLightStyle(swapLight); }
-            applyMeasuredVeil(veil);
+            boolean ramped = applyMeasuredVeil(veil);
             // The text moves with the start of the veil, not its midpoint: a decided change of side
             // shows at once (the ramp's midpoint held white text over a white app ~100 ms longer).
+            // The glass's own light style (bright outline, stronger thickness shadow) still waits
+            // for the midpoint, as before #80: switched at the ramp's start it jumped ahead of the veil.
+            boolean text = pendingSwap != null;
             flushPendingSwap();
+            if (SURFACE_POPUP.equals(toneSurface)) {
+                View pv = background.get();
+                Probe.log("POPUP_TRANSITION", "viewId=" + Integer.toHexString(pv == null ? 0 : System.identityHashCode(pv))
+                        + " first=" + !animateSwap + " veilRamp=" + ramped + " rampMs=" + (ramped ? VEIL_RAMP_MS : 0)
+                        + " text=" + (text ? (animateSwap ? "animated" : "immediate") : "unchanged")
+                        + " lightStyle=" + (pendingLightStyle == null ? "now" : "midpoint")
+                        + " alpha=" + String.format(java.util.Locale.ROOT, "%.2f", pv == null ? 0f : shownAlpha(pv)));
+            }
+        }
+        /** The glass light style a running ramp applies at its midpoint (null: none pending). */
+        Boolean pendingLightStyle;
+        void flushLightStyle() {
+            if (pendingLightStyle == null) return;
+            boolean l = pendingLightStyle;
+            pendingLightStyle = null;
+            setLightStyle(l);
         }
         /** The text tone a running ramp applies at its midpoint (null: none pending). */
         Boolean pendingSwap;
@@ -1416,7 +1435,8 @@ public final class HeadsUpHooks {
             if (pendingSwap == null) return;
             boolean s = pendingSwap, l = pendingLight;
             pendingSwap = null;
-            setForeground(s); setLightStyle(l);
+            setForeground(s);
+            if (veilRamp != null) pendingLightStyle = l; else { pendingLightStyle = null; setLightStyle(l); }
         }
         void styleChanged(String style) {
             if (style.equals(loggedStyle)) return;
@@ -1514,7 +1534,8 @@ public final class HeadsUpHooks {
          * VEIL_RAMP_MS when both veils darken (or both lighten); a switch between a dark and a light
          * veil (theme change) still applies at once.
          */
-        void applyMeasuredVeil(int veil) {
+        /** Returns whether a visible ramp started (false: applied at once). */
+        boolean applyMeasuredVeil(int veil) {
             int from = measuredVeil;
             measuredVeil = veil;
             if (veilRamp != null) { veilRamp.cancel(); veilRamp = null; }
@@ -1523,20 +1544,21 @@ public final class HeadsUpHooks {
             // A card still fading in (the shade's first frames) takes the new veil at once: a ramp
             // would only replay the old veil under the fade.
             if (ends == null || v == null || !v.isShown() || shownAlpha(v) < 0.5f || (compBridge == null && semBridge == null)) {
-                pushToneVeil(); invalidate(); return;
+                pushToneVeil(); invalidate(); flushLightStyle(); return false;
             }
             android.animation.ValueAnimator a = android.animation.ValueAnimator.ofArgb(ends[0], ends[1]);
             a.setDuration(VEIL_RAMP_MS);
             a.addUpdateListener(an -> {
                 pushToneVeil((Integer) an.getAnimatedValue());
-                if (an.getAnimatedFraction() >= 0.5f) flushPendingSwap();
+                if (an.getAnimatedFraction() >= 0.5f) { flushPendingSwap(); flushLightStyle(); }
                 invalidate();
             });
             a.addListener(new android.animation.AnimatorListenerAdapter() {
-                @Override public void onAnimationEnd(android.animation.Animator an) { pushToneVeil(); flushPendingSwap(); invalidate(); }
+                @Override public void onAnimationEnd(android.animation.Animator an) { pushToneVeil(); flushPendingSwap(); flushLightStyle(); invalidate(); }
             });
             veilRamp = a;
             a.start();
+            return true;
         }
         // Hiding the region until the new measurement arrived made every opening pop in late; the
         // card keeps the veil of the previous opening meanwhile (measuredVeil persists), which is
@@ -2291,7 +2313,7 @@ public final class HeadsUpHooks {
             // Every path to the native background (hidden, ineligible, failed draw or compose)
             // passes here: the text gets its own colours back in the same frame. A ramp still running
             // must not apply its pending swap to a card that is going native.
-            pendingSwap = null;
+            pendingSwap = null; pendingLightStyle = null;
             if (veilRamp != null) { veilRamp.cancel(); veilRamp = null; }
             // The shelf's text follows the shade's scene, not its glass: in the shade its native
             // background is drawn through material() -> release() on every frame, and restoring
