@@ -6,7 +6,7 @@ MODDIR=${0%/*}
 # wanted, so turn it on unless it was set explicitly (setprop debug.oulg.sfrefract 0 still wins).
 [ -z "$(getprop debug.oulg.sfrefract)" ] && setprop debug.oulg.sfrefract 1
 # The library announces its optics itself when a rewrite compiles; this covers a refused write.
-[ -z "$(getprop debug.oulg.sf.optics)" ] && setprop debug.oulg.sf.optics 9
+[ -z "$(getprop debug.oulg.sf.optics)" ] && setprop debug.oulg.sf.optics 10
 pids=""
 missing=0
 i=0

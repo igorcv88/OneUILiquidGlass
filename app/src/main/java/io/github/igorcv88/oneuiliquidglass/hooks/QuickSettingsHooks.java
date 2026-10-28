@@ -29,10 +29,15 @@ import io.github.igorcv88.oneuiliquidglass.glass.QuickSettingsGlass.Kind;
  * <p>Every visible pill, circle, tile group, slider and empty media card passes through Samsung's
  * {@code BoxWithOutline(modifier, outlined, width, outlineColor, backgroundColor, shape, content)}:
  * a border on the outer box, then a clipped inner box with a background. Only the values Samsung
- * hands to those two modifier elements change: the solid outline becomes an optical rim gradient
- * and the background a translucent veil. Layout, modifier chains, Composer state, gestures,
- * semantics and drawing order are Samsung's. Nothing is drawn per frame and no compositor region
- * exists, so nothing can lag the layout or survive a fade.</p>
+ * hands to those two modifier elements change: the outline becomes a uniform basal light rim and
+ * the background a translucent veil. Layout, modifier chains, Composer state, gestures,
+ * semantics and drawing order are Samsung's. With the compositor (sfhook profile 3), each glass
+ * container also gets a tagged region for the backdrop-dependent edge light
+ * (QuickSettingsEdgeLight); without it, no compositor region exists.</p>
+ *
+ * <p>Only outer containers get the rim; circles inside them keep Samsung's outline. The slider
+ * track and fill are drawn inset inside the glass pill (drawing only: layout, touch area and drag
+ * are unchanged).</p>
  *
  * <p>Members are matched by name and descriptor; any one missing leaves the panel native.</p>
  */
@@ -41,7 +46,10 @@ public final class QuickSettingsHooks {
             "com.android.systemui.samsung.quicksetting.ui.common.uielement.BoxWithOutlineKt";
     private static final String BOX_METHOD = "BoxWithOutline-8QY48No";
     private static final String PANEL = "com.android.systemui.samsung.quicksetting.SecQSPanelCompose";
-    private static final long IDLE_COLOR = QuickSettingsGlass.color(QuickSettingsGlass.IDLE_MARKER);
+    private static final String BAR = "com.android.systemui.samsung.quicksetting.ui.tiles.BidirectionalBarKt";
+    private static final String BAR_DRAW = "drawBidirectionalBarTrackProgressThumbContent-Uzs9YN0";
+    /** $default mask bit of BoxWithOutline's {@code outlined}; its default is true. */
+    private static final int OUTLINED_DEFAULT = 0x2;
     private static final int MAX_LOGGED = 48;
 
     private final ClassLoader loader;
@@ -50,23 +58,32 @@ public final class QuickSettingsHooks {
     /** BoxWithOutline's own recompose scopes, invalidated when the setting changes (live switch). */
     private final Set<Object> scopes = Collections.newSetFromMap(new WeakHashMap<>());
     private final Set<String> logged = new HashSet<>();
+    private final QuickSettingsEdgeLight edge;
     private Object circleShape;
-    private Method boxImpl, recomposeScope, recordUsed, invalidate, valid;
-    private Constructor<?> gradient;
+    private Method recomposeScope, recordUsed, invalidate, valid;
+    private Method drawContext, contextSize, setContextSize, contextCanvas;
+    private Field nativeCanvas;
+    private Constructor<?> solidColor;
     private Object darkRim, lightRim;
     private boolean ready, broken, configStarted, applied;
     private android.content.Context app;
-    /** Set by BoxWithOutline for the two element constructors it runs next, on the same thread. */
-    private volatile Pending pending;
+    /**
+     * Set by BoxWithOutline for the two element constructors it runs next. Per thread: a box being
+     * composed on one thread can never pick up, or clear, another thread's state.
+     */
+    private final ThreadLocal<Pending> pending = new ThreadLocal<>();
 
     private static final class Pending {
-        final Thread thread = Thread.currentThread();
         final Object composer;
         final long background, fill;
         final Object rim;
+        /** A glass container's shape and outline width (dp), for its edge light; null for circles. */
+        final Object edgeShape;
+        final float edgeBorder;
         boolean rimDone, fillDone;
-        Pending(Object composer, long background, long fill, Object rim) {
+        Pending(Object composer, long background, long fill, Object rim, Object edgeShape, float edgeBorder) {
             this.composer = composer; this.background = background; this.fill = fill; this.rim = rim;
+            this.edgeShape = edgeShape; this.edgeBorder = edgeBorder;
             // Samsung builds no background element for a transparent colour: nothing to recolour.
             fillDone = background == 0L;
         }
@@ -77,6 +94,7 @@ public final class QuickSettingsHooks {
         this.loader = loader;
         this.master = master;
         this.startConfig = startConfig;
+        this.edge = new QuickSettingsEdgeLight(loader, this::enabled);
     }
 
     private boolean enabled() {
@@ -88,38 +106,34 @@ public final class QuickSettingsHooks {
             Class<?> box = resolve(BOX);
             Class<?> border = resolve("androidx.compose.foundation.BorderModifierNodeElement");
             Class<?> background = resolve("androidx.compose.foundation.BackgroundElement");
-            Class<?> linear = resolve("androidx.compose.ui.graphics.LinearGradient");
-            Class<?> colorClass = resolve("androidx.compose.ui.graphics.Color");
+            Class<?> solid = resolve("androidx.compose.ui.graphics.SolidColor");
             Class<?> shapes = resolve("androidx.compose.foundation.shape.RoundedCornerShapeKt");
             Method boxMethod = box == null ? null : boxMethod(box);
             Constructor<?> borderInit = constructor(border, float.class, 3);
             Constructor<?> backgroundInit = constructor(background, long.class, 5);
-            gradient = linearGradient(linear);
-            boxImpl = colorClass == null ? null : colorClass.getDeclaredMethod("box-impl", long.class);
+            solidColor = solid == null ? null : solid.getDeclaredConstructor(long.class);
             Field circle = shapes == null ? null : shapes.getDeclaredField("CircleShape");
-            if (boxMethod == null || borderInit == null || backgroundInit == null || gradient == null
+            if (boxMethod == null || borderInit == null || backgroundInit == null || solidColor == null
                     || circle == null) {
                 Probe.log("QS_COMPOSE_MISSING", "box=" + (boxMethod != null) + " border=" + (borderInit != null)
-                        + " background=" + (backgroundInit != null) + " gradient=" + (gradient != null)
+                        + " background=" + (backgroundInit != null) + " solid=" + (solidColor != null)
                         + " circle=" + (circle != null));
                 return;
             }
             circle.setAccessible(true);
             circleShape = circle.get(null);
-            gradient.setAccessible(true);
-            boxImpl.setAccessible(true);
+            solidColor.setAccessible(true);
             resolveScopes();
             XposedBridge.hookMethod(boxMethod, new XC_MethodHook() {
                 @Override protected void beforeHookedMethod(MethodHookParam p) { beforeBox(p.args); }
                 @Override protected void afterHookedMethod(MethodHookParam p) {
-                    Pending q = pending;
-                    if (q != null && q.thread == Thread.currentThread()) pending = null;
+                    pending.remove();
                 }
             });
             XposedBridge.hookMethod(borderInit, new XC_MethodHook() {
                 @Override protected void beforeHookedMethod(MethodHookParam p) {
-                    Pending q = pending;
-                    if (q == null || q.thread != Thread.currentThread() || q.rimDone) return;
+                    Pending q = pending.get();
+                    if (q == null || q.rimDone) return;
                     q.rimDone = true; // The outer box's border is the first one BoxWithOutline builds.
                     capture(q.composer);
                     if (q.rim != null && p.args[0] instanceof Float && (Float) p.args[0] > 0f) p.args[1] = q.rim;
@@ -127,13 +141,19 @@ public final class QuickSettingsHooks {
             });
             XposedBridge.hookMethod(backgroundInit, new XC_MethodHook() {
                 @Override protected void beforeHookedMethod(MethodHookParam p) {
-                    Pending q = pending;
-                    if (q == null || q.thread != Thread.currentThread() || q.fillDone) return;
+                    Pending q = pending.get();
+                    if (q == null || q.fillDone) return;
                     if (!(p.args[0] instanceof Long) || (Long) p.args[0] != q.background) return;
                     q.fillDone = true;
                     p.args[0] = q.fill;
+                    if (q.edgeShape != null) p.setObjectExtra("oulgEdge", q);
+                }
+                @Override protected void afterHookedMethod(MethodHookParam p) {
+                    Object q = p.getObjectExtra("oulgEdge");
+                    if (q instanceof Pending) edge.element(p.thisObject, ((Pending) q).edgeShape, ((Pending) q).edgeBorder);
                 }
             });
+            edge.install(background);
             // ART may have inlined the small element constructors into these callers (AOT/JIT), which
             // would bypass the constructor hooks; run them interpreted instead.
             deoptimize(boxMethod, named(resolve("androidx.compose.foundation.BorderKt"), "border-xT4_qwU"),
@@ -141,6 +161,7 @@ public final class QuickSettingsHooks {
             for (Constructor<?> k : border.getDeclaredConstructors()) if (k != borderInit) deoptimize(k);
             for (Constructor<?> k : background.getDeclaredConstructors()) if (k != backgroundInit) deoptimize(k);
             hookPanel();
+            hookSlider();
             ready = true;
             Probe.log("QS_COMPOSE_READY", "method=" + boxMethod.toGenericString()
                     + " liveRefresh=" + (invalidate != null)
@@ -176,17 +197,6 @@ public final class QuickSettingsHooks {
             Class<?>[] t = k.getParameterTypes();
             // The real constructor, not Kotlin's DefaultConstructorMarker bridges that call it.
             if (t.length == count && t[0] == first) return k;
-        }
-        return null;
-    }
-
-    /** LinearGradient(List colors, List stops, Offset start, Offset end, TileMode tileMode). */
-    private static Constructor<?> linearGradient(Class<?> c) {
-        if (c == null) return null;
-        for (Constructor<?> k : c.getDeclaredConstructors()) {
-            Class<?>[] t = k.getParameterTypes();
-            if (t.length == 5 && t[0] == List.class && t[1] == List.class && t[2] == long.class
-                    && t[3] == long.class && t[4] == int.class) return k;
         }
         return null;
     }
@@ -227,7 +237,7 @@ public final class QuickSettingsHooks {
         }
     }
 
-    /** Diagnostic only: proves which panel the device shows. */
+    /** Proves which panel the device shows, and hands its root and expansion to the edge light. */
     private void hookPanel() {
         Class<?> panel = resolve(PANEL);
         if (panel == null) return;
@@ -236,6 +246,7 @@ public final class QuickSettingsHooks {
                 @Override protected void afterHookedMethod(MethodHookParam p) {
                     Probe.log("QS_COMPOSE_ACTIVE", "optIn=" + ConfigClient.flag(ProductFlags.QUICK_SETTINGS)
                             + " master=" + master.getAsBoolean());
+                    edge.panel(p.thisObject);
                 }
             });
         } catch (NoSuchMethodException | RuntimeException | LinkageError e) {
@@ -243,20 +254,106 @@ public final class QuickSettingsHooks {
         }
     }
 
-    private void beforeBox(Object[] a) {
-        pending = null;
+    /**
+     * Slider track and fill: BidirectionalBarKt draws both over the whole inner box. Inset the draw
+     * area on every side (DrawTransform.inset's two steps: translate the canvas, shrink the size;
+     * getTransform() is stripped by R8) and clip it to a pill, then restore both after the call.
+     */
+    private void hookSlider() {
+        Class<?> bar = resolve(BAR);
+        Method draw = named(bar, BAR_DRAW);
+        if (draw == null) { Probe.log("QS_SLIDER_MISSING", "method=" + BAR_DRAW); return; }
         try {
-            // A recomposition through Samsung's restart lambda passes our own argument back.
-            if (a[4] instanceof Long && (Long) a[4] == IDLE_COLOR) a[4] = 0L;
+            Class<?> scope = Class.forName("androidx.compose.ui.graphics.drawscope.DrawScope", false, loader);
+            drawContext = scope.getMethod("getDrawContext");
+            Class<?> context = drawContext.getReturnType();
+            contextSize = context.getMethod("getSize-NH-jbRc");
+            setContextSize = context.getMethod("setSize-uvyYCjk", long.class);
+            contextCanvas = context.getMethod("getCanvas");
+            nativeCanvas = Class.forName("androidx.compose.ui.graphics.AndroidCanvas", false, loader)
+                    .getDeclaredField("internalCanvas");
+            nativeCanvas.setAccessible(true);
+            XposedBridge.hookMethod(draw, new XC_MethodHook() {
+                @Override protected void beforeHookedMethod(MethodHookParam p) { insetSlider(p); }
+                @Override protected void afterHookedMethod(MethodHookParam p) { restoreSlider(p); }
+            });
+            Probe.log("QS_SLIDER_READY", "method=" + draw.toGenericString());
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
+            Probe.error("QS_SLIDER_HOOK_FAILED", e);
+        }
+    }
+
+    private static final class SliderInset {
+        final Object context; final android.graphics.Canvas canvas; final long size; final int save;
+        SliderInset(Object context, android.graphics.Canvas canvas, long size, int save) {
+            this.context = context; this.canvas = canvas; this.size = size; this.save = save;
+        }
+    }
+
+    private void insetSlider(XC_MethodHook.MethodHookParam p) {
+        if (!enabled()) return;
+        try {
+            Object context = drawContext.invoke(p.args[0]);
+            Object canvas = contextCanvas.invoke(context);
+            Object raw = nativeCanvas.getDeclaringClass().isInstance(canvas) ? nativeCanvas.get(canvas) : null;
+            if (!(raw instanceof android.graphics.Canvas)) return;
+            android.graphics.Canvas c = (android.graphics.Canvas) raw;
+            long size = (Long) contextSize.invoke(context);
+            float w = Float.intBitsToFloat((int) (size >>> 32)), h = Float.intBitsToFloat((int) size);
+            float m = QuickSettingsGlass.sliderInset(w, h);
+            if (m <= 0f || w <= 2f * m || h <= 2f * m) return;
+            float iw = w - 2f * m, ih = h - 2f * m, r = Math.min(iw, ih) / 2f;
+            // Registered before anything changes: whatever fails below, the after-hook (which runs
+            // even when Samsung's draw throws) or the catch undoes exactly what was done.
+            SliderInset undo = new SliderInset(context, c, size, c.save());
+            p.setObjectExtra("oulgSlider", undo);
+            try {
+                c.translate(m, m);
+                android.graphics.Path pill = new android.graphics.Path();
+                pill.addRoundRect(0f, 0f, iw, ih, r, r, android.graphics.Path.Direction.CW);
+                // Samsung's track is a plain rectangle rounded only by the outer clip: keep it a pill.
+                c.clipPath(pill);
+                setContextSize.invoke(context, ((long) Float.floatToRawIntBits(iw) << 32)
+                        | (Float.floatToRawIntBits(ih) & 0xffffffffL));
+            } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
+                restoreSlider(p);
+                throw e;
+            }
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
+            fail(e);
+        }
+    }
+
+    /** Runs whether or not Samsung's draw threw, so the canvas and size are always restored. */
+    private void restoreSlider(XC_MethodHook.MethodHookParam p) {
+        Object extra = p.getObjectExtra("oulgSlider");
+        if (!(extra instanceof SliderInset)) return;
+        p.setObjectExtra("oulgSlider", null); // Once: the catch above and the after-hook may both call.
+        SliderInset s = (SliderInset) extra;
+        // The canvas first and unconditionally: a size that cannot be put back must not leave the
+        // translation and clip on the rest of the frame.
+        s.canvas.restoreToCount(s.save);
+        try {
+            setContextSize.invoke(s.context, s.size);
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
+            fail(e);
+        }
+    }
+
+    private void beforeBox(Object[] a) {
+        pending.remove();
+        try {
             bootstrap();
             if (broken) return;
             // Even with the master or the option off, the border constructor captures this box's
             // own scope (see capture), so that switching either on later applies live.
-            pending = new Pending(a[7], 0L, 0L, null);
+            pending.set(new Pending(a[7], 0L, 0L, null, null, 0f));
             if (!enabled()) return;
-            // Bits 2-32 of the $default mask: Samsung's defaults replace the outlined/width/colour/
-            // shape arguments, so what is read here would not be what is drawn.
-            if (!(a[9] instanceof Integer) || ((Integer) a[9] & 0x3e) != 0) { log("defaults", a); return; }
+            // Bits 4-32 of the $default mask: Samsung's defaults replace the width/colour/shape
+            // arguments, so what is read here would not be what is drawn. Bit 2 (outlined, default
+            // true) is how the tile group container calls it, and is read as true below.
+            if (!(a[9] instanceof Integer) || ((Integer) a[9] & 0x3c) != 0) { log("defaults", a); return; }
+            boolean outlinedDefault = ((Integer) a[9] & OUTLINED_DEFAULT) != 0;
             long outline = (Long) a[3], background = (Long) a[4];
             // Only sRGB colours (colour space id 0) are understood; others stay native.
             if (!QuickSettingsGlass.srgb(outline) || !QuickSettingsGlass.srgb(background)) { log("non-srgb", a); return; }
@@ -266,9 +363,12 @@ public final class QuickSettingsHooks {
             if (kind == Kind.NONE) return;
             boolean dark = dark();
             long fill = QuickSettingsGlass.color(QuickSettingsGlass.fill(kind, QuickSettingsGlass.argb(background), dark));
-            if (background == 0L && kind == Kind.IDLE) a[4] = background = IDLE_COLOR;
-            boolean outlined = Boolean.TRUE.equals(a[1]) && a[2] instanceof Float && (Float) a[2] > 0f;
-            pending = new Pending(a[7], background, fill, outlined ? rim(dark) : null);
+            boolean outlined = (outlinedDefault || Boolean.TRUE.equals(a[1]))
+                    && a[2] instanceof Float && (Float) a[2] > 0f;
+            boolean rimmed = outlined && QuickSettingsGlass.rimmed(kind);
+            // The inner box is padded by the outline width only when the outline is on.
+            pending.set(new Pending(a[7], background, fill, rimmed ? rim(dark) : null,
+                    kind == Kind.CONTAINER ? a[5] : null, outlined ? (Float) a[2] : 0f));
         } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
             fail(e);
         }
@@ -311,14 +411,7 @@ public final class QuickSettingsHooks {
     private Object rim(boolean dark) throws ReflectiveOperationException {
         Object cached = dark ? darkRim : lightRim;
         if (cached != null) return cached;
-        List<Object> colors = new ArrayList<>();
-        for (int c : QuickSettingsGlass.rim(dark)) colors.add(boxImpl.invoke(null, QuickSettingsGlass.color(c)));
-        List<Float> stops = new ArrayList<>();
-        for (float s : QuickSettingsGlass.rimStops()) stops.add(s);
-        // Offset.Zero to Offset.Infinite: the gradient spans each box's own diagonal; TileMode.Clamp.
-        long infinite = ((long) Float.floatToRawIntBits(Float.POSITIVE_INFINITY) << 32)
-                | (Float.floatToRawIntBits(Float.POSITIVE_INFINITY) & 0xffffffffL);
-        Object brush = gradient.newInstance(colors, stops, 0L, infinite, 0);
+        Object brush = solidColor.newInstance(QuickSettingsGlass.color(QuickSettingsGlass.rim(dark)));
         if (dark) darkRim = brush; else lightRim = brush;
         return brush;
     }
@@ -362,7 +455,7 @@ public final class QuickSettingsHooks {
 
     /** Fail closed: stop recolouring and let every captured box recompose with Samsung's values. */
     private void fail(Throwable e) {
-        pending = null;
+        pending.remove();
         if (broken) return;
         broken = true;
         Probe.error("QS_COMPOSE_FAILED", e);
@@ -371,7 +464,7 @@ public final class QuickSettingsHooks {
     }
 
     private void log(String kind, Object[] a) {
-        String key = kind + " circle=" + (a[5] == circleShape) + " outlined=" + a[1] + " width=" + a[2]
+        String key = kind + " circle=" + (a[5] == circleShape) + " outlined=" + a[1] + " mask=" + a[9] + " width=" + a[2]
                 + " outline=" + hex((Long) a[3]) + " background=" + hex((Long) a[4]);
         synchronized (logged) {
             // Compose may compose off the main thread (prefetch); the set is small and bounded.

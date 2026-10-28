@@ -295,7 +295,8 @@ static float prop_float(const char *name, float fallback) {
 // the outline, rad), .kgline (contour strength) and .kgcorecap (body blur radius cap in px; 80 or
 // more restores v0.11) and .kgflatcap (flattening weight cap; 1 restores v0.11) and .kgcoredim (core gain; 0
 // restores v0.11) and .kgglow (rim glow width; 1 with kgrim 1 and kgspec 0.30 restores v0.11). Profile 2
-// (expanded-shade legibility): debug.oulg.sf.shadecap and .shadelift (luma limits). Which
+// (expanded-shade legibility): debug.oulg.sf.shadecap and .shadelift (luma limits). Profile 3
+// (Quick Settings edge light): no properties yet, OULG_QS_* in refract.h. Which
 // profile a card gets travels in its tag, set live by the module.
 // .kggradient (0..1, default 1) enables the continuous glass/body transition;
 // .kggradient=0 with .kgcorecap=62 restores the v0.21 lockscreen reference.
@@ -332,6 +333,8 @@ static void layered_blur(struct oulg_profile p[OULG_PROFILES]) {
     p[2] = OULG_PROFILES_DEFAULT[2];
     p[2].cap = prop_float("debug.oulg.sf.shadecap", OULG_SHADE_CAP_DEFAULT);
     p[2].lift = prop_float("debug.oulg.sf.shadelift", OULG_SHADE_LIFT_DEFAULT);
+    // Profile 3 (Quick Settings edge light) keeps its defaults until it is tuned on the device.
+    p[3] = OULG_PROFILES_DEFAULT[3];
 }
 
 // Tells the module that this library's optics are live (debug.oulg.sf.optics = OULG_OPTICS_VERSION)

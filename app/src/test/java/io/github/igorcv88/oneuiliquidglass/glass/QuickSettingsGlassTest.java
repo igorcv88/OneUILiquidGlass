@@ -13,8 +13,8 @@ public final class QuickSettingsGlassTest {
 
     @Test public void circlesFollowSamsungsStateColour() {
         assertEquals(Kind.ACTIVE, QuickSettingsGlass.kind(true, 0xffd9d9d9, 0));
-        assertEquals(Kind.IDLE, QuickSettingsGlass.kind(true, 0, 0));
-        assertEquals(Kind.IDLE, QuickSettingsGlass.kind(true, QuickSettingsGlass.IDLE_MARKER, 0));
+        // DeviceControl/NearByDevice icons: Samsung lays them out without a disc; none is added.
+        assertEquals(Kind.NONE, QuickSettingsGlass.kind(true, 0, 0));
         // A faint inactive fill is not mistaken for the active state.
         assertEquals(Kind.IDLE, QuickSettingsGlass.kind(true, 0x33ffffff, 0));
     }
@@ -34,24 +34,36 @@ public final class QuickSettingsGlassTest {
         int light = QuickSettingsGlass.fill(Kind.CONTAINER, 0x66000000, false);
         assertEquals(0xffffff, dark & 0xffffff);
         assertTrue((light >>> 24) > (dark >>> 24));
-        assertTrue((QuickSettingsGlass.fill(Kind.IDLE, 0, true) >>> 24) > 0);
+        assertTrue((QuickSettingsGlass.fill(Kind.IDLE, 0x33000000, true) >>> 24) > 0);
     }
 
-    @Test public void rimIsBrightestOnTheLitEdge() {
-        for (boolean dark : new boolean[]{true, false}) {
-            int[] rim = QuickSettingsGlass.rim(dark);
-            assertEquals(QuickSettingsGlass.rimStops().length, rim.length);
-            assertTrue(rim[0] >>> 24 > rim[3] >>> 24);
-            assertTrue(rim[3] >>> 24 > rim[1] >>> 24);
-        }
+    @Test public void rimIsAUniformBasalWhite() {
+        // No direction is baked in: the whole outline has the same basal light.
+        int dark = QuickSettingsGlass.rim(true), light = QuickSettingsGlass.rim(false);
+        assertEquals(0xffffff, dark & 0xffffff);
+        assertTrue(dark >>> 24 > 0);
+        assertTrue(light >>> 24 > dark >>> 24);
     }
 
-    @Test public void theIdleMarkerIsInvisibleOnItsOwn() {
-        assertEquals(0, QuickSettingsGlass.IDLE_MARKER >>> 24);
+    @Test public void onlyOuterContainersCarryTheRim() {
+        assertTrue(QuickSettingsGlass.rimmed(Kind.CONTAINER));
+        assertFalse(QuickSettingsGlass.rimmed(Kind.ACTIVE));
+        assertFalse(QuickSettingsGlass.rimmed(Kind.IDLE));
+        assertFalse(QuickSettingsGlass.rimmed(Kind.NONE));
+    }
+
+    @Test public void sliderFillIsCentredOnTheNarrowSide() {
+        // A vertical slider 180 x 540 px: 6 % of its width on every side, 88 % of the width left.
+        float inset = QuickSettingsGlass.sliderInset(180f, 540f);
+        assertEquals(10.8f, inset, 1e-3f);
+        assertEquals(0.88f * 180f, 180f - 2f * inset, 1e-3f);
+        // Horizontal: the same rule on the height.
+        assertEquals(inset, QuickSettingsGlass.sliderInset(540f, 180f), 1e-6f);
+        assertEquals(0f, QuickSettingsGlass.sliderInset(0f, 100f), 0f);
     }
 
     @Test public void composeColourPackingRoundTrips() {
-        for (int c : new int[]{0, 0x0dffffff, 0xff3e91ff, QuickSettingsGlass.IDLE_MARKER}) {
+        for (int c : new int[]{0, 0x0dffffff, 0xff3e91ff, 0x00a1b2c3}) {
             long packed = QuickSettingsGlass.color(c);
             assertTrue(QuickSettingsGlass.srgb(packed));
             assertEquals(c, QuickSettingsGlass.argb(packed));
@@ -61,5 +73,41 @@ public final class QuickSettingsGlassTest {
         assertEquals(0L, QuickSettingsGlass.color(0));
         // Color.Unspecified carries colour space id 16 (Unspecified) and is left alone.
         assertFalse(QuickSettingsGlass.srgb(0x10L));
+    }
+
+    @Test public void edgeTagFallsInTheProfileThreeBandBelowTheRadius() {
+        for (float r = 43f; r < 256f; r += 0.37f) {
+            float tag = QuickSettingsGlass.edgeTag(r);
+            assertEquals(0.875f, tag - (float) Math.floor(tag), 1e-4f);
+            assertTrue(tag <= r && r - tag < 1.5f);
+            // The clip program reads r + 0.5 in fp16: .375 must survive (step 1/8 below 256).
+            assertEquals(0.375f, (tag + 0.5f) - (float) Math.floor(tag + 0.5f), 1e-4f);
+        }
+        assertEquals(-1f, QuickSettingsGlass.edgeTag(42.9f), 0f);
+        assertEquals(-1f, QuickSettingsGlass.edgeTag(256f), 0f);
+        assertEquals(-1f, QuickSettingsGlass.edgeTag(Float.NaN), 0f);
+    }
+
+    @Test public void edgeFadeFollowsTheExpansionAndTheAncestors() {
+        assertEquals(1f, QuickSettingsGlass.edgeFade(1f, 1f), 1e-6f);
+        assertEquals(1f, QuickSettingsGlass.edgeFade(1f, 0.95f), 1e-6f);
+        assertEquals(0f, QuickSettingsGlass.edgeFade(1f, 0.6f), 1e-6f);
+        assertEquals(0f, QuickSettingsGlass.edgeFade(1f, 0.2f), 1e-6f);
+        assertEquals(0.5f, QuickSettingsGlass.edgeFade(0.5f, 1f), 1e-6f);
+        float a = QuickSettingsGlass.edgeFade(1f, 0.7f), b = QuickSettingsGlass.edgeFade(1f, 0.8f);
+        assertTrue(a > 0f && a < b && b < 1f);
+    }
+
+    @Test public void edgeRegionCoversSamsungsOutline() {
+        // S938B dump: the Wi-Fi pill's outer box [48,404][708,694], its inner box [52,408][704,690]:
+        // a 4 px outline at density 3.5 (GRID_BORDER ~1.14 dp). Inner + 2 x outset = outer.
+        int out = QuickSettingsGlass.edgeOutset(4f / 3.5f, 3.5f);
+        assertEquals(4, out);
+        assertEquals(708 - 48, (704 - 52) + 2 * out);
+        assertEquals(694 - 404, (690 - 408) + 2 * out);
+        // The outer pill (290 px high) keeps a tag the compositor reads.
+        assertTrue(QuickSettingsGlass.edgeTag((694 - 404) / 2f) > 0f);
+        // No outline: the region is the inner box itself.
+        assertEquals(0, QuickSettingsGlass.edgeOutset(0f, 3.5f));
     }
 }

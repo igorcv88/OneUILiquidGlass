@@ -4,40 +4,46 @@ package io.github.igorcv88.oneuiliquidglass.glass;
  * Colour rules for One UI 9's Compose Quick Settings (BoxWithOutline), free of Android state.
  *
  * <p>The panel behind the controls is already blurred by Samsung, so the material here is a light
- * veil and an optical rim, not a second compositor blur: nothing in the compositor can lag the
- * Compose layout or outlive its alpha. Colours are non-premultiplied ARGB.</p>
+ * veil and a basal rim drawn by Compose, not a second blur. The only compositor part is the optional
+ * edge light (sfhook profile 3), whose regions are transparent but for the outline. Colours are
+ * non-premultiplied ARGB.</p>
  */
 public final class QuickSettingsGlass {
     private QuickSettingsGlass() {}
 
-    /**
-     * Stands in for Samsung's transparent background of an inactive circle, so that Compose creates
-     * the background element the hook recolours. Alpha 0: if it ever reached the screen it would
-     * draw nothing.
-     */
-    public static final int IDLE_MARKER = 0x00a1b2c3;
-
     static final float DARK_FILL = 0.10f, LIGHT_FILL = 0.30f;
     static final float DARK_IDLE = 0.08f, LIGHT_IDLE = 0.22f;
     static final float ACTIVE_ALPHA = 0.90f;
-    static final float[] RIM_STOPS = {0f, 0.35f, 0.65f, 1f};
-    private static final float[] DARK_RIM = {0.50f, 0.10f, 0.06f, 0.30f};
-    private static final float[] LIGHT_RIM = {0.85f, 0.30f, 0.20f, 0.60f};
+    /**
+     * Basal rim alpha: the same all around the outline, so no corner looks lit regardless of what
+     * is behind it. A backdrop-dependent part needs backdrop pixels this Compose path does not
+     * have (docs/quick-settings-glass.md).
+     */
+    static final float DARK_RIM = 0.26f, LIGHT_RIM = 0.45f;
+    /** Slider track and fill: share of the slider's narrow side, centred, inside the glass pill. */
+    static final float SLIDER_FILL = 0.88f;
 
     /** What a BoxWithOutline call draws, decided from Samsung's own arguments. */
     public enum Kind {
-        /** Not a visible surface (one-cell tile area, edit placeholder): left untouched. */
+        /**
+         * Not a visible surface (one-cell tile area, edit placeholder), or a circle Samsung leaves
+         * transparent on purpose (the icon of DeviceControl, NearByDevice and MyDevice tiles is laid
+         * out without a disc): left untouched.
+         */
         NONE,
         /** Circle with a light, mostly opaque fill: Samsung's active state. */
         ACTIVE,
-        /** Circle without a visible fill: Samsung's inactive state. */
+        /** Circle with a faint fill (the panel tint): Samsung's inactive state. */
         IDLE,
         /** Visible pill or rounded rectangle: large tile, tile group, slider, media card. */
         CONTAINER
     }
 
     public static Kind kind(boolean circle, int fill, int outline) {
-        if (circle) return alpha(fill) >= 0.5f ? Kind.ACTIVE : Kind.IDLE;
+        if (circle) {
+            float a = alpha(fill);
+            return a >= 0.5f ? Kind.ACTIVE : a > 0f ? Kind.IDLE : Kind.NONE;
+        }
         return alpha(fill) > 0f || alpha(outline) > 0f ? Kind.CONTAINER : Kind.NONE;
     }
 
@@ -55,16 +61,55 @@ public final class QuickSettingsGlass {
         }
     }
 
-    /** Rim colours for {@link #RIM_STOPS}: bright upper-left edge, faint middle, softer lower-right. */
-    public static int[] rim(boolean dark) {
-        float[] a = dark ? DARK_RIM : LIGHT_RIM;
-        int[] out = new int[a.length];
-        for (int i = 0; i < a.length; i++) out[i] = white(a[i]);
-        return out;
+    /**
+     * Only outer containers carry the optical rim; circles inside them keep Samsung's outline, so
+     * that a group of controls reads as one piece of glass rather than a set of small lenses.
+     */
+    public static boolean rimmed(Kind kind) {
+        return kind == Kind.CONTAINER;
     }
 
-    public static float[] rimStops() {
-        return RIM_STOPS.clone();
+    /** Inset on every side of a slider's draw area for a {@link #SLIDER_FILL} track and fill. */
+    public static float sliderInset(float width, float height) {
+        float narrow = Math.min(width, height);
+        return narrow > 0f ? narrow * (1f - SLIDER_FILL) / 2f : 0f;
+    }
+
+    /** Blur radius of an edge-light region: only the luma right at the outline matters, kept local. */
+    public static final int EDGE_BLUR_PX = 8;
+
+    /**
+     * Corner radius carrying the compositor's Quick Settings edge-light tag (sfhook profile 3):
+     * floor(r) - 1 + 0.875, below r so Skia never clamps it on a pill; -1 where no tag can be read
+     * (the vertex shader needs more than 40 px, and an fp16 radius + 0.5 holds .375 only below 256).
+     */
+    public static float edgeTag(float radius) {
+        if (!(radius >= 43f && radius < 256f)) return -1f;
+        return (float) Math.floor(radius) - 1f + 0.875f;
+    }
+
+    /**
+     * Px from the background's inner box out to the container's outer edge: Samsung pads the inner
+     * box by the outline width, and Compose rounds a dp padding to whole px (roundToPx). 0 when the
+     * outline is off. The edge-light region is the inner box grown by this on every side.
+     */
+    public static int edgeOutset(float borderDp, float density) {
+        return borderDp > 0f && density > 0f ? Math.round(borderDp * density) : 0;
+    }
+
+    /**
+     * Edge-light region alpha: the accumulated alpha of the panel's ancestor views times the panel's
+     * own expansion, which Compose fades and moves without telling the region (a blur region ignores
+     * the alpha of what draws it). Fully in from 95 % expanded, gone below 60 %.
+     */
+    public static float edgeFade(float ancestors, float expansion) {
+        float u = Math.max(0f, Math.min(1f, (expansion - 0.60f) / 0.35f));
+        return Math.max(0f, Math.min(1f, ancestors)) * u * u * (3f - 2f * u);
+    }
+
+    /** Uniform basal rim colour of outer containers. */
+    public static int rim(boolean dark) {
+        return white(dark ? DARK_RIM : LIGHT_RIM);
     }
 
     static float alpha(int argb) {

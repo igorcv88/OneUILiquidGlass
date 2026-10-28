@@ -260,10 +260,36 @@ static double tag(double r, double k, int pf) {
 }
 static double strength(double f, double base) { return 0.1 + 1.1 * clampd((f - base) / 0.15, 0, 1); }
 static double decodeFill(double f) {
-    return f > 0.54 && f < 0.71 ? strength(f, 0.55) : f > 0.29 && f < 0.46 ? 2 + strength(f, 0.30) : f > 0.04 && f < 0.21 ? 4 + strength(f, 0.05) : 0;
+    return f > 0.54 && f < 0.71 ? strength(f, 0.55) : f > 0.29 && f < 0.46 ? 2 + strength(f, 0.30) : f > 0.04 && f < 0.21 ? 4 + strength(f, 0.05)
+         : f > 0.79 && f < 0.96 ? 6 + strength(f, 0.80) : 0;
 }
 static double decodeClip(double f) {
-    return f > 0.04 && f < 0.21 ? strength(f, 0.05) : f > 0.79 && f < 0.96 ? 2 + strength(f, 0.80) : f > 0.54 && f < 0.71 ? 4 + strength(f, 0.55) : 0;
+    return f > 0.04 && f < 0.21 ? strength(f, 0.05) : f > 0.79 && f < 0.96 ? 2 + strength(f, 0.80) : f > 0.54 && f < 0.71 ? 4 + strength(f, 0.55)
+         : f > 0.29 && f < 0.46 ? 6 + strength(f, 0.30) : 0;
+}
+
+// Profile 3 (Quick Settings edge light): QuickSettingsGlass.edgeTag sends floor(r) - 1 + 0.875 for
+// 43 <= r < 256. Both programs must decode profile 3 at every such radius, the clip program also from
+// an fp16 uniform (r + 0.5, step <= 1/8 below 256: .375 is exact), and no other profile's tag nor a
+// whole-pixel radius may decode as profile 3.
+static void checkEdgeTag(void) {
+    int before = failures, n = 0;
+    for (double r0 = 43; r0 < 256; r0 += 0.25) {
+        double r = floor(r0) - 1 + 0.875;
+        CHECK(r > 42 && r <= r0 && r0 - r < 1.5, "edge tag %.3f for radius %.2f", r, r0);
+        double kf = decodeFill(r - floor(r)), kc = decodeClip((r + 0.5) - floor(r + 0.5));
+        CHECK(kf >= 6 && kf < 8 && kc >= 6 && kc < 8, "edge tag r=%.3f fill=%.3f clip=%.3f", r, kf, kc);
+        double v = r + 0.5, ulp = ldexp(1, (int) floor(log2(v)) - 10), h16 = round(v / ulp) * ulp;
+        double kh = decodeClip(h16 - floor(h16));
+        CHECK(kh >= 6 && kh < 8, "edge tag fp16 r=%.3f -> %.4f decodes %.3f", r, h16, kh);
+        CHECK(decodeFill(0) == 0 && decodeClip(0.5) == 0, "whole-pixel radius decodes");
+        for (int pf = 0; pf < 3; pf++) {
+            double t = tag(r0, 0.4, pf);
+            CHECK(decodeFill(t - floor(t)) < 6 && decodeClip(t + 0.5 - floor(t + 0.5)) < 6, "profile %d tag decodes as 3", pf);
+        }
+        n++;
+    }
+    printf("edge tag (profile 3): %d radii 43-256 px, fill/clip/fp16 clip, failures = %d\n", n, failures - before);
 }
 
 // oulg_tone (profile 2), ported: light text (k < 0.65) caps luma, dark text lifts it.
@@ -412,5 +438,6 @@ int main(void) {
     printf("\nfield: failures = %d\n", failures);
     check23();
     checkEdge0();
+    checkEdgeTag();
     return failures != 0;
 }
