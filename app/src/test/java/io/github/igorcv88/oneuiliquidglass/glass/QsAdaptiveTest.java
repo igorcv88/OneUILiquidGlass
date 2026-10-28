@@ -94,7 +94,7 @@ public class QsAdaptiveTest {
         assertEquals(0,QuickSettingsGlass.fill(CONTAINER,0x33000000,DARK_SCENE,heavy)>>>24);
         assertNotEquals(a,new QsStyle(k->k.equals("qs.fill")?"0.25":null));
         assertEquals(a,new QsStyle(k->k.equals("qs.fill")?"NaN":null));
-        assertEquals(.88f,a.fill,1e-6f);
+        assertEquals(.85f,a.fill,1e-6f);
     }
 
     /** An old profile's light or white qs.lightcolor can never become a light film. */

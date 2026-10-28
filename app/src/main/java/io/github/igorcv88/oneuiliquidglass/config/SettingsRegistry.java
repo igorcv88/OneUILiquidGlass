@@ -124,7 +124,7 @@ public final class SettingsRegistry {
         add(new SettingSpec("qs.edgeblur","Controles rápidos","shade","Desfoque da borda","Desfoque do fundo lido pela lente dinâmica no contorno das cápsulas",SettingSpec.Type.INT,"8",1.0,32.0,1,"px","","sfrefract=1",false,"DIAGRAM"));
         add(new SettingSpec("qs.outer","Controles rápidos","shade","Espessura do slider","Espessura da pílula inteira dos sliders (o toque continua na área da Samsung)",SettingSpec.Type.FLOAT,"1",0.5,1.0,.01,"","","",false,"DIAGRAM"));
         add(new SettingSpec("qs.track","Controles rápidos","shade","Trilho antigo (descontinuado)","Legado sem efeito visual; preservado para importar e exportar perfis",SettingSpec.Type.FLOAT,".88",0.1,1.0,.01,"","","",false,"DIAGRAM"));
-        add(new SettingSpec("qs.fill","Controles rápidos","shade","Espessura do preenchimento","Espessura do preenchimento branco dentro da cápsula; a mesma margem vale nas pontas",SettingSpec.Type.FLOAT,".88",0.1,1.0,.01,"","","",false,"DIAGRAM"));
+        add(new SettingSpec("qs.fill","Controles rápidos","shade","Espessura do preenchimento","Espessura do preenchimento branco dentro da cápsula; a mesma margem vale nas pontas",SettingSpec.Type.FLOAT,".85",0.1,1.0,.01,"","","",false,"DIAGRAM"));
         add(new SettingSpec("qs.lightstyle","Controles rápidos","shade","Estilo antigo (descontinuado)","Legado sem efeito visual; ambos usam vidro translúcido e tinta adaptativa",SettingSpec.Type.ENUM,"light",0,1,.01,"","obsidian,light","",false,"DIAGRAM"));
         add(new SettingSpec("sf.qslight","Compositor","shade","Luz pela borda dos controles rápidos","Quick Settings: luz que entra pelo contorno conforme o fundo ali (0 desliga)",SettingSpec.Type.FLOAT,".90",0,2,.01,"","","sfrefract=1",true,"DIAGRAM"));
     }

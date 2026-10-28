@@ -26,7 +26,7 @@ public final class QuickSettingsGlass {
      */
     static final float DARK_RIM = 0.26f, LIGHT_RIM = 0.18f;
     /** Default slider progress thickness: share of the capsule's narrow side. */
-    static final float SLIDER_FILL = 0.88f;
+    static final float SLIDER_FILL = 0.85f;
 
     /** What a BoxWithOutline call draws, decided from Samsung's own arguments. */
     public enum Kind {

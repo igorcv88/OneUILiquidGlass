@@ -2,6 +2,7 @@ package io.github.igorcv88.oneuiliquidglass.hooks;
 
 import android.graphics.Canvas;
 import android.graphics.Paint;
+import android.graphics.Path;
 import android.graphics.RuntimeShader;
 import java.util.Map;
 import java.util.WeakHashMap;
@@ -17,8 +18,9 @@ import io.github.igorcv88.oneuiliquidglass.glass.Tuning;
  * the outline faces the light, a fainter internal reflection opposite and a soft absorption ring
  * inside the far side (the slab's thickness). The capsules had a uniform white line instead. The
  * same program, with the same GlassSpec and the shade's tuning, is drawn here inside each glass
- * container just before its background and content (QuickSettingsEdgeLight's BackgroundNode.draw:
- * icons and labels stay above the light), in the inner box
+ * container between the native background and the content where the drawContent boundary is
+ * available. Without that boundary it is drawn after the node, clipped to the inner bevel ring
+ * so it cannot wash over the content in the middle of the capsule, in the inner box
  * Samsung pads by its outline: Compose-drawn, so it fades with the controls (a slider drag) and
  * needs no compositor. Over a light scene the light style applies, as on light notification glass:
  * a bright bent contour and a stronger thickness shadow. One shader per node (uniforms are
@@ -41,6 +43,16 @@ final class QsCapsuleOptics {
      * backdrop is a light scene. Main/render thread of the draw; never throws.
      */
     boolean draw(Object node, Canvas canvas, float x, float y, float w, float h, float radius, float density, boolean light) {
+        return draw(node, canvas, x, y, w, h, radius, density, light, false);
+    }
+
+    /**
+     * If the Compose drawContent boundary is absent/inlined, the only reliable visible fallback is
+     * after BackgroundNode.draw. Clip that overlay to the inside bevel: never cover the labels or
+     * artwork in the capsule centre with a late shader draw.
+     */
+    boolean draw(Object node, Canvas canvas, float x, float y, float w, float h, float radius,
+            float density, boolean light, boolean rimOnlyOverlay) {
         if (broken || !canvas.isHardwareAccelerated() || !(w > 2f) || !(h > 2f)) return false;
         try {
             Paint paint;
@@ -55,13 +67,32 @@ final class QsCapsuleOptics {
             RuntimeShader s = (RuntimeShader) paint.getShader();
             uniforms(s, spec, Tuning.get(), w, h, radius, density, light);
             int save = canvas.save();
-            try { canvas.translate(x, y); canvas.drawRect(0f, 0f, w, h, paint); }
+            try {
+                canvas.translate(x, y);
+                if (rimOnlyOverlay) {
+                    float band = overlayBand(w, h, density, spec.rimDp);
+                    if (!(band > 0f) || !(w > 2f * band) || !(h > 2f * band)) return false;
+                    Path centre = new Path();
+                    centre.addRoundRect(band, band, w - band, h - band,
+                            Math.max(0f, radius - band), Math.max(0f, radius - band), Path.Direction.CW);
+                    canvas.clipOutPath(centre);
+                }
+                canvas.drawRect(0f, 0f, w, h, paint);
+            }
             finally { canvas.restoreToCount(save); }
             return true;
         } catch (RuntimeException | LinkageError e) {
             fail("shader", e);
             return false;
         }
+    }
+
+    /** Leave at least half the short axis clear while showing the whole lit bevel near the rim. */
+    static float overlayBand(float w, float h, float density, float rimDp) {
+        if (!Float.isFinite(w) || !Float.isFinite(h) || !Float.isFinite(density)
+                || !Float.isFinite(rimDp) || w <= 0f || h <= 0f || density <= 0f || rimDp <= 0f)
+            return 0f;
+        return Math.min(GlassSpec.bevelPx(rimDp, density, w, h), Math.min(w, h) * 0.24f);
     }
 
     /**
