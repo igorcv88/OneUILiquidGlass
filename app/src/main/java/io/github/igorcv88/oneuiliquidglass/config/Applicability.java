@@ -245,6 +245,10 @@ public final class Applicability {
                         ? EnumSet.allOf(Controls.Surface.class)
                         : c.surfaces;
         if (!globalOn()) return new Result(Kind.OFF, "O vidro está desligado");
+        if (key.startsWith("qs.") || key.startsWith("sf.qs")) {
+            if (!flag(ProductFlags.QUICK_SETTINGS)) return new Result(Kind.OFF, "Ative Controles rápidos");
+            return rule;
+        }
         if (surface != null && where.contains(surface)) {
             if (!surfaceOn(surface))
                 return new Result(Kind.OFF, "O vidro está desligado em " + surface.label);

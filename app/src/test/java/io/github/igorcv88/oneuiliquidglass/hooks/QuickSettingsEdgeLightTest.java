@@ -164,6 +164,61 @@ public final class QuickSettingsEdgeLightTest {
         return e;
     }
 
+    @Test public void invalidSizeReleasesAnAlreadyAllocatedRegion() throws Exception {
+        QuickSettingsEdgeLight edge=edge(true,true,true);Object node=bind(edge);BlurDrawable d=seed(edge,node);
+        set(edge,"getSize",EmptyScope.class.getMethod("size"));
+        call(edge,"draw",new Class<?>[]{Object.class,Object.class},node,new EmptyScope());
+        assertReleased(d);
+        assertEquals(true,get(edge,"ready"));
+    }
+
+    @Test public void softwareCanvasAndMissingRootReleaseOldRegions() throws Exception {
+        for(boolean hardware:new boolean[]{false,true}) {
+            QuickSettingsEdgeLight edge=edge(true,true,true);
+            Object element=new Object(),node=new Object();
+            edge.element(element,new Shape(),1);
+            call(edge,"bind",new Class<?>[]{Object.class,Object.class},element,node);
+            BlurDrawable d=seed(edge,node);
+            set(edge,"getSize",Scope.class.getMethod("size"));set(edge,"getDensity",Scope.class.getMethod("density"));
+            set(edge,"drawContext",Scope.class.getMethod("context"));
+            set(edge,"contextCanvas",DrawContext.class.getMethod("canvas"));
+            set(edge,"nativeCanvas",CanvasWrapper.class.getField("raw"));
+            set(edge,"topStart",Shape.class.getField("corner"));
+            set(edge,"toPx",Corner.class.getMethod("radius",Object.class,long.class));
+            if(hardware)set(edge,"host",new WeakReference<>(new RootlessView(activity)));
+            call(edge,"draw",new Class<?>[]{Object.class,Object.class},node,new Scope(hardware));
+            assertReleased(d);
+            assertEquals(true,get(edge,"ready"));
+            String reason=hardware?"missing-viewroot":"nonhardware-canvas";
+            assertTrue(ShadowLog.getLogsForTag("OULG").stream().anyMatch(log->log.msg.contains("reason="+reason)));
+        }
+    }
+
+    public static class EmptyScope { public long size(){return 0L;} }
+    public static class Shape { public final Corner corner=new Corner(); }
+    public static class Corner { public float radius(Object scope,long size){return 50f;} }
+    public static class Scope {
+        final DrawContext context;
+        Scope(boolean hardware){context=new DrawContext(hardware);}
+        public long size(){return ((long)Float.floatToRawIntBits(100)<<32)|(Float.floatToRawIntBits(300)&0xffffffffL);}
+        public float density(){return 1f;}
+        public DrawContext context(){return context;}
+    }
+    public static class DrawContext {
+        final CanvasWrapper wrapper;
+        DrawContext(boolean hardware){wrapper=new CanvasWrapper(hardware);}
+        public CanvasWrapper canvas(){return wrapper;}
+    }
+    public static class CanvasWrapper {
+        public final Canvas raw;
+        CanvasWrapper(boolean hardware){raw=hardware?new HardwareCanvas():new Canvas();}
+    }
+    public static class HardwareCanvas extends Canvas { @Override public boolean isHardwareAccelerated(){return true;} }
+    public static class RootlessView extends View {
+        RootlessView(android.content.Context context){super(context);}
+        public Object getViewRootImpl(){return null;}
+    }
+
     private Object bind(QuickSettingsEdgeLight edge) throws Exception {
         Object element = new Object(), node = new Object();
         edge.element(element, new Object(), 1f);

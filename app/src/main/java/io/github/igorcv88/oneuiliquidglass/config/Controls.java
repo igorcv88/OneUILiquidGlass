@@ -387,24 +387,24 @@ public final class Controls {
                 .show(BEHAV, Channel.NONE));
 
         // Cor e contraste
-        put(c("veilmax", "Proteção de contraste").fmt(Format.PERCENT_1).in(COLOR, STD)
+        put(c("veilmax", "Proteção de contraste").fmt(Format.PERCENT_1).in(COLOR, Tier.STANDARD)
                 .on(HU, SH).feature("tonemap")
                 .hint("Véu máximo para manter o texto legível")
                 .help("Limite do véu medido sobre o fundo. Mais proteção deixa o texto legível"
                         + " sobre fundos difíceis; menos mantém o vidro mais transparente.")
                 .show(FAITH, Channel.VEIL));
-        put(c("popuptone", "Contraste medido no pop-up").fmt(Format.TOGGLE).in(COLOR, STD)
+        put(c("popuptone", "Contraste medido no pop-up").fmt(Format.TOGGLE).in(COLOR, Tier.STANDARD)
                 .on(HU).feature("tonemap")
                 .hint("Mede o fundo sob o pop-up")
                 .help("O pop-up recebe um véu medido do fundo atrás dele. Desligado, texto"
                         + " branco pode ficar sobre um app branco.")
                 .show(FAITH, Channel.VEIL));
-        put(c("textswap", "Texto adaptativo").fmt(Format.TOGGLE).in(COLOR, STD).all()
+        put(c("textswap", "Texto adaptativo").fmt(Format.TOGGLE).in(COLOR, Tier.STANDARD).all()
                 .hint("Vidro claro ou escuro conforme o fundo")
                 .help("Sobre um fundo do lado oposto ao tema, o cartão vira vidro claro (ou"
                         + " escuro) e troca a cor do texto. Desligado, só o véu é usado.")
                 .show(FAITH, Channel.TEXT_SWAP));
-        put(c("shadetone", "Proteção de legibilidade").fmt(Format.CHOICE).in(COLOR, STD).on(SH)
+        put(c("shadetone", "Proteção de legibilidade").fmt(Format.CHOICE).in(COLOR, Tier.STANDARD).on(SH)
                 .feature("tonemap")
                 .choice("3", "Adaptativa", "Mede o fundo ao abrir a central")
                 .choice("2", "Véu fixo", "Mesmo véu em todos os cartões")
@@ -412,7 +412,7 @@ public final class Controls {
                 .choice("0", "Desligada", "Sem proteção")
                 .help("Como a central protege o texto sobre apps claros ou escuros.")
                 .show(DIDACTIC, Channel.VEIL));
-        put(c("paneldim", "Escurecer o painel").fmt(Format.PERCENT_1).in(COLOR, STD).on(SH)
+        put(c("paneldim", "Escurecer o painel").fmt(Format.PERCENT_1).in(COLOR, Tier.STANDARD).on(SH)
                 .hint("Sobre apps claros, no tema escuro")
                 .help("Escurece o fundo da central aberta sobre um app claro no tema escuro.")
                 .show(FAITH, Channel.PANEL_DIM));
@@ -602,6 +602,38 @@ public final class Controls {
                 .show(BEHAV, Channel.NONE));
         put(c("sf.shadelight", "Luz pela borda (lente)").fmt(Format.PERCENT_1).in(LENS, ADV).on(SH)
                 .help("Luz que entra pelo contorno dos cartões da central." + light)
+                .show(BEHAV, Channel.NONE));
+        // Quick Settings has its own opt-in and its own section inside Central.
+        put(c("qs.darkfill", "Véu em fundo colorido").fmt(Format.PERCENT_1).in(COLOR, Tier.STANDARD).on(SH)
+                .help("Ajuste ao vivo dos controles rápidos. A amostra acima representa notificações; confira os controles no aparelho.").show(BEHAV, Channel.NONE));
+        put(c("qs.lightfill", "Véu em fundo claro").fmt(Format.PERCENT_1).in(COLOR, Tier.STANDARD).on(SH)
+                .help("Ajuste ao vivo dos controles rápidos. A amostra acima representa notificações; confira os controles no aparelho.").show(BEHAV, Channel.NONE));
+        put(c("qs.darkcolor", "Cor em fundo colorido").fmt(Format.COLOR).in(COLOR, Tier.STANDARD).on(SH)
+                .help("Ajuste ao vivo dos controles rápidos. A amostra acima representa notificações; confira os controles no aparelho.").show(BEHAV, Channel.NONE));
+        put(c("qs.lightcolor", "Cor em fundo claro").fmt(Format.COLOR).in(COLOR, Tier.STANDARD).on(SH)
+                .help("Ajuste ao vivo dos controles rápidos. A amostra acima representa notificações; confira os controles no aparelho.").show(BEHAV, Channel.NONE));
+        put(c("qs.idle", "Círculos inativos").fmt(Format.PERCENT_1).in(COLOR, Tier.STANDARD).on(SH)
+                .help("Ajuste ao vivo dos controles rápidos. A amostra acima representa notificações; confira os controles no aparelho.").show(BEHAV, Channel.NONE));
+        put(c("qs.active", "Opacidade dos círculos ativos").fmt(Format.PERCENT_1).in(COLOR, Tier.STANDARD).on(SH)
+                .help("Ajuste ao vivo dos controles rápidos. A amostra acima representa notificações; confira os controles no aparelho.").show(BEHAV, Channel.NONE));
+        put(c("qs.darkrim", "Contorno em fundo colorido").fmt(Format.PERCENT_1).in(COLOR, Tier.STANDARD).on(SH)
+                .help("Ajuste ao vivo dos controles rápidos. A amostra acima representa notificações; confira os controles no aparelho.").show(BEHAV, Channel.NONE));
+        put(c("qs.lightrim", "Contorno em fundo claro").fmt(Format.PERCENT_1).in(COLOR, Tier.STANDARD).on(SH)
+                .help("Ajuste ao vivo dos controles rápidos. A amostra acima representa notificações; confira os controles no aparelho.").show(BEHAV, Channel.NONE));
+        put(c("qs.edgeblur", "Desfoque da borda").fmt(Format.PX).in(COLOR, Tier.STANDARD).on(SH)
+                .help("Ajuste ao vivo dos controles rápidos. A amostra acima representa notificações; confira os controles no aparelho.").show(BEHAV, Channel.NONE));
+        put(c("qs.outer", "Espessura da pílula externa").fmt(Format.PERCENT_1).in(COLOR, Tier.STANDARD).on(SH)
+                .help("Mantém a célula e a área de toque da Samsung; o máximo é a altura disponível.").show(BEHAV, Channel.NONE));
+        put(c("qs.track", "Espessura do trilho").fmt(Format.PERCENT_1).in(COLOR, Tier.STANDARD).on(SH)
+                .help("Altera somente o trilho, mantendo o preenchimento independente.").show(BEHAV, Channel.NONE));
+        put(c("qs.fill", "Espessura do preenchimento").fmt(Format.PERCENT_1).in(COLOR, Tier.STANDARD).on(SH)
+                .help("Altera somente o preenchimento, sem mudar o progresso ou o trilho.").show(BEHAV, Channel.NONE));
+        put(c("qs.lightstyle", "Estilo sobre fundo claro").fmt(Format.CHOICE).in(COLOR, Tier.STANDARD).on(SH)
+                .choice("obsidian", "Obsidiana", "Vidro grafite com conteúdo claro")
+                .choice("light", "Claro", "Vidro claro com conteúdo escuro")
+                .help("Ajuste ao vivo dos controles rápidos. A amostra acima representa notificações; confira os controles no aparelho.").show(BEHAV, Channel.NONE));
+        put(c("sf.qslight", "Intensidade da luz nos atalhos").fmt(Format.GAIN).in(LENS, ADV).on(SH)
+                .help("Luz que entra pelo contorno dos controles rápidos; 0 desliga essa contribuição." + restart)
                 .show(BEHAV, Channel.NONE));
         put(c("sf.qslens", "Refração dos atalhos").fmt(Format.PERCENT_1).in(LENS, ADV).on(SH)
                 .help("Refração do fundo junto ao contorno dos controles dos atalhos rápidos,"

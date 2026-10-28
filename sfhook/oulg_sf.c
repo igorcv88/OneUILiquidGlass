@@ -14,6 +14,7 @@
 #include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 #include <string.h>
 #include <unistd.h>
 #include <link.h>
@@ -281,7 +282,7 @@ static float prop_float(const char *name, float fallback) {
     if (__system_property_get(name, v) <= 0) return fallback;
     char *end = NULL;
     float f = strtof(v, &end);
-    return end != v ? f : fallback;
+    return end != v && *end == '\0' && isfinite(f) ? f : fallback;
 }
 
 // Optical profiles, read when a shader is compiled like the debug tint. Profile 0 (heads-up; the
@@ -347,6 +348,7 @@ static void layered_blur(struct oulg_profile p[OULG_PROFILES]) {
     p[3].lens = prop_float("debug.oulg.sf.qslens", OULG_QS_LENS_DEFAULT);
     p[3].lwidth = prop_float("debug.oulg.sf.qsdepth", OULG_QS_LWIDTH_DEFAULT);
     p[3].body = prop_float("debug.oulg.sf.qsbody", OULG_QS_BODY_DEFAULT);
+    p[3].light = prop_float("debug.oulg.sf.qslight", OULG_QS_LIGHT_DEFAULT);
 }
 
 // Tells the module that this library's optics are live (debug.oulg.sf.optics = OULG_OPTICS_VERSION)

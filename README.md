@@ -161,3 +161,12 @@ The [release workflow](.github/workflows/release.yml) is dispatched manually on 
 ## License and attribution
 
 MIT License. See [LICENSE](LICENSE) and [NOTICE](NOTICE). Independent SystemUI project; the WaEnhancer Community design and README organization informed this project's documentation, but the projects do not share a runtime or settings storage.
+
+### Controles rápidos na One UI 9
+
+Em **Central → Controles rápidos**, o módulo pode selecionar vidro grafite sobre fundo claro e
+preservar o véu colorido sobre fundo escuro. A seção reúne cores, círculos, bordas e três espessuras
+independentes dos sliders, mantendo a célula e os gestos da Samsung. Os ajustes de Compose aplicam
+ao vivo; luz/refração da lente usam o fluxo de aplicação pendente do compositor. O recurso continua
+opt-in. A comparação visual no Galaxy e os limites do firmware estão em
+[docs/quick-settings-glass.md](docs/quick-settings-glass.md).

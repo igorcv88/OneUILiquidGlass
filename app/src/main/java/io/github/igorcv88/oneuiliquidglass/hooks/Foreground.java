@@ -328,6 +328,89 @@ final class Foreground {
         float[] s = shadows.remove(t);
         if (s != null) t.setShadowLayer(s[0], s[1], s[2], Float.floatToRawIntBits(s[3]));
     }
+    private static final class Chevron {
+        ColorStateList tint;
+        android.graphics.PorterDuff.Mode mode;
+        android.graphics.ColorFilter imageFilter, drawableFilter, appliedFilter;
+        java.lang.ref.WeakReference<android.graphics.drawable.Drawable> drawable;
+        int color;
+        boolean lightText;
+        Chevron(ImageView v) { remember(v); }
+        void remember(ImageView v) {
+            tint=v.getImageTintList(); mode=v.getImageTintMode(); imageFilter=v.getColorFilter();
+            android.graphics.drawable.Drawable d=v.getDrawable();
+            drawable=new java.lang.ref.WeakReference<>(d);drawableFilter=d==null?null:d.getColorFilter();
+        }
+        boolean current(ImageView v) {
+            android.graphics.drawable.Drawable d=v.getDrawable();
+            return d==drawable.get() && d!=null && d.getColorFilter()==appliedFilter
+                    && v.getColorFilter()==appliedFilter && v.getImageTintList()!=null
+                    && v.getImageTintList().getDefaultColor()==color;
+        }
+        void restore(ImageView v) {
+            android.graphics.drawable.Drawable d=v.getDrawable();
+            boolean owns=d!=null&&d.getColorFilter()==appliedFilter;
+            ColorStateList now=v.getImageTintList();
+            if(now!=null&&now.getDefaultColor()==color){v.setImageTintList(tint);v.setImageTintMode(mode);}
+            if(v.getColorFilter()==appliedFilter)v.setColorFilter(imageFilter);
+            if(owns)d.setColorFilter(drawableFilter);
+        }
+    }
+    private static final WeakHashMap<ImageView,Chevron> chevrons=new WeakHashMap<>();
+    static boolean trackingChevrons() { return !chevrons.isEmpty(); }
+    static void beforeChevronDrawable(ImageView view,android.graphics.drawable.Drawable incoming) {
+        Chevron r=chevrons.get(view);
+        if(r==null||incoming==null)return;
+        // Save the incoming drawable before ImageView copies our current filter onto it.
+        r.drawable=new java.lang.ref.WeakReference<>(incoming);
+        if(incoming.getColorFilter()!=r.appliedFilter)r.drawableFilter=incoming.getColorFilter();
+    }
+    private static int chevronLogs;
+    private static boolean chevronId(View v) {
+        try { return "android".equals(v.getResources().getResourcePackageName(v.getId()))
+                && "expand_button_icon".equals(v.getResources().getResourceEntryName(v.getId())); }
+        catch(RuntimeException e){return false;}
+    }
+    private static Integer filterColor(android.graphics.ColorFilter f) {
+        if(f instanceof android.graphics.PorterDuffColorFilter) {
+            try { Object color=Reflect.call(f,"getColor");return color instanceof Integer?(Integer)color:null; }
+            catch(ReflectiveOperationException|RuntimeException e){return null;}
+        }
+        if(f instanceof android.graphics.BlendModeColorFilter)return ((android.graphics.BlendModeColorFilter)f).getColor();
+        return null;
+    }
+    private static boolean chevron(ImageView v,boolean swap,boolean lightText) {
+        Chevron r=chevrons.get(v);
+        if(!swap){if(r==null)return false;chevrons.remove(v);r.restore(v);return true;}
+        if(r!=null&&r.current(v))return false;
+        if(v.getDrawable()==null)return false;
+        if(r==null){r=new Chevron(v);chevrons.put(v,r);}
+        else {
+            ColorStateList tint=v.getImageTintList();
+            if(tint==null||tint.getDefaultColor()!=r.color)r.tint=tint;
+            if(v.getColorFilter()!=r.appliedFilter)r.imageFilter=v.getColorFilter();
+            android.graphics.drawable.Drawable d=v.getDrawable();
+            if(d.getColorFilter()!=r.appliedFilter)r.drawableFilter=d.getColorFilter();
+            r.drawable=new java.lang.ref.WeakReference<>(d);
+        }
+        r.lightText=lightText;
+        Integer nativeColor=r.tint==null?filterColor(r.drawableFilter):Integer.valueOf(r.tint.getDefaultColor());
+        int c=nativeColor==null?(lightText?0xffffffff:0xff1d1d1d):nativeColor;
+        if(!themeTone(c,lightText)){chevrons.remove(v);r.restore(v);return false;}
+        int mapped=mirror(c);
+        if(r.appliedFilter==null||r.color!=mapped)
+            r.appliedFilter=new android.graphics.PorterDuffColorFilter(mapped,android.graphics.PorterDuff.Mode.SRC_IN);
+        r.color=mapped;
+        v.setImageTintList(ColorStateList.valueOf(r.color));
+        v.setImageTintMode(android.graphics.PorterDuff.Mode.SRC_IN);
+        v.setColorFilter(r.appliedFilter);
+        v.getDrawable().mutate().setColorFilter(r.appliedFilter);
+        if(chevronLogs++<8)io.github.igorcv88.oneuiliquidglass.diagnostics.Probe.log("CHEVRON_TONE",
+                "view="+Integer.toHexString(System.identityHashCode(v))+" drawable="+Integer.toHexString(System.identityHashCode(v.getDrawable()))
+                +" tint="+(r.tint!=null)+" filter="+(r.drawableFilter!=null)+" alpha="+v.getImageAlpha());
+        return true;
+    }
+
     /** Only icons tinted through imageTintList: the expand chevron and similar glyphs, never app icons. */
     private static final class Icon implements Ink {
         final ImageView i;
@@ -382,7 +465,7 @@ final class Foreground {
                 if (!(v instanceof TextView)) continue;
                 changed += ink(new Text((TextView) v), swap, lightText, swapped) ? 1 : 0;
                 shadowFor((TextView) v, swap);
-                if (tracked != null && swap && swapped.containsKey(v)) tracked.add(v);
+                if (tracked != null && swap && (swapped.containsKey(v) || chevrons.containsKey(v))) tracked.add(v);
             }
         } finally { applying = false; }
         return changed;
@@ -432,6 +515,15 @@ final class Foreground {
             View v = tracked.get(i);
             lastDrift = v;
             if (!v.isAttachedToWindow()) return "detached";
+            if (v instanceof ImageView && chevrons.containsKey(v)) {
+                Chevron c=chevrons.get(v);
+                if (!c.current((ImageView)v)) {
+                    boolean before=applying;applying=true;
+                    try { chevron((ImageView)v,true,c.lightText); }
+                    finally { applying=before; }
+                }
+                continue;
+            }
             Rec r = swapped.get(v);
             // Read in place (no Ink wrapper): this runs for every swapped view on every pre-draw.
             if (r == null) return "rebind";
@@ -462,6 +554,8 @@ final class Foreground {
                 if (record != null) record.custom = !standard(v, false);
                 shadowFor((TextView) v, swap && eligible);
             }
+        } else if (v instanceof ImageView && (chevrons.containsKey(v) || chevronId(v))) {
+            changed += chevron((ImageView)v,swap,lightText)?1:0;
         } else if (v instanceof ImageView && (glyphs.containsKey(v) || smallIcon(v))) {
             // icontone turned off live restores the glyphs already swapped.
             changed += glyph((ImageView) v, swap && io.github.igorcv88.oneuiliquidglass.glass.Tuning.get().iconTone, lightText) ? 1 : 0;
@@ -470,7 +564,7 @@ final class Foreground {
             if (i.getImageTintList() == null) swapped.remove(v);
             else if (standard(v, true)) changed += ink(new Icon(i), swap, lightText, swapped) ? 1 : 0;
         }
-        if (tracked != null && swap && swapped.containsKey(v)) tracked.add(v);
+        if (tracked != null && swap && (swapped.containsKey(v) || chevrons.containsKey(v))) tracked.add(v);
         if (v instanceof ViewGroup) {
             ViewGroup g = (ViewGroup) v;
             for (int i = 0; i < g.getChildCount(); i++) {

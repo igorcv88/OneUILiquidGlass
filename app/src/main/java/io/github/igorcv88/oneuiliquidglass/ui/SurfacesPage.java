@@ -17,6 +17,8 @@ import java.util.*;
  */
 public final class SurfacesPage implements Page {
     private final Host host;
+    private Toggle qsToggle;
+    private View qsRow;
     private final Theme t;
     private final FrameLayout root;
     private final ScrollView scroll;
@@ -264,6 +266,10 @@ public final class SurfacesPage implements Page {
         if (baseline == null) baseline = new HashMap<>(st.shownMap());
         Set<String> fav = favorites();
         if (builtSurface != surface || builtMode != app.mode || !fav.equals(builtFavorites)) build(app.mode, fav);
+        if (qsToggle != null) {
+            qsToggle.set(!"0".equals(st.shown(ProductFlags.QUICK_SETTINGS)), true);
+            Ui.enable(qsRow, st.enabled);
+        }
         boolean surfaceOn = app.surfaceOn(surface);
         surfaceToggle.set(surfaceOn, true);
         Ui.enable(surfaceRow, st.enabled);
@@ -303,6 +309,35 @@ public final class SurfacesPage implements Page {
         list.addView(gate, Ui.match());
 
         Set<String> placed = new HashSet<>();
+        qsToggle=null; qsRow=null;
+        if (surface == Controls.Surface.SHADE) {
+            list.addView(Ui.section(a,t,"Controles rápidos"));
+            LinearLayout qsGate=Ui.card(a,t);
+            qsToggle=new Toggle(a,t);
+            qsRow=Ui.switchRow(a,t,Icon.SHADE,"Vidro nos controles rápidos",null,qsToggle);
+            qsToggle.listener((x,on)->host.model().flag(ProductFlags.QUICK_SETTINGS,on));
+            qsGate.addView(qsRow);list.addView(qsGate,Ui.match());
+            String[][] keys={
+                {"qs.darkfill","qs.darkcolor","qs.lightfill","qs.lightcolor","qs.lightstyle"},
+                {"qs.idle","qs.active"}, {"qs.darkrim","qs.lightrim","qs.edgeblur"},
+                {"qs.outer","qs.track","qs.fill"}, {"sf.qslens","sf.qsbody","sf.qsdepth","sf.qslight"}
+            };
+            String[] names={"Aparência","Círculos","Bordas","Sliders","Avançado"};
+            for(int i=0;i<keys.length;i++) {
+                if(i==4){
+                    String id="shade.quicksettings.advanced";
+                    View[] disclosure=Ui.disclosure(a,t,Icon.LENS,names[i],"Luz e refração da borda",open.contains(id),on->{if(on)open.add(id);else open.remove(id);});
+                    LinearLayout advanced=Ui.card(a,t);advanced.addView(disclosure[0]);
+                    LinearLayout body=(LinearLayout)disclosure[1];
+                    for(String k:keys[i])addRow(body,k,placed);
+                    advanced.addView(body);list.addView(advanced,Ui.match());
+                }else{
+                    list.addView(Ui.section(a,t,names[i]));
+                    list.addView(card(Arrays.asList(keys[i]),placed),Ui.match());
+                }
+            }
+            list.addView(Ui.notice(a,t,Ui.Tone.INFO,"A amostra acima é de notificações. Confira os controles rápidos no aparelho.",null,null),Ui.match());
+        }
         if (!fav.isEmpty()) {
             list.addView(Ui.section(a, t, "Favoritos"));
             list.addView(card(new ArrayList<>(fav), placed), Ui.match());

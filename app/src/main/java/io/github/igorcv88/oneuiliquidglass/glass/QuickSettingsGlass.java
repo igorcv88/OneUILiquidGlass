@@ -61,6 +61,60 @@ public final class QuickSettingsGlass {
         }
     }
 
+    public static int fill(Kind kind, int nativeFill, boolean darkTheme, QsScene.Tone scene, QsStyle s) {
+        if (kind == Kind.NONE) return nativeFill;
+        if (kind == Kind.ACTIVE) return withAlpha(nativeFill, Math.min(alpha(nativeFill), s.active));
+        if (scene == QsScene.Tone.UNKNOWN) return fill(kind, nativeFill, darkTheme);
+        if (kind == Kind.IDLE) return withAlpha(0xffffff, s.idle);
+        if (scene == QsScene.Tone.LIGHT_SCENE)
+            return withAlpha(s.lightGlass ? 0xf4f5f7 : s.lightColor, s.lightFill);
+        return withAlpha(s.darkColor, s.darkFill);
+    }
+
+    public static int rim(boolean darkTheme, QsScene.Tone scene, QsStyle s) {
+        if (scene == QsScene.Tone.UNKNOWN) return rim(darkTheme);
+        return withAlpha(0xffffff, scene == QsScene.Tone.LIGHT_SCENE ? s.lightRim : s.darkRim);
+    }
+
+    public static int withAlpha(int color, float a) {
+        return (Math.round(Math.max(0, Math.min(1, a)) * 255f) << 24) | (color & 0xffffff);
+    }
+
+    /** Only neutral foregrounds; logos, accent colours and transparent/sentinel values survive. */
+    public static int ink(int nativeColor, boolean darkInk) {
+        int r=(nativeColor >> 16)&255, g=(nativeColor >> 8)&255, b=nativeColor&255;
+        if ((nativeColor >>> 24) == 0 || Math.max(r,Math.max(g,b))-Math.min(r,Math.min(g,b)) > 36) return nativeColor;
+        return withAlpha(darkInk ? 0x1d1d1d : 0xffffff, Math.max(.85f, alpha(nativeColor)));
+    }
+    public static int iconInk(int nativeColor, Kind state, boolean darkInk) {
+        if(state==Kind.ACTIVE)return nativeColor;
+        // Unknown glyphs may belong to a native light disc; known inactive glyphs take the body ink.
+        if(state==Kind.NONE&&((nativeColor>>16)&255)<128)return nativeColor;
+        return ink(nativeColor,darkInk);
+    }
+
+    /** Centred envelope inside the native grid cell. Its long axis and hitbox never change. */
+    public static float[] envelope(float w, float h, float ratio) {
+        ratio = Float.isFinite(ratio) ? Math.max(.1f, Math.min(1f, ratio)) : 1f;
+        float dx = w <= h ? w * (1-ratio)/2 : 0;
+        float dy = h < w ? h * (1-ratio)/2 : 0;
+        return new float[]{dx,dy,w-dx,h-dy};
+    }
+
+    /** Native progress coordinates are retained on the long axis; only thickness is independent. */
+    public static float[] sliderPrimitive(float w,float h,float outer,float ratio,
+            float x,float y,float sw,float sh,boolean thumb,boolean rtl) {
+        float narrow=Math.min(w,h)*Math.max(.5f,Math.min(1f,outer))*Math.max(.1f,Math.min(1f,ratio));
+        if(w<=h){
+            x=(w-narrow)/2;sw=narrow;
+            if(thumb)sh=Math.min(sh,narrow);
+        }else{
+            y=(h-narrow)/2;sh=narrow;
+            if(thumb){float next=Math.min(sw,narrow);if(!rtl)x+=sw-next;sw=next;}
+        }
+        return new float[]{x,y,Math.max(0,sw),Math.max(0,sh),narrow/2};
+    }
+
     /**
      * Only outer containers carry the optical rim; circles inside them keep Samsung's outline, so
      * that a group of controls reads as one piece of glass rather than a set of small lenses.

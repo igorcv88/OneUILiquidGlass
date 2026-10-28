@@ -1170,3 +1170,19 @@ Cause: the stack removes the row and adds it back at once as a transient view fo
 
 - **Separate blur for the notification center and the control center.** Theme Park and HomeUp set a single blur amount for both panels. The user runs 12 %: lower leaves the control center unreadable, higher over-blurs the notification list. A split needs its own investigation: find where SystemUI applies the panel blur, whether the two panels are separate blur regions or one window, and whether the module can own one of them.
 - **Tuning the compositor lens without a restart.** Lens strength, bevel width and highlight are constants in `refract.h`, so each change needs a surfaceflinger restart and a cleared cache. The radius fraction already carries the tag and could also carry the strength, so the module could tune it live.
+
+## QS adaptativo após #75
+
+`QsStyle` é o snapshot imutável de controles do provider; `QsScene` classifica luma com histerese.
+`QsBackdrop` usa prefetch cancelável abaixo da janela QS e não lê pixels/config por frame. Tinta,
+conteúdo Compose e scopes são atualizados juntos por invalidação dirigida. Mídia ativa possui vias
+explícitas para seu background e arte. `QsSliderHooks` diferencia as três primitives DZIF por
+identidade de DrawScope; `QsDrawTransaction` garante restore do Canvas/context. `QsPillShape` muda
+somente o envelope desenhado dentro da célula, e `QuickSettingsEdgeLight` usa a mesma geometria.
+`HeaderToneController` mantém uma lista fixa de Views, readquire instâncias e repara cores antes de
+desenhar. Chevrons possuem restauração de tint/filtros e observação de rebind do Drawable.
+
+Controles qs.* aplicam via provider; sf.qs* exigem o fluxo transacional existente. O ganho qslight
+agora é lido pelo perfil 3 e autorizado no helper. Ver docs/quick-settings-glass.md para assinaturas
+verificadas, limites, diagnóstico e protocolo de hardware. Não houve ajuste especulativo da luz
+ou do shade global das notificações.

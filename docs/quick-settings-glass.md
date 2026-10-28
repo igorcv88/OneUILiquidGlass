@@ -194,11 +194,11 @@ Samsung recompõe as cores. O recuo dos sliders vale a partir do próximo redese
   profundidade, força da refração e opacidade são propriedades.
 - O SmartThings/Google Home (e outros `DeviceControl`/`NearByDevice`/`MyDevice`) fica sem disco,
   como na Samsung; só a posição do ícone e do rótulo segue a dos tiles com disco.
-- O player com mídia tocando (`MediaPlayerKt`) não passa por `BoxWithOutline`; só o estado vazio
-  recebe o material.
+- O player ativo não passa por `BoxWithOutline`; possui hooks próprios de background e arte,
+  descritos na seção do material adaptativo abaixo. Ausência dessas APIs é uma lacuna a validar.
 - A cor do preenchimento dos sliders e os ícones permanecem os da Samsung.
-- Os valores do material são constantes em `QuickSettingsGlass`. Expor como ajustes no app
-  (catálogo, `Controls`, superfície própria) fica para depois da validação no aparelho.
+- A paleta legada permanece como fallback. Os ajustes do material adaptativo estão em `QsStyle`
+  e na seção Controles rápidos, descrita abaixo; os valores iniciais ainda exigem A/B no aparelho.
 - O hook altera chamadas de `BoxWithOutline` também no modo de edição e em pop-ups da Central que
   usem o mesmo componente; conferir na validação.
 
@@ -324,3 +324,136 @@ instância seria correta. O teste no aparelho decide se essa recuperação é ne
 Os testes de host cobrem gates e motivos, associação por identidade, rebind/unbind, release,
 substituição/detach do host, fade sem expansão legível, escala e atualização do alpha sem novo draw.
 Não substituem as capturas e os logs do dispositivo.
+
+## Material adaptativo e controles (base #75)
+
+A nova captura mede o conteúdo abaixo da janela QS, excluindo a própria janela por SurfaceControl.
+`QsBackdrop` mantém uma requisição cancelável de `ShadeTone.prefetch` por abertura, em escala 0,125;
+a cópia de pixels e a redução para `ToneGrid` continuam no worker. Um toque na borda superior pode
+antecipar a captura. Não há captura, consulta de configuração ou varredura de Views por frame com o
+recurso desligado. Os timestamps são fixados quando as janelas de exclusão são reunidas, antes de
+enfileirar o worker; uma medição não aceita uma captura anterior à sua inscrição.
+
+`QsScene` separa UNKNOWN / DARK_SCENE / LIGHT_SCENE do tema Android. Entrada em claro: luma sRGB
+≥ 0,75; saída: < 0,65, com cooldown de 500 ms. Uma amostra com mais de 600 ms não decide uma nova
+abertura; dados seguros indisponíveis mantêm a paleta legada por tema. O estado fica estável durante
+a abertura. Mudanças de configuração/tema invalidam a amostra por ComponentCallbacks e pedem
+uma nova captura; detach cancela a requisição e remove callbacks/listeners. O header QS usa separadamente as quatro bandas superiores, evitando inverter o painel
+inteiro por causa de uma faixa clara no topo. A classificação das cápsulas é global: fotos mistas
+ainda precisam de teste local de contraste no aparelho; não há promessa de contraste mínimo para
+todos os pixels de um vídeo ou wallpaper arbitrário.
+
+Sobre claro, o ponto inicial ajustável é #141823 com alpha 0,66 e contorno branco 0,18. É uma
+hipótese de teste, não um default aprovado visualmente. Sobre colorido/escuro, os defaults do véu e
+contorno continuam 0,10 / 0,26. A variante “Claro” serve ao A/B com tinta escura. Sem amostra válida
+não se escolhe obsidiana por suposição. Texto neutro conserva pelo menos alpha 0,85 no contexto
+adaptado; cores de destaque, logos sem tint e ícones pretos dos discos ativos são preservados. A espécie ACTIVE/IDLE observada em
+BoxWithOutline é associada ao Painter por identidade, com referências fracas e teto de 64 entradas;
+a associação mantém a tinta correta em recomposições independentes de QSIcon. Glyphs sem estado
+conhecido mantêm conservadoramente a tinta escura nativa, para não inverter um disco claro.
+
+`QsContentHooks` limita os hooks de Text/Icon aos composables QS e às lambdas de conteúdo
+identificadas no DEX DZIF. `QSIcon-fWhpE4E` só altera conteúdo explicitamente tintável. O cabeçalho
+usa seus próprios wrappers; não existe filtro global na janela. Cada scope capturado é invalidado
+por mudança de cena ou de snapshot `QsStyle`, mesmo com `on == applied`. Os campos são lidos uma
+vez no callback de configuração. Propriedades de shader não usam esse caminho de aplicação live.
+
+### Mídia ativa
+
+`OneUI90MediaPlayerPageKt` cria um background fora de `BoxWithOutline`; o hook captura seu clip
+arredondado e o associa à região óptica. `MediaArtworkKt$$ExternalSyntheticLambda4.invoke` desenha
+a arte e os gradientes nativos. Um véu é desenhado depois dessa chamada, somente na cena clara,
+atrás dos controles do player. Assim uma capa branca não cobre o material de proteção.
+DrawWithContentElement.onDraw/create/update e DrawModifierNodeKt.invalidateDraw foram confirmados
+no DEX DZIF. Os nós da arte são acompanhados por identidade com weak refs, e sua display list é
+invalidada junto aos scopes, inclusive em OFF: só recompor a página pode reutilizar a mesma lambda
+e deixar um véu antigo gravado no desenho. Falhas ou
+API ausente geram `QS_ARTWORK_FAILED` / `QS_ARTWORK_MISSING` uma vez e deixam o desenho nativo;
+esses casos precisam ser tratados como lacuna de contraste na validação. Play/pause, metadata e
+arte continuam pertencendo à Samsung. Logos multicoloridos e logos brancos sem tint são mantidos;
+a variante clara precisa de inspeção desses logos no dispositivo.
+
+### Três espessuras, sem alterar a célula
+
+- Pílula externa: 50–100% da dimensão curta da célula nativa. O limite superior é físico; não há
+  expansão da grade. Um Shape com outline inset substitui somente os shapes de fundo e borda do
+  slider. O clip do host e a área de toque não são substituídos.
+- Trilho: 10–100% da largura/altura da pílula externa; só seu rect recebe geometria e clip próprios.
+- Preenchimento: 10–100% da pílula; o gradiente recebe geometria e raios próprios, preservando a
+  posição de progresso no eixo longo e a direção RTL. O thumb mantém sua proporção de 88% dentro
+  da pílula, independente dos knobs de trilho e fill.
+
+A referência é o DEX DZIF, não o nome decompilado normalizado:
+
+| Membro | Escopo |
+| --- | --- |
+| `BidirectionalBar-Ld4roP0` | Marca a composição da pílula externa |
+| `drawBidirectionalBarTrackProgressThumbContent-Uzs9YN0` | Transação de Canvas/context size |
+| `DrawScope.drawRect-n-J9OG0$default` | Trilho |
+| `DrawScope.drawRoundRect-ZuiqVtQ$default` | Gradiente de progresso |
+| `DrawScope.drawRoundRect-u-Aw5IA$default` | Thumb |
+| `Shape.createOutline-Pq9zytI` / `Outline.Rounded(RoundRect)` | Envelope externo inset |
+
+Primitives só são alteradas quando o DrawScope é a mesma identidade do slider sendo desenhado.
+O bit de alpha padrão do rect é preservado: a Samsung passa alpha 0 com máscara 110, em que o
+bit 8 seleciona alpha 1. `QsDrawTransaction` restaura o Canvas mesmo quando o setter de tamanho
+falha; a restauração é idempotente. A geometria/tag da região acompanha o envelope externo. Raio
+< 43 px é inelegível para perfil 3 e libera a região, preservando o material Compose. Retornos de
+invalid-size, nonhardware-canvas e missing-viewroot também liberam bridges antigos.
+
+### Aplicativo e aplicação pendente
+
+Central → Controles rápidos reúne Aparência, Círculos, Bordas, Sliders e Avançado. O opt-in é
+independente do vidro das notificações e permanece false por padrão. A prévia superior ainda é de
+notificações, explicitamente indicada na UI; não é um render QS WYSIWYG.
+
+`qs.darkfill`, `qs.lightfill`, `qs.darkcolor`, `qs.lightcolor`, `qs.idle`, `qs.active`, `qs.darkrim`,
+`qs.lightrim`, `qs.edgeblur`, `qs.outer`, `qs.track`, `qs.fill` e `qs.lightstyle` são chaves do app,
+lidas do snapshot do provider. Não são lidas de `setprop`. `qs.edgeblur` atualiza drawables existentes
+sem reiniciar o compositor. Os demais valores invalidam somente scopes QS. O máximo da espessura
+externa está explicado na UI.
+
+`sf.qslens`, `sf.qsbody`, `sf.qsdepth` e o novo `sf.qslight` usam o mecanismo existente de pending
+até a aplicação real. `sf.qslight` tem default 0,90, domínio 0–2; é lido em `p[3].light`, permitido
+por `SfLive` e pelo helper e registrado no catálogo gerado. O parser C rejeita valores não finitos
+e sufixos inválidos. O ganho não altera os perfis 0–2; a biblioteca bundled passa a v0.28.0/29.
+Não foi alterado `sf.shadelight`, `paneldim`, `shadelightglass` ou o material de popup/bloqueio.
+
+### Cabeçalho e chevrons das notificações
+
+`HeaderToneController` adquire somente header_clock, header_date, shade_carrier_text, noti_setting
+e clear_all. O predraw compara cores de uma lista fixa de weak refs; não percorre a árvore. Views
+substituídas são readquiridas quando a identidade anterior detachou e em checks pontuais na abertura
+(0/100/350/700/1500 ms). Rebind e TextAppearance são reparados antes do desenho; ColorStateList nativa
+mais recente é restaurada ao desativar/fechar. Logs não incluem texto. Samples temporais são trace
+opt-in; drift é limitado. O ponto nativo exato do escritor tardio ainda deve ser correlacionado no
+aparelho, mas não é necessário esperar por ele para reparar a cor no predraw do header.
+
+`Foreground` trata apenas android:expand_button_icon como chevron. Salva tint list/mode, filtros da
+ImageView e do Drawable, preserva imageAlpha e observa troca de drawable antes de ImageView copiar
+seu filtro atual. Reassert é dirigido à instância afetada, sem rewalk da linha inteira por drift do
+chevron. A API PorterDuff pode ocultar getColor no SDK: a consulta é refletida e cacheada, com fallback
+neutro do tema somente para esse glyph conhecido. Badges, imagens de apps e RemoteViews não ganham
+novas heurísticas de recoloração.
+
+### Validação do novo build no Galaxy (pendente de hardware)
+
+1. Instalar o APK com o bundle v0.28.0 e usar somente o fluxo seguro do app para aplicar a lente.
+2. Abrir QS sobre o mesmo fundo azul e sobre app branco, Theme Park fora do teste, por 2 s cada.
+   Conferir cápsulas, ativo/inativo, logos, header, mídia vazia e tocando. Comparar Obsidiana/Claro.
+3. Variar separadamente pílula/trilho/fill nos mínimos, padrão e máximos; brilho/volume em 0/50/100%,
+   LTR/RTL/orientação se disponíveis. Confirmar toque, edição e ausência de ghost ao fechar.
+4. Alternar master/QS e valores com o interruptor já ligado, 20 vezes. OFF deve liberar regiões e
+   restaurar cores e shapes nativos. Falha/secure capture deve retornar ao fallback UNKNOWN.
+5. Notificações claras/escuras: conferir relógio/data/ações após 0,7 e 1,5 s, expandir/agrupar,
+   substituir conteúdo e desativar. Para brilho de notificação, A/B somente sf.shadelight 0,30 / 0;
+   não inferir causalidade de capturas anteriores.
+6. Coletar somente:
+
+   ```sh
+   su -c 'logcat -d -v threadtime -s OULG OULG_SF' | grep -E 'event=(QS_|HEADER_INK|CHEVRON_TONE|TUNING)|OULG_SF.*(OPTICS|REWRITE)'
+   ```
+
+Capturas fornecidas no handoff são da base #75; não validam esta implementação. A passagem dos
+checks Java/C/GLSL/WebGL não prova cor, timing ou gestos no S25 Ultra. O PR está pronto para review
+de código; a aprovação visual e de interação continua necessária antes do merge.
