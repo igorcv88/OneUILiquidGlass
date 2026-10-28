@@ -27,6 +27,20 @@ public class QsRefreshTest {
         setValues(".20");hooks.refresh();assertEquals(1,live.invalidations);assertEquals(0,stale.invalidations);
         hooks.refresh();assertEquals(1,live.invalidations);
     }
+    @Test public void quickSettingsGateIsIndependentInAllFourSurfaceStates() throws Exception {
+        java.lang.reflect.Method gate=QuickSettingsHooks.class.getDeclaredMethod("enabled");gate.setAccessible(true);
+        for(boolean qs:new boolean[]{true,false})for(boolean notifications:new boolean[]{true,false}){
+            Map<String,String> values=new HashMap<>();
+            values.put("surface.quicksettings.enabled",qs?"1":"0");values.put("surface.shade.enabled",notifications?"1":"0");
+            field(ConfigClient.class,"current").set(null,values);
+            QuickSettingsHooks hooks=new QuickSettingsHooks(getClass().getClassLoader(),()->true,context->{});
+            assertEquals(qs,gate.invoke(hooks));
+        }
+    }
+    @Test public void onlyTheTrackIsSuppressedAndNativeLogicalInputsAreUntouched(){
+        assertTrue(QsSliderHooks.suppressTrack(0));
+        assertFalse(QsSliderHooks.suppressTrack(1));assertFalse(QsSliderHooks.suppressTrack(2));
+    }
     @Test public void trackGeometryOverrideKeepsTheNativeAlphaDefaultBit() {
         // DZIF passes alpha=0 with bit 8 meaning "use 1". Clearing it makes the track invisible.
         assertEquals(104,QsSliderHooks.explicitGeometryMask(110,false));

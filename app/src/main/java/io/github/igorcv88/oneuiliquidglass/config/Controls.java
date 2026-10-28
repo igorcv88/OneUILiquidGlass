@@ -617,19 +617,13 @@ public final class Controls {
                 .help("Cor do véu das cápsulas sobre fundos escuros ou coloridos. Branco mantém o"
                         + " vidro neutro.")
                 .show(BEHAV, Channel.NONE));
-        put(c("qs.lightstyle", "Vidro sobre fundo claro").fmt(Format.CHOICE).in(QS, STD).on(SH)
-                .choice("obsidian", "Obsidiana", "Vidro escuro com texto e ícones claros")
-                .choice("light", "Claro", "Vidro claro com texto e ícones escuros")
-                .help("O que as cápsulas viram quando a central abre sobre um app claro. O fundo é"
-                        + " medido uma vez a cada abertura, e a escolha vale para todas as cápsulas.")
-                .show(BEHAV, Channel.NONE));
+        put(c("qs.lightstyle", "Estilo antigo (descontinuado)").fmt(Format.READONLY)
+                .in(QS, Tier.INTERNAL).on(SH).help("Preservado em perfis; ambos os valores usam tinta adaptativa."));
         put(c("qs.lightfill", "Opacidade sobre fundo claro").fmt(Format.PERCENT_1).in(QS, STD).on(SH)
-                .hint("Mais deixa texto e ícones mais legíveis")
-                .help("Quanto o vidro cobre um app claro atrás da central. Mais escurece (obsidiana)"
-                        + " ou clareia (claro) as cápsulas e deixa o conteúdo mais legível.")
+                .help("Contribuição translúcida da cápsula sobre apps claros, limitada a 18%. O desfoque pertence ao painel.")
                 .show(BEHAV, Channel.NONE));
-        put(c("qs.lightcolor", "Cor da obsidiana").fmt(Format.COLOR).in(QS, ADV).on(SH)
-                .help("Cor do vidro escuro sobre apps claros. Só vale com o estilo Obsidiana.")
+        put(c("qs.lightcolor", "Cor do vidro sobre fundo claro").fmt(Format.COLOR).in(QS, ADV).on(SH)
+                .help("Cor do véu translúcido sobre apps claros; texto e ícones usam contraste adaptativo.")
                 .show(BEHAV, Channel.NONE));
         put(c("qs.idle", "Círculos desligados").fmt(Format.PERCENT_1).in(QS, STD).on(SH)
                 .hint("Disco atrás dos ícones inativos")
@@ -653,14 +647,11 @@ public final class Controls {
                 .help("Afina a pílula inteira dos sliders. O toque continua na área original da"
                         + " Samsung; 100% é o máximo, o espaço da grade não permite mais grossa.")
                 .show(BEHAV, Channel.NONE));
-        put(c("qs.track", "Espessura do trilho").fmt(Format.PERCENT_1).in(QS, STD).on(SH)
-                .hint("Faixa de fundo dentro da pílula")
-                .help("Largura da faixa de fundo dentro da pílula, independente da parte que se"
-                        + " move.")
-                .show(BEHAV, Channel.NONE));
+        put(c("qs.track", "Trilho antigo (descontinuado)").fmt(Format.READONLY)
+                .in(QS, Tier.INTERNAL).on(SH).help("Preservado em perfis, sem superfície desenhada."));
         put(c("qs.fill", "Espessura do preenchimento").fmt(Format.PERCENT_1).in(QS, STD).on(SH)
                 .hint("Parte que se move ao arrastar")
-                .help("Largura da parte que acompanha o dedo, independente do trilho. O valor do"
+                .help("Largura da parte que acompanha o dedo, dentro da cápsula externa. O valor do"
                         + " brilho ou do volume não muda.")
                 .show(BEHAV, Channel.NONE));
         put(c("sf.qslight", "Luz pela borda").fmt(Format.GAIN).in(QS, ADV).on(SH)

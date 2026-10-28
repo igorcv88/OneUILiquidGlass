@@ -666,8 +666,7 @@ public final class HeadsUpHooks {
         boolean headerOn=headerFlag==null?t.headerTone:!"0".equals(headerFlag);
         boolean textOn=textFlag==null?t.textSwap:!"0".equals(textFlag);
         if(pv==null||!shadeConfigEnabled()||!headerOn||!textOn){restoreHeader();return;}
-        boolean light=ShadeTone.lightBackdrop(grid.whole(),shadeScene);
-        headerInk.update(pv.getRootView(),light);
+        headerInk.update(pv.getRootView(),grid);
     }
     private void restoreHeader() { headerInk.clear(); }
     /**

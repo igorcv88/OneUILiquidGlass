@@ -361,17 +361,32 @@ final class Foreground {
     static void beforeChevronDrawable(ImageView view,android.graphics.drawable.Drawable incoming) {
         Chevron r=chevrons.get(view);
         if(r==null||incoming==null)return;
+        android.graphics.drawable.Drawable previous=r.drawable.get();
+        if(previous!=null&&previous!=incoming&&previous.getColorFilter()==r.appliedFilter)
+            previous.setColorFilter(r.drawableFilter);
         // Save the incoming drawable before ImageView copies our current filter onto it.
         r.drawable=new java.lang.ref.WeakReference<>(incoming);
         if(incoming.getColorFilter()!=r.appliedFilter)r.drawableFilter=incoming.getColorFilter();
     }
     private static int chevronLogs;
     private static boolean chevronId(View v) {
-        try { return "android".equals(v.getResources().getResourcePackageName(v.getId()))
-                && "expand_button_icon".equals(v.getResources().getResourceEntryName(v.getId())); }
-        catch(RuntimeException e){return false;}
+        try {
+            String pkg=v.getResources().getResourcePackageName(v.getId());
+            String id=v.getResources().getResourceEntryName(v.getId());
+            if("android".equals(pkg)&&"expand_button_icon".equals(id))return true;
+        }catch(RuntimeException ignored){}
+        // Samsung may supply a different child resource id. Verify ownership by the framework
+        // expand control's actual icon field, never by fuzzy id/name matching or arbitrary images.
+        android.view.ViewParent parent=v.getParent();
+        if(!(parent instanceof View))return false;
+        for(Class<?> c=parent.getClass();c!=null;c=c.getSuperclass()){
+            if(!c.getName().equals("com.android.internal.widget.NotificationExpandButton"))continue;
+            try{return Reflect.read(parent,"mIconView")==v;}
+            catch(RuntimeException ignored){return false;}
+        }
+        return false;
     }
-    private static Integer filterColor(android.graphics.ColorFilter f) {
+    static Integer filterColor(android.graphics.ColorFilter f) {
         if(f instanceof android.graphics.PorterDuffColorFilter) {
             try { Object color=Reflect.call(f,"getColor");return color instanceof Integer?(Integer)color:null; }
             catch(ReflectiveOperationException|RuntimeException e){return null;}
@@ -382,19 +397,24 @@ final class Foreground {
     private static boolean chevron(ImageView v,boolean swap,boolean lightText) {
         Chevron r=chevrons.get(v);
         if(!swap){if(r==null)return false;chevrons.remove(v);r.restore(v);return true;}
-        if(r!=null&&r.current(v))return false;
+        if(r!=null&&r.current(v)&&r.lightText==lightText)return false;
         if(v.getDrawable()==null)return false;
         if(r==null){r=new Chevron(v);chevrons.put(v,r);}
         else {
             ColorStateList tint=v.getImageTintList();
             if(tint==null||tint.getDefaultColor()!=r.color)r.tint=tint;
             if(v.getColorFilter()!=r.appliedFilter)r.imageFilter=v.getColorFilter();
+            if(v.getImageTintMode()!=android.graphics.PorterDuff.Mode.SRC_IN)r.mode=v.getImageTintMode();
             android.graphics.drawable.Drawable d=v.getDrawable();
             if(d.getColorFilter()!=r.appliedFilter)r.drawableFilter=d.getColorFilter();
             r.drawable=new java.lang.ref.WeakReference<>(d);
         }
         r.lightText=lightText;
-        Integer nativeColor=r.tint==null?filterColor(r.drawableFilter):Integer.valueOf(r.tint.getDefaultColor());
+        // Explicit ImageView filter wins over drawable/tint in ImageView.applyColorMod.
+        android.graphics.ColorFilter effective=r.imageFilter!=null?r.imageFilter:r.drawableFilter;
+        Integer nativeColor=filterColor(effective);
+        if(effective!=null&&nativeColor==null){chevrons.remove(v);r.restore(v);return false;}
+        if(nativeColor==null&&r.tint!=null)nativeColor=r.tint.getColorForState(v.getDrawableState(),r.tint.getDefaultColor());
         int c=nativeColor==null?(lightText?0xffffffff:0xff1d1d1d):nativeColor;
         if(!themeTone(c,lightText)){chevrons.remove(v);r.restore(v);return false;}
         int mapped=mirror(c);

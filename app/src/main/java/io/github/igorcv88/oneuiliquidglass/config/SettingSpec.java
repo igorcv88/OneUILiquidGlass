@@ -129,6 +129,11 @@ public final class SettingSpec {
             default:
                 try {
                     double n = Double.parseDouble(value);
+                    // Migrate valid pre-corrective QS profiles instead of rejecting the import.
+                    // Values beyond the old domains remain errors; no general numeric clamping.
+                    double legacyMax=key.equals("qs.lightfill")?.90:
+                            key.equals("qs.darkfill")||key.equals("qs.idle")?1:-1;
+                    if(Double.isFinite(n)&&legacyMax>max&&n>max&&n<=legacyMax)n=max;
                     if (!Double.isFinite(n)
                             || n < min
                             || n > max

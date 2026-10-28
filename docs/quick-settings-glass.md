@@ -38,8 +38,9 @@ Composer, int, int)`. Chamadores no firmware: `IconTextTileBackground` (cápsula
 3. no construtor de `BorderModifierNodeElement`, **só em contêineres**, troca a cor do contorno por
    uma luz basal branca uniforme (`QuickSettingsGlass.rim`). Círculos internos mantêm o contorno da
    Samsung: o grupo de controles se lê como uma peça de vidro, não como várias lentes pequenas;
-4. no construtor de `BackgroundElement`, troca a cor de fundo pelo véu: branco translúcido em
-   contêineres e círculos inativos, a própria cor da Samsung com alpha ≤ 0,90 nos ativos.
+4. no construtor de `BackgroundElement`, troca a cor pelo véu translúcido da cena (padrão 10%,
+   teto 18% nos contêineres), disco inativo tênue (4%, teto 12%) ou a própria cor Samsung com
+   alpha ≤ 0,90 nos ativos.
 
 O grande contêiner dos tiles (`QuickTileBox`) chama `BoxWithOutline` com o bit 2 da máscara
 `$default` (parâmetro `contorno`, padrão `true`). Esse bit é aceito e lido como `true`; os demais
@@ -50,14 +51,13 @@ contorno nativo `#0dffffff`. Se o usuário definir uma imagem própria para o gr
 
 ### Sliders
 
-`IconProgressBar → BidirectionalBar` desenha trilha, preenchimento e polegar em
-`BidirectionalBarKt.drawBidirectionalBarTrackProgressThumbContent-Uzs9YN0(DrawScope, …)`, sobre
-toda a caixa interna. O hook recua essa área em todos os lados por
-`QuickSettingsGlass.sliderInset` (6 % do lado estreito, deixando trilha e preenchimento com 88 %
-dessa medida, centralizados) e a recorta numa pílula. A trilha da Samsung é um `drawRect` que só era
-arredondado pelo `clip` externo. É o mesmo que `DrawScope.inset {}`: transladar o canvas e reduzir o
-tamanho do `DrawContext` (o `getTransform()` foi removido pelo R8), desfeito depois da chamada,
-mesmo se ela falhar. Só desenho: layout, área de toque e arraste não mudam.
+`IconProgressBar → BidirectionalBar` mantém seu layout Samsung vertical ou horizontal.
+A transação de `DrawContext` conserva o recuo longitudinal nativo; as espessuras externa e do
+preenchimento são independentes. O rect do trilho não é executado no DrawScope identificado.
+Progresso e thumb usam branco, formando a segunda superfície sobre a cápsula externa de vidro.
+No mínimo, o thumb é um círculo completo contido na cápsula; abaixo de um diâmetro, não se desenha
+um corpo achatado por trás dele. Veja a seção “Duas superfícies” para limites e compatibilidade.
+Canvas/context size são restaurados mesmo em erro. Layout, valor, hitbox e arraste permanecem nativos.
 
 ### Luz de borda dependente do fundo (compositor, perfil 3)
 
@@ -325,7 +325,7 @@ Os testes de host cobrem gates e motivos, associação por identidade, rebind/un
 substituição/detach do host, fade sem expansão legível, escala e atualização do alpha sem novo draw.
 Não substituem as capturas e os logs do dispositivo.
 
-## Material adaptativo e controles (base #75)
+## Material adaptativo e controles (correção após #76/#77)
 
 A nova captura mede o conteúdo abaixo da janela QS, excluindo a própria janela por SurfaceControl.
 `QsBackdrop` mantém uma requisição cancelável de `ShadeTone.prefetch` por abertura, em escala 0,125;
@@ -353,20 +353,44 @@ painel e não sobre uma cápsula) usa as quatro bandas superiores **só para a t
 ainda precisam de teste local de contraste no aparelho; não há promessa de contraste mínimo para
 todos os pixels de um vídeo ou wallpaper arbitrário.
 
-Sobre claro, o ponto inicial ajustável é #141823 com alpha 0,66 e contorno branco 0,18. É uma
-hipótese de teste, não um default aprovado visualmente. Sobre colorido/escuro, os defaults do véu e
-contorno continuam 0,10 / 0,26. A variante “Claro” serve ao A/B com tinta escura. Sem amostra válida
-não se escolhe obsidiana por suposição. Texto neutro conserva pelo menos alpha 0,85 no contexto
+Sobre claro, o véu #141823 tem alpha padrão 0,10, teto 0,18 e contorno branco 0,18.
+Sobre colorido/escuro, véu e contorno têm padrões 0,10 / 0,26. Não há modo opaco:
+`qs.lightstyle` é legado sem efeito visual. `qs.idle` começa em 0,04 e tem teto 0,12.
+Valores antigos válidos acima dos novos tetos são normalizados por `SettingSpec.validate`,
+inclusive no provider e na importação. O blur continua pertencendo ao painel, sem blur por cápsula. Sem amostra válida
+o foreground e o desenho nativos são preservados. Texto neutro preserva o alpha nativo no contexto
 adaptado; cores de destaque, logos sem tint e ícones pretos dos discos ativos são preservados. A espécie ACTIVE/IDLE observada em
 BoxWithOutline é associada ao Painter por identidade, com referências fracas e teto de 64 entradas;
 a associação mantém a tinta correta em recomposições independentes de QSIcon. Glyphs sem estado
 conhecido mantêm conservadoramente a tinta escura nativa, para não inverter um disco claro.
 
-`QsContentHooks` limita os hooks de Text/Icon aos composables QS e às lambdas de conteúdo
-identificadas no DEX DZIF. `QSIcon-fWhpE4E` só altera conteúdo explicitamente tintável. O cabeçalho
-usa seus próprios wrappers; não existe filtro global na janela. Cada scope capturado é invalidado
-por mudança de cena ou de snapshot `QsStyle`, mesmo com `on == applied`. Os campos são lidos uma
-vez no callback de configuração. Propriedades de shader não usam esse caminho de aplicação live.
+`QsContentHooks` não intercepta `Material3.TextKt` nem `Material3.IconKt`. Nenhum hook de
+foreground escreve `$changed`, `$default`, `Composer` ou `TextStyle`. Os argumentos padrão de
+`Text` são resolvidos exclusivamente pelo Compose, eliminando a origem suspeita do receptor nulo.
+
+`QsTextHooks` associa `TextStringSimpleElement` / `TextAnnotatedStringElement` criados dentro dos
+owners Samsung permitidos aos seus nós de desenho. O registro usa identidade fraca, não `equals`
+estrutural do Compose, e é limitado a 256 entradas. O desenho de texto desses nós pode adaptar
+apenas o `Paint` neutro, sem shader/filtro. O callback posterior restaura a cor mesmo se o desenho
+lançar exceção; não captura nem suprime a exceção da aplicação. Tanto BaseCanvas quanto as
+sobrescritas de BaseRecordingCanvas são contempladas. Outros nós não herdam o override, nem quando
+aninhados. O estado UNKNOWN/OFF produz desenho nativo, e OFF invalida também a display list.
+
+As APIs `create/update/draw(ContentDrawScope)` e os tipos/retornos são checados antes da ativação.
+API ausente produz `QS_TEXT_INCOMPATIBLE` e deixa esse caminho inativo. Essa compatibilidade de
+renderização ainda precisa ser confirmada no DEX em execução no aparelho; testes de host não
+executam recomposição real de SystemUI. O fallback não altera o fornecimento de TextStyle.
+
+`QSIcon-fWhpE4E` só altera o long de cor na ABI explícita
+`(Modifier, Painter, String, long, float, boolean, Composer, int) -> void`, com conteúdo tintável.
+Nenhuma máscara é alterada. ABI diferente gera `QS_ICON_INCOMPATIBLE` e ícone nativo.
+Ações do cabeçalho usam os nós Painter criados no escopo dos wrappers Samsung do cabeçalho.
+O filtro neutro é substituído só durante seu desenho e restaurado logo após; display lists também
+são invalidadas. Assim o override não depende de uma recomposição interna de Icon com parâmetros
+inalterados. Painters sem tint e cores de marca permanecem nativos. API de Painter ausente gera
+`QS_HEADER_ICONS_INCOMPATIBLE`, isoladamente do texto.
+Scopes e nós de texto são invalidados nas mudanças de cena/configuração e ao desligar QS;
+nenhum desses caminhos depende do interruptor de vidro das notificações.
 
 ### Mídia ativa
 
@@ -383,15 +407,22 @@ esses casos precisam ser tratados como lacuna de contraste na validação. Play/
 arte continuam pertencendo à Samsung. Logos multicoloridos e logos brancos sem tint são mantidos;
 a variante clara precisa de inspeção desses logos no dispositivo.
 
-### Três espessuras, sem alterar a célula
+### Duas superfícies, sem alterar a célula
 
-- Pílula externa: 50–100% da dimensão curta da célula nativa. O limite superior é físico; não há
-  expansão da grade. Um Shape com outline inset substitui somente os shapes de fundo e borda do
-  slider. O clip do host e a área de toque não são substituídos.
-- Trilho: 10–100% da largura/altura da pílula externa; só seu rect recebe geometria e clip próprios.
-- Preenchimento: 10–100% da pílula; o gradiente recebe geometria e raios próprios, preservando a
-  posição de progresso no eixo longo e a direção RTL. O thumb é a ponta do preenchimento e segue a
-  espessura dele, como no desenho da Samsung.
+- Cápsula externa: 50–100% da dimensão curta da célula nativa. Fundo e contorno compartilham
+  o envelope. O clip do host e a área de toque permanecem nativos.
+- Preenchimento branco: 10–100% da espessura externa. Progresso e terminação usam a mesma largura;
+  as coordenadas do corpo e RTL são mantidas. Em 0/1/2%, a terminação é um círculo completo,
+  com diâmetro igual à espessura escolhida, limitado ao interior da cápsula. Não se desenha uma
+  faixa achatada quando o progresso ainda não cobre um diâmetro: o círculo é o marcador nativo
+  do controle, não um piso artificial de brilho/volume. O corpo passa a aparecer sob ele ao
+  alcançar esse diâmetro. O raio de cada primitiva continua limitado à geometria efetiva.
+  O handle é limitado na extremidade; valor, hitbox e coordenadas lógicas não são alterados.
+
+O rect do trilho é suprimido somente no DrawScope do slider identificado. `qs.track` continua
+importável/exportável, mas não desenha nenhuma faixa nem aparece como ajuste ativo. As três
+assinaturas das primitivas são verificadas por tipos e quantidade de parâmetros; incompatibilidade
+mantém o desenho nativo do slider. Nenhuma View nem interceptador de toque é adicionado.
 
 A referência é o DEX DZIF, não o nome decompilado normalizado:
 
@@ -406,8 +437,8 @@ A referência é o DEX DZIF, não o nome decompilado normalizado:
 | `Shape.createOutline-Pq9zytI` / `Outline.Rounded(RoundRect)` | Envelope externo inset |
 
 Primitives só são alteradas quando o DrawScope é a mesma identidade do slider sendo desenhado.
-O bit de alpha padrão do rect é preservado: a Samsung passa alpha 0 com máscara 110, em que o
-bit 8 seleciona alpha 1. `QsDrawTransaction` restaura o Canvas mesmo quando o setter de tamanho
+O rect do trilho não é executado no escopo identificado. As máscaras alteradas são apenas
+as de geometria das primitivas DrawScope, nunca máscaras de recomposição. `QsDrawTransaction` restaura o Canvas mesmo quando o setter de tamanho
 falha; a restauração é idempotente. A geometria/tag da região acompanha o envelope externo. Raio
 < 43 px é inelegível para perfil 3 e libera a região, preservando o material Compose. Retornos de
 invalid-size, nonhardware-canvas e missing-viewroot também liberam bridges antigos.
@@ -422,8 +453,8 @@ busca, os controles aparecem na seção "Controles rápidos". `qs.edgeblur` só 
 dinâmica (é o blur das regiões do perfil 3) e aparece inativo fora dela.
 
 `qs.darkfill`, `qs.lightfill`, `qs.darkcolor`, `qs.lightcolor`, `qs.idle`, `qs.active`, `qs.darkrim`,
-`qs.lightrim`, `qs.edgeblur`, `qs.outer`, `qs.track`, `qs.fill` e `qs.lightstyle` são chaves do app,
-lidas do snapshot do provider. Não são lidas de `setprop`. `qs.edgeblur` atualiza drawables existentes
+`qs.lightrim`, `qs.edgeblur`, `qs.outer` e `qs.fill` são chaves do app,
+lidas do snapshot do provider. `qs.track` e `qs.lightstyle` são preservadas somente para compatibilidade. Não são lidas de `setprop`. `qs.edgeblur` atualiza drawables existentes
 sem reiniciar o compositor. Os demais valores invalidam somente scopes QS. O máximo da espessura
 externa está explicado na UI.
 
@@ -435,39 +466,68 @@ Não foi alterado `sf.shadelight`, `paneldim`, `shadelightglass` ou o material d
 
 ### Cabeçalho e chevrons das notificações
 
-`HeaderToneController` adquire somente header_clock, header_date, shade_carrier_text, noti_setting
-e clear_all. O predraw compara cores de uma lista fixa de weak refs; não percorre a árvore. Views
-substituídas são readquiridas quando a identidade anterior detachou e em checks pontuais na abertura
-(0/100/350/700/1500 ms). Rebind e TextAppearance são reparados antes do desenho; ColorStateList nativa
-mais recente é restaurada ao desativar/fechar. Logs não incluem texto. Samples temporais são trace
-opt-in; drift é limitado. O ponto nativo exato do escritor tardio ainda deve ser correlacionado no
-aparelho, mas não é necessário esperar por ele para reparar a cor no predraw do header.
+`HeaderToneController` mantém as Views já identificadas: header_clock, header_date,
+shade_carrier_text, noti_setting e clear_all. Cada alvo consulta as bandas do ToneGrid dentro dos
+seus limites atuais em coordenadas de tela, inclusive ao expandir. Não usa a média global. Histerese
+é local ao alvo e reiniciada por geração; ausência de layout/amostra válida mantém a cor nativa.
+Amostragem reutiliza a captura de abertura. O pre-draw repara rebind e deslocamento antes do desenho;
+OFF/detach restaura a ColorStateList original, incluindo estados e alpha de desabilitação.
+O cabeçalho Compose QS conserva a classificação separada das bandas superiores do painel; sua
+geometria e ícones de editar/energia/configurações precisam de inspeção no DZIF.
 
-`Foreground` trata apenas android:expand_button_icon como chevron. Salva tint list/mode, filtros da
-ImageView e do Drawable, preserva imageAlpha e observa troca de drawable antes de ImageView copiar
-seu filtro atual. Reassert é dirigido à instância afetada, sem rewalk da linha inteira por drift do
-chevron. A API PorterDuff pode ocultar getColor no SDK: a consulta é refletida e cacheada, com fallback
-neutro do tema somente para esse glyph conhecido. Badges, imagens de apps e RemoteViews não ganham
-novas heurísticas de recoloração.
+`Foreground` reconhece android:expand_button_icon e variantes cujo objeto seja exatamente o
+mIconView de NotificationExpandButton do framework (inclusive subclasses Samsung). Não se usam
+nomes aproximados de recursos. Variantes fora dessa estrutura ficam nativas, sem inventar IDs.
+O filtro explícito da ImageView tem precedência, seguido do filtro do Drawable e do tint ativo
+para o estado da View. Filtro efetivo de tipo desconhecido retorna ao estado nativo, sem inferir
+cor a partir de um tint sobreposto. A troca de drawable restaura também o filtro do objeto antigo destacado.
+Rebind/drift reaplica o override antes do desenho. OFF restitui tint/mode e filtros originais;
+imageAlpha e estado não são modificados. Logos e imagens arbitrárias não se tornam elegíveis.
 
-### Validação do novo build no Galaxy (pendente de hardware)
+### Validação no SM-S938B / S938BXXUCDZIF (pendente)
 
-1. Instalar o APK com o bundle v0.28.0 e usar somente o fluxo seguro do app para aplicar a lente.
-2. Abrir QS sobre o mesmo fundo azul e sobre app branco, Theme Park fora do teste, por 2 s cada.
-   Conferir cápsulas, ativo/inativo, logos, header, mídia vazia e tocando. Comparar Obsidiana/Claro.
-3. Variar separadamente pílula/trilho/fill nos mínimos, padrão e máximos; brilho/volume em 0/50/100%,
-   LTR/RTL/orientação se disponíveis. Confirmar toque, edição e ausência de ghost ao fechar.
-4. Alternar master/QS e valores com o interruptor já ligado, 20 vezes. OFF deve liberar regiões e
-   restaurar cores e shapes nativos. Falha/secure capture deve retornar ao fallback UNKNOWN.
-5. Notificações claras/escuras: conferir relógio/data/ações após 0,7 e 1,5 s, expandir/agrupar,
-   substituir conteúdo e desativar. Para brilho de notificação, A/B somente sf.shadelight 0,30 / 0;
-   não inferir causalidade de capturas anteriores.
-6. Coletar somente:
+1. Abrir Chrome numa página inteiramente branca. Abrir/fechar notificações e QS 20 vezes.
+2. Repetir sobre preto, azul e imagens mistas: cabeçalho claro/restante escuro e o inverso.
+   Conferir relógio, data, operadora, ações e editar/energia/configurações já na primeira abertura.
+3. Testar separadamente QS ON/notificações ON, OFF/ON, ON/OFF e OFF/OFF. Alternar durante a sessão;
+   OFF deve devolver desenho, cores e shaders nativos somente do recurso desligado.
+4. Arrastar brilho/volume por 0, 1, 2, 5, 25, 50, 75, 99 e 100%. Conferir cápsula integral no mínimo,
+   preenchimento branco arredondado, ausência da faixa interna e continuidade do toque.
+   Preservar o layout vertical DZIF; testar horizontal/RTL/rotação quando o firmware os apresentar.
+5. Alterar Wi-Fi, Bluetooth e configuração/tema. Expandir/recolher notificações, atualizar seu
+   conteúdo e conferir setas, tint e logos. Observar se há flash e se os alvos de toque continuam iguais.
+6. Registrar PID da SystemUI antes/depois e verificar que não reiniciou. Coletar eventos e crashes:
 
    ```sh
-   su -c 'logcat -d -v threadtime -s OULG OULG_SF' | grep -E 'event=(QS_|HEADER_INK|CHEVRON_TONE|TUNING)|OULG_SF.*(OPTICS|REWRITE)'
+   adb shell pidof com.android.systemui
+   adb logcat -v threadtime -b main -b system -b crash OULG:I OULG_SF:I AndroidRuntime:E ActivityManager:I '*:S' \
+     | grep --line-buffered -E 'OULG|com\.android\.systemui|FATAL EXCEPTION|TextStyle|TextKt|QuickTile|compose|NullPointerException'
    ```
 
-Capturas fornecidas no handoff são da base #75; não validam esta implementação. A passagem dos
-checks Java/C/GLSL/WebGL não prova cor, timing ou gestos no S25 Ultra. O PR está pronto para review
-de código; a aprovação visual e de interação continua necessária antes do merge.
+   Não fixe `--pid`: isso perderia o novo processo justamente após um crash. O filtro mantém os
+   eventos OULG e as exceções relevantes, sem habilitar trace por quadro. `CHEVRON_TONE` limita
+   sucessos a oito por processo; sua ausência posterior não prova falha. Guardar o log completo
+   de AndroidRuntime para o stack trace se houver exceção.
+
+Para medir o custo no dispositivo, comparar QS OFF/ON sobre o mesmo fundo e os mesmos 20 gestos:
+`adb shell dumpsys gfxinfo com.android.systemui reset` antes e
+`adb shell dumpsys gfxinfo com.android.systemui framestats` depois de cada sequência. Comparar
+tempos e frames lentos, além do Perfetto se disponível. Não existe medição de overhead de Xposed
+no host: os testes não executam ART/LSPosed. Os callbacks fora do escopo retornam após ThreadLocal;
+nenhum contador ou log por frame foi acrescentado.
+
+Os testes automatizados cobrem política de desenho, propriedade por identidade, cores compostas,
+bandas locais, rebind/restauração e geometria nos valores acima. Não provam recomposição real,
+contraste de todo wallpaper, assinatura do DEX em execução ou estabilidade no S25 Ultra.
+Não considerar esta implementação validada fisicamente até executar o roteiro.
+
+### Resultado automatizado desta correção
+
+Na rodada final local: **279 testes JUnit/Robolectric passaram**. Todo o Java de produção e de
+testes compilou contra o Android SDK 36 (source/target 17). A execução foi direta no JUnit,
+com Robolectric 4.14.1, SDKs instrumentados offline e recursos do framework; o R de produção foi
+substituído apenas no classpath de compilação do host. Isso não é um build APK pelo AGP nem
+validação da tabela de recursos empacotada. Contratos de distribuição (4 testes) e helper live
+passaram. CI não foi habilitado/disparado. Lint, DEX, empacotamento, APK de teste e validação física
+não foram obtidos nesta sessão. A estabilidade da SystemUI no DZIF e o custo dos hooks continuam
+pendentes do roteiro no aparelho acima.

@@ -1,7 +1,6 @@
 package io.github.igorcv88.oneuiliquidglass.hooks;
 
 import android.graphics.Canvas;
-import android.graphics.Path;
 import java.lang.reflect.*;
 import java.util.function.*;
 import de.robv.android.xposed.XC_MethodHook;
@@ -19,6 +18,7 @@ final class QsSliderHooks {
     private Method drawContext, size, setSize, getCanvas;
     private Field nativeCanvas;
     private boolean broken;
+    private Object whiteBrush;
     private final ThreadLocal<Frame> current=new ThreadLocal<>();
     private static final class Frame {
         final Object scope, context;
@@ -29,6 +29,7 @@ final class QsSliderHooks {
         final boolean rtl;
         final QsStyle style;
         final float outer;
+        final float[] geometry=new float[5];
         Frame(Object scope,Object context,Canvas canvas,long original,QsDrawTransaction transaction,float w,float h,boolean rtl,QsStyle style,float outer){
             this.scope=scope;this.context=context;this.canvas=canvas;this.original=original;this.transaction=transaction;
             this.w=w;this.h=h;this.rtl=rtl;
@@ -41,6 +42,8 @@ final class QsSliderHooks {
         this.geometryAvailable=geometryAvailable;
     }
     void install(Class<?> bar) throws ReflectiveOperationException {
+        Constructor<?> solid=Class.forName("androidx.compose.ui.graphics.SolidColor",false,loader).getDeclaredConstructor(long.class);
+        solid.setAccessible(true);whiteBrush=solid.newInstance(QuickSettingsGlass.color(0xffffffff));
         Class<?> scope=Class.forName("androidx.compose.ui.graphics.drawscope.DrawScope",false,loader);
         drawContext=scope.getMethod("getDrawContext");
         Class<?> ctx=drawContext.getReturnType();
@@ -53,13 +56,9 @@ final class QsSliderHooks {
             String n=m.getName();
             int stage=n.equals("drawRect-n-J9OG0$default")?0:n.equals("drawRoundRect-ZuiqVtQ$default")?1
                     :n.equals("drawRoundRect-u-Aw5IA$default")?2:-1;
-            if(stage<0)continue;
+            if(stage<0 || !primitiveSignature(m,stage,scope))continue;
             XposedBridge.hookMethod(m,new XC_MethodHook(){
                 @Override protected void beforeHookedMethod(MethodHookParam p){primitive(p,stage);}
-                @Override protected void afterHookedMethod(MethodHookParam p){
-                    Object saved=p.getObjectExtra("qsPrimitiveCanvasSave");
-                    Frame f=current.get();if(saved instanceof Integer&&f!=null)f.canvas.restoreToCount((Integer)saved);
-                }
             });
             primitives++;deoptimize(m);
         }
@@ -78,7 +77,7 @@ final class QsSliderHooks {
             });
             deoptimize(m);
         }
-        Probe.log("QS_SLIDER_READY","primitives="+primitives+" independent=true firmware=DZIF");
+        Probe.log("QS_SLIDER_READY","primitives="+primitives+" surfaces=2 firmware=DZIF");
     }
     private void begin(XC_MethodHook.MethodHookParam p){
         if(broken||!enabled.getAsBoolean())return;
@@ -101,22 +100,20 @@ final class QsSliderHooks {
     }
     private void primitive(XC_MethodHook.MethodHookParam p,int stage){
         Frame f=current.get();if(broken||f==null||p.args[0]!=f.scope)return;
+        if(suppressTrack(stage)){p.setResult(null);return;} // No visual track, even for legacy presets.
         try {
             int last=p.args.length-1, mask=(Integer)p.args[last];
             long offset=(mask&2)!=0?0L:(Long)p.args[2];
             long extent=(mask&4)!=0?pack(f.w,f.h):(Long)p.args[3];
             QsStyle s=f.style;
             // The thumb is the fill's end cap: it takes the fill's thickness, as in Samsung's draw.
-            float ratio=stage==0?s.track:s.fill;
-            float[] g=QuickSettingsGlass.sliderPrimitive(f.w,f.h,f.outer,ratio,x(offset),y(offset),x(extent),y(extent),stage==2,f.rtl);
+            float ratio=s.fill;
+            float[] g=QuickSettingsGlass.sliderPrimitive(f.w,f.h,f.outer,ratio,x(offset),y(offset),x(extent),y(extent),stage==2,f.rtl,f.geometry);
+            if(stage==1&&!QuickSettingsGlass.sliderBodyVisible(g[2],g[3],f.w<=f.h)){p.setResult(null);return;}
             p.args[2]=pack(g[0],g[1]);p.args[3]=pack(g[2],g[3]);
             p.args[last]=explicitGeometryMask(mask,stage!=0);
-            if(stage!=0)p.args[4]=pack(g[4],g[4]);
-            else {
-                int saved=f.canvas.save();p.setObjectExtra("qsPrimitiveCanvasSave",saved);
-                Path pill=new Path();pill.addRoundRect(g[0],g[1],g[0]+g[2],g[1]+g[3],g[4],g[4],Path.Direction.CW);
-                f.canvas.clipPath(pill);
-            }
+            p.args[4]=pack(g[4],g[4]);
+            p.args[1]=stage==1?whiteBrush:QuickSettingsGlass.color(0xffffffff);
         }catch(RuntimeException|LinkageError e){fail(e);}
     }
     private void end(XC_MethodHook.MethodHookParam p){
@@ -127,6 +124,18 @@ final class QsSliderHooks {
         try{f.transaction.close();}catch(ReflectiveOperationException|RuntimeException|LinkageError e){fail(e);}
     }
     private void fail(Throwable e){if(!broken){broken=true;Probe.error("QS_SLIDER_FAILED",e);}}
+    static boolean suppressTrack(int stage){return stage==0;}
+    static boolean primitiveSignature(Method m,int stage,Class<?> scope){
+        Class<?>[] t=m.getParameterTypes();
+        if(t.length!=(stage==0?9:10)||t[0]!=scope||t[t.length-1]!=int.class)return false;
+        if(stage==2?t[1]!=long.class:!t[1].getName().equals("androidx.compose.ui.graphics.Brush"))return false;
+        if(t[2]!=long.class||t[3]!=long.class)return false;
+        if(stage==0)return t[4]==float.class && t[5].getName().equals("androidx.compose.ui.graphics.drawscope.DrawStyle")
+                && t[6].getName().equals("androidx.compose.ui.graphics.ColorFilter") && t[7]==int.class;
+        return t[4]==long.class && t[stage==1?5:6]==float.class
+                && t[stage==1?6:5].getName().equals("androidx.compose.ui.graphics.drawscope.DrawStyle")
+                && t[7].getName().equals("androidx.compose.ui.graphics.ColorFilter") && t[8]==int.class;
+    }
     static int explicitGeometryMask(int mask,boolean rounded){return mask&~(2|4|(rounded?8:0));}
     private static float x(long v){return Float.intBitsToFloat((int)(v>>>32));}
     private static float y(long v){return Float.intBitsToFloat((int)v);}

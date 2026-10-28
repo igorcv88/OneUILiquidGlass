@@ -181,17 +181,17 @@ Controles `qs.*` são lidos pelo snapshot `QsStyle` em callbacks de configuraç�
 
 | Chave | Padrão | Tipo/domínio do parser | Controle / consequência |
 | --- | --- | --- | --- |
-| `qs.darkfill` | .10 | 0–1 | Opacidade do vidro das cápsulas sobre fundos escuros ou coloridos |
-| `qs.lightfill` | .66 | 0–0.90 | Opacidade do vidro das cápsulas sobre apps claros |
+| `qs.darkfill` | .10 | 0–0.18 | Opacidade do vidro das cápsulas sobre fundos escuros ou coloridos |
+| `qs.lightfill` | .10 | 0–0.18 | Opacidade do vidro das cápsulas sobre apps claros |
 | `qs.darkcolor` | ffffff | RGB hexadecimal | Cor do véu das cápsulas sobre fundos escuros ou coloridos |
-| `qs.lightcolor` | 141823 | RGB hexadecimal | Cor do vidro obsidiana sobre apps claros |
-| `qs.idle` | .08 | 0–1 | Opacidade do disco atrás dos ícones desligados |
+| `qs.lightcolor` | 141823 | RGB hexadecimal | Cor do véu translúcido sobre apps claros |
+| `qs.idle` | .04 | 0–0.12 | Opacidade do disco atrás dos ícones desligados |
 | `qs.active` | .90 | 0–1 | Opacidade dos discos ligados (a cor continua a da Samsung ou do tema) |
 | `qs.darkrim` | .26 | 0–1 | Intensidade do contorno sobre fundos escuros ou coloridos |
 | `qs.lightrim` | .18 | 0–1 | Intensidade do contorno sobre apps claros |
 | `qs.edgeblur` | 8 | inteiro 1–32 px | Desfoque do fundo lido pela lente dinâmica no contorno das cápsulas |
 | `qs.outer` | 1 | 0.50–1 | Espessura da pílula inteira dos sliders (o toque continua na área da Samsung) |
-| `qs.track` | .88 | 0.10–1 | Espessura do trilho dos sliders, independente do preenchimento |
-| `qs.fill` | .88 | 0.10–1 | Espessura do preenchimento dos sliders, independente do trilho |
-| `qs.lightstyle` | obsidian | enum obsidian/light | Material das cápsulas sobre apps claros: obsidiana ou vidro claro |
+| `qs.track` | .88 | 0.10–1 | Legado sem efeito visual; preservado para importar e exportar perfis |
+| `qs.fill` | .88 | 0.10–1 | Espessura do preenchimento branco dentro da cápsula externa |
+| `qs.lightstyle` | light | enum obsidian/light | Legado sem efeito visual; ambos usam vidro translúcido e tinta adaptativa |
 | `sf.qslight` | .90 | 0–2 | Quick Settings: luz que entra pelo contorno conforme o fundo ali (0 desliga) |

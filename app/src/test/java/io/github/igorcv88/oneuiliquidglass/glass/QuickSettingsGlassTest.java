@@ -33,7 +33,7 @@ public final class QuickSettingsGlassTest {
         int dark = QuickSettingsGlass.fill(Kind.CONTAINER, 0x66000000, true);
         int light = QuickSettingsGlass.fill(Kind.CONTAINER, 0x66000000, false);
         assertEquals(0xffffff, dark & 0xffffff);
-        assertTrue((light >>> 24) > (dark >>> 24));
+        assertEquals(light >>> 24, dark >>> 24);
         assertTrue((QuickSettingsGlass.fill(Kind.IDLE, 0x33000000, true) >>> 24) > 0);
     }
 
@@ -42,7 +42,7 @@ public final class QuickSettingsGlassTest {
         int dark = QuickSettingsGlass.rim(true), light = QuickSettingsGlass.rim(false);
         assertEquals(0xffffff, dark & 0xffffff);
         assertTrue(dark >>> 24 > 0);
-        assertTrue(light >>> 24 > dark >>> 24);
+        assertTrue(light >>> 24 < dark >>> 24);
     }
 
     @Test public void onlyOuterContainersCarryTheRim() {

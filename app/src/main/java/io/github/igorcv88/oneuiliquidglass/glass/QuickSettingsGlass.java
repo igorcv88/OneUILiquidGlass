@@ -11,15 +11,15 @@ package io.github.igorcv88.oneuiliquidglass.glass;
 public final class QuickSettingsGlass {
     private QuickSettingsGlass() {}
 
-    static final float DARK_FILL = 0.10f, LIGHT_FILL = 0.30f;
-    static final float DARK_IDLE = 0.08f, LIGHT_IDLE = 0.22f;
+    static final float DARK_FILL = 0.10f, LIGHT_FILL = 0.10f;
+    static final float DARK_IDLE = 0.04f, LIGHT_IDLE = 0.04f;
     static final float ACTIVE_ALPHA = 0.90f;
     /**
      * Basal rim alpha: the same all around the outline, so no corner looks lit regardless of what
      * is behind it. A backdrop-dependent part needs backdrop pixels this Compose path does not
      * have (docs/quick-settings-glass.md).
      */
-    static final float DARK_RIM = 0.26f, LIGHT_RIM = 0.45f;
+    static final float DARK_RIM = 0.26f, LIGHT_RIM = 0.18f;
     /** Slider track and fill: share of the slider's narrow side, centred, inside the glass pill. */
     static final float SLIDER_FILL = 0.88f;
 
@@ -67,7 +67,7 @@ public final class QuickSettingsGlass {
         if (scene == QsScene.Tone.UNKNOWN) return fill(kind, nativeFill, darkTheme);
         if (kind == Kind.IDLE) return withAlpha(0xffffff, s.idle);
         if (scene == QsScene.Tone.LIGHT_SCENE)
-            return withAlpha(s.lightGlass ? 0xf4f5f7 : s.lightColor, s.lightFill);
+            return withAlpha(s.lightColor, s.lightFill);
         return withAlpha(s.darkColor, s.darkFill);
     }
 
@@ -84,7 +84,7 @@ public final class QuickSettingsGlass {
     public static int ink(int nativeColor, boolean darkInk) {
         int r=(nativeColor >> 16)&255, g=(nativeColor >> 8)&255, b=nativeColor&255;
         if ((nativeColor >>> 24) == 0 || Math.max(r,Math.max(g,b))-Math.min(r,Math.min(g,b)) > 36) return nativeColor;
-        return withAlpha(darkInk ? 0x1d1d1d : 0xffffff, Math.max(.85f, alpha(nativeColor)));
+        return withAlpha(darkInk ? 0x1d1d1d : 0xffffff, alpha(nativeColor));
     }
     public static int iconInk(int nativeColor, Kind state, boolean darkInk) {
         if(state==Kind.ACTIVE)return nativeColor;
@@ -104,15 +104,36 @@ public final class QuickSettingsGlass {
     /** Native progress coordinates are retained on the long axis; only thickness is independent. */
     public static float[] sliderPrimitive(float w,float h,float outer,float ratio,
             float x,float y,float sw,float sh,boolean thumb,boolean rtl) {
-        float narrow=Math.min(w,h)*Math.max(.5f,Math.min(1f,outer))*Math.max(.1f,Math.min(1f,ratio));
+        return sliderPrimitive(w,h,outer,ratio,x,y,sw,sh,thumb,rtl,new float[5]);
+    }
+    /** Caller-owned buffer for the draw path. */
+    public static float[] sliderPrimitive(float w,float h,float outer,float ratio,
+            float x,float y,float sw,float sh,boolean thumb,boolean rtl,float[] out) {
+        if(!Float.isFinite(w)||!Float.isFinite(h)||w<=0||h<=0
+                ||!Float.isFinite(x)||!Float.isFinite(y)||!Float.isFinite(sw)||!Float.isFinite(sh))
+            {java.util.Arrays.fill(out,0);return out;}
+        outer=Float.isFinite(outer)?Math.max(.5f,Math.min(1f,outer)):1f;
+        ratio=Float.isFinite(ratio)?Math.max(.1f,Math.min(1f,ratio)):.88f;
+        float narrow=Math.min(w,h)*outer*ratio;
+        sw=Math.max(0,sw);sh=Math.max(0,sh);
         if(w<=h){
             x=(w-narrow)/2;sw=narrow;
-            if(thumb)sh=Math.min(sh,narrow);
+            if(thumb){sh=narrow;y=Math.max(0,Math.min(h-narrow,y));}
         }else{
             y=(h-narrow)/2;sh=narrow;
-            if(thumb){float next=Math.min(sw,narrow);if(!rtl)x+=sw-next;sw=next;}
+            if(thumb){if(!rtl)x+=sw-narrow;sw=narrow;x=Math.max(0,Math.min(w-narrow,x));}
         }
-        return new float[]{x,y,Math.max(0,sw),Math.max(0,sh),narrow/2};
+        x=Math.max(0,Math.min(w,x));y=Math.max(0,Math.min(h,y));
+        sw=Math.min(sw,w-x);sh=Math.min(sh,h-y);
+        // A full circular handle survives even when native progress extent is zero. Clamp only
+        // the handle at the boundary, never the logical value or the native body coordinates.
+        out[0]=x;out[1]=y;out[2]=sw;out[3]=sh;out[4]=Math.min(sw,sh)/2;
+        return out;
+    }
+
+    /** Below one diameter the circular handle is the white surface; no flattened body is drawn. */
+    public static boolean sliderBodyVisible(float width,float height,boolean vertical){
+        return width>0&&height>0&&(vertical?height>=width:width>=height);
     }
 
     /**

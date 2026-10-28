@@ -33,8 +33,8 @@ final class QsContentHooks {
     }
     private final java.util.List<IconState> icons=new java.util.ArrayList<>();
     private final Consumer<Object> capture;
-    private int inkLogged;
     private Method invalidateDraw;
+    private QsTextHooks text;
     private final java.util.List<java.lang.ref.WeakReference<Object>> artworkNodes=new java.util.ArrayList<>();
     QsContentHooks(ClassLoader loader, BooleanSupplier enabled, Supplier<QsStyle> style,
             Supplier<QsScene.Tone> scene, Supplier<QsScene.Tone> headerScene,
@@ -78,7 +78,7 @@ final class QsContentHooks {
                         for(Object a:p.args) if(a!=null && a.getClass().getName().contains("ComposerImpl")) { composer=a; break; }
                         if(composer!=null) capture.accept(composer); // retain live OFF -> ON recomposition
                         Frame previous=content.get(); p.setObjectExtra("qsContentPrevious",previous);
-                        if(enabled.getAsBoolean()) content.set(new Frame(header,media,composer));
+                        content.set(new Frame(header,media,composer));
                     }
                     @Override protected void afterHookedMethod(MethodHookParam p) {
                         Frame previous=(Frame)p.getObjectExtra("qsContentPrevious");
@@ -97,9 +97,9 @@ final class QsContentHooks {
                     if(f!=null && f.media && !f.background && p.args.length==2) f.shape=p.args[1];
                 }
             });
-        hookInk("androidx.compose.material3.TextKt",false,false);
-        hookInk("androidx.compose.material3.IconKt",true,false);
-        hookInk(prefix+"tiles.QSIconKt",true,true);
+        text = new QsTextHooks(loader, this::current, enabled, scene, headerScene);
+        text.install();
+        hookQsIcon(prefix+"tiles.QSIconKt");
         hookArtwork(prefix+"media.components.MediaArtworkKt$$ExternalSyntheticLambda4");
         Probe.log("QS_CONTENT_READY","owners="+hooked+" firmware=DZIF");
     }
@@ -141,49 +141,25 @@ final class QsContentHooks {
             Probe.log("QS_ARTWORK_READY","firmware=DZIF");
         }catch(ReflectiveOperationException|RuntimeException|LinkageError e){Probe.error("QS_ARTWORK_FAILED",e);}
     }
-    private void hookInk(String name, boolean icon, boolean qsIcon) {
+    private void hookQsIcon(String name) {
         Class<?> c=optional(name); if(c==null) return;
+        int count=0;
         for(Method m:c.getDeclaredMethods()) {
-            int color=icon?3:2;
-            if(!(m.getName().startsWith(icon ? qsIcon?"QSIcon-":"Icon-":"Text-"))
-                    ||m.getParameterCount()<=color||m.getParameterTypes()[color]!=long.class) continue;
+            if(!QsInkSignature.accepts(m))continue;
+            count++;
             XposedBridge.hookMethod(m,new XC_MethodHook(){
                 @Override protected void beforeHookedMethod(MethodHookParam p) {
-                    Frame f=content.get();
-                    if(!qsIcon&&f==null || !enabled.getAsBoolean())return;
-                    QuickSettingsGlass.Kind state=qsIcon?iconState(p.args[1],circle.get()):QuickSettingsGlass.Kind.NONE;
-                    boolean header=f!=null&&f.header;
-                    QsScene.Tone local=header?headerScene.get():scene.get();
-                    if(local!=QsScene.Tone.LIGHT_SCENE) return;
-                    if(qsIcon && (p.args.length<6 || !Boolean.TRUE.equals(p.args[5]))) return; // untinted provider logo
-                    long original=(Long)p.args[color];
-                    if(!QuickSettingsGlass.srgb(original) && original!=16L) return;
-                    int nativeInk=original==16L?0xffffffff:QuickSettingsGlass.argb(original);
-                    boolean darkInk=header||style.get().lightGlass;
-                    p.args[color]=QuickSettingsGlass.color(icon&&!header?QuickSettingsGlass.iconInk(nativeInk,state,darkInk)
-                            :QuickSettingsGlass.ink(nativeInk,darkInk));
-                    int family=header?1:qsIcon?2:icon?4:8;
-                    if((inkLogged&family)==0){inkLogged|=family;Probe.log("QS_INK","family="+family+" dark="+darkInk);}
-                    int composer=-1;
-                    Class<?>[] types=m.getParameterTypes();
-                    for(int i=0;i<types.length;i++) if(types[i].getName().equals("androidx.compose.runtime.Composer")) composer=i;
-                    if(composer>=0) {
-                        capture.accept(p.args[composer]);
-                        if(composer+1<p.args.length && p.args[composer+1] instanceof Integer)
-                            p.args[composer+1]=((Integer)p.args[composer+1])|1;
-                    }
-                    // Color's default bit is index 2 for Text and 3 for Icon. QSIcon has no default mask,
-                    // nor has DZIF's Icon(AndroidImageBitmap, ...) (6 arguments, $changed last); the
-                    // Painter and ImageVector overloads end in ($changed, $default): 7 arguments.
-                    boolean defaults=!qsIcon && (icon ? p.args.length==7 : true);
-                    if(defaults) {
-                        int last=p.args.length-1;
-                        p.args[last]=((Integer)p.args[last])&~(1<<color);
-                    }
+                    if(!enabled.getAsBoolean() || scene.get()!=QsScene.Tone.LIGHT_SCENE || !Boolean.TRUE.equals(p.args[5]))return;
+                    long original=(Long)p.args[3];
+                    if(!QuickSettingsGlass.srgb(original))return;
+                    QuickSettingsGlass.Kind state=iconState(p.args[1],circle.get());
+                    p.args[3]=QuickSettingsGlass.color(QuickSettingsGlass.iconInk(QuickSettingsGlass.argb(original),state,true));
+                    // No Composer, TextStyle, $changed or $default writes.
                 }
             });
             deoptimize(m);
         }
+        if(count==0)Probe.log("QS_ICON_INCOMPATIBLE","native=true");
     }
     private static void deoptimize(Method method) {
         try{XposedBridge.class.getMethod("deoptimizeMethod",java.lang.reflect.Member.class).invoke(null,method);}
@@ -218,6 +194,7 @@ final class QsContentHooks {
     }
     /** A Compose recomposition alone may reuse the same draw block. Dirty its display list too. */
     void invalidateArtwork() {
+        if(text!=null)text.invalidate();
         if(invalidateDraw==null)return;
         synchronized(artworkNodes){
             for(java.util.Iterator<java.lang.ref.WeakReference<Object>> it=artworkNodes.iterator();it.hasNext();){
