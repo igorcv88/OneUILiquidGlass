@@ -26,18 +26,82 @@ public final class CompositorValuesTest {
         assertTrue(CompositorValues.writable("sf.kgtilt"));
     }
 
+    @Test public void terminalOnlyChangeStillRequiresARecompile() {
+        Map<String, String> compiled = new HashMap<>();
+        compiled.put("sf.core", "48");
+        compiled.put("sf.taps", "24");
+        Map<String, String> terminal = new HashMap<>();
+        terminal.put("sf.core", "72");
+        terminal.put("sf.taps", "24.0");
+        // The app has released both controls to Terminal; getprop readback is not compilation.
+        assertEquals(Collections.singletonMap("sf.core", "72"),
+                CompositorValues.pending(Collections.emptyMap(), terminal, compiled));
+        assertTrue(CompositorValues.pending(Collections.emptyMap(), compiled, compiled).isEmpty());
+        // An explicit property clear is another change, back to the built-in default.
+        assertEquals(Collections.singletonMap("sf.core", "48"),
+                CompositorValues.pending(Collections.emptyMap(), Collections.emptyMap(),
+                        Collections.singletonMap("sf.core", "72")));
+    }
+
+    @Test public void inputsForRestartIncludeExternalValuesAndSavedOverrides() {
+        Map<String, String> observed = Collections.singletonMap("sf.taps", "36");
+        Map<String, String> writes = Collections.singletonMap("sf.core", "72");
+        Map<String, String> inputs = CompositorValues.restartInputs(observed, writes);
+        assertEquals("72", inputs.get("sf.core"));
+        assertEquals("36", inputs.get("sf.taps"));
+        assertEquals("0", inputs.get("sf.debug"));
+        assertTrue(inputs.size() >= SfLive.WRITABLE.size());
+    }
+
     @Test public void verificationNeedsALoadedLibraryAndMatchingValues() {
         Map<String, String> written = Collections.singletonMap("sf.kgsat", "1.4");
         Map<String, String> loaded = new HashMap<>();
         loaded.put("helper", "1");
         loaded.put("sf_loaded", "1");
         loaded.put("sfrefract", "1");
+        loaded.put("sf_rewrite", "1");
+        loaded.put("sf_got", "1");
+        loaded.put("sf_rewrite_ok", "1");
+        loaded.put("sf_stable", "1");
+        loaded.put("sf_generation", "boot:4200:123");
         assertEquals(CompositorValues.Outcome.NONE, CompositorValues.verify(0, written, loaded, written));
         assertEquals(CompositorValues.Outcome.UNVERIFIED, CompositorValues.verify(1, written, Collections.emptyMap(), written));
         assertEquals(CompositorValues.Outcome.CONFIRMED, CompositorValues.verify(1, written, loaded, Collections.singletonMap("sf.kgsat", "1.40")));
         assertEquals(CompositorValues.Outcome.CHANGED, CompositorValues.verify(1, written, loaded, Collections.singletonMap("sf.kgsat", "1.2")));
+        loaded.put("sf_pid", "4200");
+        assertEquals(CompositorValues.Outcome.UNVERIFIED, CompositorValues.verify(1, written, loaded, written, "4200"));
+        assertEquals(CompositorValues.Outcome.CONFIRMED, CompositorValues.verify(1, written, loaded, written, "4199"));
         loaded.put("sf_loaded", "0");
         assertEquals(CompositorValues.Outcome.NOT_LOADED, CompositorValues.verify(1, written, loaded, written));
+    }
+
+    @Test public void readbackAndOpticsNeverSubstituteForOperationalEvidence() {
+        Map<String, String> inputs = Collections.singletonMap("sf.core", "72");
+        Map<String, String> status = new HashMap<>();
+        status.put("helper", "1"); status.put("sf_loaded", "1");
+        status.put("sfrefract", "1"); status.put("sf_rewrite", "1");
+        status.put("sf_pid", "52"); status.put("sf_generation", "boot:52:700");
+        status.put("sf_optics", "9");
+        for (String key : Arrays.asList("sf_got", "sf_rewrite_ok", "sf_stable")) {
+            assertEquals(CompositorValues.Outcome.UNVERIFIED,
+                    CompositorValues.verify(1, inputs, status, inputs, "51"));
+            status.put(key, "1");
+        }
+        assertEquals(CompositorValues.Outcome.CONFIRMED,
+                CompositorValues.verify(1, inputs, status, inputs, "boot:51:600"));
+        assertEquals(CompositorValues.Outcome.UNVERIFIED,
+                CompositorValues.verify(1, inputs, status, inputs, "boot:52:700"));
+        status.put("sf_loaded", "0");
+        assertEquals(CompositorValues.Outcome.NOT_LOADED,
+                CompositorValues.verify(1, inputs, status, inputs, "51"));
+    }
+
+    @Test public void liveParametersDoNotBecomeCompositorPendingAndEdgeblurDoes() {
+        assertTrue(CompositorValues.pending(Collections.singletonMap("semradiuslens", "22"),
+                Collections.singletonMap("semradiuslens", "16"), Collections.emptyMap()).isEmpty());
+        assertEquals(Collections.singletonMap("sf.edgeblur", "12"),
+                CompositorValues.pending(Collections.emptyMap(), Collections.singletonMap("sf.edgeblur", "12"),
+                        Collections.singletonMap("sf.edgeblur", "0")));
     }
 
     @Test public void setpropsCommandIsAllowlistedAndNumeric() {

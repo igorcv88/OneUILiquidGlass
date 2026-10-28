@@ -23,6 +23,7 @@
 #include <GLES2/gl2.h>
 #include "refract.h"
 #include "relocs.h"
+#include "health.h"
 
 #define TAG "OULG_SF"
 #define DUMP "/data/misc/surfaceflinger/oulg_shaders.txt"
@@ -165,6 +166,22 @@ static int patch_object(struct dl_phdr_info *info, size_t size, void *self) {
     return 0;
 }
 
+// A process-bound acknowledgement, independent of residual global properties. Failure to
+// write is deliberately unknown to the helper, never evidence of success.
+static pthread_mutex_t health_lock = PTHREAD_MUTEX_INITIALIZER;
+static int health_got, health_rewrite, health_target;
+static void publish_health(int rewrite) {
+    if (!health_target) return;
+    pthread_mutex_lock(&health_lock);
+    health_rewrite |= rewrite;
+    char tmp[128]; snprintf(tmp, sizeof tmp, "%s.%d.tmp", OULG_HEALTH, getpid());
+    FILE *f = fopen(tmp, "w");
+    if (f) {
+        fprintf(f, "%d %llu %d %d\n", getpid(), oulg_start(getpid()), health_got, health_rewrite);
+        if (fclose(f) == 0) rename(tmp, OULG_HEALTH);
+    }
+    pthread_mutex_unlock(&health_lock);
+}
 __attribute__((constructor)) static void loaded(void) {
     __android_log_print(ANDROID_LOG_INFO, TAG, "LOADED pid=%d", getpid());
     hooks[0] = (struct got_hook) { "glShaderSource", (void *) glShaderSource, (void **) &real_shader_source, 0 };
@@ -174,6 +191,11 @@ __attribute__((constructor)) static void loaded(void) {
     // (dzif-port.md), and it is loaded before the entry point; main=0 means that did not hold.
     __android_log_print(main_patched && !prot_failed ? ANDROID_LOG_INFO : ANDROID_LOG_WARN, TAG, "GOT_DONE glShaderSource=%d eglGetProcAddress=%d main=%d protfail=%d",
                         hooks[0].patched, hooks[1].patched, main_patched, prot_failed);
+    char exe[256];
+    ssize_t exe_len = readlink("/proc/self/exe", exe, sizeof exe - 1);
+    if (exe_len > 0) { exe[exe_len] = 0; health_target = !strcmp(exe, "/system/bin/surfaceflinger"); }
+    health_got = main_patched > 0 && !prot_failed && hooks[0].patched > 0 && hooks[1].patched > 0;
+    publish_health(0);
 }
 
 static uint64_t fnv1a(const char *s, size_t n) {
@@ -382,7 +404,7 @@ void glShaderSource(GLuint shader, GLsizei count, const GLchar *const *strings, 
             dump_text(ok ? "REWRITE_OK fragment" : "REWRITE_FAILED fragment", shader, frag);
             free(frag);
             used = ok;
-            if (ok) announce_optics();
+            if (ok) { publish_health(1); announce_optics(); }
         }
     }
     if (!used) real_shader_source(shader, count, strings, lengths);

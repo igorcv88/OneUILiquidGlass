@@ -218,7 +218,22 @@ public final class AppModel {
     // ---- dynamic lens
 
     public Map<String, String> pendingCompositor() {
-        return CompositorValues.pending(state().saved, SystemPropertyReader.snapshot());
+        SharedPreferences p = lensPrefs();
+        return CompositorValues.pending(state().saved, SystemPropertyReader.snapshot(),
+                CompositorValues.hasCompiled(p) ? CompositorValues.compiledValues(p) : null);
+    }
+
+    /** With no acknowledged restart, equal setprop values do not prove the shader uses them. */
+    public boolean compositorUnverified() {
+        SharedPreferences p = lensPrefs();
+        Map<String, String> status = lens.model().status;
+        return !CompositorValues.hasCompiled(p)
+                || !"1".equals(status.get("sf_loaded"))
+                || !"1".equals(status.get("sf_got"))
+                || !"1".equals(status.get("sf_rewrite_ok"))
+                || !"1".equals(status.get("sf_stable"))
+                || !p.getString("compiledGeneration", "").equals(status.get("sf_generation"))
+                || p.getLong("restartRequestedAt", 0) > p.getLong("compiledAt", 0);
     }
 
     public SharedPreferences lensPrefs() {
@@ -226,9 +241,14 @@ public final class AppModel {
     }
 
     public CompositorValues.Outcome lastApply() {
+        if (!SystemPropertyReader.available()) return CompositorValues.Outcome.UNVERIFIED;
         SharedPreferences p = lensPrefs();
+        if (CompositorValues.hasCompiled(p) && !lens.model().status.isEmpty()
+                && !p.getString("compiledGeneration", "").equals(lens.model().status.get("sf_generation")))
+            return CompositorValues.Outcome.UNVERIFIED;
         return CompositorValues.verify(p.getLong("restartRequestedAt", 0),
-                CompositorValues.attemptValues(p), lens.model().status, SystemPropertyReader.snapshot());
+                CompositorValues.attemptValues(p), lens.model().status,
+                SystemPropertyReader.snapshot(), p.getString("restartBeforePid", ""));
     }
 
     public long lastApplyAt() {

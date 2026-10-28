@@ -95,6 +95,26 @@ status)
     selftest_ok && out selftest_ok 1 || out selftest_ok 0
     p="$(sf_pid)"
     out sf_pid "$p"
+    start="$(sed 's/.*) //' "$PROCDIR/$p/stat" 2>/dev/null | awk '{print $20}')"
+    boot="$(cat "$PROCDIR/sys/kernel/random/boot_id" 2>/dev/null)"
+    generation="$boot:$p:$start"
+    out sf_generation "$generation"
+    got=0; rewrite=0
+    if [ -n "$p" ] && [ -n "$start" ] && [ -n "$boot" ] && [ -f "$LIBDIR/oulg_health" ]; then
+        read -r owner born health_got health_rewrite < "$LIBDIR/oulg_health"
+        if [ "$owner" = "$p" ] && [ "$born" = "$start" ]; then
+            [ "$health_got" = 1 ] && got=1
+            [ "$health_rewrite" = 1 ] && rewrite=1
+        fi
+    fi
+    stable=0
+    if [ -f "$LIBDIR/oulg_monitor" ]; then
+        read -r monitor_pid monitor_start monitor_ok monitor_boot < "$LIBDIR/oulg_monitor"
+        [ "$monitor_pid" = "$p" ] && [ -n "$start" ] && [ "$monitor_start" = "$start" ] && [ "$monitor_ok" = 1 ] && [ -n "$boot" ] && [ "$monitor_boot" = "$boot" ] && stable=1
+    fi
+    out sf_stable "$stable"
+    out sf_got "$got"
+    out sf_rewrite_ok "$rewrite"
     # The library file as installed now: after a reinstall the running compositor still maps the
     # old inode, which /proc shows as "(deleted)"; that is not the current library.
     inode="$(stat -c '%i' "$LIB" 2>/dev/null)"
@@ -105,6 +125,13 @@ status)
     [ "$(getprop debug.oulg.sf.norewrite)" = 1 ] && out sf_rewrite 0 || out sf_rewrite 1
     out sf_optics "$(getprop debug.oulg.sf.optics)"
     out sfrefract "$(getprop debug.oulg.sfrefract)"
+    # Repeat identity after maps/property reads: mixed observations cannot establish health.
+    end_pid="$(sf_pid)"
+    end_start="$(sed 's/.*) //' "$PROCDIR/$end_pid/stat" 2>/dev/null | awk '{print $20}')"
+    if [ "$p" != "$end_pid" ] || [ "$start" != "$end_start" ]; then
+        out sf_loaded 0; out sf_stable 0; out sf_got 0; out sf_rewrite_ok 0; out sf_generation ""
+        out health_error process_changed_during_status
+    fi
     exit 0
     ;;
 install)
@@ -184,6 +211,9 @@ setprops)
 log)
     echo "--- selftest"; cat "$SELFLOG" 2>/dev/null
     echo "--- inject"; cat "$LOG" 2>/dev/null
+    echo "--- current process health"; cat "$LIBDIR/oulg_health" 2>/dev/null
+    echo "--- correlated Android logs (epoch timestamps; absence does not prove no failure)"
+    logcat -b all -d -v epoch -t 500 -s OULG_SF init libc DEBUG crash_dump64 2>/dev/null
     exit 0
     ;;
 uninstall)

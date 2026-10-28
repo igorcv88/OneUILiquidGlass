@@ -202,18 +202,23 @@ public final class HomePage implements Page {
         Map<String, String> pending = m.mode() == Mode.DYNAMIC_LENS ? m.pendingCompositor() : Collections.emptyMap();
         List<String> conflicts = m.conflicts();
         CompositorValues.Outcome last = m.lastApply();
-        if (st.enabled && sync == AppModel.Sync.NOT_DETECTED) {
-            key = "detect";
-            n = Ui.notice(a, t, Ui.Tone.WARN, "O sistema ainda não leu os ajustes. Confira se o módulo está ativo no LSPosed.", "Ver como", host::openSync);
-        } else if (st.enabled && sync == AppModel.Sync.NO_RESPONSE) {
-            key = "sync";
-            n = Ui.notice(a, t, Ui.Tone.WARN, "O sistema não confirmou as últimas alterações.", "Resolver", host::openSync);
-        } else if (last == CompositorValues.Outcome.NOT_LOADED) {
+        if (last == CompositorValues.Outcome.NOT_LOADED) {
             key = "lens-failed";
             n = Ui.notice(a, t, Ui.Tone.ERROR, "A lente dinâmica não foi carregada no último reinício.", "Detalhes", host::openLens);
         } else if (!pending.isEmpty()) {
             key = "pending" + pending.size();
             n = Ui.notice(a, t, Ui.Tone.INFO, pending.size() == 1 ? "1 ajuste da lente aguarda aplicação." : pending.size() + " ajustes da lente aguardam aplicação.", "Aplicar", host::openLens);
+        } else if (m.mode() == Mode.DYNAMIC_LENS && m.compositorUnverified()) {
+            key = "lens-unverified";
+            n = Ui.notice(a, t, Ui.Tone.WARN,
+                    "Não foi confirmado quais ajustes a lente carregou no último reinício.",
+                    "Verificar", host::openLens);
+        } else if (st.enabled && sync == AppModel.Sync.NOT_DETECTED) {
+            key = "detect";
+            n = Ui.notice(a, t, Ui.Tone.WARN, "O sistema ainda não leu os ajustes. Confira se o módulo está ativo no LSPosed.", "Ver como", host::openSync);
+        } else if (st.enabled && sync == AppModel.Sync.NO_RESPONSE) {
+            key = "sync";
+            n = Ui.notice(a, t, Ui.Tone.WARN, "O sistema não confirmou as últimas alterações.", "Resolver", host::openSync);
         } else if (!conflicts.isEmpty()) {
             key = "conflict" + conflicts.size();
             n = Ui.notice(a, t, Ui.Tone.INFO, conflicts.size() == 1 ? "Um ajuste foi alterado fora do app." : conflicts.size() + " ajustes foram alterados fora do app.", "Revisar", host::openConflicts);

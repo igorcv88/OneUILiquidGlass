@@ -52,6 +52,10 @@ final class LensSheet extends Sheet {
         refresh.setOnClickListener(v -> m.lens.status());
         tools.addView(refresh);
         tools.addView(Ui.divider(activity, t, t.dp(72)));
+        LinearLayout restart = Ui.listRow(activity, t, Icon.RESTART, "Reiniciar lente", "Reinicia o userspace após confirmação", null);
+        restart.setOnClickListener(v -> confirmRestart());
+        tools.addView(restart);
+        tools.addView(Ui.divider(activity, t, t.dp(72)));
         LinearLayout log = Ui.listRow(activity, t, Icon.CODE, "Mostrar registro", "Últimos testes e injeções", null);
         log.setOnClickListener(v -> m.lens.log());
         tools.addView(log);
@@ -88,6 +92,7 @@ final class LensSheet extends Sheet {
         SfLiveController.Model model = m.lens.model();
         SfLive.State s = SfLive.state(model.status);
         Map<String, String> pending = m.pendingCompositor();
+        boolean unverified = m.compositorUnverified();
         String title, text, action;
         boolean enabled = !model.busy && !m.root.busy();
         if (!model.bundled) {
@@ -125,11 +130,17 @@ final class LensSheet extends Sheet {
                 action = "Ativar lente";
                 break;
             case LOADED:
-                boolean on = "1".equals(model.status.get("sfrefract")) && "1".equals(model.status.get("sf_rewrite"));
-                title = on ? "Ativa" : "Carregada, sem refração";
-                text = on ? (pending.isEmpty() ? "A lente está carregada no compositor." : "Há ajustes esperando um reinício para valer.")
-                        : "A biblioteca está carregada, mas a refração não está ligada.";
-                action = !pending.isEmpty() ? (pending.size() == 1 ? "Aplicar 1 ajuste" : "Aplicar " + pending.size() + " ajustes") : on ? null : "Ativar lente";
+                boolean on = "1".equals(model.status.get("sfrefract")) && "1".equals(model.status.get("sf_rewrite"))
+                        && "1".equals(model.status.get("sf_got")) && "1".equals(model.status.get("sf_rewrite_ok"))
+                        && "1".equals(model.status.get("sf_stable"));
+                title = on ? "Ativa" : "Carregada, aguardando verificação";
+                text = on ? (pending.isEmpty()
+                        ? unverified ? "A lente está carregada, mas ainda não foi verificado um reinício com estes parâmetros."
+                                     : "A lente está carregada no compositor."
+                        : "Há ajustes esperando um reinício para valer.")
+                        : "Aguarde 2 minutos após ativar, abra uma notificação e verifique o estado. Sem confirmação de GOT/reescrita, consulte o registro.";
+                action = !pending.isEmpty() ? (pending.size() == 1 ? "Aplicar 1 ajuste" : "Aplicar " + pending.size() + " ajustes")
+                        : !on ? "Verificar estado" : unverified ? "Reiniciar para confirmar" : null;
                 break;
             default:
                 title = "Sem resposta";
@@ -140,7 +151,7 @@ final class LensSheet extends Sheet {
         if (last != CompositorValues.Outcome.NONE && last != CompositorValues.Outcome.UNVERIFIED) {
             String when = DateFormat.getTimeFormat(activity).format(new Date(m.lastApplyAt()));
             switch (last) {
-                case CONFIRMED: text += "\nÚltimo reinício (" + when + "): biblioteca carregada com os valores enviados."; break;
+                case CONFIRMED: text += "\nÚltimo reinício (" + when + "): processo estável, GOT/reescrita observados e inputs conferidos; não comprova cada shader."; break;
                 case NOT_LOADED: text += "\nÚltimo reinício (" + when + "): a lente não foi carregada. Veja o registro."; break;
                 case CHANGED: text += "\nÚltimo reinício (" + when + "): carregada, mas algum valor mudou depois."; break;
                 default: break;
@@ -167,6 +178,11 @@ final class LensSheet extends Sheet {
             }
             card.addView(Ui.text(activity, t, b, Theme.LABEL, t.ink, false));
             pendingBox.addView(card, Ui.match());
+        } else if (unverified && s == SfLive.State.LOADED) {
+            pendingBox.addView(Ui.text(activity, t,
+                    "O valor do getprop pode ter mudado sem o shader recompilar. O próximo reinício "
+                            + "pelo app registra os parâmetros enviados ao compositor; confira o estado depois.",
+                    Theme.LABEL, t.inkMuted, false));
         }
         protocol.setText(describe(model));
         // Maintenance needs a helper that answered as root.
@@ -194,8 +210,18 @@ final class LensSheet extends Sheet {
             case SELFTEST:
                 m.lens.prepare();
                 break;
-            case RESTART:
             case LOADED:
+                if (m.pendingCompositor().isEmpty()
+                        && (!"1".equals(model.status.get("sf_stable"))
+                        || !"1".equals(model.status.get("sf_got"))
+                        || !"1".equals(model.status.get("sf_rewrite_ok"))
+                        || !"1".equals(model.status.get("sfrefract")))) {
+                    m.lens.status();
+                    break;
+                }
+                confirmRestart();
+                break;
+            case RESTART:
                 confirmRestart();
                 break;
             default:
@@ -214,7 +240,8 @@ final class LensSheet extends Sheet {
         Sheet s = new Sheet(activity, t, "Reiniciar userspace?");
         s.text("A tela fica preta por cerca de 20 segundos e todos os apps abertos são fechados, inclusive"
                 + " este. O sistema volta com a lente dinâmica"
-                + (pending.isEmpty() ? "." : " e " + (pending.size() == 1 ? "1 ajuste novo." : pending.size() + " ajustes novos."))
+                + (pending.isEmpty() ? (m.compositorUnverified() ? "; os parâmetros enviados serão conferidos após o reinício." : ".")
+                        : " e " + (pending.size() == 1 ? "1 ajuste novo." : pending.size() + " ajustes novos."))
                 + "\n\nSe algo falhar, reiniciar o aparelho volta ao compositor original: nada é carregado na inicialização.");
         Toggle ack = new Toggle(activity, t);
         LinearLayout row = Ui.switchRow(activity, t, null, "Salvei o que estava fazendo", null, ack);
