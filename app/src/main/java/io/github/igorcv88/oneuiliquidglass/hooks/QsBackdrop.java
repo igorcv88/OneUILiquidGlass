@@ -116,6 +116,9 @@ final class QsBackdrop {
     /** The top-edge ACTION_DOWN, before Samsung shows the panel. Ignored while it is open. */
     void gesture() {
         if (shown || pending || fresh() || !enabled.getAsBoolean()) return;
+        // A new opening decides afresh: no hysteresis or cooldown carried over from the last one.
+        // Not published here: the panel is closed, the sample's own publish follows.
+        scene.reset(); header.reset();
         prefetch();
     }
 
