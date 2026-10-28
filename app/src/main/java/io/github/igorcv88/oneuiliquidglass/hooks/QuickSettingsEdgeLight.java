@@ -80,6 +80,8 @@ final class QuickSettingsEdgeLight {
     });
     synchronized QsOpticsCoverage.Token selected(String role) { return coverage.select(role); }
     private final ThreadLocal<DrawFrame> drawing = new ThreadLocal<>();
+    /** LayoutNodeDrawScope.drawContent is hooked: the optics go between background and content. */
+    private boolean contentBoundary;
     private static final class DrawFrame {
         final Object node, scope;
         boolean consumed;
@@ -175,9 +177,16 @@ final class QuickSettingsEdgeLight {
             Method detach = nodeBase.getDeclaredMethod("markAsDetached$ui");
             // BackgroundNode.draw paints the background then invokes this concrete drawContent.
             // Intercept only that exact scope/frame, before it enters descendants.
-            member = "LayoutNodeDrawScope.drawContent";
-            Method drawContent = Class.forName("androidx.compose.ui.node.LayoutNodeDrawScope", false, loader)
-                    .getDeclaredMethod("drawContent");
+            // Optional: without it the optics draw at the start of BackgroundNode.draw instead
+            // (under Samsung's background, still under the content).
+            Method drawContent = null;
+            try {
+                drawContent = Class.forName("androidx.compose.ui.node.LayoutNodeDrawScope", false, loader)
+                        .getDeclaredMethod("drawContent");
+            } catch (ReflectiveOperationException | LinkageError e) {
+                Probe.log("QS_HOOK_STATUS", "family=optics step=drawContent ready=false fallback=draw-start error="
+                        + e.getClass().getSimpleName());
+            }
             try {
                 Class<?> drawNode = Class.forName("androidx.compose.ui.node.DrawModifierNode", false, loader);
                 invalidateDraw = Class.forName("androidx.compose.ui.node.DrawModifierNodeKt", false, loader)
@@ -193,7 +202,7 @@ final class QuickSettingsEdgeLight {
             XposedBridge.hookMethod(detach, new XC_MethodHook() {
                 @Override protected void afterHookedMethod(MethodHookParam p) { unbind(p.thisObject); }
             });
-            XposedBridge.hookMethod(drawContent, new XC_MethodHook() {
+            if (drawContent != null) XposedBridge.hookMethod(drawContent, new XC_MethodHook() {
                 @Override protected void beforeHookedMethod(MethodHookParam p) {
                     DrawFrame f = drawing.get();
                     if (f == null || f.consumed || f.scope != p.thisObject) return;
@@ -215,6 +224,8 @@ final class QuickSettingsEdgeLight {
                     if (nodes.containsKey(p.thisObject)) drawing.set(new DrawFrame(p.thisObject, p.args[0]));
                     else drawing.remove();
                     draw(p.thisObject, p.args[0]);
+                    DrawFrame f = drawing.get();
+                    if (f != null && !contentBoundary) { f.consumed = true; optics(f.node, f.scope); }
                 }
                 @Override protected void afterHookedMethod(MethodHookParam p) {
                     DrawFrame f = drawing.get();
@@ -229,8 +240,10 @@ final class QuickSettingsEdgeLight {
             // Prevent an inlined drawContent from bypassing the optical layer boundary.
             try { XposedBridge.class.getMethod("deoptimizeMethod", java.lang.reflect.Member.class).invoke(null, draw); }
             catch (ReflectiveOperationException | RuntimeException ignored) { }
+            contentBoundary = drawContent != null;
             ready = true;
-            Probe.log("QS_HOOK_STATUS", "family=optics step=drawContent ready=true method=" + drawContent.toGenericString());
+            Probe.log("QS_HOOK_STATUS", "family=optics step=" + (contentBoundary ? "drawContent" : "draw-start")
+                    + " ready=true method=" + (contentBoundary ? drawContent.toGenericString() : draw.toGenericString()));
             Probe.log("QS_EDGE_READY", "draw=" + draw.toGenericString());
             Probe.log("QS_EDGE_STATUS", "phase=install ready=true host=" + (host.get() != null));
             active();

@@ -5,6 +5,7 @@ import android.os.Looper;
 import android.os.SystemClock;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.lang.reflect.Proxy;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -53,7 +54,8 @@ final class BackdropEvents {
         try {
             Class<?> registry = Class.forName("com.android.systemui.shared.system.TaskStackChangeListeners", false, loader);
             Class<?> listener = Class.forName("com.android.systemui.shared.system.TaskStackChangeListener", false, loader);
-            Object instance = registry.getMethod("getInstance").invoke(null);
+            Method register = register(registry, listener);
+            Object instance = instance(registry);
             InvocationHandler handler = (proxy, method, args) -> {
                 switch (method.getName()) {
                     case "equals": return args != null && args.length == 1 && proxy == args[0];
@@ -65,11 +67,53 @@ final class BackdropEvents {
                 }
             };
             Object proxy = Proxy.newProxyInstance(listener.getClassLoader(), new Class<?>[] {listener}, handler);
-            registry.getMethod("registerTaskStackListener", listener).invoke(instance, proxy);
-            Probe.log("BACKDROP_EVENTS_READY", "source=TaskStackChangeListeners");
+            register.setAccessible(true);
+            register.invoke(instance, proxy);
+            Probe.log("BACKDROP_EVENTS_READY", "source=TaskStackChangeListeners register=" + register.getName());
         } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
-            Probe.log("BACKDROP_EVENTS_MISSING", "error=" + e.getClass().getSimpleName() + " periodic=true");
+            Probe.log("BACKDROP_EVENTS_MISSING", "error=" + e.getClass().getSimpleName()
+                    + " message=" + e.getMessage() + " periodic=true");
         }
+    }
+
+    /**
+     * The registry singleton: getInstance(), or (DZIF, 28/10: NoSuchMethodException, the static
+     * getter may be removed when Dagger injects the registry) any static no-argument method or
+     * static field of the registry's own type.
+     */
+    static Object instance(Class<?> registry) throws ReflectiveOperationException {
+        try { return registry.getMethod("getInstance").invoke(null); }
+        catch (NoSuchMethodException ignored) { }
+        for (Method m : registry.getDeclaredMethods())
+            if (Modifier.isStatic(m.getModifiers()) && m.getParameterCount() == 0 && m.getReturnType() == registry) {
+                m.setAccessible(true);
+                Object o = m.invoke(null);
+                if (o != null) return o;
+            }
+        for (java.lang.reflect.Field f : registry.getDeclaredFields())
+            if (Modifier.isStatic(f.getModifiers()) && f.getType() == registry) {
+                f.setAccessible(true);
+                Object o = f.get(null);
+                if (o != null) return o;
+            }
+        throw new NoSuchMethodException(registry.getName() + " instance candidates="
+                + QsNodeAbi.candidates(registry, "getInstance"));
+    }
+
+    /** registerTaskStackListener(listener), or the single non-static register* method taking the listener. */
+    static Method register(Class<?> registry, Class<?> listener) throws NoSuchMethodException {
+        try { return registry.getMethod("registerTaskStackListener", listener); }
+        catch (NoSuchMethodException ignored) { }
+        Method found = null;
+        for (Method m : registry.getDeclaredMethods())
+            if (!Modifier.isStatic(m.getModifiers()) && m.getParameterCount() == 1
+                    && m.getParameterTypes()[0] == listener && m.getName().startsWith("register")) {
+                if (found != null) throw new NoSuchMethodException(registry.getName() + ".register ambiguous");
+                found = m;
+            }
+        if (found == null) throw new NoSuchMethodException(registry.getName()
+                + ".registerTaskStackListener candidates=" + QsNodeAbi.candidates(registry, "registerTaskStackListener"));
+        return found;
     }
 
     private static Object defaultValue(Method m) {

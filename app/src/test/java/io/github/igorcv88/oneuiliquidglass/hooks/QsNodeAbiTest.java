@@ -53,4 +53,50 @@ public class QsNodeAbiTest {
     @Test(expected=NoSuchMethodException.class) public void staticDrawIsRejected() throws Exception {
         QsNodeAbi.resolve(StaticDrawElement.class,StaticDrawNode.class,Scope.class);
     }
+
+    /*
+     * DZIF (device log 28/10 18:49:20): every hooked node has only
+     * draw(androidx.compose.ui.node.LayoutNodeDrawScope), R8's narrowing of draw(ContentDrawScope)
+     * to its only implementation. These fixtures mirror that shape for the four failing families
+     * (BackgroundNode, TextStringSimpleNode, TextAnnotatedStringNode, PainterNode).
+     */
+    interface DrawScope {}
+    interface ContentDrawScope extends DrawScope {}
+    static final class LayoutNodeDrawScope implements ContentDrawScope {}
+    static class ModifierNode {}
+    static class BackgroundNode extends ModifierNode {public void draw(LayoutNodeDrawScope s){}}
+    static class BackgroundElement {public BackgroundNode create(){return null;}public void update(BackgroundNode n){}}
+    static class TextStringSimpleNode extends ModifierNode {public void draw(LayoutNodeDrawScope s){}}
+    static class TextStringSimpleElement {public ModifierNode create(){return null;}public void update(ModifierNode n){}}
+    static class TextAnnotatedStringNode extends ModifierNode {public void draw(LayoutNodeDrawScope s){}}
+    static class TextAnnotatedStringElement {public TextAnnotatedStringNode create(){return null;}public void update(TextAnnotatedStringNode n){}}
+    static class PainterNode extends ModifierNode {public void draw(LayoutNodeDrawScope s){}}
+    static class PainterElement {public PainterNode create(){return null;}public void update(ModifierNode n){}}
+    @Test public void dzifNarrowedLayoutNodeDrawScopeIsAcceptedForEveryFailedFamily() throws Exception {
+        Class<?>[][] families={{BackgroundElement.class,BackgroundNode.class},{TextStringSimpleElement.class,TextStringSimpleNode.class},
+                {TextAnnotatedStringElement.class,TextAnnotatedStringNode.class},{PainterElement.class,PainterNode.class}};
+        for(Class<?>[] f:families){
+            QsNodeAbi abi=QsNodeAbi.resolve(f[0],f[1],ContentDrawScope.class);
+            assertEquals(f[1].getSimpleName(),LayoutNodeDrawScope.class,abi.draw.getParameterTypes()[0]);
+            assertEquals(f[1],abi.draw.getDeclaringClass());
+        }
+    }
+    /** When both exist, the exact ContentDrawScope method wins over the narrowed one. */
+    static class BothNode {public void draw(ContentDrawScope s){}public void draw(LayoutNodeDrawScope s){}}
+    static class BothElement {public BothNode create(){return null;}public void update(BothNode n){}}
+    @Test public void exactScopeIsPreferredOverANarrowedOne() throws Exception {
+        assertEquals(ContentDrawScope.class,QsNodeAbi.resolve(BothElement.class,BothNode.class,ContentDrawScope.class).draw.getParameterTypes()[0]);
+    }
+    /** A scope unrelated to ContentDrawScope, or Object, is still rejected. */
+    static class ObjectDrawNode {public void draw(Object s){}}
+    static class ObjectDrawElement {public ObjectDrawNode create(){return null;}public void update(ObjectDrawNode n){}}
+    static class UnrelatedNode {public void draw(OtherScope s){}}
+    static class UnrelatedElement {public UnrelatedNode create(){return null;}public void update(UnrelatedNode n){}}
+    @Test public void objectOrUnrelatedDrawParameterIsRejected() {
+        try{QsNodeAbi.resolve(ObjectDrawElement.class,ObjectDrawNode.class,ContentDrawScope.class);fail();}catch(NoSuchMethodException expected){}
+        try{QsNodeAbi.resolve(UnrelatedElement.class,UnrelatedNode.class,ContentDrawScope.class);fail();}catch(NoSuchMethodException expected){}
+        assertFalse(QsNodeAbi.drawScope(Object.class,ContentDrawScope.class));
+        assertTrue(QsNodeAbi.drawScope(DrawScope.class,ContentDrawScope.class));
+        assertTrue(QsNodeAbi.drawScope(LayoutNodeDrawScope.class,ContentDrawScope.class));
+    }
 }

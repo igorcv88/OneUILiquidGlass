@@ -97,4 +97,19 @@ public class QsTextHooksTest {
         assertNotNull(QsTextHooks.applyPaint(paint,hooks.inkFor(clock),true));
         assertEquals(0xff1d1d1d,paint.getColor());
     }
+
+    /** The visible clock is identified by the shape of what a header node draws, not by its class. */
+    @Test public void clockShapeIsRecognisedForEveryCanvasTextForm(){
+        assertTrue(QsTextHooks.clockText(new Object[]{"18:44",0f,0f,null}));
+        assertTrue(QsTextHooks.clockText(new Object[]{"6:44 PM",0f,0f,null}));
+        assertTrue(QsTextHooks.clockText(new Object[]{"x18:44y",1,6,0f,0f,null}));
+        assertTrue(QsTextHooks.clockText(new Object[]{"..18:44".toCharArray(),2,5,0f,0f,null}));
+        assertTrue(QsTextHooks.clockText(new Object[]{new StringBuilder("09.05"),0,5,0f,0f,null}));
+        assertFalse(QsTextHooks.clockText(new Object[]{"Wed, Oct 28",0f,0f,null}));
+        assertFalse(QsTextHooks.clockText(new Object[]{"Wi-Fi",0f,0f,null}));
+        assertFalse(QsTextHooks.clockText(new Object[]{"18:44".toCharArray(),3,9,0f,0f,null}));
+        assertFalse(QsTextHooks.clockText(new Object[]{"18:44",4,2,0f,0f,null}));
+        assertFalse(QsTextHooks.clockText(new Object[0]));
+        assertFalse(QsTextHooks.clockText(null));
+    }
 }

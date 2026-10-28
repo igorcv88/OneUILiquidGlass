@@ -218,13 +218,16 @@ final class QsTextHooks {
         return l;
     }
     /** Called only after a Canvas text primitive completed, never merely on node entry. */
-    private void painted(Object node, int original, int result, String canvas) {
+    private void painted(Object node, int original, int result, String canvas, boolean clock) {
         if (node == null) return;
         int bucket = result & 0xffffff;
-        Integer previous = drawnTones.put(node, bucket);
-        if (previous != null && previous == bucket) return;
         boolean h = Boolean.TRUE.equals(nodes.get(node));
-        String detail = "family=" + owners.get(node) + " role=" + (h ? "header-unverified" : "label")
+        // A header node that drew a time of day is the clock: recorded once, and logged again.
+        boolean newClock = h && clock && clocks.put(node, Boolean.TRUE) == null;
+        Integer previous = drawnTones.put(node, bucket);
+        if (previous != null && previous == bucket && !newClock) return;
+        boolean isClock = h && clocks.get(node) != null;
+        String detail = "family=" + owners.get(node) + " role=" + (h ? isClock ? "header-clock" : "header-unverified" : "label")
                 + " id=" + Integer.toHexString(System.identityHashCode(node))
                 + " registered=true bound=true drawn=true originalTone=" + Integer.toHexString(original)
                 + " finalTone=" + Integer.toHexString(result) + " canvas=" + canvas;
@@ -234,7 +237,34 @@ final class QsTextHooks {
         }
         if (h) Probe.log("QS_HEADER_TEXT_DRAWN", detail + " ink="
                 + (bucket == QuickSettingsGlass.DARK_INK ? "dark" : bucket == 0xffffff ? "light" : "native")
-                + " clockVerified=false");
+                + " clockVerified=" + isClock);
+    }
+    /** Header nodes whose drawn text had the shape of a time of day (weak keys). */
+    private final java.util.Map<Object, Boolean> clocks = java.util.Collections.synchronizedMap(new java.util.WeakHashMap<>());
+    private static final java.util.regex.Pattern CLOCK =
+            java.util.regex.Pattern.compile("\\s*\\d{1,2}[:.\\u2236]\\d{2}(\\s*[AaPp]\\.?[Mm]\\.?)?\\s*");
+    /**
+     * Whether a Canvas text call draws a time of day ("18:44", "6:44 PM"). drawText/drawTextRun
+     * take (char[], index, count, ...) or (CharSequence|String, start, end, ...) or the whole
+     * string; only the shape is tested, nothing is kept or logged.
+     */
+    static boolean clockText(Object[] args) {
+        if (args == null || args.length == 0) return false;
+        CharSequence run = null;
+        try {
+            if (args[0] instanceof char[]) {
+                char[] c = (char[]) args[0];
+                int i = args.length > 2 && args[1] instanceof Integer ? (Integer) args[1] : 0;
+                int n = args.length > 2 && args[2] instanceof Integer ? (Integer) args[2] : c.length;
+                if (i >= 0 && n >= 0 && i + n <= c.length && n <= 16) run = new String(c, i, n);
+            } else if (args[0] instanceof CharSequence) {
+                CharSequence t = (CharSequence) args[0];
+                boolean range = args.length > 2 && args[1] instanceof Integer && args[2] instanceof Integer;
+                int a = range ? (Integer) args[1] : 0, b = range ? (Integer) args[2] : t.length();
+                if (a >= 0 && b >= a && b <= t.length() && b - a <= 16) run = t.subSequence(a, b);
+            }
+        } catch (RuntimeException e) { return false; }
+        return run != null && CLOCK.matcher(run).matches();
     }
     static Integer applyPaint(Paint paint,Boolean dark,boolean enabled){
         return applyPaint(paint,dark==null?null:dark?1f:0f,enabled);
@@ -278,7 +308,11 @@ final class QsTextHooks {
                         Paint paint=(Paint)p.args[index];
                         if (paint == null) return;
                         p.setObjectExtra("qsPaintBefore",paint.getColor());
-                        p.setObjectExtra("qsPaintNode",drawingNode.get());
+                        Object owningNode=drawingNode.get();
+                        p.setObjectExtra("qsPaintNode",owningNode);
+                        // Header nodes only: whether this run is a time of day (shape, never content).
+                        if(owningNode!=null&&Boolean.TRUE.equals(nodes.get(owningNode)))
+                            p.setObjectExtra("qsPaintClock",clockText(p.args));
                         Integer original=applyPaint(paint,tone,true);
                         p.setObjectExtra("qsPaintAfter",paint.getColor());
                         if(original!=null)p.setObjectExtra("qsTextColor",original);
@@ -291,7 +325,8 @@ final class QsTextHooks {
                 @Override protected void afterHookedMethod(MethodHookParam p){
                     if(text && !p.hasThrowable() && p.getObjectExtra("qsPaintBefore") instanceof Integer)
                         painted(p.getObjectExtra("qsPaintNode"), (Integer)p.getObjectExtra("qsPaintBefore"),
-                                (Integer)p.getObjectExtra("qsPaintAfter"), owner);
+                                (Integer)p.getObjectExtra("qsPaintAfter"), owner,
+                                Boolean.TRUE.equals(p.getObjectExtra("qsPaintClock")));
                     Object original=p.getObjectExtra("qsTextColor");
                     if(original instanceof Integer)((Paint)p.args[index]).setColor((Integer)original);
                     Object filter=p.getObjectExtra("qsHeaderFilter");

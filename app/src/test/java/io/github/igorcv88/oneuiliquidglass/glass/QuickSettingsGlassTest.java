@@ -74,7 +74,9 @@ public final class QuickSettingsGlassTest {
         assertEquals(0f, QuickSettingsGlass.sliderMargin(0f, 1f, .78f), 0f);
         assertEquals(0f, QuickSettingsGlass.sliderMargin(Float.NaN, 1f, .78f), 0f);
         // Invalid ratios fall back to the default instead of a negative or infinite margin.
-        assertEquals(QuickSettingsGlass.sliderMargin(180f, 1f, .78f), QuickSettingsGlass.sliderMargin(180f, 1f, Float.NaN), 0f);
+        assertEquals(QuickSettingsGlass.sliderMargin(180f, 1f, .88f), QuickSettingsGlass.sliderMargin(180f, 1f, Float.NaN), 0f);
+        // Default 0.88: 6 % of the narrow side each side (was 11 % at 0.78).
+        assertEquals(10.8f, QuickSettingsGlass.sliderMargin(180f, 1f, .88f), 1e-3f);
     }
 
     @Test public void composeColourPackingRoundTrips() {

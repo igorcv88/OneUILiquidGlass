@@ -38,4 +38,22 @@ public class BackdropEventsTest {
         assertEquals(1, registry.registered.size());
         assertEquals(l, l);
     }
+
+    /** No getInstance (DZIF: NoSuchMethodException): a static singleton field and a renamed register still work. */
+    static final class FieldRegistry {
+        static final FieldRegistry sInstance = new FieldRegistry();
+        Object added;
+        void registerTaskStackListenerInternal(TaskStackChangeListener l) { added = l; }
+        void unregisterTaskStackListener(String other) { }
+    }
+    static final class NoRegistry { void register(Object o) { } }
+    @Test public void singletonAndRegisterAreFoundWithoutGetInstance() throws Exception {
+        assertSame(FieldRegistry.sInstance, BackdropEvents.instance(FieldRegistry.class));
+        assertEquals("registerTaskStackListenerInternal",
+                BackdropEvents.register(FieldRegistry.class, TaskStackChangeListener.class).getName());
+        try { BackdropEvents.instance(NoRegistry.class); fail(); }
+        catch (NoSuchMethodException e) { assertTrue(e.getMessage(), e.getMessage().contains("candidates=")); }
+        try { BackdropEvents.register(NoRegistry.class, TaskStackChangeListener.class); fail(); }
+        catch (NoSuchMethodException e) { assertTrue(e.getMessage(), e.getMessage().contains("candidates=")); }
+    }
 }
