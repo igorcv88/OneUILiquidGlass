@@ -97,7 +97,8 @@ public final class QuickSettingsHooks {
         this.loader = loader;
         this.master = master;
         this.startConfig = startConfig;
-        this.edge = new QuickSettingsEdgeLight(loader, this::enabled);
+        this.edge = new QuickSettingsEdgeLight(loader, this::enabled,
+                () -> ConfigClient.flag(ProductFlags.QUICK_SETTINGS), master);
     }
 
     private boolean enabled() {
@@ -253,6 +254,7 @@ public final class QuickSettingsHooks {
                     edge.panel(p.thisObject);
                 }
             });
+            Probe.log("QS_EDGE_STATUS", "phase=panel-hook installed=true acquisition=attachComposeView");
         } catch (NoSuchMethodException | RuntimeException | LinkageError e) {
             Probe.error("QS_PANEL_HOOK_FAILED", e);
         }
@@ -467,7 +469,9 @@ public final class QuickSettingsHooks {
     public void refresh() {
         if (!ready) return;
         boolean on = enabled();
-        if (on == applied) return;
+        // Include effective tuning even if only a compositor gate changed (no Compose toggle).
+        if (on == applied) { edge.check(); return; }
+        edge.status(on ? "on" : "off");
         applied = on;
         invalidateAll(on ? "on" : "off");
     }
