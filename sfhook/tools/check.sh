@@ -5,6 +5,7 @@
 # Usage: sfhook/tools/check.sh [dump] [expected "vertex fragment" counts]
 set -e
 cd "$(dirname "$0")"
+python3 property_check.py
 DUMP="${1:-testdata/synthetic_dump.txt}"
 EXPECT="${2:-1 5}"
 OUT="$(mktemp -d)"

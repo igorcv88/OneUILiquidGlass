@@ -118,6 +118,7 @@ public final class HeadsUpHooks {
             enabled = value;
             if (quickSettings != null) quickSettings.refresh();
             if (!shadeConfigEnabled()) { panelDim(false); restoreHeader(); orphanTone(); }
+            else if (shadeGrid != null) headerTone(shadeGrid);
             for (State state : new ArrayList<>(states.values())) {
                 if (!enabled || !state.surfaceEnabled()) state.release();
                 state.invalidate();
@@ -285,6 +286,13 @@ public final class HeadsUpHooks {
                         android.content.res.ColorStateList c = Foreground.interceptList((View) p.thisObject, (android.content.res.ColorStateList) p.args[0]);
                         if (c != null) p.args[0] = c;
                     } catch (RuntimeException | LinkageError e) { Probe.error("TEXT_GUARD_FAILED", e); }
+                }
+            });
+            XposedBridge.hookAllMethods(android.widget.ImageView.class,"setImageDrawable",new XC_MethodHook(){
+                @Override protected void beforeHookedMethod(MethodHookParam p){
+                    if(Foreground.applying||!Foreground.trackingChevrons()||p.args.length!=1)return;
+                    if(p.args[0] instanceof android.graphics.drawable.Drawable)
+                        Foreground.beforeChevronDrawable((android.widget.ImageView)p.thisObject,(android.graphics.drawable.Drawable)p.args[0]);
                 }
             });
             Probe.log("TEXT_GUARD", "textHooks=" + text.size() + " tintHooks=" + tint.size());
@@ -649,48 +657,19 @@ public final class HeadsUpHooks {
         try { View.class.getMethod("semSetBlurInfo", Class.forName("android.view.SemBlurInfo")).invoke(host, panelInfo); }
         catch (ReflectiveOperationException | RuntimeException e) { Probe.error("PANEL_DIM_FAILED", e); }
     }
-    /** The shade header's clock, date and carrier while they carry the swapped tone. */
-    private final java.util.List<View> headerViews = new ArrayList<>();
-    private static final String[] HEADER_IDS = { "header_clock", "header_date", "shade_carrier_text" };
-    /**
-     * The shade header's labels follow the backdrop under them like the cards' text: white on a
-     * white app read as missing (device frames, 25/10). Clear-all and the settings button are left:
-     * they sit on pills of their own. Off with debug.oulg.headertone=0.
-     */
+    private final HeaderToneController headerInk = new HeaderToneController();
     private void headerTone(ToneGrid grid) {
-        restoreHeader();
-        View pv = panelView == null ? null : panelView.get();
-        if (pv == null || !shadeConfigEnabled() || !Tuning.get().headerTone || !Tuning.get().textSwap) return;
-        View root = pv.getRootView();
-        java.util.List<View> found = new ArrayList<>();
-        int top = Integer.MAX_VALUE, bottom = Integer.MIN_VALUE;
-        int[] xy = new int[2];
-        for (String name : HEADER_IDS) {
-            int id = root.getResources().getIdentifier(name, "id", root.getContext().getPackageName());
-            View v = id == 0 ? null : root.findViewById(id);
-            if (v == null) continue;
-            found.add(v);
-            v.getLocationOnScreen(xy);
-            top = Math.min(top, xy[1]); bottom = Math.max(bottom, xy[1] + v.getHeight());
-        }
-        if (found.isEmpty() || bottom <= top) { Probe.log("HEADER_TONE", "views=" + found.size() + " state=skip"); return; }
-        // The scene's decision, like the cards: the band under the header read 0.34 over a white
-        // app (the header animating in from above the screen, device log 26/10).
-        float luma = Tuning.get().shadeLocal ? grid.luma(top, bottom) : grid.whole();
-        boolean light = ShadeTone.lightBackdrop(luma, shadeScene);
-        boolean swap = light == ShadeTone.lightText();
-        int changed = 0;
-        try { changed = Foreground.applyViews(found, swap, ShadeTone.lightText(), headerViews); }
-        catch (RuntimeException e) { Probe.error("TEXT_TONE_FAILED", e); }
-        Probe.log("HEADER_TONE", "views=" + found.size() + " luma=" + String.format(java.util.Locale.ROOT, "%.2f", luma)
-                + " swap=" + swap + " changed=" + changed);
+        View pv=panelView==null?null:panelView.get();
+        Tuning t=Tuning.get();
+        String headerFlag=io.github.igorcv88.oneuiliquidglass.config.ConfigClient.override("headertone");
+        String textFlag=io.github.igorcv88.oneuiliquidglass.config.ConfigClient.override("textswap");
+        boolean headerOn=headerFlag==null?t.headerTone:!"0".equals(headerFlag);
+        boolean textOn=textFlag==null?t.textSwap:!"0".equals(textFlag);
+        if(pv==null||!shadeConfigEnabled()||!headerOn||!textOn){restoreHeader();return;}
+        boolean light=ShadeTone.lightBackdrop(grid.whole(),shadeScene);
+        headerInk.update(pv.getRootView(),light);
     }
-    private void restoreHeader() {
-        if (headerViews.isEmpty()) return;
-        try { Foreground.applyViews(new ArrayList<>(headerViews), false, ShadeTone.lightText(), null); }
-        catch (RuntimeException e) { Probe.error("TEXT_TONE_FAILED", e); }
-        headerViews.clear();
-    }
+    private void restoreHeader() { headerInk.clear(); }
     /**
      * First frame of a shade opening: the backdrop tone starts over. A pre-open capture younger than
      * PRE_OPEN_MAX_MS is adopted at once; otherwise one is asked for now, before the panel or any

@@ -25,8 +25,9 @@ class DistributionTests(unittest.TestCase):
         self.assertFalse((ROOT/'app/src/main/java/io/github/igorcv88/oneuiliquidglass/modules/RootOperations.java').exists())
     def test_registry_has_exact_active_reader_coverage(self):
         java=(ROOT/'app/src/main/java/io/github/igorcv88/oneuiliquidglass/glass/Tuning.java').read_text()
+        java+=(ROOT/'app/src/main/java/io/github/igorcv88/oneuiliquidglass/glass/QsStyle.java').read_text()
         c=(ROOT/'sfhook/oulg_sf.c').read_text();registry=(ROOT/'app/src/main/java/io/github/igorcv88/oneuiliquidglass/config/SettingsRegistry.java').read_text()
-        readers=set(re.findall(r'(?:number|prop)\("([a-z0-9.]+)"',java))|set(re.findall(r'debug\.oulg\.([a-z0-9.]+)',c))
+        readers=set(re.findall(r'(?:number|prop|color)\("([a-z0-9.]+)"',java))|set(re.findall(r'debug\.oulg\.([a-z0-9.]+)',c))
         specs=set(re.findall(r'add\(new SettingSpec\("([a-z0-9.]+)"',registry))
-        self.assertEqual(109,len(readers));self.assertEqual(readers,specs)
+        self.assertEqual(123,len(readers));self.assertEqual(readers,specs)
 if __name__=='__main__':unittest.main()

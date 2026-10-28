@@ -19,6 +19,8 @@ import io.github.igorcv88.oneuiliquidglass.config.ConfigClient;
 import io.github.igorcv88.oneuiliquidglass.config.ProductFlags;
 import io.github.igorcv88.oneuiliquidglass.diagnostics.Probe;
 import io.github.igorcv88.oneuiliquidglass.glass.QuickSettingsGlass;
+import io.github.igorcv88.oneuiliquidglass.glass.QsStyle;
+import io.github.igorcv88.oneuiliquidglass.glass.QsScene;
 import io.github.igorcv88.oneuiliquidglass.glass.QuickSettingsGlass.Kind;
 
 /**
@@ -47,7 +49,6 @@ public final class QuickSettingsHooks {
     private static final String BOX_METHOD = "BoxWithOutline-8QY48No";
     private static final String PANEL = "com.android.systemui.samsung.quicksetting.SecQSPanelCompose";
     private static final String BAR = "com.android.systemui.samsung.quicksetting.ui.tiles.BidirectionalBarKt";
-    private static final String BAR_DRAW = "drawBidirectionalBarTrackProgressThumbContent-Uzs9YN0";
     private static final String ICON_TILE = "com.android.systemui.samsung.quicksetting.ui.tiles.IconTextTileKt";
     private static final String ICON_TILE_METHOD = "IconTextTile-v3dQN_U";
     /** $default mask bit of BoxWithOutline's {@code outlined}; its default is true. */
@@ -61,10 +62,18 @@ public final class QuickSettingsHooks {
     private final Set<Object> scopes = Collections.newSetFromMap(new WeakHashMap<>());
     private final Set<String> logged = new HashSet<>();
     private final QuickSettingsEdgeLight edge;
+    private final QsBackdrop backdrop;
+    private final QsContentHooks content;
+    private volatile QsStyle style = QsStyle.read();
+    private volatile Object pillShape;
+    /**
+     * BidirectionalBarKt.PillShape, the shape only the slider passes to BoxWithOutline. Matched by
+     * identity: a box recomposing on its own (a live refresh invalidates its scope) does not run
+     * inside BidirectionalBar, so a call-stack flag would lose the slider there.
+     */
+    private volatile Object barPill;
     private Object circleShape;
     private Method recomposeScope, recordUsed, invalidate, valid;
-    private Method drawContext, contextSize, setContextSize, contextCanvas;
-    private Field nativeCanvas;
     private Constructor<?> solidColor;
     private Object darkRim, lightRim;
     private boolean ready, broken, configStarted, applied;
@@ -83,6 +92,10 @@ public final class QuickSettingsHooks {
         /** A glass container's shape and outline width (dp), for its edge light; null for circles. */
         final Object edgeShape;
         final float edgeBorder;
+        boolean slider;
+        Kind kind = Kind.NONE;
+        Object sliderShape;
+        float outer = 1f;
         boolean rimDone, fillDone;
         Pending(Object composer, long background, long fill, Object rim, Object edgeShape, float edgeBorder) {
             this.composer = composer; this.background = background; this.fill = fill; this.rim = rim;
@@ -99,6 +112,9 @@ public final class QuickSettingsHooks {
         this.startConfig = startConfig;
         this.edge = new QuickSettingsEdgeLight(loader, this::enabled,
                 () -> ConfigClient.flag(ProductFlags.QUICK_SETTINGS), master);
+        this.backdrop = new QsBackdrop(this::enabled, edge::expansion, () -> { darkRim=null; lightRim=null; invalidateAll("backdrop"); });
+        this.content = new QsContentHooks(loader, this::enabled, () -> style, backdrop::tone, backdrop::headerTone,
+                () -> pending.get()==null ? Kind.NONE : pending.get().kind, this::capture);
     }
 
     private boolean enabled() {
@@ -140,21 +156,33 @@ public final class QuickSettingsHooks {
                     if (q == null || q.rimDone) return;
                     q.rimDone = true; // The outer box's border is the first one BoxWithOutline builds.
                     capture(q.composer);
+                    if (q.sliderShape != null) p.args[2] = q.sliderShape;
                     if (q.rim != null && p.args[0] instanceof Float && (Float) p.args[0] > 0f) p.args[1] = q.rim;
                 }
             });
             XposedBridge.hookMethod(backgroundInit, new XC_MethodHook() {
                 @Override protected void beforeHookedMethod(MethodHookParam p) {
                     Pending q = pending.get();
-                    if (q == null || q.fillDone) return;
+                    if (q == null || q.fillDone) {
+                        QsContentHooks.Frame f = content.current();
+                        if (f == null || !f.media || f.background || f.shape == null || !enabled()) return;
+                        f.background = true;
+                        capture(f.composer);
+                        long original = (Long)p.args[0];
+                        if (!QuickSettingsGlass.srgb(original)) return;
+                        if ((QuickSettingsGlass.argb(original) >>> 24) == 0) return;
+                        q = new Pending(f.composer, original, QuickSettingsGlass.color(QuickSettingsGlass.fill(
+                                Kind.CONTAINER, QuickSettingsGlass.argb(original), dark(), backdrop.tone(), style)), null, f.shape, 0);
+                    }
                     if (!(p.args[0] instanceof Long) || (Long) p.args[0] != q.background) return;
                     q.fillDone = true;
                     p.args[0] = q.fill;
+                    if (q.sliderShape != null) p.args[3] = q.sliderShape;
                     if (q.edgeShape != null) p.setObjectExtra("oulgEdge", q);
                 }
                 @Override protected void afterHookedMethod(MethodHookParam p) {
                     Object q = p.getObjectExtra("oulgEdge");
-                    if (q instanceof Pending) edge.element(p.thisObject, ((Pending) q).edgeShape, ((Pending) q).edgeBorder);
+                    if (q instanceof Pending) edge.element(p.thisObject, ((Pending) q).edgeShape, ((Pending) q).edgeBorder, ((Pending) q).outer);
                 }
             });
             edge.install(background);
@@ -167,6 +195,8 @@ public final class QuickSettingsHooks {
             hookPanel();
             hookSlider();
             hookIconTile();
+            content.install();
+            installPrefetchGesture();
             ready = true;
             Probe.log("QS_COMPOSE_READY", "method=" + boxMethod.toGenericString()
                     + " liveRefresh=" + (invalidate != null)
@@ -252,6 +282,8 @@ public final class QuickSettingsHooks {
                     Probe.log("QS_COMPOSE_ACTIVE", "optIn=" + ConfigClient.flag(ProductFlags.QUICK_SETTINGS)
                             + " master=" + master.getAsBoolean());
                     edge.panel(p.thisObject);
+                    Object view = Reflect.read(p.thisObject, "view");
+                    if (view instanceof android.view.View) backdrop.panel((android.view.View)view);
                 }
             });
             Probe.log("QS_EDGE_STATUS", "phase=panel-hook installed=true acquisition=attachComposeView");
@@ -265,28 +297,51 @@ public final class QuickSettingsHooks {
      * area on every side (DrawTransform.inset's two steps: translate the canvas, shrink the size;
      * getTransform() is stripped by R8) and clip it to a pill, then restore both after the call.
      */
-    private void hookSlider() {
-        Class<?> bar = resolve(BAR);
-        Method draw = named(bar, BAR_DRAW);
-        if (draw == null) { Probe.log("QS_SLIDER_MISSING", "method=" + BAR_DRAW); return; }
+    /**
+     * The touch that opens the panel starts at the top edge: sampling from its ACTION_DOWN gives the
+     * capture a head start on Samsung's animation. Every SystemUI input event passes here, so the
+     * cheap tests come first; QsBackdrop.gesture() ignores it while the panel is open or a fresh
+     * sample exists, so a tap on the status bar or header does not capture again.
+     */
+    private void installPrefetchGesture() {
         try {
-            Class<?> scope = Class.forName("androidx.compose.ui.graphics.drawscope.DrawScope", false, loader);
-            drawContext = scope.getMethod("getDrawContext");
-            Class<?> context = drawContext.getReturnType();
-            contextSize = context.getMethod("getSize-NH-jbRc");
-            setContextSize = context.getMethod("setSize-uvyYCjk", long.class);
-            contextCanvas = context.getMethod("getCanvas");
-            nativeCanvas = Class.forName("androidx.compose.ui.graphics.AndroidCanvas", false, loader)
-                    .getDeclaredField("internalCanvas");
-            nativeCanvas.setAccessible(true);
-            XposedBridge.hookMethod(draw, new XC_MethodHook() {
-                @Override protected void beforeHookedMethod(MethodHookParam p) { insetSlider(p); }
-                @Override protected void afterHookedMethod(MethodHookParam p) { restoreSlider(p); }
+            Class<?> receiver=Class.forName("android.view.InputEventReceiver");
+            XposedBridge.hookAllMethods(receiver,"dispatchInputEvent",new XC_MethodHook(){
+                @Override protected void beforeHookedMethod(MethodHookParam p){
+                    if(p.args.length<2||!(p.args[1] instanceof android.view.MotionEvent))return;
+                    android.view.MotionEvent e=(android.view.MotionEvent)p.args[1];
+                    if(e.getActionMasked()!=android.view.MotionEvent.ACTION_DOWN||e.getRawY()>=topEdge()||!enabled())return;
+                    backdrop.gesture();
+                }
             });
-            Probe.log("QS_SLIDER_READY", "method=" + draw.toGenericString());
+        } catch(ClassNotFoundException|RuntimeException|LinkageError e){Probe.error("QS_PREFETCH_GESTURE_FAILED",e);}
+    }
+
+    private int topEdgePx;
+
+    /**
+     * Where a pull-down of the panel starts: 64 dp from the top, about twice One UI's status bar
+     * (its height is an internal resource, not read here).
+     */
+    private int topEdge() {
+        if (topEdgePx <= 0)
+            topEdgePx = Math.round(64f * android.content.res.Resources.getSystem().getDisplayMetrics().density);
+        return topEdgePx;
+    }
+
+    private void hookSlider() {
+        Class<?> bar=resolve(BAR);if(bar==null)return;
+        try {
+            Field pill=bar.getDeclaredField("PillShape");
+            pill.setAccessible(true);
+            barPill=pill.get(null);
         } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
-            Probe.error("QS_SLIDER_HOOK_FAILED", e);
+            barPill=null;
+            Probe.log("QS_SLIDER_SHAPE_MISSING", "error=" + e.getClass().getSimpleName());
         }
+        try { new QsSliderHooks(loader,this::enabled,()->style,()->pillShape!=null||style.outer>=1,
+                this::capture).install(bar); }
+        catch(ReflectiveOperationException|RuntimeException|LinkageError e){Probe.error("QS_SLIDER_HOOK_FAILED",e);}
     }
 
     /**
@@ -325,63 +380,6 @@ public final class QuickSettingsHooks {
         }
     }
 
-    private static final class SliderInset {
-        final Object context; final android.graphics.Canvas canvas; final long size; final int save;
-        SliderInset(Object context, android.graphics.Canvas canvas, long size, int save) {
-            this.context = context; this.canvas = canvas; this.size = size; this.save = save;
-        }
-    }
-
-    private void insetSlider(XC_MethodHook.MethodHookParam p) {
-        if (!enabled()) return;
-        try {
-            Object context = drawContext.invoke(p.args[0]);
-            Object canvas = contextCanvas.invoke(context);
-            Object raw = nativeCanvas.getDeclaringClass().isInstance(canvas) ? nativeCanvas.get(canvas) : null;
-            if (!(raw instanceof android.graphics.Canvas)) return;
-            android.graphics.Canvas c = (android.graphics.Canvas) raw;
-            long size = (Long) contextSize.invoke(context);
-            float w = Float.intBitsToFloat((int) (size >>> 32)), h = Float.intBitsToFloat((int) size);
-            float m = QuickSettingsGlass.sliderInset(w, h);
-            if (m <= 0f || w <= 2f * m || h <= 2f * m) return;
-            float iw = w - 2f * m, ih = h - 2f * m, r = Math.min(iw, ih) / 2f;
-            // Registered before anything changes: whatever fails below, the after-hook (which runs
-            // even when Samsung's draw throws) or the catch undoes exactly what was done.
-            SliderInset undo = new SliderInset(context, c, size, c.save());
-            p.setObjectExtra("oulgSlider", undo);
-            try {
-                c.translate(m, m);
-                android.graphics.Path pill = new android.graphics.Path();
-                pill.addRoundRect(0f, 0f, iw, ih, r, r, android.graphics.Path.Direction.CW);
-                // Samsung's track is a plain rectangle rounded only by the outer clip: keep it a pill.
-                c.clipPath(pill);
-                setContextSize.invoke(context, ((long) Float.floatToRawIntBits(iw) << 32)
-                        | (Float.floatToRawIntBits(ih) & 0xffffffffL));
-            } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
-                restoreSlider(p);
-                throw e;
-            }
-        } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
-            fail(e);
-        }
-    }
-
-    /** Runs whether or not Samsung's draw threw, so the canvas and size are always restored. */
-    private void restoreSlider(XC_MethodHook.MethodHookParam p) {
-        Object extra = p.getObjectExtra("oulgSlider");
-        if (!(extra instanceof SliderInset)) return;
-        p.setObjectExtra("oulgSlider", null); // Once: the catch above and the after-hook may both call.
-        SliderInset s = (SliderInset) extra;
-        // The canvas first and unconditionally: a size that cannot be put back must not leave the
-        // translation and clip on the rest of the frame.
-        s.canvas.restoreToCount(s.save);
-        try {
-            setContextSize.invoke(s.context, s.size);
-        } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
-            fail(e);
-        }
-    }
-
     private void beforeBox(Object[] a) {
         pending.remove();
         try {
@@ -404,13 +402,19 @@ public final class QuickSettingsHooks {
             log(kind.name(), a);
             if (kind == Kind.NONE) return;
             boolean dark = dark();
-            long fill = QuickSettingsGlass.color(QuickSettingsGlass.fill(kind, QuickSettingsGlass.argb(background), dark));
+            long fill = QuickSettingsGlass.color(QuickSettingsGlass.fill(kind, QuickSettingsGlass.argb(background), dark, backdrop.tone(), style));
             boolean outlined = (outlinedDefault || Boolean.TRUE.equals(a[1]))
                     && a[2] instanceof Float && (Float) a[2] > 0f;
             boolean rimmed = outlined && QuickSettingsGlass.rimmed(kind);
             // The inner box is padded by the outline width only when the outline is on.
             pending.set(new Pending(a[7], background, fill, rimmed ? rim(dark) : null,
                     kind == Kind.CONTAINER ? a[5] : null, outlined ? (Float) a[2] : 0f));
+            pending.get().slider = kind == Kind.CONTAINER && barPill != null && a[5] == barPill;
+            pending.get().kind = kind;
+            if (pending.get().slider) {
+                pending.get().sliderShape = pillShape;
+                pending.get().outer = pillShape != null ? style.outer : 1f;
+            }
         } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
             fail(e);
         }
@@ -453,7 +457,7 @@ public final class QuickSettingsHooks {
     private Object rim(boolean dark) throws ReflectiveOperationException {
         Object cached = dark ? darkRim : lightRim;
         if (cached != null) return cached;
-        Object brush = solidColor.newInstance(QuickSettingsGlass.color(QuickSettingsGlass.rim(dark)));
+        Object brush = solidColor.newInstance(QuickSettingsGlass.color(QuickSettingsGlass.rim(dark, backdrop.tone(), style)));
         if (dark) darkRim = brush; else lightRim = brush;
         return brush;
     }
@@ -469,6 +473,17 @@ public final class QuickSettingsHooks {
     public void refresh() {
         if (!ready) return;
         boolean on = enabled();
+        QsStyle next = QsStyle.read();
+        boolean valuesChanged = !next.equals(style);
+        if (valuesChanged) {
+            darkRim=null; lightRim=null;
+            try { pillShape=next.outer < 1f ? QsPillShape.create(loader, next.outer) : null; }
+            catch (ReflectiveOperationException | RuntimeException | LinkageError e) { pillShape=null; Probe.error("QS_PILL_SHAPE_FAILED", e); }
+            edge.configure(next.edgeBlur);
+        }
+        style = next;
+        if (on != applied) backdrop.configuration();
+        if (valuesChanged && on == applied) { edge.check(); invalidateAll("values"); return; }
         // Include effective tuning even if only a compositor gate changed (no Compose toggle).
         if (on == applied) { edge.check(); return; }
         edge.status(on ? "on" : "off");
@@ -477,6 +492,7 @@ public final class QuickSettingsHooks {
     }
 
     private void invalidateAll(String reason) {
+        content.invalidateArtwork();
         if (invalidate == null) {
             Probe.log("QS_COMPOSE_REFRESH", "reason=" + reason + " live=false (applies on the next composition)");
             return;
@@ -491,7 +507,7 @@ public final class QuickSettingsHooks {
                 count++;
             } catch (ReflectiveOperationException | RuntimeException e) {
                 Probe.error("QS_COMPOSE_REFRESH_FAILED", e);
-                return;
+                synchronized (scopes) { scopes.remove(scope); }
             }
         }
         Probe.log("QS_COMPOSE_REFRESH", "reason=" + reason + " scopes=" + count);

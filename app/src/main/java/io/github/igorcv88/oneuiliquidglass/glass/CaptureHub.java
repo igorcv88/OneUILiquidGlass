@@ -176,13 +176,13 @@ public final class CaptureHub {
             worker = new Handler(t.getLooper());
         }
         inFlight = true;
-        worker.post(() -> capture(displayId, finalCrop, exclude, captureScale));
+        long requestedAt = SystemClock.uptimeMillis();
+        worker.post(() -> capture(displayId, finalCrop, exclude, captureScale, requestedAt));
     }
 
-    private static void capture(int displayId, Rect crop, SurfaceControl[] exclude, float scale) {
+    private static void capture(int displayId, Rect crop, SurfaceControl[] exclude, float scale, long requestedAt) {
         CaptureApi api = CaptureApi.get();
         long t0 = SystemClock.elapsedRealtimeNanos();
-        long requestedAt = SystemClock.uptimeMillis();
         Object lock = new Object();
         Object[] result = new Object[1];
         int[] status = {-1};

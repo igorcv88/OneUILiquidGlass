@@ -43,9 +43,11 @@ public final class ShadeTone implements CaptureHub.Client {
      * (secure content, capture unavailable). The panel need not be shown yet: the capture is asked
      * for on the first frame of the opening.
      */
-    public static void prefetch(View panel, int generation, java.util.function.Consumer<ToneGrid> result) {
-        if (!CaptureHub.available()) { result.accept(null); return; }
-        CaptureHub.register(new Prefetch(panel, generation, result));
+    public static Runnable prefetch(View panel, int generation, java.util.function.Consumer<ToneGrid> result) {
+        if (!CaptureHub.available()) { result.accept(null); return () -> {}; }
+        Prefetch client = new Prefetch(panel, generation, result);
+        CaptureHub.register(client);
+        return client::cancel;
     }
     private static final class Prefetch implements CaptureHub.Client {
         final WeakReference<View> panel;
@@ -53,7 +55,8 @@ public final class ShadeTone implements CaptureHub.Client {
         final java.util.function.Consumer<ToneGrid> result;
         /** A capture already in flight covers only the earlier clients (a pop-up's band): skip it. */
         final long registeredAt = android.os.SystemClock.uptimeMillis();
-        boolean done;
+        boolean done, cancelled;
+        void cancel() { cancelled = true; done = true; CaptureHub.unregister(this); }
         Prefetch(View panel, int generation, java.util.function.Consumer<ToneGrid> result) {
             this.panel = new WeakReference<>(panel); this.generation = generation; this.result = result;
         }
@@ -74,13 +77,13 @@ public final class ShadeTone implements CaptureHub.Client {
             result.accept(null);
         }
         @Override public void onFrame(CaptureHub.Frame frame) {
-            if (done || frame.capturedAt < registeredAt) return;
+            if (done || frame.capturedAt <= registeredAt) return;
             done = true;
             CaptureHub.unregister(this);
             frame.retain();
             worker().post(() -> {
                 ToneGrid grid = grid(frame, generation);
-                MAIN.post(() -> { frame.release(); result.accept(grid); scheduleDrop(); });
+                MAIN.post(() -> { frame.release(); if (!cancelled) result.accept(grid); scheduleDrop(); });
             });
         }
     }

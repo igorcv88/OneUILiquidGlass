@@ -7,6 +7,13 @@ import org.junit.Test;
 import java.util.*;
 
 public final class CompositorValuesTest {
+    @Test public void qsLightRequiresCompileAndComposeValuesDoNot() {
+        assertTrue(CompositorValues.writable("sf.qslight"));
+        assertEquals(Collections.singletonMap("sf.qslight","2"),
+                CompositorValues.pending(Collections.singletonMap("sf.qslight","2"),Collections.emptyMap()));
+        assertTrue(CompositorValues.pending(Collections.singletonMap("qs.darkfill","0.2"),Collections.emptyMap()).isEmpty());
+        assertTrue(CompositorValues.pending(Collections.singletonMap("sf.qslight","0.90"),Collections.emptyMap()).isEmpty());
+    }
     @Test public void pendingIsSavedMinusWhatTheCompositorWouldCompile() {
         Map<String, String> saved = new HashMap<>(), observed = new HashMap<>();
         saved.put("sf.kgcore", "80");      // equals the library default, property empty

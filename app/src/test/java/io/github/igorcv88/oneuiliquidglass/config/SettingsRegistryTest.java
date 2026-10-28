@@ -27,7 +27,8 @@ public class SettingsRegistryTest {
                 read(
                         root().resolve(
                                         "app/src/main/java/io/github/igorcv88/oneuiliquidglass/glass/Tuning.java"));
-        Matcher j = Pattern.compile("(?:number|prop)\\(\"([a-z0-9.]+)\"").matcher(java);
+        java += read(root().resolve("app/src/main/java/io/github/igorcv88/oneuiliquidglass/glass/QsStyle.java"));
+        Matcher j = Pattern.compile("(?:number|prop|color)\\(\"([a-z0-9.]+)\"").matcher(java);
         while (j.find()) readers.add(j.group(1));
         Matcher c =
                 Pattern.compile("debug\\.oulg\\.([a-z0-9.]+)")
@@ -35,7 +36,7 @@ public class SettingsRegistryTest {
         while (c.find()) readers.add(c.group(1));
         Set<String> registered = new TreeSet<>();
         for (SettingSpec s : SettingsRegistry.all()) registered.add(s.key);
-        assertEquals(109, readers.size());
+        assertEquals(123, readers.size());
         assertEquals(readers, registered);
     }
 

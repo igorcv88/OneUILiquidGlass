@@ -70,6 +70,7 @@ final class QuickSettingsEdgeLight {
     private ViewTreeObserver.OnPreDrawListener preDraw;
     private ViewTreeObserver observed;
     private int alpha = 255;
+    private int blurPx = QuickSettingsGlass.EDGE_BLUR_PX;
     /** Last expansion read (-1: none, or unreadable), for the log; 0 = closed, 1 = open is assumed. */
     private float lastExpansion = -1f;
     private boolean ready, logged;
@@ -82,9 +83,9 @@ final class QuickSettingsEdgeLight {
     private static final class Spec {
         final WeakReference<Object> element;
         final Object shape;
-        final float border;
-        Spec(Object element, Object shape, float border) {
-            this.element = new WeakReference<>(element); this.shape = shape; this.border = border;
+        final float border, outer;
+        Spec(Object element, Object shape, float border, float outer) {
+            this.element = new WeakReference<>(element); this.shape = shape; this.border = border; this.outer = outer;
         }
     }
 
@@ -180,7 +181,9 @@ final class QuickSettingsEdgeLight {
     }
 
     /** The recolouring built this element for a glass container of this shape and outline width. */
-    synchronized void element(Object element, Object shape, float borderDp) {
+    synchronized void element(Object element, Object shape, float borderDp) { element(element, shape, borderDp, 1f); }
+
+    synchronized void element(Object element, Object shape, float borderDp, float outer) {
         if (!ready || shape == null) return;
         purge();
         if (elements.size() >= MAX_PENDING_ELEMENTS) {
@@ -188,7 +191,7 @@ final class QuickSettingsEdgeLight {
             if (diagnostic.count(QuickSettingsEdgeDiagnostics.Event.PENDING_EVICTED))
                 diagnostic.event(QuickSettingsEdgeDiagnostics.Event.PENDING_EVICTED, "limit=" + MAX_PENDING_ELEMENTS);
         }
-        elements.add(new Spec(element, shape, borderDp));
+        elements.add(new Spec(element, shape, borderDp, outer));
         if (diagnostic.count(QuickSettingsEdgeDiagnostics.Event.ELEMENT))
             diagnostic.event(QuickSettingsEdgeDiagnostics.Event.ELEMENT, "element=" + identity(element));
     }
@@ -279,8 +282,9 @@ final class QuickSettingsEdgeLight {
             diagnostic.event(QuickSettingsEdgeDiagnostics.Event.NODE_RELEASED, "");
     }
 
+    /** Runs on every pre-draw while inactive: no copy, and release() does not touch the map. */
     private void releaseAll() {
-        for (Edge e : new ArrayList<>(nodes.values())) e.release();
+        for (Edge e : nodes.values()) if (e.bridge != null) e.release();
     }
 
     /** Compositor edge light wanted and possible: the option, the compositor and its profile 3. */
@@ -307,7 +311,7 @@ final class QuickSettingsEdgeLight {
             if (w <= 0 || h <= 0) {
                 if (diagnostic.count(QuickSettingsEdgeDiagnostics.Event.INVALID_SIZE))
                     diagnostic.event(QuickSettingsEdgeDiagnostics.Event.INVALID_SIZE, "width=" + w + " height=" + h);
-                return;
+                e.release(); return;
             }
             // Samsung pads the background's box by the outline width (Compose rounds it to px).
             int out = QuickSettingsGlass.edgeOutset(e.spec.border, (Float) getDensity.invoke(scope));
@@ -315,6 +319,8 @@ final class QuickSettingsEdgeLight {
             long outer = ((long) Float.floatToRawIntBits(ow) << 32) | (Float.floatToRawIntBits(oh) & 0xffffffffL);
             Object corner = topStart.get(e.spec.shape);
             float radius = corner == null ? -1f : (Float) toPx.invoke(corner, scope, outer);
+            float[] envelope = QuickSettingsGlass.envelope(ow, oh, e.spec.outer);
+            if (e.spec.outer < 1f) radius = Math.min(envelope[2]-envelope[0], envelope[3]-envelope[1])/2f;
             float tag = QuickSettingsGlass.edgeTag(radius);
             if (tag < 0f) {
                 if (diagnostic.count(QuickSettingsEdgeDiagnostics.Event.INVALID_RADIUS_TAG))
@@ -327,13 +333,13 @@ final class QuickSettingsEdgeLight {
             if (!(raw instanceof android.graphics.Canvas) || !((android.graphics.Canvas) raw).isHardwareAccelerated()) {
                 if (diagnostic.count(QuickSettingsEdgeDiagnostics.Event.NONHARDWARE_CANVAS))
                     diagnostic.event(QuickSettingsEdgeDiagnostics.Event.NONHARDWARE_CANVAS, "");
-                return;
+                e.release(); return;
             }
             Object root = Reflect.call(v, "getViewRootImpl");
             if (root == null) {
                 if (diagnostic.count(QuickSettingsEdgeDiagnostics.Event.MISSING_VIEWROOT))
                     diagnostic.event(QuickSettingsEdgeDiagnostics.Event.MISSING_VIEWROOT, "");
-                return;
+                e.release(); return;
             }
             if (e.bridge == null || e.root != root) {
                 e.release();
@@ -353,7 +359,7 @@ final class QuickSettingsEdgeLight {
             if (tag != e.tag) {
                 float[] radii = {tag, tag, tag, tag, tag, tag, tag, tag};
                 // No region colour: the shader draws the light and the refracted bevel; past it, nothing.
-                e.bridge.update(QuickSettingsGlass.EDGE_BLUR_PX, 0, radii);
+                e.bridge.update(blurPx, 0, radii);
                 e.tag = tag;
                 if (diagnostic.count(QuickSettingsEdgeDiagnostics.Event.REGION_UPDATED))
                     diagnostic.event(QuickSettingsEdgeDiagnostics.Event.REGION_UPDATED,
@@ -363,7 +369,8 @@ final class QuickSettingsEdgeLight {
             e.bridge.drawable.setAlpha(Math.max(1, alpha));
             // The inner box grown back to the outer one: the RenderNode reports these bounds whatever
             // the inner clip, and the light band then sits on Samsung's outline.
-            e.bridge.draw((android.graphics.Canvas) raw, new Rect(-out, -out, w + out, h + out));
+            e.bridge.draw((android.graphics.Canvas) raw, new Rect(Math.round(-out+envelope[0]), Math.round(-out+envelope[1]),
+                    Math.round(-out+envelope[2]), Math.round(-out+envelope[3])));
             if (!e.drawn) {
                 e.drawn = true;
                 if (diagnostic.count(QuickSettingsEdgeDiagnostics.Event.REGION_DRAWN))
@@ -402,16 +409,24 @@ final class QuickSettingsEdgeLight {
         refresh();
     }
 
-    private synchronized void refresh() {
-        // Switched off (option, master, compositor): release, do not keep a residual alpha. A later
-        // switch on recomposes the containers (QuickSettingsHooks.refresh), which draws them again.
+    /** Before each frame of the shade window. */
+    private synchronized void refresh() { refresh(false); }
+
+    /**
+     * Switched off (option, master, compositor): release, do not keep a residual alpha. A later
+     * switch on recomposes the containers (QuickSettingsHooks.refresh), which draws them again.
+     * The listener stays on the shade window from panel() on, also with the option off (its
+     * default), so an inactive frame only checks the gate: the ancestor walk and the reflective
+     * expansion read run only for a snapshot (toggle, config callback, failure).
+     */
+    private void refresh(boolean snapshot) {
         boolean on = active();
-        float fade = fade();
         if (!on) {
             releaseAll();
-            observe(false);
+            if (snapshot) { fade(); observe(false); }
             return;
         }
+        float fade = fade();
         int next = Math.round(255f * fade);
         if (next != alpha) {
             alpha = next;
@@ -440,28 +455,49 @@ final class QuickSettingsEdgeLight {
         }
         // An expansion that cannot be read is not taken as "open": no dynamic light rather than one
         // that may outlive the panel's fade.
-        float expansion = -1f;
-        try {
-            Object flow = expansionField == null || adapter == null ? null : expansionField.get(adapter);
-            Object value = flow == null || flowValue == null ? null : flowValue.invoke(flow);
-            if (value instanceof Float) expansion = (Float) value;
-        } catch (ReflectiveOperationException | RuntimeException e) {
-            expansion = -1f;
-        }
+        float expansion = readExpansion();
         lastExpansion = expansion;
         ancestorAlpha = a;
         edgeFade = scaled || expansion < 0f ? 0f : QuickSettingsGlass.edgeFade(a, expansion);
         return edgeFade;
     }
 
+    /**
+     * SecQSPanelComposeAdapter.expansionFraction (0 closed, 1 open), -1 before panel() or when it
+     * cannot be read. Also the opening signal of the backdrop sampling (QsBackdrop): the compose
+     * root may stay VISIBLE while the panel is collapsed.
+     */
+    synchronized float expansion() { return readExpansion(); }
+
+    private float readExpansion() {
+        try {
+            Object flow = expansionField == null || adapter == null ? null : expansionField.get(adapter);
+            Object value = flow == null || flowValue == null ? null : flowValue.invoke(flow);
+            return value instanceof Float ? (Float) value : -1f;
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            return -1f;
+        }
+    }
+
+    synchronized void configure(int blur) {
+        if (blurPx == blur) return;
+        blurPx = Math.max(1, Math.min(32, blur));
+        try {
+            for (Edge e : nodes.values()) if (e.bridge != null && e.tag >= 0f) {
+                float t=e.tag;
+                e.bridge.update(blurPx, 0, new float[]{t,t,t,t,t,t,t,t});
+            }
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError e) { fail(e); }
+    }
+
     /** Config callbacks with no material toggle still expose changes to effective compositor gates. */
-    synchronized void check() { refresh(); }
+    synchronized void check() { refresh(true); }
 
     /** Also called when there is no region: a failed gate must not make the diagnostics disappear. */
     synchronized void status(String reason) {
         cancelSettled(host.get());
         diagnostic.begin(reason);
-        refresh();
+        refresh(true);
         summary("snapshot");
     }
 
@@ -488,7 +524,7 @@ final class QuickSettingsEdgeLight {
             synchronized (QuickSettingsEdgeLight.this) {
                 settledSnapshot = null;
                 if (host.get() != v) return;
-                refresh();
+                refresh(true);
                 if (shown && lastExpansion >= 0.95f) summary("stabilized");
             }
         };

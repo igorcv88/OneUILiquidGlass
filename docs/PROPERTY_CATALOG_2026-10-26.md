@@ -4,9 +4,11 @@
 
 **Atualização de integração (main após #57):** `lensregiondiff`/gate `region` foram removidos; `popuplock` e `orphandraw` foram adicionados. O inventário ativo agora tem 103 propriedades. O interruptor `sfrefract` pertence ao helper live e não pode ser persistido pela ponte do APK.
 
-**Abrangência:** 74 chaves parseadas em Java (incluindo `sf.optics`), 36 mencionadas no leitor da biblioteca C (incluindo a mesma `sf.optics`), **109 propriedades distintas**. O módulo também tem um controle global `glass/enabled` nas SharedPreferences, fora de `debug.oulg.*`. As configurações independentes de perfil, as condições de ativação, os comandos de teste e as ações de recuperação também devem aparecer no APK.
+**Abrangência:** 87 chaves em Java (`Tuning` e `QsStyle`, incluindo `sf.optics`), 37 no leitor da biblioteca C (incluindo a mesma `sf.optics`), **123 chaves distintas**. O módulo também tem um controle global `glass/enabled` nas SharedPreferences, fora de `debug.oulg.*`. As configurações independentes de perfil, as condições de ativação, os comandos de teste e as ações de recuperação também devem aparecer no APK.
 
-Prefixo omitido nas tabelas: cada entrada abaixo significa `debug.oulg.<chave>`. **L:** `Tuning` atualiza aproximadamente a cada 1 s dentro de SystemUI, mas algumas mudanças exigem recriação de material/invalidação de View. **C:** SurfaceFlinger lê ao compilar shader; mudar `setprop` não recompila o shader existente. **R:** leitura de estado; não oferecer escrita normal. Padrões são do código, não do telefone, do serviço de boot nem dos overrides do usuário.
+**Exceção para `qs.*`:** são chaves do snapshot do aplicativo, sem leitura de `setprop`.
+
+Prefixo omitido nas tabelas (demais chaves): cada entrada abaixo significa `debug.oulg.<chave>`. **L:** `Tuning` atualiza aproximadamente a cada 1 s dentro de SystemUI, mas algumas mudanças exigem recriação de material/invalidação de View. **C:** SurfaceFlinger lê ao compilar shader; mudar `setprop` não recompila o shader existente. **R:** leitura de estado; não oferecer escrita normal. Padrões são do código, não do telefone, do serviço de boot nem dos overrides do usuário.
 
 ## Modos, captura e refração amostrada — Java (L)
 
@@ -171,3 +173,25 @@ Observar que as propriedades `lightglass` e `shadelightglass` se aplicam a super
 3. Não transformar `sf.optics` em opção de usuário; não confundir `kgoptics` (seleção de perfil) com confirmação do compositor.
 4. `debug.*` expira no reboot: persistência deve ser uma política explícita, com caminho de rollback, e não presumida.
 5. Validar o comportamento de cada toggle nos três estados (heads-up, keyguard, shade) e nos dois temas; dependências devem desabilitar controles contextualmente, sem perder valor salvo.
+
+
+## Controles rápidos — pós-PR #75
+
+Controles `qs.*` são lidos pelo snapshot `QsStyle` em callbacks de configuração e aplicam ao vivo. As cores são hipóteses iniciais ajustáveis para teste no aparelho. `sf.qslight` exige aplicação do shader pelo fluxo de userspace.
+
+| Chave | Padrão | Tipo/domínio do parser | Controle / consequência |
+| --- | --- | --- | --- |
+| `qs.darkfill` | .10 | 0–1 | Opacidade do vidro das cápsulas sobre fundos escuros ou coloridos |
+| `qs.lightfill` | .66 | 0–0.90 | Opacidade do vidro das cápsulas sobre apps claros |
+| `qs.darkcolor` | ffffff | RGB hexadecimal | Cor do véu das cápsulas sobre fundos escuros ou coloridos |
+| `qs.lightcolor` | 141823 | RGB hexadecimal | Cor do vidro obsidiana sobre apps claros |
+| `qs.idle` | .08 | 0–1 | Opacidade do disco atrás dos ícones desligados |
+| `qs.active` | .90 | 0–1 | Opacidade dos discos ligados (a cor continua a da Samsung ou do tema) |
+| `qs.darkrim` | .26 | 0–1 | Intensidade do contorno sobre fundos escuros ou coloridos |
+| `qs.lightrim` | .18 | 0–1 | Intensidade do contorno sobre apps claros |
+| `qs.edgeblur` | 8 | inteiro 1–32 px | Desfoque do fundo lido pela lente dinâmica no contorno das cápsulas |
+| `qs.outer` | 1 | 0.50–1 | Espessura da pílula inteira dos sliders (o toque continua na área da Samsung) |
+| `qs.track` | .88 | 0.10–1 | Espessura do trilho dos sliders, independente do preenchimento |
+| `qs.fill` | .88 | 0.10–1 | Espessura do preenchimento dos sliders, independente do trilho |
+| `qs.lightstyle` | obsidian | enum obsidian/light | Material das cápsulas sobre apps claros: obsidiana ou vidro claro |
+| `sf.qslight` | .90 | 0–2 | Quick Settings: luz que entra pelo contorno conforme o fundo ali (0 desliga) |

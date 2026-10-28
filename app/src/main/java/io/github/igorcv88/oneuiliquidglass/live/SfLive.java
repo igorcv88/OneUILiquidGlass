@@ -116,7 +116,7 @@ public final class SfLive {
             "core", "taps", "ramp", "hubloom", "edgeblur", "kgcore", "kgtaps", "kgramp", "kgsat", "kgtone",
             "kgrim", "kgspec", "kgflat", "kglevel", "kgcool", "kgtilt", "kgline", "kgcorecap",
             "kggradient", "kgband", "kgbodylens", "kgblurexp", "kgflatcap", "kgcoredim", "kgglow", "shadecap", "shadelift",
-            "hulight", "kglight", "shadelight", "qslens", "qsbody", "qsdepth", "debug"));
+            "hulight", "kglight", "shadelight", "qslens", "qsbody", "qsdepth", "qslight", "debug"));
 
     /** key=value lines (the helper's output, a live.prop); comments and other lines are skipped. */
     public static Map<String, String> parse(String text) {

@@ -96,6 +96,10 @@ public class ControlMatrixTest {
             if (s.key.startsWith("sf.")) {
                 assertTrue(s.key + " not read by the library", c.contains("debug.oulg." + s.key));
                 readers = "sfhook/oulg_sf.c" + (fields.containsKey(s.key) ? ", " + String.join(", ", readers(fields.get(s.key))) : "");
+            } else if (s.key.startsWith("qs.")) {
+                String source = new String(Files.readAllBytes(SRC.resolve("glass/QsStyle.java")), StandardCharsets.UTF_8);
+                assertTrue(s.key, source.contains("\"" + s.key + "\""));
+                readers = "glass/QsStyle, glass/QuickSettingsGlass, hooks/QuickSettingsHooks, hooks/QsSliderHooks";
             } else {
                 Set<String> f = fields.get(s.key);
                 assertNotNull("no Tuning field for " + s.key, f);
