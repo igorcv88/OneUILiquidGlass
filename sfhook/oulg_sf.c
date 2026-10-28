@@ -296,7 +296,11 @@ static float prop_float(const char *name, float fallback) {
 // more restores v0.11) and .kgflatcap (flattening weight cap; 1 restores v0.11) and .kgcoredim (core gain; 0
 // restores v0.11) and .kgglow (rim glow width; 1 with kgrim 1 and kgspec 0.30 restores v0.11). Profile 2
 // (expanded-shade legibility): debug.oulg.sf.shadecap and .shadelift (luma limits). Profile 3
-// (Quick Settings edge light): no properties yet, OULG_QS_* in refract.h. Which
+// (Quick Settings edge light): debug.oulg.sf.qslens (refraction strength; 0 = none), .qsbody (opacity
+// of the refracted backdrop at the outline) and .qsdepth (penetration depth in px of light from a
+// white edge), the rest OULG_QS_* in refract.h. The edge
+// light of profiles 0-2: debug.oulg.sf.hulight, .kglight and .shadelight (gain; 0 restores v0.26
+// exactly). Which
 // profile a card gets travels in its tag, set live by the module.
 // .kggradient (0..1, default 1) enables the continuous glass/body transition;
 // .kggradient=0 with .kgcorecap=62 restores the v0.21 lockscreen reference.
@@ -310,6 +314,10 @@ static void layered_blur(struct oulg_profile p[OULG_PROFILES]) {
     p[0].ramp = prop_float("debug.oulg.sf.ramp", OULG_RAMP_DEFAULT);
     p[0].bloom = prop_float("debug.oulg.sf.hubloom", OULG_HU_BLOOM_DEFAULT);
     p[0].edge = prop_float("debug.oulg.sf.edgeblur", OULG_HU_EDGE_DEFAULT);
+    p[0].light = prop_float("debug.oulg.sf.hulight", OULG_HU_LIGHT_DEFAULT);
+    // Every field first: those without a property (the edge light's depth, floor and cap) must not be
+    // left to the stack.
+    p[1] = OULG_PROFILES_DEFAULT[1];
     p[1].core = prop_float("debug.oulg.sf.kgcore", OULG_KG_CORE_DEFAULT);
     p[1].taps = (int) prop_float("debug.oulg.sf.kgtaps", OULG_KG_TAPS_DEFAULT);
     p[1].ramp = prop_float("debug.oulg.sf.kgramp", OULG_KG_RAMP_DEFAULT);
@@ -330,11 +338,15 @@ static void layered_blur(struct oulg_profile p[OULG_PROFILES]) {
     p[1].band = prop_float("debug.oulg.sf.kgband", OULG_KG_BAND_DEFAULT);
     p[1].lensbody = prop_float("debug.oulg.sf.kgbodylens", OULG_KG_LENSBODY_DEFAULT);
     p[1].blurexp = prop_float("debug.oulg.sf.kgblurexp", OULG_KG_BLUREXP_DEFAULT);
+    p[1].light = prop_float("debug.oulg.sf.kglight", OULG_KG_LIGHT_DEFAULT);
     p[2] = OULG_PROFILES_DEFAULT[2];
     p[2].cap = prop_float("debug.oulg.sf.shadecap", OULG_SHADE_CAP_DEFAULT);
     p[2].lift = prop_float("debug.oulg.sf.shadelift", OULG_SHADE_LIFT_DEFAULT);
-    // Profile 3 (Quick Settings edge light) keeps its defaults until it is tuned on the device.
+    p[2].light = prop_float("debug.oulg.sf.shadelight", OULG_SHADE_LIGHT_DEFAULT);
     p[3] = OULG_PROFILES_DEFAULT[3];
+    p[3].lens = prop_float("debug.oulg.sf.qslens", OULG_QS_LENS_DEFAULT);
+    p[3].lwidth = prop_float("debug.oulg.sf.qsdepth", OULG_QS_LWIDTH_DEFAULT);
+    p[3].body = prop_float("debug.oulg.sf.qsbody", OULG_QS_BODY_DEFAULT);
 }
 
 // Tells the module that this library's optics are live (debug.oulg.sf.optics = OULG_OPTICS_VERSION)

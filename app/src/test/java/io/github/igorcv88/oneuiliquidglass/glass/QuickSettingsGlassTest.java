@@ -110,4 +110,15 @@ public final class QuickSettingsGlassTest {
         // No outline: the region is the inner box itself.
         assertEquals(0, QuickSettingsGlass.edgeOutset(0f, 3.5f));
     }
+
+    @Test public void noDiscTilesTakeTheDiscTilesIconLayout() {
+        // QuickTile passes (6 dp, 0) for isNoBgTile and (Dp.Unspecified, 5 dp) for the rest.
+        float[] l = QuickSettingsGlass.iconLayout(6f, 0f);
+        assertNotNull(l);
+        assertTrue(Float.isNaN(l[0])); // Dp.Unspecified: the same start inset as the disc tiles.
+        assertEquals(5f, l[1], 0f);
+        assertNull(QuickSettingsGlass.iconLayout(Float.NaN, 5f));
+        assertNull(QuickSettingsGlass.iconLayout(6f, 5f));
+        assertNull(QuickSettingsGlass.iconLayout(0f, 0f));
+    }
 }

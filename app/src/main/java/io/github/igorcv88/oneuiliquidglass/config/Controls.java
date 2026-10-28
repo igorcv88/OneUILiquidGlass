@@ -592,6 +592,26 @@ public final class Controls {
                 .help("Mapa de tons da lente na central: brilho mínimo sob texto escuro."
                         + restart)
                 .show(DIDACTIC, Channel.VEIL));
+        String light = " Vem do fundo logo atrás do contorno: escuro não acende nada, claro entra mais"
+                + " fundo. 0 desliga e volta ao desenho anterior." + restart;
+        put(c("sf.hulight", "Luz pela borda").fmt(Format.PERCENT_1).in(LENS, ADV).on(HU)
+                .help("Luz que entra pelo contorno do pop-up." + light)
+                .show(BEHAV, Channel.NONE));
+        put(c("sf.kglight", "Luz pela borda").fmt(Format.PERCENT_1).in(LENS, ADV).on(KG)
+                .help("Luz que entra pelo contorno dos cartões do bloqueio." + light)
+                .show(BEHAV, Channel.NONE));
+        put(c("sf.shadelight", "Luz pela borda (lente)").fmt(Format.PERCENT_1).in(LENS, ADV).on(SH)
+                .help("Luz que entra pelo contorno dos cartões da central." + light)
+                .show(BEHAV, Channel.NONE));
+        put(c("sf.qslens", "Refração dos atalhos").fmt(Format.PERCENT_1).in(LENS, ADV).on(SH)
+                .help("Refração do fundo junto ao contorno dos controles dos atalhos rápidos,"
+                        + " mais forte na borda e sumindo para dentro; 0 desliga." + restart)
+                .show(BEHAV, Channel.NONE));
+        put(c("sf.qsbody", "Fundo refratado dos atalhos").fmt(Format.PERCENT_1).in(TECH, TEC).on(SH)
+                .help("Opacidade do fundo refratado no contorno dos atalhos rápidos." + restart));
+        put(c("sf.qsdepth", "Alcance da luz nos atalhos").fmt(Format.PX).in(TECH, TEC).on(SH)
+                .help("Quanto a luz de um fundo branco entra pelo contorno dos atalhos rápidos."
+                        + " Fundos mais escuros entram menos." + restart));
         put(c("sf.debug", "Tinta de diagnóstico").fmt(Format.TOGGLE).in(TECH, TEC).all()
                 .help("Pinta em magenta e ciano os programas reescritos pela lente. Só para"
                         + " diagnóstico." + restart));

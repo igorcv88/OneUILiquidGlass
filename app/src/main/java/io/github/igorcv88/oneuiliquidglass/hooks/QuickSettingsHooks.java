@@ -48,6 +48,8 @@ public final class QuickSettingsHooks {
     private static final String PANEL = "com.android.systemui.samsung.quicksetting.SecQSPanelCompose";
     private static final String BAR = "com.android.systemui.samsung.quicksetting.ui.tiles.BidirectionalBarKt";
     private static final String BAR_DRAW = "drawBidirectionalBarTrackProgressThumbContent-Uzs9YN0";
+    private static final String ICON_TILE = "com.android.systemui.samsung.quicksetting.ui.tiles.IconTextTileKt";
+    private static final String ICON_TILE_METHOD = "IconTextTile-v3dQN_U";
     /** $default mask bit of BoxWithOutline's {@code outlined}; its default is true. */
     private static final int OUTLINED_DEFAULT = 0x2;
     private static final int MAX_LOGGED = 48;
@@ -66,6 +68,7 @@ public final class QuickSettingsHooks {
     private Constructor<?> solidColor;
     private Object darkRim, lightRim;
     private boolean ready, broken, configStarted, applied;
+    private volatile boolean iconLogged;
     private android.content.Context app;
     /**
      * Set by BoxWithOutline for the two element constructors it runs next. Per thread: a box being
@@ -162,6 +165,7 @@ public final class QuickSettingsHooks {
             for (Constructor<?> k : background.getDeclaredConstructors()) if (k != backgroundInit) deoptimize(k);
             hookPanel();
             hookSlider();
+            hookIconTile();
             ready = true;
             Probe.log("QS_COMPOSE_READY", "method=" + boxMethod.toGenericString()
                     + " liveRefresh=" + (invalidate != null)
@@ -280,6 +284,42 @@ public final class QuickSettingsHooks {
             Probe.log("QS_SLIDER_READY", "method=" + draw.toGenericString());
         } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
             Probe.error("QS_SLIDER_HOOK_FAILED", e);
+        }
+    }
+
+    /**
+     * Icon position of DeviceControl-type tiles (QuickSettingsGlass.iconLayout): only IconTextTile's
+     * start and gap arguments change, recognised by the values QuickTile derives from Samsung's
+     * isNoBgTile flag, never by tile spec, provider or position.
+     */
+    private void hookIconTile() {
+        Method tile = null;
+        Class<?> c = resolve(ICON_TILE);
+        if (c != null) for (Method m : c.getDeclaredMethods()) {
+            Class<?>[] t = m.getParameterTypes();
+            if (m.getName().equals(ICON_TILE_METHOD) && t.length == 14 && t[4] == float.class
+                    && t[5] == float.class && t[6] == float.class
+                    && t[12].getName().equals("androidx.compose.runtime.Composer")) tile = m;
+        }
+        if (tile == null) { Probe.log("QS_ICON_TILE_MISSING", "method=" + ICON_TILE_METHOD); return; }
+        try {
+            XposedBridge.hookMethod(tile, new XC_MethodHook() {
+                @Override protected void beforeHookedMethod(MethodHookParam p) {
+                    if (broken || !(p.args[4] instanceof Float) || !(p.args[5] instanceof Float)) return;
+                    float[] layout = QuickSettingsGlass.iconLayout((Float) p.args[4], (Float) p.args[5]);
+                    if (layout == null) return;
+                    // The caller's scope (QuickTile's tile content): its restart passes the
+                    // arguments again, so switching the option applies live.
+                    capture(p.args[12]);
+                    if (!enabled()) return;
+                    p.args[4] = layout[0];
+                    p.args[5] = layout[1];
+                    if (!iconLogged) { iconLogged = true; Probe.log("QS_ICON_TILE", "noDisc start=6.0 gap=0.0 -> start=Unspecified gap=" + layout[1]); }
+                }
+            });
+            Probe.log("QS_ICON_TILE_READY", "method=" + tile.toGenericString());
+        } catch (RuntimeException | LinkageError e) {
+            Probe.error("QS_ICON_TILE_HOOK_FAILED", e);
         }
     }
 
