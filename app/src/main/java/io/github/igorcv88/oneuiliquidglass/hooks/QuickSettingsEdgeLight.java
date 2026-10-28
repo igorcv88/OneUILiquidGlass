@@ -220,7 +220,7 @@ final class QuickSettingsEdgeLight {
                     DrawFrame f = drawing.get();
                     if (f != null && !f.consumed) {
                         Edge e = nodes.get(f.node);
-                        if (e != null) coverage.stage(e.spec.token, "fallback", "drawContent-not-reached");
+                        if (e != null) result(e.spec.token, false, "drawContent-not-reached");
                     }
                     DrawFrame old = (DrawFrame) p.getObjectExtra("qsEdgePrevious");
                     if (old == null) drawing.remove(); else drawing.set(old);
@@ -581,12 +581,28 @@ final class QuickSettingsEdgeLight {
     /** The capsules' glass optics (APK-side, with or without the compositor). */
     void optics(QsCapsuleOptics o, BooleanSupplier light) { optics = o; lightScene = light == null ? () -> false : light; }
 
+    /** Told whether a box's optics drew (token, drawn, panel session): the per-capsule outline follows it. */
+    interface OpticsResult { void drawn(QsOpticsCoverage.Token token, boolean drawn, long session); }
+    private volatile OpticsResult opticsResult = (t, d, s) -> {};
+    void onOptics(OpticsResult r) { opticsResult = r == null ? (t, d, s) -> {} : r; }
+
+    private void result(QsOpticsCoverage.Token token, boolean drawn, String reason) {
+        coverage.stage(token, drawn ? "drawn" : "fallback", reason);
+        try { opticsResult.drawn(token, drawn, coverage.session()); }
+        catch (RuntimeException | LinkageError ex) { Probe.error("QS_RIM_OWNER_FAILED", ex); }
+    }
+
     /** Draws the optics into a glass container's inner box; any failure leaves the capsule as it is. */
     private void optics(Object node, Object scope) {
         QsCapsuleOptics o = optics;
         Edge e;
-        synchronized (this) { e = nodes.isEmpty() ? null : nodes.get(node); }
+        boolean dragging;
+        synchronized (this) { e = nodes.isEmpty() ? null : nodes.get(node); dragging = suppressed; }
         if (e == null) return;
+        // A slider drag: Samsung fades every other capsule, and their light goes with their
+        // compositor regions (suppress) instead of relying on the layer alpha alone. The dragged
+        // slider's container keeps its optics. Not a failure: the outline state is left as it is.
+        if (dragging && !e.spec.token.role.equals("slider")) return;
         if (o == null || !QsCapsuleOptics.available() || !enabled.getAsBoolean()) {
             coverage.stage(e.spec.token, "fallback", "disabled-or-shader"); return;
         }
@@ -598,7 +614,7 @@ final class QuickSettingsEdgeLight {
             Object canvas = contextCanvas.invoke(drawContext.invoke(scope));
             Object raw = nativeCanvas.getDeclaringClass().isInstance(canvas) ? nativeCanvas.get(canvas) : null;
             if (!(raw instanceof android.graphics.Canvas) || !((android.graphics.Canvas) raw).isHardwareAccelerated()) {
-                coverage.stage(e.spec.token, "fallback", "no-hardware-canvas"); return;
+                result(e.spec.token, false, "no-hardware-canvas"); return;
             }
             int out = QuickSettingsGlass.edgeOutset(e.spec.border, density);
             long outer = ((long) Float.floatToRawIntBits(w + 2 * out) << 32) | (Float.floatToRawIntBits(h + 2 * out) & 0xffffffffL);
@@ -614,13 +630,13 @@ final class QuickSettingsEdgeLight {
             }
             boolean success = o.draw(node, (android.graphics.Canvas) raw, x, y, w, h, radius, density, lightScene.getAsBoolean());
             boolean first = !e.spec.token.drawn;
-            coverage.stage(e.spec.token, success ? "drawn" : "fallback", success ? "agsl" : "shader-or-size");
+            result(e.spec.token, success, success ? "agsl" : "shader-or-size");
             if (success && first && Probe.trace) Probe.log("QS_OPTICS_DRAWN", "session=" + coverage.session()
                     + " id=" + e.spec.token.id + " role=" + e.spec.token.role + " w=" + w + " h=" + h
                     + " radius=" + radius + " hardware=true light=" + lightScene.getAsBoolean());
 
         } catch (ReflectiveOperationException | RuntimeException | LinkageError ex) {
-            coverage.stage(e.spec.token, "fallback", "geometry");
+            result(e.spec.token, false, "geometry");
             if (Probe.trace) Probe.error("QS_OPTICS_FAILED", "geometry id=" + e.spec.token.id, ex);
         }
     }
@@ -665,7 +681,20 @@ final class QuickSettingsEdgeLight {
         int released = 0;
         if (on) for (Edge e : nodes.values()) if (e.bridge != null) { e.release(); released++; }
         Probe.log("QS_EDGE_SUPPRESS", "session=" + coverage.session() + " trigger=slider dragging=" + on + " nodes=" + nodes.size() + " released=" + released);
-        if (!on && enabled.getAsBoolean() && fade() > 0f) redrawNodes();
+        // Drag start: the faded capsules' cached display lists still hold their AGSL light; draw
+        // them again without it (draw invalidation only, no recomposition mid-gesture).
+        if (on) invalidateNodes();
+        else if (enabled.getAsBoolean() && fade() > 0f) redrawNodes();
+    }
+
+    private int invalidateNodes() {
+        int n = 0;
+        if (invalidateDraw == null) return 0;
+        for (Object node : new ArrayList<>(nodes.keySet())) {
+            try { invalidateDraw.invoke(null, node); n++; }
+            catch (ReflectiveOperationException | RuntimeException e) { invalidateDraw = null; Probe.error("QS_EDGE_REDRAW_FAILED", e); break; }
+        }
+        return n;
     }
 
     /** DrawModifierNodeKt.invalidateDraw: the background nodes' own draw runs again (null: unavailable). */
@@ -673,13 +702,7 @@ final class QuickSettingsEdgeLight {
 
     /** Rebuilds released regions: each background node draws again, which creates its region. */
     private void redrawNodes() {
-        int n = 0;
-        if (invalidateDraw != null) {
-            for (Object node : new ArrayList<>(nodes.keySet())) {
-                try { invalidateDraw.invoke(null, node); n++; }
-                catch (ReflectiveOperationException | RuntimeException e) { invalidateDraw = null; Probe.error("QS_EDGE_REDRAW_FAILED", e); break; }
-            }
-        }
+        int n = invalidateNodes();
         // Without the draw invalidation, recompose the containers instead.
         if (invalidateDraw == null) try { restored.run(); }
         catch (RuntimeException | LinkageError e) { Probe.error("QS_EDGE_RESTORE_FAILED", e); }

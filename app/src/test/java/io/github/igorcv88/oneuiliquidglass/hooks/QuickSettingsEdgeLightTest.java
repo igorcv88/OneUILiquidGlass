@@ -246,6 +246,47 @@ public final class QuickSettingsEdgeLightTest {
             assertNull(get(nodes(edge).get(node),"bridge"));
         }
     }
+    /**
+     * The AGSL path honours a drag like the compositor path: faded capsules draw no light and
+     * report nothing (their outline state stays), the dragged slider's container still draws, and
+     * every reported result reaches the per-capsule outline owner.
+     */
+    @Test public void dragSkipsOpticsOfFadedCapsulesButNotTheSlider() throws Exception {
+        Field broken = QsCapsuleOptics.class.getDeclaredField("broken"); broken.setAccessible(true);
+        Object wasBroken = broken.get(null); broken.set(null, false);
+        try {
+            QuickSettingsEdgeLight edge = edge(true, true, true);
+            edge.panel(new Controller(host, new Adapter()));
+            edge.optics(new QsCapsuleOptics(), () -> false);
+            java.util.List<String> results = new java.util.ArrayList<>();
+            edge.onOptics((t, drawn, session) -> results.add(t.role + ":" + drawn));
+            Object tile = new Object(), slider = new Object(), tileNode = new Object(), sliderNode = new Object();
+            edge.element(tile, new Shape(), 1, 1f, edge.selected("container"));
+            edge.element(slider, new Shape(), 1, 1f, edge.selected("slider"));
+            call(edge, "bind", new Class<?>[]{Object.class, Object.class}, tile, tileNode);
+            call(edge, "bind", new Class<?>[]{Object.class, Object.class}, slider, sliderNode);
+            set(edge,"getSize",Scope.class.getMethod("size"));set(edge,"getDensity",Scope.class.getMethod("density"));
+            set(edge,"drawContext",Scope.class.getMethod("context"));
+            set(edge,"contextCanvas",DrawContext.class.getMethod("canvas"));
+            set(edge,"nativeCanvas",CanvasWrapper.class.getField("raw"));
+            set(edge,"topStart",Shape.class.getField("corner"));
+            set(edge,"toPx",Corner.class.getMethod("radius",Object.class,long.class));
+            Class<?>[] sig = {Object.class, Object.class};
+            // A software canvas cannot run the shader: an honest failure, reported for both.
+            call(edge, "optics", sig, tileNode, new Scope(false));
+            call(edge, "optics", sig, sliderNode, new Scope(false));
+            assertEquals(java.util.Arrays.asList("container:false", "slider:false"), results);
+            results.clear();
+            edge.suppress(true);
+            call(edge, "optics", sig, tileNode, new Scope(false));
+            call(edge, "optics", sig, sliderNode, new Scope(false));
+            assertEquals("only the dragged slider's container is drawn", java.util.Collections.singletonList("slider:false"), results);
+            results.clear();
+            edge.suppress(false);
+            call(edge, "optics", sig, tileNode, new Scope(false));
+            assertEquals(java.util.Collections.singletonList("container:false"), results);
+        } finally { broken.set(null, wasBroken); }
+    }
     @Test public void duplicateUpdateOfSameElementDoesNotLoseBinding() throws Exception {
         QuickSettingsEdgeLight edge=edge(true,true,true);
         Object element=new Object(),node=new Object();edge.element(element,new Object(),1);

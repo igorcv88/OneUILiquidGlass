@@ -77,7 +77,9 @@ public final class QuickSettingsHooks {
     private Object circleShape;
     private Method recomposeScope, recordUsed, invalidate, valid;
     private Constructor<?> solidColor;
-    private Object darkRim, lightRim;
+    private Object darkRim, lightRim, darkLitRim, lightLitRim;
+    /** Boxes whose own optics drew: only their outline is attenuated (QsLitRims). */
+    private final QsLitRims litRims = new QsLitRims();
     private boolean ready, broken, configStarted, applied;
     private volatile boolean iconLogged;
     private android.content.Context app;
@@ -91,6 +93,7 @@ public final class QuickSettingsHooks {
         final Object composer;
         final long background, fill;
         final Object rim;
+        boolean dark;
         /** A glass container's shape and outline width (dp), for its edge light; null for circles. */
         final Object edgeShape;
         final float edgeBorder;
@@ -118,11 +121,12 @@ public final class QuickSettingsHooks {
         // After a drag the released edge regions are rebuilt by the containers' next draw.
         edge.onRestore(() -> invalidateAll("drag-end"));
         // Optics gone (shader or geometry failure): full-strength rims again, recomposed now.
-        capsuleOptics.onFailure(() -> { darkRim = null; lightRim = null; invalidateAll("optics-failed"); });
+        capsuleOptics.onFailure(() -> { litRims.clear(); clearRims(); invalidateAll("optics-failed"); });
+        edge.onOptics(this::opticsResult);
         edge.optics(capsuleOptics, () -> QuickSettingsHooks.this.backdrop != null
                 && QuickSettingsHooks.this.backdrop.tone() == io.github.igorcv88.oneuiliquidglass.glass.QsScene.Tone.LIGHT_SCENE);
         BackdropEvents.add(() -> QuickSettingsHooks.this.backdrop.event());
-        this.backdrop = new QsBackdrop(this::enabled, edge::expansion, () -> { darkRim=null; lightRim=null; invalidateAll("backdrop"); },
+        this.backdrop = new QsBackdrop(this::enabled, edge::expansion, () -> { clearRims(); invalidateAll("backdrop"); },
                 () -> { QsContentHooks c = QuickSettingsHooks.this.content; if (c != null) c.invalidateDraw(); });
         this.content = new QsContentHooks(loader, this::enabled, () -> style, backdrop::tone, backdrop::headerTone, this::ink,
                 this::capture);
@@ -166,9 +170,20 @@ public final class QuickSettingsHooks {
                     Pending q = pending.get();
                     if (q == null || q.rimDone) return;
                     q.rimDone = true; // The outer box's border is the first one BoxWithOutline builds.
-                    capture(q.composer);
+                    Object box = capture(q.composer);
                     if (q.sliderShape != null) p.args[2] = q.sliderShape;
-                    if (q.rim != null && p.args[0] instanceof Float && (Float) p.args[0] > 0f) p.args[1] = q.rim;
+                    if (q.rim != null && p.args[0] instanceof Float && (Float) p.args[0] > 0f) {
+                        // Attenuated only for a box whose own optics already drew; otherwise full.
+                        boolean lit = litRims.lit(box) && QsCapsuleOptics.available();
+                        Object brush = q.rim;
+                        if (lit) try { brush = rim(q.dark, true); }
+                        catch (ReflectiveOperationException | RuntimeException e) { lit = false; Probe.error("QS_RIM_FAILED", e); }
+                        p.args[1] = brush;
+                        if (q.token != null) {
+                            q.token.box = box == null ? null : new java.lang.ref.WeakReference<>(box);
+                            q.token.rimAttenuated = lit;
+                        }
+                    }
                 }
             });
             XposedBridge.hookMethod(backgroundInit, new XC_MethodHook() {
@@ -436,8 +451,9 @@ public final class QuickSettingsHooks {
                     && a[2] instanceof Float && (Float) a[2] > 0f;
             boolean rimmed = outlined && QuickSettingsGlass.rimmed(kind);
             // The inner box is padded by the outline width only when the outline is on.
-            pending.set(new Pending(a[7], background, fill, rimmed ? rim(dark) : null,
+            pending.set(new Pending(a[7], background, fill, rimmed ? rim(dark, false) : null,
                     kind == Kind.CONTAINER ? a[5] : null, outlined ? (Float) a[2] : 0f));
+            pending.get().dark = dark;
             pending.get().slider = kind == Kind.CONTAINER && barPill != null && a[5] == barPill;
             pending.get().kind = kind;
             QsContentHooks.Frame owner = content.current();
@@ -473,28 +489,58 @@ public final class QuickSettingsHooks {
      * box when Samsung's arguments are unchanged. Marked used so endRestartGroup keeps it; its
      * restart then executes the body with the forced bit and the hooks run again.
      */
-    private void capture(Object composer) {
-        if (recomposeScope == null || composer == null) return;
+    private Object capture(Object composer) {
+        if (recomposeScope == null || composer == null) return null;
         try {
             Object scope = recomposeScope.invoke(composer);
-            if (scope == null) return;
+            if (scope == null) return null;
             recordUsed.invoke(composer, scope);
             synchronized (scopes) { scopes.add(scope); }
+            return scope;
         } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
             recomposeScope = null;
             Probe.error("QS_SCOPE_CAPTURE_FAILED", e);
+            return null;
         }
     }
 
-    private Object rim(boolean dark) throws ReflectiveOperationException {
-        Object cached = dark ? darkRim : lightRim;
+    /**
+     * The outline brush. Full strength ({@code lit} false) unless this box's own optics drew:
+     * border and background of one box are built in the same restart scope, which is what ties
+     * the outline to the background node that drew (QsLitRims), not the shader's availability.
+     */
+    private Object rim(boolean dark, boolean lit) throws ReflectiveOperationException {
+        Object cached = lit ? (dark ? darkLitRim : lightLitRim) : (dark ? darkRim : lightRim);
         if (cached != null) return cached;
-        // Border and background have no proven one-to-one draw ownership. Keep the full
-        // fallback; shader availability is not evidence that this capsule drew optics.
         Object brush = solidColor.newInstance(QuickSettingsGlass.color(QuickSettingsGlass.basalRim(
-                QuickSettingsGlass.rim(dark, backdrop.tone(), style), false)));
-        if (dark) darkRim = brush; else lightRim = brush;
+                QuickSettingsGlass.rim(dark, backdrop.tone(), style), lit)));
+        if (lit) { if (dark) darkLitRim = brush; else lightLitRim = brush; }
+        else if (dark) darkRim = brush; else lightRim = brush;
         return brush;
+    }
+
+    private void clearRims() { darkRim = null; lightRim = null; darkLitRim = null; lightLitRim = null; }
+
+    /**
+     * Draw thread, from the background node's optics: the box whose state changed (full outline
+     * to attenuated, or back) recomposes on the main thread; nothing else does.
+     */
+    private void opticsResult(QsOpticsCoverage.Token token, boolean drawn, long session) {
+        java.lang.ref.WeakReference<Object> ref = token.box;
+        Object box = ref == null ? null : ref.get();
+        if (!litRims.report(box, drawn, session)) return;
+        if (Probe.trace) Probe.log("QS_RIM_OWNER", "session=" + session + " id=" + token.id + " role=" + token.role
+                + " rim=" + (drawn ? "attenuated" : "full"));
+        if (invalidate == null) return;
+        java.lang.ref.WeakReference<Object> weak = new java.lang.ref.WeakReference<>(box);
+        try {
+            new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+                Object scope = weak.get();
+                if (scope == null) return;
+                try { if (Boolean.TRUE.equals(valid.invoke(scope))) invalidate.invoke(scope, (Object) null); }
+                catch (ReflectiveOperationException | RuntimeException | LinkageError e) { Probe.error("QS_RIM_REFRESH_FAILED", e); }
+            });
+        } catch (RuntimeException | LinkageError e) { Probe.error("QS_RIM_REFRESH_FAILED", e); }
     }
 
     /** Samsung recomposes its colours on a theme change, and this is read again then. */
@@ -511,7 +557,7 @@ public final class QuickSettingsHooks {
         QsStyle next = QsStyle.read();
         boolean valuesChanged = !next.equals(style);
         if (valuesChanged) {
-            darkRim=null; lightRim=null;
+            clearRims();
             try { pillShape=next.outer < 1f ? QsPillShape.create(loader, next.outer) : null; }
             catch (ReflectiveOperationException | RuntimeException | LinkageError e) { pillShape=null; Probe.error("QS_PILL_SHAPE_FAILED", e); }
             edge.configure(next.edgeBlur);

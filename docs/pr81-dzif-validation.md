@@ -4,7 +4,8 @@ The supplied screenshots are **before PR 81**. They are not validation of this p
 
 ## Implemented behavior
 
-- Full Compose rim remains the per-capsule fallback. No global reduction based on shader availability. A reliable border-node/background-node association is still required before selectively reducing it.
+- Full Compose rim is the default for every capsule. The association border ↔ background is the BoxWithOutline restart scope: both elements of one box are built inside it, and it is stable across recompositions. Only a box whose own background node reported an AGSL `drawn` result gets the attenuated rim (40 %), by recomposing that scope alone (`QsLitRims`). A later failure of that box (`no-hardware-canvas`, `shader-or-size`, `geometry`, `drawContent-not-reached`) restores its full rim and is not retried in the same panel session. Shader availability is never evidence. A process-wide shader failure clears every box. `QS_OPTICS_COVERAGE` reports `rimAttenuated` and `rimWithoutOptics`; the latter must be 0 at `stabilized`. `QS_RIM_OWNER` (trace gate) logs each box's state change.
+- Slider drag: the AGSL path now honours the same suppression as the compositor path. Non-slider capsules skip the optics while suppressed and their nodes are draw-invalidated at drag start, so cached display lists drop the light. The skip is not a failure and does not change the rim state. Slider containers keep their optics: there is no per-slider identity for the dragged bar, so the other slider (faded by Samsung's layer alpha) still draws AGSL inside its faded layer.
 - Background elements have process-local tokens and roles (`slider`, `container`, `media-active`, `media-empty`, `unknown`). Selection, registration, binding and actual AGSL result are distinct. Repeated updates of the same element retain ownership.
 - AGSL runs at the exact background scope's `LayoutNodeDrawScope.drawContent` boundary, after background and before descendants. An unavailable boundary leaves the full rim. Compositor failure no longer disables APK optics.
 - Zero fade, hidden host, unreadable expansion and detach release compositor drawables. Draw refuses recreation at zero fade. Reopening invalidates background nodes. Delayed snapshots check host generation and session.
@@ -27,9 +28,9 @@ Local checks: distribution contracts, live helper, property parser/profile isola
 ## Device acceptance (pending)
 
 1. Verify APK commit and native bundle, DZIF firmware, no new AndroidRuntime crash.
-2. Dark, white and colored backgrounds: all selected capsule roles must draw or expose fallback; inspect directional contour and transparency against a notification.
+2. Dark, white and colored backgrounds: all selected capsule roles must draw or expose fallback; `rimWithoutOptics=0`; a capsule with full rim must correspond to a fallback in its `QS_OPTICS_PATH`; inspect directional contour and transparency against a notification.
 3. Brightness/volume at 0, >0, 50 and 100%, then RTL and drag/hold/cancel: all three stages, no milky track, centered margins, native interaction/accessibility.
-4. Close/partial close/reopen/root replacement: `QS_EDGE_EXIT regionsAfter=0 alphaPositiveAfter=0`, no launcher ghost. Confirm interaction-source hook execution, not just installation.
+4. Hold a slider over a white backdrop: no light or outline ghost on the faded capsules; release restores them. Close/partial close/reopen/root replacement: `QS_EDGE_EXIT regionsAfter=0 alphaPositiveAfter=0`, no launcher ghost. Confirm interaction-source hook execution, not just installation.
 5. Compose notification header and QS header separately: final pixels dark over white, normal icons/discs preserved. Identify the visible clock in the composition tree if `clockVerified=false` remains unresolved.
 6. Active media with/without artwork and empty media: parent inset and single outer border; check play/pause/skip hitboxes.
 7. Record 60/120 Hz backdrop switches with timestamps; inspect capture→commit→paint latency and measure frame cost and node/region counts. No claim of 1 ms latency or visual approval is made by this patch.

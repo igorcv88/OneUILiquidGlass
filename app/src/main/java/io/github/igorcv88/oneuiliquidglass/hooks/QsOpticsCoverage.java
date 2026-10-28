@@ -12,6 +12,9 @@ final class QsOpticsCoverage {
         final long id;
         final String role;
         boolean registered, bound, attempted, drawn;
+        /** The box (its BoxWithOutline restart scope) and whether its outline was built attenuated. */
+        volatile java.lang.ref.WeakReference<Object> box;
+        volatile boolean rimAttenuated;
         String fallback;
         Token(long id, String role) { this.id = id; this.role = role; }
     }
@@ -50,19 +53,21 @@ final class QsOpticsCoverage {
                 + " stage=" + stage + " reason=" + reason);
     }
     String snapshot(String phase) {
-        int registered=0, bound=0, attempted=0, drawn=0, fallback=0, noNode=0;
+        int registered=0, bound=0, attempted=0, drawn=0, fallback=0, noNode=0, attenuated=0, unlit=0;
         Map<String,Integer> roles = new LinkedHashMap<>();
         for (Token t : tokens.values()) {
             if(t.registered) registered++;
             if(t.bound) bound++; else noNode++;
             if(t.attempted) attempted++;
             if(t.drawn) drawn++; else fallback++;
+            if(t.rimAttenuated) { attenuated++; if(!t.drawn) unlit++; }
             roles.put(t.role, roles.getOrDefault(t.role, 0) + 1);
         }
         return "session=" + session + " phase=" + phase + " counters=session eligible=" + tokens.size()
                 + " selected=" + tokens.size() + " registered=" + registered + " bound=" + bound
                 + " drawAttempt=" + attempted + " drawn=" + drawn + " fallback=" + fallback
-                + " unmatched=" + noNode + " evicted=" + evicted + " byRole=" + roles;
+                + " unmatched=" + noNode + " rimAttenuated=" + attenuated + " rimWithoutOptics=" + unlit
+                + " evicted=" + evicted + " byRole=" + roles;
     }
     void summary(String phase) { log.accept("QS_OPTICS_COVERAGE", snapshot(phase)); }
 }
