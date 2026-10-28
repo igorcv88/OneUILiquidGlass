@@ -4,8 +4,9 @@ package io.github.igorcv88.oneuiliquidglass.glass;
  * Colour rules for One UI 9's Compose Quick Settings (BoxWithOutline), free of Android state.
  *
  * <p>The panel behind the controls is already blurred by Samsung, so the material here is a light
- * veil and an optical rim, not a second compositor blur: nothing in the compositor can lag the
- * Compose layout or outlive its alpha. Colours are non-premultiplied ARGB.</p>
+ * veil and a basal rim drawn by Compose, not a second blur. The only compositor part is the optional
+ * edge light (sfhook profile 3), whose regions are transparent but for the outline. Colours are
+ * non-premultiplied ARGB.</p>
  */
 public final class QuickSettingsGlass {
     private QuickSettingsGlass() {}
@@ -72,6 +73,29 @@ public final class QuickSettingsGlass {
     public static float sliderInset(float width, float height) {
         float narrow = Math.min(width, height);
         return narrow > 0f ? narrow * (1f - SLIDER_FILL) / 2f : 0f;
+    }
+
+    /** Blur radius of an edge-light region: only the luma right at the outline matters, kept local. */
+    public static final int EDGE_BLUR_PX = 8;
+
+    /**
+     * Corner radius carrying the compositor's Quick Settings edge-light tag (sfhook profile 3):
+     * floor(r) - 1 + 0.875, below r so Skia never clamps it on a pill; -1 where no tag can be read
+     * (the vertex shader needs more than 40 px, and an fp16 radius + 0.5 holds .375 only below 256).
+     */
+    public static float edgeTag(float radius) {
+        if (!(radius >= 43f && radius < 256f)) return -1f;
+        return (float) Math.floor(radius) - 1f + 0.875f;
+    }
+
+    /**
+     * Edge-light region alpha: the accumulated alpha of the panel's ancestor views times the panel's
+     * own expansion, which Compose fades and moves without telling the region (a blur region ignores
+     * the alpha of what draws it). Fully in from 95 % expanded, gone below 60 %.
+     */
+    public static float edgeFade(float ancestors, float expansion) {
+        float u = Math.max(0f, Math.min(1f, (expansion - 0.60f) / 0.35f));
+        return Math.max(0f, Math.min(1f, ancestors)) * u * u * (3f - 2f * u);
     }
 
     /** Uniform basal rim colour of outer containers. */

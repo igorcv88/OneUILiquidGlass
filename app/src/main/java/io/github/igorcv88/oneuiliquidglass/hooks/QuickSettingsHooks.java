@@ -31,8 +31,9 @@ import io.github.igorcv88.oneuiliquidglass.glass.QuickSettingsGlass.Kind;
  * a border on the outer box, then a clipped inner box with a background. Only the values Samsung
  * hands to those two modifier elements change: the outline becomes a uniform basal light rim and
  * the background a translucent veil. Layout, modifier chains, Composer state, gestures,
- * semantics and drawing order are Samsung's. Nothing is drawn per frame and no compositor region
- * exists, so nothing can lag the layout or survive a fade.</p>
+ * semantics and drawing order are Samsung's. With the compositor (sfhook profile 3), each glass
+ * container also gets a tagged region for the backdrop-dependent edge light
+ * (QuickSettingsEdgeLight); without it, no compositor region exists.</p>
  *
  * <p>Only outer containers get the rim; circles inside them keep Samsung's outline. The slider
  * track and fill are drawn inset inside the glass pill (drawing only: layout, touch area and drag
@@ -57,6 +58,7 @@ public final class QuickSettingsHooks {
     /** BoxWithOutline's own recompose scopes, invalidated when the setting changes (live switch). */
     private final Set<Object> scopes = Collections.newSetFromMap(new WeakHashMap<>());
     private final Set<String> logged = new HashSet<>();
+    private final QuickSettingsEdgeLight edge;
     private Object circleShape;
     private Method recomposeScope, recordUsed, invalidate, valid;
     private Method drawContext, contextSize, setContextSize, contextCanvas;
@@ -65,17 +67,22 @@ public final class QuickSettingsHooks {
     private Object darkRim, lightRim;
     private boolean ready, broken, configStarted, applied;
     private android.content.Context app;
-    /** Set by BoxWithOutline for the two element constructors it runs next, on the same thread. */
-    private volatile Pending pending;
+    /**
+     * Set by BoxWithOutline for the two element constructors it runs next. Per thread: a box being
+     * composed on one thread can never pick up, or clear, another thread's state.
+     */
+    private final ThreadLocal<Pending> pending = new ThreadLocal<>();
 
     private static final class Pending {
-        final Thread thread = Thread.currentThread();
         final Object composer;
         final long background, fill;
         final Object rim;
+        /** A glass container's shape, for its compositor edge light; null for circles. */
+        final Object edgeShape;
         boolean rimDone, fillDone;
-        Pending(Object composer, long background, long fill, Object rim) {
+        Pending(Object composer, long background, long fill, Object rim, Object edgeShape) {
             this.composer = composer; this.background = background; this.fill = fill; this.rim = rim;
+            this.edgeShape = edgeShape;
             // Samsung builds no background element for a transparent colour: nothing to recolour.
             fillDone = background == 0L;
         }
@@ -86,6 +93,7 @@ public final class QuickSettingsHooks {
         this.loader = loader;
         this.master = master;
         this.startConfig = startConfig;
+        this.edge = new QuickSettingsEdgeLight(loader, this::enabled);
     }
 
     private boolean enabled() {
@@ -118,14 +126,13 @@ public final class QuickSettingsHooks {
             XposedBridge.hookMethod(boxMethod, new XC_MethodHook() {
                 @Override protected void beforeHookedMethod(MethodHookParam p) { beforeBox(p.args); }
                 @Override protected void afterHookedMethod(MethodHookParam p) {
-                    Pending q = pending;
-                    if (q != null && q.thread == Thread.currentThread()) pending = null;
+                    pending.remove();
                 }
             });
             XposedBridge.hookMethod(borderInit, new XC_MethodHook() {
                 @Override protected void beforeHookedMethod(MethodHookParam p) {
-                    Pending q = pending;
-                    if (q == null || q.thread != Thread.currentThread() || q.rimDone) return;
+                    Pending q = pending.get();
+                    if (q == null || q.rimDone) return;
                     q.rimDone = true; // The outer box's border is the first one BoxWithOutline builds.
                     capture(q.composer);
                     if (q.rim != null && p.args[0] instanceof Float && (Float) p.args[0] > 0f) p.args[1] = q.rim;
@@ -133,13 +140,19 @@ public final class QuickSettingsHooks {
             });
             XposedBridge.hookMethod(backgroundInit, new XC_MethodHook() {
                 @Override protected void beforeHookedMethod(MethodHookParam p) {
-                    Pending q = pending;
-                    if (q == null || q.thread != Thread.currentThread() || q.fillDone) return;
+                    Pending q = pending.get();
+                    if (q == null || q.fillDone) return;
                     if (!(p.args[0] instanceof Long) || (Long) p.args[0] != q.background) return;
                     q.fillDone = true;
                     p.args[0] = q.fill;
+                    if (q.edgeShape != null) p.setObjectExtra("oulgEdge", q.edgeShape);
+                }
+                @Override protected void afterHookedMethod(MethodHookParam p) {
+                    Object shape = p.getObjectExtra("oulgEdge");
+                    if (shape != null) edge.element(p.thisObject, shape);
                 }
             });
+            edge.install(background);
             // ART may have inlined the small element constructors into these callers (AOT/JIT), which
             // would bypass the constructor hooks; run them interpreted instead.
             deoptimize(boxMethod, named(resolve("androidx.compose.foundation.BorderKt"), "border-xT4_qwU"),
@@ -223,7 +236,7 @@ public final class QuickSettingsHooks {
         }
     }
 
-    /** Diagnostic only: proves which panel the device shows. */
+    /** Proves which panel the device shows, and hands its root and expansion to the edge light. */
     private void hookPanel() {
         Class<?> panel = resolve(PANEL);
         if (panel == null) return;
@@ -232,6 +245,7 @@ public final class QuickSettingsHooks {
                 @Override protected void afterHookedMethod(MethodHookParam p) {
                     Probe.log("QS_COMPOSE_ACTIVE", "optIn=" + ConfigClient.flag(ProductFlags.QUICK_SETTINGS)
                             + " master=" + master.getAsBoolean());
+                    edge.panel(p.thisObject);
                 }
             });
         } catch (NoSuchMethodException | RuntimeException | LinkageError e) {
@@ -288,15 +302,22 @@ public final class QuickSettingsHooks {
             float m = QuickSettingsGlass.sliderInset(w, h);
             if (m <= 0f || w <= 2f * m || h <= 2f * m) return;
             float iw = w - 2f * m, ih = h - 2f * m, r = Math.min(iw, ih) / 2f;
-            int save = c.save();
-            c.translate(m, m);
-            android.graphics.Path pill = new android.graphics.Path();
-            pill.addRoundRect(0f, 0f, iw, ih, r, r, android.graphics.Path.Direction.CW);
-            // Samsung's track is a plain rectangle rounded only by the outer clip: keep it a pill.
-            c.clipPath(pill);
-            setContextSize.invoke(context, ((long) Float.floatToRawIntBits(iw) << 32)
-                    | (Float.floatToRawIntBits(ih) & 0xffffffffL));
-            p.setObjectExtra("oulgSlider", new SliderInset(context, c, size, save));
+            // Registered before anything changes: whatever fails below, the after-hook (which runs
+            // even when Samsung's draw throws) or the catch undoes exactly what was done.
+            SliderInset undo = new SliderInset(context, c, size, c.save());
+            p.setObjectExtra("oulgSlider", undo);
+            try {
+                c.translate(m, m);
+                android.graphics.Path pill = new android.graphics.Path();
+                pill.addRoundRect(0f, 0f, iw, ih, r, r, android.graphics.Path.Direction.CW);
+                // Samsung's track is a plain rectangle rounded only by the outer clip: keep it a pill.
+                c.clipPath(pill);
+                setContextSize.invoke(context, ((long) Float.floatToRawIntBits(iw) << 32)
+                        | (Float.floatToRawIntBits(ih) & 0xffffffffL));
+            } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
+                restoreSlider(p);
+                throw e;
+            }
         } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
             fail(e);
         }
@@ -306,9 +327,12 @@ public final class QuickSettingsHooks {
     private void restoreSlider(XC_MethodHook.MethodHookParam p) {
         Object extra = p.getObjectExtra("oulgSlider");
         if (!(extra instanceof SliderInset)) return;
+        p.setObjectExtra("oulgSlider", null); // Once: the catch above and the after-hook may both call.
         SliderInset s = (SliderInset) extra;
+        // The canvas first and unconditionally: a size that cannot be put back must not leave the
+        // translation and clip on the rest of the frame.
+        s.canvas.restoreToCount(s.save);
         try {
-            s.canvas.restoreToCount(s.save);
             setContextSize.invoke(s.context, s.size);
         } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
             fail(e);
@@ -316,13 +340,13 @@ public final class QuickSettingsHooks {
     }
 
     private void beforeBox(Object[] a) {
-        pending = null;
+        pending.remove();
         try {
             bootstrap();
             if (broken) return;
             // Even with the master or the option off, the border constructor captures this box's
             // own scope (see capture), so that switching either on later applies live.
-            pending = new Pending(a[7], 0L, 0L, null);
+            pending.set(new Pending(a[7], 0L, 0L, null, null));
             if (!enabled()) return;
             // Bits 4-32 of the $default mask: Samsung's defaults replace the width/colour/shape
             // arguments, so what is read here would not be what is drawn. Bit 2 (outlined, default
@@ -341,7 +365,8 @@ public final class QuickSettingsHooks {
             boolean outlined = (outlinedDefault || Boolean.TRUE.equals(a[1]))
                     && a[2] instanceof Float && (Float) a[2] > 0f;
             boolean rimmed = outlined && QuickSettingsGlass.rimmed(kind);
-            pending = new Pending(a[7], background, fill, rimmed ? rim(dark) : null);
+            pending.set(new Pending(a[7], background, fill, rimmed ? rim(dark) : null,
+                    kind == Kind.CONTAINER ? a[5] : null));
         } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
             fail(e);
         }
@@ -428,7 +453,7 @@ public final class QuickSettingsHooks {
 
     /** Fail closed: stop recolouring and let every captured box recompose with Samsung's values. */
     private void fail(Throwable e) {
-        pending = null;
+        pending.remove();
         if (broken) return;
         broken = true;
         Probe.error("QS_COMPOSE_FAILED", e);

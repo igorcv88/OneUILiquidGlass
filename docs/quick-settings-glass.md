@@ -59,6 +59,40 @@ arredondado pelo `clip` externo. É o mesmo que `DrawScope.inset {}`: transladar
 tamanho do `DrawContext` (o `getTransform()` foi removido pelo R8), desfeito depois da chamada,
 mesmo se ela falhar. Só desenho: layout, área de toque e arraste não mudam.
 
+### Luz de borda dependente do fundo (compositor, perfil 3)
+
+Os cards de notificação respondem ao fundo porque o shader reescrito no SurfaceFlinger
+(`sfhook/refract.h`) lê os pixels reais atrás de cada região de blur marcada. A Central passa a usar o
+mesmo motor, com um perfil próprio:
+
+- **Marca.** Cada contêiner de vidro (`Kind.CONTAINER`) ganha uma região `BackgroundBlurDrawable`
+  com raio de canto `floor(r) − 1 + 0,875` (`QuickSettingsGlass.edgeTag`): a faixa 0,80–0,95 no
+  programa FillRRect e, como `r + 0,5`, 0,30–0,45 no programa de clip, livres nos dois. 0,875 e
+  0,375 são exatos em fp16 até 256 px (`field_check`: 852 raios de 43 a 256 px, os dois programas e
+  o uniform fp16; nenhuma marca dos perfis 0–2 nem raio inteiro decodifica como 3).
+- **Shader.** Perfil 3: sem refração nem blur extra. Numa faixa de `OULG_QS_LWIDTH_DEFAULT` (4,5 px)
+  a partir do contorno, a luz é `ganho × (luma − piso) / (1 − piso)`, limitada a um teto e tingida em
+  35 % pela cor do fundo naquele ponto; fora da faixa, transparente. Preto não soma nada, um glifo
+  branco cruzando a borda acende só aquele trecho, e não há direção nem canto embutidos. A luz basal
+  continua sendo o contorno do Compose, então sem o compositor nada muda.
+- **Onde é desenhada.** No `BackgroundNode.draw` do próprio fundo do contêiner (o nó é ligado ao
+  elemento recolorido em `BackgroundElement.create/update`), dentro da display list do Compose: a
+  região acompanha layout, rolagem e transformações. O raio vem de
+  `CornerSize.toPx-TmRCtEA(Density, tamanho)` da forma que a Samsung passou ao `BoxWithOutline`.
+- **Fade.** Uma região de blur ignora o alpha de quem a desenha. Antes de cada frame da janela, o
+  alpha das regiões é o alpha acumulado dos ancestrais do painel × `edgeFade(expansão)`
+  (`SecQSPanelComposeAdapter.expansionFraction`: 0 abaixo de 60 %, inteira a partir de 95 %). Um
+  ancestral com escala ≠ 1 apaga a luz: a marca exige pixels inteiros, como nos cards da central.
+  O alpha nunca vai a 0 no drawable (mínimo 1/255), para a região não sumir quando o painel volta sem
+  regravar a display list.
+- **Condição.** Opção ligada, `debug.oulg.sfrefract=1` e `debug.oulg.sf.optics ≥ 10` (o pacote
+  v0.26 anuncia 10). Sem isso, nenhuma região é criada.
+
+Verificação no host: `sfhook/tools/edge_check.mjs` renderiza os dois programas reescritos em WebGL2
+(Chromium headless) e confere corpo transparente, borda apagada sobre preto, borda uniforme sobre
+cinza (oito trechos iguais), resposta local a uma barra branca na borda inferior (acesa nela, zero a
+60 px e na borda superior) e FillRRect = clip.
+
 ### Círculos transparentes
 
 Para tiles grandes `DeviceControl` (SmartThings), `NearByDevice` e `MyDeviceTileService`, a Samsung
@@ -94,11 +128,12 @@ Samsung recompõe as cores. O recuo dos sliders vale a partir do próximo redese
 
 - O material é véu + contorno de luz basal sobre o blur que a Samsung já aplica ao painel. Não há
   blur próprio por elemento nem refração do conteúdo atrás dos controles.
-- **A luz do contorno não depende do fundo.** Este caminho só troca cores no Compose; o processo do
-  SystemUI não lê os pixels atrás da própria janela. As opções para uma borda que responda ao
-  fundo trecho a trecho são o shader do compositor (`sfhook`, add-on KernelSU, por pixel e sem
-  atraso, mas exige regiões de blur por contêiner) ou a captura de tela (`CaptureHub`, só APK, mas
-  com atraso em movimento e custo contínuo enquanto a Central está aberta). Nenhuma foi feita.
+- A luz que depende do fundo só existe com o compositor (perfil 3, acima). Só com o APK, a borda
+  é apenas a luz basal uniforme. Os parâmetros do perfil 3 são constantes (`OULG_QS_*`), sem
+  propriedades `debug.oulg.sf.*` até a validação no aparelho.
+- Não validado no aparelho: a ordem entre as regiões da Central e o blur do próprio painel
+  (se o blur da Samsung for desenhado depois, cobre a luz), o significado de `expansionFraction` e
+  fades internos do Compose (modo de edição, detalhes), que o alpha da região não acompanha.
 - O SmartThings (e outros tiles `DeviceControl`/`NearByDevice`/`MyDevice`) fica sem disco, como na
   Samsung; um disco com o mesmo recuo do Quick Share exigiria alterar o layout desses tiles.
 - O player com mídia tocando (`MediaPlayerKt`) não passa por `BoxWithOutline`; só o estado vazio
@@ -115,7 +150,10 @@ Samsung recompõe as cores. O recuo dos sliders vale a partir do próximo redese
    carregar os hooks.
 2. `logcat -d -s OULG | grep 'QS_'` deve conter `QS_COMPOSE_READY`, `QS_COMPOSE_ACTIVE` e linhas
    `QS_BOX` com `ACTIVE`, `IDLE` e `CONTAINER` (uma delas com `mask=2`, o grupo de tiles) e
-   `QS_SLIDER_READY`. Sem `QS_BOX`, o caminho não foi atingido.
+   `QS_SLIDER_READY`. Sem `QS_BOX`, o caminho não foi atingido. Com o compositor v0.26:
+   `QS_EDGE_READY`, `QS_EDGE_PANEL host=true expansion=true` e `QS_EDGE_REGION ... expansion=1.0`
+   com a Central aberta. `setprop debug.oulg.sf.debug 1` antes de reiniciar o compositor pinta as
+   regiões marcadas de magenta: com o perfil 3, só a faixa da borda deve aparecer.
 3. Abrir/fechar a Central 20 vezes, devagar e rápido; alternar Wi-Fi/Bluetooth e tiles pequenos;
    arrastar brilho e volume; mídia vazia e tocando; modo de edição; tema claro/escuro; rotação.
 4. Desligar a opção com a Central aberta: tudo deve voltar às cores Samsung

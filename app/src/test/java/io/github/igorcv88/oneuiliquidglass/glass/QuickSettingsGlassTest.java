@@ -74,4 +74,27 @@ public final class QuickSettingsGlassTest {
         // Color.Unspecified carries colour space id 16 (Unspecified) and is left alone.
         assertFalse(QuickSettingsGlass.srgb(0x10L));
     }
+
+    @Test public void edgeTagFallsInTheProfileThreeBandBelowTheRadius() {
+        for (float r = 43f; r < 256f; r += 0.37f) {
+            float tag = QuickSettingsGlass.edgeTag(r);
+            assertEquals(0.875f, tag - (float) Math.floor(tag), 1e-4f);
+            assertTrue(tag <= r && r - tag < 1.5f);
+            // The clip program reads r + 0.5 in fp16: .375 must survive (step 1/8 below 256).
+            assertEquals(0.375f, (tag + 0.5f) - (float) Math.floor(tag + 0.5f), 1e-4f);
+        }
+        assertEquals(-1f, QuickSettingsGlass.edgeTag(42.9f), 0f);
+        assertEquals(-1f, QuickSettingsGlass.edgeTag(256f), 0f);
+        assertEquals(-1f, QuickSettingsGlass.edgeTag(Float.NaN), 0f);
+    }
+
+    @Test public void edgeFadeFollowsTheExpansionAndTheAncestors() {
+        assertEquals(1f, QuickSettingsGlass.edgeFade(1f, 1f), 1e-6f);
+        assertEquals(1f, QuickSettingsGlass.edgeFade(1f, 0.95f), 1e-6f);
+        assertEquals(0f, QuickSettingsGlass.edgeFade(1f, 0.6f), 1e-6f);
+        assertEquals(0f, QuickSettingsGlass.edgeFade(1f, 0.2f), 1e-6f);
+        assertEquals(0.5f, QuickSettingsGlass.edgeFade(0.5f, 1f), 1e-6f);
+        float a = QuickSettingsGlass.edgeFade(1f, 0.7f), b = QuickSettingsGlass.edgeFade(1f, 0.8f);
+        assertTrue(a > 0f && a < b && b < 1f);
+    }
 }

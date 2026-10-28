@@ -37,7 +37,10 @@
 //    module draws its edge optics);
 //  - profile 1, the lockscreen material: one thick-slab model drives every term (below);
 //  - profile 2, shade legibility (expanded-shade cards): no lens and no extra blur, the plain sample
-//    tone-mapped against the text colour (below).
+//    tone-mapped against the text colour (below);
+//  - profile 3, Quick Settings edge light (v0.26): no lens and no extra blur; the region adds light
+//    only in a thin band at the outline, in proportion to the luma of the backdrop right there, and
+//    is transparent elsewhere (below). The module draws the basal rim and the veil itself.
 //
 // Common to both: the blur region's texture is downscaled, so tagged cards read it through a cubic
 // B-spline (4 bilinear taps) instead of bilinear blocks. Layered blur: the blur region is a light
@@ -76,7 +79,7 @@
 //  - a thin contour, the grazing edge of the same surface, 1.6 px from the outline;
 //  - a specular band inside the contour, peaked mid-bevel on the light-facing side (light from the
 //    upper left, as the module's edge optics), a fainter one opposite, fading over bright backdrops.
-#define OULG_FS_GLOBALS "highp float oulg_on, oulg_pf, oulg_br, oulg_bw, oulg_lw, oulg_t, oulg_k, oulg_bv, oulg_grad;\nhighp vec2 oulg_jx, oulg_jy, oulg_n;\n"
+#define OULG_FS_GLOBALS "highp float oulg_on, oulg_pf, oulg_br, oulg_bw, oulg_lw, oulg_t, oulg_k, oulg_bv, oulg_grad, oulg_dp;\nhighp vec2 oulg_jx, oulg_jy, oulg_n;\n"
 #define OULG_FS_BSPLINE \
     "mediump vec4 oulg_bspline(sampler2D s, highp vec2 uv) {\n" \
     "  highp vec2 ts = vec2(textureSize(s, 0));\n" \
@@ -167,6 +170,24 @@
     "  }\n" \
     "  return vec4(clamp(rgb, 0.0, 1.0) * c.a, c.a);\n" \
     "}\n"
+// Profile 3's edge light (width, gain, floor, floor, cap). Quick Settings containers already have the
+// panel's blur, the module's veil and a basal rim; the region only adds the part that depends on what
+// is behind each stretch of the outline: within `width` px of it (oulg_dp, the depth from the outline,
+// set by the field), light = gain x (luma - floor) / (1 - floor), capped, tinted 35 % toward the
+// backdrop's hue. Elsewhere the output is transparent (premultiplied zero), so the region's own blur
+// never shows: black behind the edge adds nothing, a white glyph crossing it lights that stretch
+// only, and nothing is tied to a direction or a corner.
+#define OULG_FS_EDGE_FMT \
+    "mediump vec4 oulg_edge(mediump vec4 c) {\n" \
+    "  mediump float a = max(c.a, 1e-3);\n" \
+    "  mediump vec3 rgb = c.rgb / a;\n" \
+    "  mediump float y = dot(rgb, vec3(0.2126, 0.7152, 0.0722));\n" \
+    "  mediump float w = 1.0 - smoothstep(0.0, %.3f, oulg_dp);\n" \
+    "  mediump float lit = w * clamp(%.3f * max(y - %.3f, 0.0) / (1.0 - %.3f), 0.0, %.3f);\n" \
+    "  mediump float m = max(max(rgb.r, rgb.g), max(rgb.b, 1e-3));\n" \
+    "  mediump vec3 col = mix(vec3(1.0), clamp(rgb / m, 0.0, 1.0), 0.35);\n" \
+    "  return vec4(col * lit, lit) * c.a;\n" \
+    "}\n"
 // Profile 1's material (core, sat, tone, flat, level, cool x3, tilt, rim, line, spec); profile 0
 // passes through untouched. Colour is handled unpremultiplied (the region is opaque; a = 1 in
 // practice). Body, scaled by the body-blur weight:
@@ -224,10 +245,10 @@
     "  return oulg_material(oulg_br < 0.5 ? c : mix(c, oulg_body(s, uv), oulg_br / 6.0));\n" \
     "}\n" \
     "mediump vec4 oulg_sample(sampler2D s, highp vec2 uv, float bias) {\n" \
-    "  return oulg_on > 0.0 ? (oulg_pf > 1.5 ? oulg_tone(texture(s, uv, bias)) : oulg_lens(s, uv)) : texture(s, uv, bias);\n" \
+    "  return oulg_on > 0.0 ? (oulg_pf > 2.5 ? oulg_edge(texture(s, uv, bias)) : oulg_pf > 1.5 ? oulg_tone(texture(s, uv, bias)) : oulg_lens(s, uv)) : texture(s, uv, bias);\n" \
     "}\n" \
     "mediump vec4 oulg_sample(sampler2D s, highp vec2 uv) {\n" \
-    "  return oulg_on > 0.0 ? (oulg_pf > 1.5 ? oulg_tone(texture(s, uv)) : oulg_lens(s, uv)) : texture(s, uv);\n" \
+    "  return oulg_on > 0.0 ? (oulg_pf > 2.5 ? oulg_edge(texture(s, uv)) : oulg_pf > 1.5 ? oulg_tone(texture(s, uv)) : oulg_lens(s, uv)) : texture(s, uv);\n" \
     "}\n"
 // The field (gradient1, ramp1, core1, ccap1, core0, ramp0, edge0, edge0, core0, ramp0, ramp1, core1, ccap1, band1, blurexp1, core1, ccap1, lensbody1,
 // acap1);
@@ -274,18 +295,20 @@
     "  return u * u * u * (u * (u * 6.0 - 15.0) + 10.0);\n" \
     "}\n" \
     "highp vec2 oulg_field(highp vec2 q, highp vec2 hs, highp float r, highp float kp) {\n" \
-    "  oulg_pf = kp >= 4.0 ? 2.0 : kp >= 2.0 ? 1.0 : 0.0;\n" \
+    "  oulg_pf = kp >= 6.0 ? 3.0 : kp >= 4.0 ? 2.0 : kp >= 2.0 ? 1.0 : 0.0;\n" \
     "  highp float k = kp - 2.0 * oulg_pf;\n" \
     "  oulg_k = k;\n" \
     "  oulg_t = 0.0;\n" \
+    "  oulg_dp = 0.0;\n" \
     "  oulg_n = vec2(0.0);\n" \
     "  oulg_grad = oulg_pf > 0.5 && oulg_pf < 1.5 ? %.3f : 0.0;\n" \
-    "  if (oulg_pf > 1.5) { oulg_br = 0.0; return vec2(0.0); }\n" \
+    "  if (oulg_pf > 1.5 && oulg_pf < 2.5) { oulg_br = 0.0; return vec2(0.0); }\n" \
     "  highp vec2 w = abs(q) - (hs - vec2(r));\n" \
     "  highp vec2 v = max(w, vec2(0.0));\n" \
     "  highp float l = length(v);\n" \
     "  highp float bevel = clamp(r * 0.42, 16.0, 56.0);\n" \
     "  highp float depth = r - l - min(max(w.x, w.y), 0.0);\n" \
+    "  if (oulg_pf > 2.5) { oulg_dp = depth; oulg_br = 0.0; return vec2(0.0); }\n" \
     "  oulg_bw = smoothstep(0.25 * bevel, %.3f * bevel, depth);\n" \
     "  oulg_br = oulg_pf > 0.5 ? min(%.2f * oulg_bw, %.2f)\n" \
     "                          : %.2f * smoothstep(0.25 * bevel, %.3f * bevel, depth);\n" \
@@ -337,7 +360,8 @@
 // edge blur radius in px (0: the v0.7 curve).
 struct oulg_profile { float core; int taps; float ramp; float sat; float tone; float rim; float spec; float cap; float lift;
                       float flat; float level; float cool; float tilt; float line; float ccap; float fcap; float cdim; float glow; float bloom; float gradient;
-                      float band; float lensbody; float blurexp; float edge; };
+                      float band; float lensbody; float blurexp; float edge;
+                      float light; float lwidth; float lfloor; float lcap; };
 #define OULG_CORE_DEFAULT 48.0f
 #define OULG_HU_BLOOM_DEFAULT 0.0f
 // Heads-up edge blur (v0.24): 0 keeps the v0.7 curve, a radius of 0 up to 0.25 bevel then a C1
@@ -398,20 +422,31 @@ struct oulg_profile { float core; int taps; float ramp; float sat; float tone; f
 // at 0.55) and the darkest a dark-text card shows.
 #define OULG_SHADE_CAP_DEFAULT 0.55f
 #define OULG_SHADE_LIFT_DEFAULT 0.45f
-// Entry 2 only uses cap and lift (the shade has no lens or layered blur); the others ignore them.
-#define OULG_PROFILES 3
-// The optics this library implements, announced to the module (debug.oulg.sf.optics).
-#define OULG_OPTICS_VERSION "9"
+// Quick Settings edge light (profile 3, v0.26): gain on the backdrop's luma above the floor, the band
+// width at the outline in px (~1.3 dp at 3.5x: the width of Samsung's GRID_BORDER) and the cap on the
+// added light. Black adds nothing; a mid-grey (0.5) ~0.42; white the cap.
+#define OULG_QS_LIGHT_DEFAULT 0.90f
+#define OULG_QS_LWIDTH_DEFAULT 4.5f
+#define OULG_QS_LFLOOR_DEFAULT 0.06f
+#define OULG_QS_LCAP_DEFAULT 0.60f
+// Entry 2 only uses cap and lift (the shade has no lens or layered blur); entry 3 only the light
+// terms; the others ignore them.
+#define OULG_PROFILES 4
+// The optics this library implements, announced to the module (debug.oulg.sf.optics). 10: profile 3.
+#define OULG_OPTICS_VERSION "10"
 static const struct oulg_profile OULG_PROFILES_DEFAULT[OULG_PROFILES] = {
     {OULG_CORE_DEFAULT, OULG_TAPS_DEFAULT, OULG_RAMP_DEFAULT, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 400.0f, 1.0f, 0.0f, 1.0f,
-     OULG_HU_BLOOM_DEFAULT, 0.0f, 0.0f, 0.0f, 1.0f, OULG_HU_EDGE_DEFAULT},
+     OULG_HU_BLOOM_DEFAULT, 0.0f, 0.0f, 0.0f, 1.0f, OULG_HU_EDGE_DEFAULT, 0.0f, OULG_QS_LWIDTH_DEFAULT, 0.0f, 0.0f},
     {OULG_KG_CORE_DEFAULT, OULG_KG_TAPS_DEFAULT, OULG_KG_RAMP_DEFAULT, OULG_KG_SAT_DEFAULT, OULG_KG_TONE_DEFAULT,
      OULG_KG_RIM_DEFAULT, OULG_KG_SPEC_DEFAULT, 0.0f, 0.0f,
      OULG_KG_FLAT_DEFAULT, OULG_KG_LEVEL_DEFAULT, OULG_KG_COOL_DEFAULT, OULG_KG_TILT_DEFAULT, OULG_KG_LINE_DEFAULT,
      OULG_KG_CCAP_DEFAULT, OULG_KG_FCAP_DEFAULT, OULG_KG_CDIM_DEFAULT, OULG_KG_GLOW_DEFAULT, 0.0f, OULG_KG_GRADIENT_DEFAULT,
-     OULG_KG_BAND_DEFAULT, OULG_KG_LENSBODY_DEFAULT, OULG_KG_BLUREXP_DEFAULT, 0.0f},
+     OULG_KG_BAND_DEFAULT, OULG_KG_LENSBODY_DEFAULT, OULG_KG_BLUREXP_DEFAULT, 0.0f, 0.0f, OULG_QS_LWIDTH_DEFAULT, 0.0f, 0.0f},
     {0.0f, OULG_TAPS_DEFAULT, OULG_RAMP_DEFAULT, 1.0f, 0.0f, 0.0f, 0.0f, OULG_SHADE_CAP_DEFAULT, OULG_SHADE_LIFT_DEFAULT,
-     0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 400.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f},
+     0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 400.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, OULG_QS_LWIDTH_DEFAULT, 0.0f, 0.0f},
+    {0.0f, OULG_TAPS_DEFAULT, OULG_RAMP_DEFAULT, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+     0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 400.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f,
+     OULG_QS_LIGHT_DEFAULT, OULG_QS_LWIDTH_DEFAULT, OULG_QS_LFLOOR_DEFAULT, OULG_QS_LCAP_DEFAULT},
 };
 #define OULG_VS_RADII_AT "highp vec2 neighbor_radii = radii_and_neighbors.zw;\n"
 #define OULG_VS_POS_AT "gl_Position = vec4(devcoord, 0.0, 1.0);\n"
@@ -419,16 +454,18 @@ static const struct oulg_profile OULG_PROFILES_DEFAULT[OULG_PROFILES] = {
 #define OULG_FS_FINAL "sk_FragColor = output_S1 * outputCoverage_S0;"
 // The tag: the radius fraction lies in a 0.15-wide band and carries the lens strength k (shift at the
 // outline as a fraction of the bevel), k = 0.1 + 1.1 * (fraction - base) / 0.15. The band is the
-// profile: [0.55, 0.70] profile 0, [0.30, 0.45] profile 1, [0.05, 0.20] profile 2. The rect must also have whole-pixel
+// profile: [0.55, 0.70] profile 0, [0.30, 0.45] profile 1, [0.05, 0.20] profile 2, [0.80, 0.95] profile 3
+// (the module sends exactly .875, which an fp16 radius + 0.5 still holds below 256 px). The rect must also have whole-pixel
 // sides: a window whose corner radius sweeps during an app-open animation is scaled to fractional
 // sizes, so a radius passing through a band does not pass for a card.
 #define OULG_STRENGTH(f, base) "(0.1 + 1.1 * clamp((" f " - " base ") / 0.15, 0.0, 1.0))"
 // kp = k + 2 x profile from a radius fraction f: loN/hiN bound band N (with a 0.01 margin), baseN
 // is its start.
-#define OULG_DECODE(f, lo0, hi0, base0, lo1, hi1, base1, lo2, hi2, base2) \
+#define OULG_DECODE(f, lo0, hi0, base0, lo1, hi1, base1, lo2, hi2, base2, lo3, hi3, base3) \
     "(" f " > " lo0 " && " f " < " hi0 " ? " OULG_STRENGTH(f, base0) \
     " : " f " > " lo1 " && " f " < " hi1 " ? 2.0 + " OULG_STRENGTH(f, base1) \
-    " : " f " > " lo2 " && " f " < " hi2 " ? 4.0 + " OULG_STRENGTH(f, base2) " : 0.0)"
+    " : " f " > " lo2 " && " f " < " hi2 " ? 4.0 + " OULG_STRENGTH(f, base2) \
+    " : " f " > " lo3 " && " f " < " hi3 " ? 6.0 + " OULG_STRENGTH(f, base3) " : 0.0)"
 
 static int oulg_count(const char *src, const char *needle) {
     int n = 0;
@@ -489,7 +526,7 @@ static char *oulg_rewrite_vertex(const char *src, int full) {
             "highp float oulg_f = fract(oulg_rpx);\n"
             "highp vec2 oulg_d = abs(fract(oulg_hs * 2.0 + 0.5) - 0.5);\n"
             "bool oulg_ok = oulg_rpx > 40.0 && oulg_d.x < 0.02 && oulg_d.y < 0.02;\n"
-            "voulg_tag = vec4(oulg_ok ? " OULG_DECODE("oulg_f", "0.54", "0.71", "0.55", "0.29", "0.46", "0.30", "0.04", "0.21", "0.05") " : 0.0, oulg_rpx, oulg_hs);\n"
+            "voulg_tag = vec4(oulg_ok ? " OULG_DECODE("oulg_f", "0.54", "0.71", "0.55", "0.29", "0.46", "0.30", "0.04", "0.21", "0.05", "0.79", "0.96", "0.80") " : 0.0, oulg_rpx, oulg_hs);\n"
             "voulg_vp = vertexpos;\n"
             "}\n");
     } else {
@@ -526,6 +563,10 @@ static void oulg_fix_params(struct oulg_profile p[OULG_PROFILES]) {
         if (!(p[i].lensbody >= 0.0f && p[i].lensbody <= 0.15f)) p[i].lensbody = d->lensbody;  // with A <= 0.5: Jacobian >= 0.1
         if (!(p[i].blurexp >= 1.0f && p[i].blurexp <= 4.0f)) p[i].blurexp = d->blurexp;
         if (!(p[i].edge >= 0.0f && p[i].edge <= 48.0f)) p[i].edge = d->edge;
+        if (!(p[i].light >= 0.0f && p[i].light <= 2.0f)) p[i].light = d->light;
+        if (!(p[i].lwidth >= 1.0f && p[i].lwidth <= 16.0f)) p[i].lwidth = d->lwidth;
+        if (!(p[i].lfloor >= 0.0f && p[i].lfloor <= 0.5f)) p[i].lfloor = d->lfloor;
+        if (!(p[i].lcap >= 0.0f && p[i].lcap <= 1.0f)) p[i].lcap = d->lcap;
     }
 }
 
@@ -562,6 +603,8 @@ static int oulg_lib(char *out, size_t cap, int external, const struct oulg_profi
                      (double) p[1].band, (double) p[1].blurexp, (double) p[1].core, (double) p[1].ccap, (double) p[1].lensbody,
                      (0.75 - (double) p[1].lensbody) / 1.5 < 0.5 ? (0.75 - (double) p[1].lensbody) / 1.5 : 0.5)) return 0;
     if (!external && !oulg_append(out, cap, &at, OULG_FS_TONE_FMT, (double) p[2].cap, (double) p[2].lift)) return 0;
+    if (!external && !oulg_append(out, cap, &at, OULG_FS_EDGE_FMT, (double) p[3].lwidth, (double) p[3].light,
+                                  (double) p[3].lfloor, (double) p[3].lfloor, (double) p[3].lcap)) return 0;
     // The cool tint, normalised to unit luma so it shifts hue only.
     double cr = 1.0 - 0.06 * p[1].cool, cg = 1.0 - 0.01 * p[1].cool, cb = 1.0 + 0.08 * p[1].cool;
     double cl = 0.2126 * cr + 0.7152 * cg + 0.0722 * cb;
@@ -592,7 +635,7 @@ static char *oulg_rewrite_fragment(const char *src, int debug, const struct oulg
     if (!mainAt || call < mainAt || final < call) return NULL;
     char coords[64];
     if (!oulg_ident_after(call + strlen("texture(uTextureSampler_0_S1, "), "vTransformedCoords_", coords, sizeof coords)) return NULL;
-    struct oulg_profile p[OULG_PROFILES] = {profiles[0], profiles[1], profiles[2]};
+    struct oulg_profile p[OULG_PROFILES] = {profiles[0], profiles[1], profiles[2], profiles[3]};
     oulg_fix_params(p);
 
     char block[2048];
@@ -636,7 +679,8 @@ static char *oulg_rewrite_fragment(const char *src, int debug, const struct oulg
 
 // Rounded-rect clip programs (CircularRRectEffect): the radius arrives as uradiusPlusHalf (r + 0.5)
 // and the rect inset by it as uinnerRect, in device pixels. The tag bands on r, [0.55, 0.70],
-// [0.30, 0.45] and [0.05, 0.20], are [0.05, 0.20], [0.80, 0.95] and [0.55, 0.70] on the uniform. Same size check, and the same
+// [0.30, 0.45], [0.05, 0.20] and [0.80, 0.95], are [0.05, 0.20], [0.80, 0.95], [0.55, 0.70] and [0.30, 0.45]
+// on the uniform. Same size check, and the same
 // library as the FillRRect program: the field, the B-spline and the layered blur, in device pixels
 // (the clip is axis-aligned there). Before, this path only shifted the sample, so a card drawn by it
 // lost the B-spline and the body blur. Debug mode paints these cyan.
@@ -655,7 +699,7 @@ static char *oulg_rewrite_clip(const char *src, int debug, const struct oulg_pro
     const char *fcEnd = fc ? strchr(fc, '\n') : NULL;
     const char *final = strstr(src, "sk_FragColor = output_S1");
     if (!mainAt || !fcEnd || fc < mainAt || !final || call < fcEnd || final < call || !strstr(src, "mediump vec4 output_S1 =")) return NULL;
-    struct oulg_profile p[OULG_PROFILES] = {profiles[0], profiles[1], profiles[2]};
+    struct oulg_profile p[OULG_PROFILES] = {profiles[0], profiles[1], profiles[2], profiles[3]};
     oulg_fix_params(p);
     int flip = strstr(src, "u_skRTFlip") != NULL;
     char block[2048];
@@ -672,7 +716,7 @@ static char *oulg_rewrite_clip(const char *src, int debug, const struct oulg_pro
         "highp float oulg_f = fract(oulg_rph);\n"
         "highp vec2 oulg_full = (%s.zw - %s.xy) + vec2(2.0 * (oulg_rph - 0.5));\n"
         "highp vec2 oulg_d = abs(fract(oulg_full + 0.5) - 0.5);\n"
-        "highp float oulg_kp = " OULG_DECODE("oulg_f", "0.04", "0.21", "0.05", "0.79", "0.96", "0.80", "0.54", "0.71", "0.55") ";\n"
+        "highp float oulg_kp = " OULG_DECODE("oulg_f", "0.04", "0.21", "0.05", "0.79", "0.96", "0.80", "0.54", "0.71", "0.55", "0.29", "0.46", "0.30") ";\n"
         "if (oulg_rph > 40.5 && oulg_kp > 0.0 && oulg_d.x < 0.02 && oulg_d.y < 0.02) {\n"
         "  oulg_on = 1.0;\n"
         "  oulg_dbg = %s;\n"
