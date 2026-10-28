@@ -21,7 +21,8 @@ public final class QsStyle {
         idle = Math.min(.12f, number("qs.idle", .04f)); active = number("qs.active", .90f);
         darkRim = number("qs.darkrim", .26f); lightRim = number("qs.lightrim", .18f);
         edgeBlur = Math.round(number("qs.edgeblur", 8));
-        outer = number("qs.outer", 1); track = number("qs.track", .88f); // Legacy profile round-trip only; never drawn. fill = number("qs.fill", .88f);
+        outer = number("qs.outer", 1); track = number("qs.track", .88f); // Legacy profile round-trip only; never drawn.
+        fill = number("qs.fill", .88f);
         darkColor = color("qs.darkcolor", 0xffffff); lightColor = color("qs.lightcolor", 0x141823);
         prop("qs.lightstyle"); // Legacy obsidian/light is accepted; both now use adaptive ink.
         lightGlass = true;

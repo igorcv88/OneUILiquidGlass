@@ -29,6 +29,7 @@ final class QsSliderHooks {
         final boolean rtl;
         final QsStyle style;
         final float outer;
+        final float[] geometry=new float[5];
         Frame(Object scope,Object context,Canvas canvas,long original,QsDrawTransaction transaction,float w,float h,boolean rtl,QsStyle style,float outer){
             this.scope=scope;this.context=context;this.canvas=canvas;this.original=original;this.transaction=transaction;
             this.w=w;this.h=h;this.rtl=rtl;
@@ -41,8 +42,8 @@ final class QsSliderHooks {
         this.geometryAvailable=geometryAvailable;
     }
     void install(Class<?> bar) throws ReflectiveOperationException {
-        whiteBrush=Class.forName("androidx.compose.ui.graphics.SolidColor",false,loader)
-                .getDeclaredConstructor(long.class).newInstance(QuickSettingsGlass.color(0xffffffff));
+        Constructor<?> solid=Class.forName("androidx.compose.ui.graphics.SolidColor",false,loader).getDeclaredConstructor(long.class);
+        solid.setAccessible(true);whiteBrush=solid.newInstance(QuickSettingsGlass.color(0xffffffff));
         Class<?> scope=Class.forName("androidx.compose.ui.graphics.drawscope.DrawScope",false,loader);
         drawContext=scope.getMethod("getDrawContext");
         Class<?> ctx=drawContext.getReturnType();
@@ -58,10 +59,6 @@ final class QsSliderHooks {
             if(stage<0 || !primitiveSignature(m,stage,scope))continue;
             XposedBridge.hookMethod(m,new XC_MethodHook(){
                 @Override protected void beforeHookedMethod(MethodHookParam p){primitive(p,stage);}
-                @Override protected void afterHookedMethod(MethodHookParam p){
-                    Object saved=p.getObjectExtra("qsPrimitiveCanvasSave");
-                    Frame f=current.get();if(saved instanceof Integer&&f!=null)f.canvas.restoreToCount((Integer)saved);
-                }
             });
             primitives++;deoptimize(m);
         }
@@ -80,7 +77,7 @@ final class QsSliderHooks {
             });
             deoptimize(m);
         }
-        Probe.log("QS_SLIDER_READY","primitives="+primitives+" independent=true firmware=DZIF");
+        Probe.log("QS_SLIDER_READY","primitives="+primitives+" surfaces=2 firmware=DZIF");
     }
     private void begin(XC_MethodHook.MethodHookParam p){
         if(broken||!enabled.getAsBoolean())return;
@@ -103,7 +100,7 @@ final class QsSliderHooks {
     }
     private void primitive(XC_MethodHook.MethodHookParam p,int stage){
         Frame f=current.get();if(broken||f==null||p.args[0]!=f.scope)return;
-        if(stage==0){p.setResult(null);return;} // No visual track, even for legacy presets.
+        if(suppressTrack(stage)){p.setResult(null);return;} // No visual track, even for legacy presets.
         try {
             int last=p.args.length-1, mask=(Integer)p.args[last];
             long offset=(mask&2)!=0?0L:(Long)p.args[2];
@@ -111,7 +108,7 @@ final class QsSliderHooks {
             QsStyle s=f.style;
             // The thumb is the fill's end cap: it takes the fill's thickness, as in Samsung's draw.
             float ratio=s.fill;
-            float[] g=QuickSettingsGlass.sliderPrimitive(f.w,f.h,f.outer,ratio,x(offset),y(offset),x(extent),y(extent),stage==2,f.rtl);
+            float[] g=QuickSettingsGlass.sliderPrimitive(f.w,f.h,f.outer,ratio,x(offset),y(offset),x(extent),y(extent),stage==2,f.rtl,f.geometry);
             p.args[2]=pack(g[0],g[1]);p.args[3]=pack(g[2],g[3]);
             p.args[last]=explicitGeometryMask(mask,stage!=0);
             p.args[4]=pack(g[4],g[4]);
@@ -126,6 +123,7 @@ final class QsSliderHooks {
         try{f.transaction.close();}catch(ReflectiveOperationException|RuntimeException|LinkageError e){fail(e);}
     }
     private void fail(Throwable e){if(!broken){broken=true;Probe.error("QS_SLIDER_FAILED",e);}}
+    static boolean suppressTrack(int stage){return stage==0;}
     static boolean primitiveSignature(Method m,int stage,Class<?> scope){
         Class<?>[] t=m.getParameterTypes();
         if(t.length!=(stage==0?9:10)||t[0]!=scope||t[t.length-1]!=int.class)return false;

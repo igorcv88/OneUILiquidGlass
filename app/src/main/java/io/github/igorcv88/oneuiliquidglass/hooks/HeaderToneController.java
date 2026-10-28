@@ -99,6 +99,7 @@ final class HeaderToneController {
             boolean action=i.id.equals("noti_setting")||i.id.equals("clear_all");
             int nativeColor=i.original.getColorForState(v.getDrawableState(),i.original.getDefaultColor());
             int desired=action&&!local?nativeColor:QuickSettingsGlass.ink(nativeColor,local);
+            desired=(desired&0xffffff)|(nativeColor&0xff000000); // Keep disabled/secondary alpha.
             if(current!=desired){
                 if(repairs++<5)log("repair",i,v,0);
                 v.setTextColor(desired);

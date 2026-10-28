@@ -33,7 +33,6 @@ final class QsContentHooks {
     }
     private final java.util.List<IconState> icons=new java.util.ArrayList<>();
     private final Consumer<Object> capture;
-    private int inkLogged;
     private Method invalidateDraw;
     private QsTextHooks text;
     private final java.util.List<java.lang.ref.WeakReference<Object>> artworkNodes=new java.util.ArrayList<>();
@@ -100,8 +99,7 @@ final class QsContentHooks {
             });
         text = new QsTextHooks(loader, this::current, enabled, scene, headerScene);
         text.install();
-        hookHeaderIconTint();
-        hookInk(prefix+"tiles.QSIconKt",true,true);
+        hookQsIcon(prefix+"tiles.QSIconKt");
         hookArtwork(prefix+"media.components.MediaArtworkKt$$ExternalSyntheticLambda4");
         Probe.log("QS_CONTENT_READY","owners="+hooked+" firmware=DZIF");
     }
@@ -143,24 +141,7 @@ final class QsContentHooks {
             Probe.log("QS_ARTWORK_READY","firmware=DZIF");
         }catch(ReflectiveOperationException|RuntimeException|LinkageError e){Probe.error("QS_ARTWORK_FAILED",e);}
     }
-    /** ColorFilter factory only while Samsung's header constructs its functional icons. */
-    private void hookHeaderIconTint() {
-        Class<?> c=optional("androidx.compose.ui.graphics.ColorFilter$Companion");
-        if(c==null)return;
-        for(Method m:c.getDeclaredMethods()) {
-            if(!m.getName().equals("tint-xETnrds") || m.getParameterCount()!=2
-                    || m.getParameterTypes()[0]!=long.class || m.getParameterTypes()[1]!=int.class)continue;
-            XposedBridge.hookMethod(m,new XC_MethodHook(){
-                @Override protected void beforeHookedMethod(MethodHookParam p){
-                    Frame f=content.get();
-                    if(f==null || !f.header || !enabled.getAsBoolean() || headerScene.get()!=QsScene.Tone.LIGHT_SCENE)return;
-                    long color=(Long)p.args[0];
-                    if(QuickSettingsGlass.srgb(color))p.args[0]=QuickSettingsGlass.color(QuickSettingsGlass.ink(QuickSettingsGlass.argb(color),true));
-                }
-            });
-        }
-    }
-    private void hookInk(String name, boolean icon, boolean qsIcon) {
+    private void hookQsIcon(String name) {
         Class<?> c=optional(name); if(c==null) return;
         int count=0;
         for(Method m:c.getDeclaredMethods()) {

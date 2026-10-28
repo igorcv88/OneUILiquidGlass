@@ -84,7 +84,7 @@ public final class QuickSettingsGlass {
     public static int ink(int nativeColor, boolean darkInk) {
         int r=(nativeColor >> 16)&255, g=(nativeColor >> 8)&255, b=nativeColor&255;
         if ((nativeColor >>> 24) == 0 || Math.max(r,Math.max(g,b))-Math.min(r,Math.min(g,b)) > 36) return nativeColor;
-        return withAlpha(darkInk ? 0x1d1d1d : 0xffffff, Math.max(.85f, alpha(nativeColor)));
+        return withAlpha(darkInk ? 0x1d1d1d : 0xffffff, alpha(nativeColor));
     }
     public static int iconInk(int nativeColor, Kind state, boolean darkInk) {
         if(state==Kind.ACTIVE)return nativeColor;
@@ -104,9 +104,14 @@ public final class QuickSettingsGlass {
     /** Native progress coordinates are retained on the long axis; only thickness is independent. */
     public static float[] sliderPrimitive(float w,float h,float outer,float ratio,
             float x,float y,float sw,float sh,boolean thumb,boolean rtl) {
+        return sliderPrimitive(w,h,outer,ratio,x,y,sw,sh,thumb,rtl,new float[5]);
+    }
+    /** Caller-owned buffer for the draw path. */
+    public static float[] sliderPrimitive(float w,float h,float outer,float ratio,
+            float x,float y,float sw,float sh,boolean thumb,boolean rtl,float[] out) {
         if(!Float.isFinite(w)||!Float.isFinite(h)||w<=0||h<=0
                 ||!Float.isFinite(x)||!Float.isFinite(y)||!Float.isFinite(sw)||!Float.isFinite(sh))
-            return new float[]{0,0,0,0,0};
+            {java.util.Arrays.fill(out,0);return out;}
         outer=Float.isFinite(outer)?Math.max(.5f,Math.min(1f,outer)):1f;
         ratio=Float.isFinite(ratio)?Math.max(.1f,Math.min(1f,ratio)):.88f;
         float narrow=Math.min(w,h)*outer*ratio;
@@ -122,7 +127,8 @@ public final class QuickSettingsGlass {
         sw=Math.min(sw,w-x);sh=Math.min(sh,h-y);
         // Empty progress is empty, not a fabricated logical minimum. The native thumb remains
         // a separate end-cap of the same white surface; the outer glass is never suppressed.
-        return new float[]{x,y,sw,sh,Math.min(sw,sh)/2};
+        out[0]=x;out[1]=y;out[2]=sw;out[3]=sh;out[4]=Math.min(sw,sh)/2;
+        return out;
     }
 
     /**

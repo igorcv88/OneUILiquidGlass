@@ -361,6 +361,9 @@ final class Foreground {
     static void beforeChevronDrawable(ImageView view,android.graphics.drawable.Drawable incoming) {
         Chevron r=chevrons.get(view);
         if(r==null||incoming==null)return;
+        android.graphics.drawable.Drawable previous=r.drawable.get();
+        if(previous!=null&&previous!=incoming&&previous.getColorFilter()==r.appliedFilter)
+            previous.setColorFilter(r.drawableFilter);
         // Save the incoming drawable before ImageView copies our current filter onto it.
         r.drawable=new java.lang.ref.WeakReference<>(incoming);
         if(incoming.getColorFilter()!=r.appliedFilter)r.drawableFilter=incoming.getColorFilter();
@@ -383,7 +386,7 @@ final class Foreground {
         }
         return false;
     }
-    private static Integer filterColor(android.graphics.ColorFilter f) {
+    static Integer filterColor(android.graphics.ColorFilter f) {
         if(f instanceof android.graphics.PorterDuffColorFilter) {
             try { Object color=Reflect.call(f,"getColor");return color instanceof Integer?(Integer)color:null; }
             catch(ReflectiveOperationException|RuntimeException e){return null;}
@@ -408,8 +411,9 @@ final class Foreground {
         }
         r.lightText=lightText;
         // Explicit ImageView filter wins over drawable/tint in ImageView.applyColorMod.
-        Integer nativeColor=filterColor(r.imageFilter);
-        if(nativeColor==null)nativeColor=filterColor(r.drawableFilter);
+        android.graphics.ColorFilter effective=r.imageFilter!=null?r.imageFilter:r.drawableFilter;
+        Integer nativeColor=filterColor(effective);
+        if(effective!=null&&nativeColor==null){chevrons.remove(v);r.restore(v);return false;}
         if(nativeColor==null&&r.tint!=null)nativeColor=r.tint.getColorForState(v.getDrawableState(),r.tint.getDefaultColor());
         int c=nativeColor==null?(lightText?0xffffffff:0xff1d1d1d):nativeColor;
         if(!themeTone(c,lightText)){chevrons.remove(v);r.restore(v);return false;}
