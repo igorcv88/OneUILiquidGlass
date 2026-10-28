@@ -7,6 +7,17 @@ import org.junit.Test;
 import java.util.*;
 
 public class PresetCodecTest {
+    @Test public void legacyQsProfileMigratesOpacityAndRetainsRetiredKeys() throws Exception {
+        Map<String,String> old=new LinkedHashMap<>();
+        old.put("qs.track","0.44");old.put("qs.lightstyle","obsidian");old.put("qs.lightfill","0.66");
+        PresetCodec.Parsed parsed=PresetCodec.parse(PresetCodec.encode(old,true,"DZIF"));
+        assertEquals("0.44",parsed.values.get("qs.track"));
+        assertEquals("obsidian",parsed.values.get("qs.lightstyle"));
+        assertEquals("0.18",parsed.values.get("qs.lightfill"));
+        assertEquals(parsed.values,PresetCodec.parse(PresetCodec.encode(parsed.values,true,"DZIF")).values);
+        assertFalse(Controls.editable("qs.track"));assertFalse(Controls.editable("qs.lightstyle"));
+        assertEquals(Applicability.Kind.READ_ONLY,new ControlState(parsed.values,Collections.emptyMap(),Collections.emptyMap(),true).applicability().rule("qs.track").kind);
+    }
     @Test
     public void diagnosticSnapshotsNeverBecomeImportedDesiredValues() throws Exception {
         Map<String, String> desired = Collections.singletonMap("lens", "0.24");
