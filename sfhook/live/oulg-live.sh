@@ -164,7 +164,7 @@ setprops)
         name="${kv%%=*}"; value="${kv#*=}"
         [ "$name" != "$kv" ] || die 2 "malformed_$kv"
         case "$name" in
-            core|taps|ramp|hubloom|kgcore|kgtaps|kgramp|kgsat|kgtone|kgrim|kgspec|kgflat|kglevel|kgcool|kgtilt|kgline|kgcorecap|kggradient|kgband|kgbodylens|kgblurexp|kgflatcap|kgcoredim|kgglow|shadecap|shadelift|debug) ;;
+            core|taps|ramp|hubloom|edgeblur|kgcore|kgtaps|kgramp|kgsat|kgtone|kgrim|kgspec|kgflat|kglevel|kgcool|kgtilt|kgline|kgcorecap|kggradient|kgband|kgbodylens|kgblurexp|kgflatcap|kgcoredim|kgglow|shadecap|shadelift|debug) ;;
             *) die 2 "key_not_allowed_$name" ;;
         esac
         case "$value" in

@@ -2,9 +2,9 @@
 
 **Fonte:** `app/src/main/java/io/github/igorcv88/oneuiliquidglass/glass/Tuning.java`, `sfhook/oulg_sf.c`, `sfhook/refract.h`, `sfhook/module/service.sh` no commit-base `11e1f3e6f2220c1eb6c7831cdf61279a981dcc03`. Inventário para a refatoração da interface, não captura do estado efetivo do aparelho.
 
-**Atualização de integração (main após #57):** `lensregiondiff`/gate `region` foram removidos; `popuplock` e `orphandraw` foram adicionados. O inventário ativo agora tem 102 propriedades. O interruptor `sfrefract` pertence ao helper live e não pode ser persistido pela ponte do APK.
+**Atualização de integração (main após #57):** `lensregiondiff`/gate `region` foram removidos; `popuplock` e `orphandraw` foram adicionados. O inventário ativo agora tem 103 propriedades. O interruptor `sfrefract` pertence ao helper live e não pode ser persistido pela ponte do APK.
 
-**Abrangência:** 74 chaves parseadas em Java (incluindo `sf.optics`), 29 mencionadas no leitor da biblioteca C (incluindo a mesma `sf.optics`), **102 propriedades distintas**. O módulo também tem um controle global `glass/enabled` nas SharedPreferences, fora de `debug.oulg.*`. As configurações independentes de perfil, as condições de ativação, os comandos de teste e as ações de recuperação também devem aparecer no APK.
+**Abrangência:** 74 chaves parseadas em Java (incluindo `sf.optics`), 30 mencionadas no leitor da biblioteca C (incluindo a mesma `sf.optics`), **103 propriedades distintas**. O módulo também tem um controle global `glass/enabled` nas SharedPreferences, fora de `debug.oulg.*`. As configurações independentes de perfil, as condições de ativação, os comandos de teste e as ações de recuperação também devem aparecer no APK.
 
 Prefixo omitido nas tabelas: cada entrada abaixo significa `debug.oulg.<chave>`. **L:** `Tuning` atualiza aproximadamente a cada 1 s dentro de SystemUI, mas algumas mudanças exigem recriação de material/invalidação de View. **C:** SurfaceFlinger lê ao compilar shader; mudar `setprop` não recompila o shader existente. **R:** leitura de estado; não oferecer escrita normal. Padrões são do código, não do telefone, do serviço de boot nem dos overrides do usuário.
 
@@ -118,6 +118,7 @@ Observar que as propriedades `lightglass` e `shadelightglass` se aplicam a super
 | `sf.taps` | 24 | Heads-up: amostras por pixel |
 | `sf.ramp` | 1.5 | Heads-up: profundidade em biséis até raio pleno |
 | `sf.hubloom` | 0 | Heads-up: supressão de amostras claras/bloom; 0 mantém disco simples |
+| `sf.edgeblur` | 0 | Heads-up: raio do blur no contorno em px, uma curva contínua até o miolo (0 restaura v0.7) |
 | `sf.kgcore` | 80 | Lockscreen: raio nominal do miolo em px |
 | `sf.kgtaps` | 48 | Lockscreen: amostras por pixel |
 | `sf.kgramp` | 1.5 | Lockscreen: rampa do blur |

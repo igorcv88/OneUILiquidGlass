@@ -265,7 +265,8 @@ static float prop_float(const char *name, float fallback) {
 // Optical profiles, read when a shader is compiled like the debug tint. Profile 0 (heads-up; the
 // established material): debug.oulg.sf.core (body blur radius in px, 0 = off), debug.oulg.sf.taps
 // (taps per pixel) and debug.oulg.sf.ramp (depth where the body radius is reached, in bevels)
-// and debug.oulg.sf.hubloom (bloom control of the body disc; 0 restores the plain disc).
+// and debug.oulg.sf.hubloom (bloom control of the body disc; 0 restores the plain disc) and
+// debug.oulg.sf.edgeblur (blur radius at the outline in px, one curve to the core; 0 restores v0.7).
 // Profile 1 (lockscreen): debug.oulg.sf.kgcore, .kgtaps, .kgramp, .kgsat (body saturation),
 // .kgtone (highlight knee), .kgrim (rim reflectance gain), .kgspec (specular strength), .kgflat and
 // .kglevel (transmission flattening toward a luma level), .kgcool (cool tint), .kgtilt (rim tilt at
@@ -285,6 +286,7 @@ static void layered_blur(struct oulg_profile p[OULG_PROFILES]) {
     p[0].taps = (int) prop_float("debug.oulg.sf.taps", OULG_TAPS_DEFAULT);
     p[0].ramp = prop_float("debug.oulg.sf.ramp", OULG_RAMP_DEFAULT);
     p[0].bloom = prop_float("debug.oulg.sf.hubloom", OULG_HU_BLOOM_DEFAULT);
+    p[0].edge = prop_float("debug.oulg.sf.edgeblur", OULG_HU_EDGE_DEFAULT);
     p[1].core = prop_float("debug.oulg.sf.kgcore", OULG_KG_CORE_DEFAULT);
     p[1].taps = (int) prop_float("debug.oulg.sf.kgtaps", OULG_KG_TAPS_DEFAULT);
     p[1].ramp = prop_float("debug.oulg.sf.kgramp", OULG_KG_RAMP_DEFAULT);

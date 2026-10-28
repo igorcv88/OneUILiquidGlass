@@ -15,6 +15,8 @@
 //    (finite-difference Jacobian everywhere, the medial line and the inner rect included), never
 //    folding and never minifying the texture; the lighting coordinate is the v0.22 one; the body
 //    radius rises monotonically from ~0 at the outline to the core radius at the end of the band.
+//  - profile 0's v0.24 edge blur: the v0.7 radius curve at edge 0; otherwise edge at the outline, the
+//    core past the ramp, monotone and flat (C2) at both ends.
 // Build: cc -O2 -o fc field_check.c -lm
 #include <math.h>
 #include <stdio.h>
@@ -191,6 +193,63 @@ static void check23(void) {
     printf("\n");
 }
 
+// Profile 0's body radius over depth (OULG_FS_FIELD_FMT, ported): v0.7 at edge = 0, else one quintic
+// curve from edge at the outline to core at ramp bevels (v0.24).
+static double br0(double depth, double bevel, double core, double ramp, double edge) {
+    double v07 = core * smoothstepd(0.25 * bevel, ramp * bevel, depth);
+    return edge > 0 ? edge + (core - edge) * smootherd(0, ramp * bevel, depth) : v07;
+}
+
+// v0.24 edge blur: the radius starts at edge on the outline, is flat there and at the core (C2: value,
+// slope and curvature continuous), rises monotonically and is the v0.7 curve exactly at edge = 0.
+// Printed: the steepest rise in px of radius per px of depth, v0.7 vs v0.24, for the device's heads-up
+// settings (core 90, ramp 1) and the defaults, on a 108 px pill.
+static void checkEdge0(void) {
+    static const double cores[] = {24, 48, 64, 90, 128}, ramps[] = {0.5, 1, 1.5, 2.5, 4}, edges[] = {0, 2, 6, 8, 12, 16, 24, 48};
+    static const double radii[] = {42, 60, 108, 160};
+    const double h = 1e-3;
+    for (unsigned a = 0; a < sizeof cores / sizeof cores[0]; a++)
+    for (unsigned b = 0; b < sizeof ramps / sizeof ramps[0]; b++)
+    for (unsigned c = 0; c < sizeof edges / sizeof edges[0]; c++)
+    for (unsigned d = 0; d < sizeof radii / sizeof radii[0]; d++) {
+        double core = cores[a], ramp = ramps[b], edge = edges[c], bevel = clampd(radii[d] * 0.42, 16, 56), end = ramp * bevel;
+        if (edge == 0) {
+            for (double dep = 0; dep <= radii[d]; dep += 0.25)
+                CHECK(br0(dep, bevel, core, ramp, 0) == core * smoothstepd(0.25 * bevel, ramp * bevel, dep), "edge 0 is not v0.7");
+            continue;
+        }
+        CHECK(fabs(br0(0, bevel, core, ramp, edge) - edge) < 1e-12, "edge radius at the outline");
+        CHECK(fabs(br0(end, bevel, core, ramp, edge) - core) < 1e-9 && br0(end + 5, bevel, core, ramp, edge) == core, "core past the ramp");
+        double last = br0(0, bevel, core, ramp, edge);
+        for (double dep = 0.25; dep <= end + 4; dep += 0.25) {
+            double v = br0(dep, bevel, core, ramp, edge);
+            CHECK(core >= edge ? v >= last - 1e-12 : v <= last + 1e-12, "edge curve not monotone");
+            last = v;
+        }
+        // Slope and curvature by central differences: ~0 at the outline and at the end of the ramp.
+        for (int side = 0; side < 2; side++) {
+            double x = side ? end : 0, k0 = side ? x - h : x, k1 = side ? x : x + h;
+            double slope = (br0(k1, bevel, core, ramp, edge) - br0(k0, bevel, core, ramp, edge)) / h;
+            double curv = (br0(x + h, bevel, core, ramp, edge) - 2 * br0(x, bevel, core, ramp, edge) + br0(x - h, bevel, core, ramp, edge)) / (h * h);
+            CHECK(fabs(slope) < 1e-4 * fabs(core - edge) + 1e-9, "edge curve slope %.2e at %s", slope, side ? "the core" : "the outline");
+            if (side) CHECK(fabs(curv) < 1e-2 * fabs(core - edge) / end + 1e-6, "edge curve curvature %.2e at the core", curv);
+        }
+    }
+    double bevel = clampd(tag(108, 0.30, 0) * 0.42, 16, 56);
+    for (int set = 0; set < 2; set++) {
+        double core = set ? 48 : 90, ramp = set ? 1.5 : 1;
+        double s07 = 0, s24 = 0, zero = 0;
+        for (double dep = 0; dep < ramp * bevel; dep += 0.01) {
+            s07 = fmax(s07, (br0(dep + 0.01, bevel, core, ramp, 0) - br0(dep, bevel, core, ramp, 0)) / 0.01);
+            s24 = fmax(s24, (br0(dep + 0.01, bevel, core, ramp, 12) - br0(dep, bevel, core, ramp, 12)) / 0.01);
+            if (br0(dep, bevel, core, ramp, 0) < 0.5) zero = dep;
+        }
+        printf("field v0.24 heads-up core %.0f ramp %.1f, bevel %.1f px: v0.7 radius < 0.5 px over the outer %.1f px, steepest rise %.2f px/px; edge 12: %.2f px/px\n",
+               core, ramp, bevel, zero, s07, s24);
+    }
+    printf("field v0.24 edge blur: failures = %d\n", failures);
+}
+
 // SemBlurBridge.sfTag and the two decoders (OULG_DECODE; FillRRect: radius fraction, clip: fraction
 // of radius + 0.5). Both return kp = k + 2 x profile, 0 off the bands.
 static double tag(double r, double k, int pf) {
@@ -352,5 +411,6 @@ int main(void) {
     CHECK(maxMag[1][2] <= maxMag[0][1] * 1.01, "profile 1 at 0.40 magnifies %.3fx > profile 0 at 0.30 %.3fx", maxMag[1][2], maxMag[0][1]);
     printf("\nfield: failures = %d\n", failures);
     check23();
+    checkEdge0();
     return failures != 0;
 }

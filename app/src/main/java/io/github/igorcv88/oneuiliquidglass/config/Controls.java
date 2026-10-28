@@ -512,6 +512,9 @@ public final class Controls {
                 .help("Reduz pontos muito claros no miolo do pop-up; 0 mantém o disco simples."
                         + restart)
                 .show(BEHAV, Channel.NONE));
+        put(c("sf.edgeblur", "Desfoque no contorno").fmt(Format.PX).in(TECH, TEC).on(HU)
+                .help("Desfoque do pop-up já no contorno, numa curva única até o miolo, sem a faixa"
+                        + " nítida perto da borda; 0 usa a curva anterior." + restart));
         put(c("sf.taps", "Amostras do pop-up").fmt(Format.COUNT).in(TECH, TEC).on(HU)
                 .help("Amostras por pixel no desfoque interno. Mais custa mais GPU." + restart));
         put(c("sf.ramp", "Rampa do pop-up").fmt(Format.PLAIN).in(TECH, TEC).on(HU)
