@@ -418,9 +418,11 @@ public final class Tuning {
         panelDim = clamp(number("paneldim", 0.12f), 0f, 0.4f);
         panelBlurCap = Math.round(clamp(number("panelblurcap", 52f), -1f, 400f));
         panelNativeGray = number("panelnativegray", 0f) >= 1f;
+        int selectedPanelColor;
         try {
-            panelColor = io.github.igorcv88.oneuiliquidglass.config.Rgba.argb(prop("panelcolor", "00000000"));
-        } catch (IllegalArgumentException e) { panelColor = 0; }
+            selectedPanelColor = io.github.igorcv88.oneuiliquidglass.config.Rgba.argb(prop("panelcolor", "00000000"));
+        } catch (IllegalArgumentException e) { selectedPanelColor = 0; }
+        panelColor = selectedPanelColor;
         qsGlint = clamp(number("qs.glint", 0f), 0f, 1f);
         shadeScaleVeil = Math.round(Math.max(0f, Math.min(255f, number("shadescaleveil", 115f))));
         sfOptics = Math.round(clamp(number("sf.optics", 0f), 0f, 1000f));
