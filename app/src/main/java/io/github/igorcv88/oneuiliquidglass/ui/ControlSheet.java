@@ -25,6 +25,7 @@ final class ControlSheet extends Sheet {
     private TextView valueText;
     private Slider slider;
     private EditText field;
+    private ColorPicker colorPicker;
     private NotificationPreview now;
     private Scale scale;
 
@@ -176,19 +177,17 @@ final class ControlSheet extends Sheet {
                 return;
             }
             case COLOR: {
-                LinearLayout sw = Ui.row(activity);
-                for (String hex : new String[] {"ffffff", "f3f6ff", "e8f6f8", "f6efff", "fff5e8"}) {
-                    View v = new View(activity);
-                    v.setBackground(Ui.rounded(0xff000000 | Integer.parseInt(hex, 16), t.dpf(20)));
-                    v.setContentDescription("Cor " + hex);
-                    v.setOnClickListener(x -> { field.setText(hex); });
-                    LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(t.dp(40), t.dp(40));
-                    p.setMarginEnd(t.dp(10));
-                    sw.addView(v, p);
-                }
-                box.addView(sw);
-                field = field("Cor (hexadecimal)", working, InputType.TYPE_CLASS_TEXT);
+                colorPicker = new ColorPicker(activity, t);
+                colorPicker.setColor(working);
+                box.addView(colorPicker, Ui.match());
+                field = field("Hexadecimal · RRGGBB ou RRGGBBAA", working, InputType.TYPE_CLASS_TEXT);
                 box.addView(field);
+                colorPicker.listener(hex -> {
+                    working = hex;
+                    if (!hex.equals(field.getText().toString())) field.setText(hex);
+                    host.preview(c.key, hex, c.channel);
+                    refreshNow();
+                });
                 return;
             }
             default:
@@ -287,8 +286,9 @@ final class ControlSheet extends Sheet {
         working = raw;
         if (valueText != null) valueText.setText(ValueFormat.display(c, raw));
         if (slider != null && syncSlider) slider.set(scale.index(raw));
-        if (field != null && scale != null) {
-            String edit = ValueFormat.isAuto(c, raw) ? "-1" : ValueFormat.toEdit(c, raw);
+        if (colorPicker != null) colorPicker.setColor(raw);
+        if (field != null) {
+            String edit = scale == null ? raw : ValueFormat.isAuto(c, raw) ? "-1" : ValueFormat.toEdit(c, raw);
             if (!edit.equals(field.getText().toString())) field.setText(edit);
             field.setError(null);
         }

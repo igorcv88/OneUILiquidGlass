@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.Map;
 import io.github.igorcv88.oneuiliquidglass.glass.InkTransition;
+import io.github.igorcv88.oneuiliquidglass.diagnostics.Probe;
 
 /**
  * Smooth foreground colour changes for View-based text, icon tints and chevrons. One shared
@@ -38,6 +39,14 @@ final class InkAnimator {
     }
     private static final Map<Object, Run> runs = new IdentityHashMap<>();
     private static ValueAnimator clock;
+    private static int traceEvents;
+    private static void trace(String phase, Object key, Run run) {
+        if(!Probe.trace || traceEvents++ >= 160) return;
+        Probe.log("INK_ANIMATOR", "phase="+phase+" id="+Integer.toHexString(System.identityHashCode(key))
+                +" role="+(key==null?"none":key.getClass().getSimpleName())
+                +" from="+Integer.toHexString(run.from)+" to="+Integer.toHexString(run.to)
+                +" duration="+run.duration);
+    }
 
     /** Whether {@code key} is mid-transition (its colour differs from the decided one on purpose). */
     static boolean running(Object key) { return runs.containsKey(key); }
@@ -74,12 +83,14 @@ final class InkAnimator {
             if (done != null) done.run();
             return;
         }
-        runs.put(key, new Run(target, from, to, done, aborted, SystemClock.uptimeMillis(), duration));
+        Run run = new Run(target, from, to, done, aborted, SystemClock.uptimeMillis(), duration);
+        runs.put(key, run);
+        trace("start",key,run);
         start();
     }
 
     /** Stops {@code key}'s transition without showing its end colour. */
-    static void cancel(Object key) { runs.remove(key); }
+    static void cancel(Object key) { Run r=runs.remove(key);if(r!=null)trace("cancel",key,r); }
 
     private static void start() {
         if (clock != null && clock.isRunning()) return;
@@ -108,6 +119,7 @@ final class InkAnimator {
     private static void step(Object key, Run r, long now) {
         if (r.target.shown() != r.last) {
             runs.remove(key);
+            trace("superseded",key,r);
             if (r.aborted != null) r.aborted.run();
             return;
         }
@@ -116,6 +128,7 @@ final class InkAnimator {
         if (t >= 1f) {
             runs.remove(key);
             r.target.show(r.to);
+            trace("done",key,r);
             if (r.done != null) r.done.run();
             return;
         }

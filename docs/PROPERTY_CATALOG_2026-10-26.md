@@ -4,7 +4,7 @@
 
 **Atualização de integração (main após #57):** `lensregiondiff`/gate `region` foram removidos; `popuplock` e `orphandraw` foram adicionados. O inventário ativo agora tem 103 propriedades. O interruptor `sfrefract` pertence ao helper live e não pode ser persistido pela ponte do APK.
 
-**Abrangência:** 99 chaves em Java (`Tuning` e `QsStyle`, incluindo `sf.optics`), 37 no leitor da biblioteca C (incluindo a mesma `sf.optics`), **135 chaves distintas**. O módulo também tem um controle global `glass/enabled` nas SharedPreferences, fora de `debug.oulg.*`. As configurações independentes de perfil, as condições de ativação, os comandos de teste e as ações de recuperação também devem aparecer no APK.
+**Abrangência atual (29/10):** **142 chaves distintas** no catálogo gerador, incluindo as 6 novas configurações de fundo/cores dos controles; `SettingsRegistry` e a matriz são gerados e testados contra essa fonte. O módulo também tem um controle global `glass/enabled` nas SharedPreferences, fora de `debug.oulg.*`. As configurações independentes de perfil, as condições de ativação, os comandos de teste e as ações de recuperação também devem aparecer no APK.
 
 **Exceção para `qs.*`:** são chaves do snapshot do aplicativo, sem leitura de `setprop`.
 
@@ -98,6 +98,9 @@ O interruptor `sfrefract` **não comprova** que o binário nativo foi carregado:
 | `shadescaleveil` | 115 | inteiro 0–255 | Véu de fallback quando shade card é escalado |
 | `shadelocal` | 0 | booleano | Mede a faixa de cada card no lugar do fundo inteiro |
 | `paneldim` | 0.12 | 0–0.4 | Escurecimento do painel sobre app claro, no tema escuro |
+| `panelblurcap` | 52 | inteiro -1–400 px | Limite do raio de desfoque do fundo da central; -1 mantém o raio nativo da Samsung |
+| `panelnativegray` | 0 | booleano | Preserva o ajuste cinza nativo da Samsung no painel quando ligado; desligado por padrão |
+| `panelcolor` | 00000000 | RGBA hexadecimal | Tinta RGBA adicional sobre o fundo da janela da central, independente das notificações |
 | `headergap` | 4 | 0–8 dp | Espaço extra entre cabeçalho e título expandido; 0 nativo |
 
 Observar que as propriedades `lightglass` e `shadelightglass` se aplicam a superfícies distintas. Não unificar os sliders. Os nomes `kgrim` (Java) e `sf.kgrim` (compositor) são **parâmetros diferentes**.
@@ -185,6 +188,9 @@ Controles `qs.*` são lidos pelo snapshot `QsStyle` em callbacks de configuraç�
 | `qs.lightfill` | .10 | 0–0.18 | Tom escuro das cápsulas sobre apps claros (transparentes sobre fundos escuros/coloridos) |
 | `qs.darkcolor` | ffffff | RGB hexadecimal | Legado sem efeito visual; o interior das cápsulas é sempre transparente |
 | `qs.lightcolor` | 141823 | RGB hexadecimal | Cor do tom das cápsulas sobre apps claros |
+| `qs.glint` | 0 | 0–1 | Reflexo especular adicional no canto superior esquerdo das cápsulas; zero elimina brilho duplicado |
+| `qs.sliderlightcolor` | ffffff | RGBA hexadecimal | Preenchimento RGBA de brilho e volume sobre fundo claro |
+| `qs.sliderdarkcolor` | ffffff | RGBA hexadecimal | Preenchimento RGBA de brilho e volume sobre fundo escuro ou colorido |
 | `qs.tilelight` | 1 | booleano | Habilita contraste de discos e ícones sobre fundo claro sem alterar as cápsulas |
 | `qs.hideoffdiscs` | 1 | booleano | Ocultar fundo e aro dos discos desligados, sem ocultar ícones; aplica em cenas claras e coloridas apenas a tiles identificados |
 | `qs.tilelighton` | cdd7e5 | RGB hexadecimal | Disco ligado sobre fundo claro |

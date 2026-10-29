@@ -141,8 +141,9 @@ public class QsAdaptiveTest {
                         assertEquals(Math.min(g[2],g[3])/2,g[4],1e-4);
                         assertTrue(g[0]>=-1e-3&&g[1]>=-1e-3&&g[0]+g[2]<=w+1e-3&&g[1]+g[3]<=h+1e-3);
                         // Centred thickness: the same margin on both sides of the narrow axis.
-                        assertEquals(d,vertical?g[2]:g[3],1e-3);
-                        assertEquals((vertical?w:h)-d,2*(vertical?g[0]:g[1]),1e-3);
+                        float visibleThickness=Math.min(d,vertical?g[3]:g[2]);
+                        assertEquals(visibleThickness,vertical?g[2]:g[3],1e-3);
+                        assertEquals((vertical?w:h)-visibleThickness,2*(vertical?g[0]:g[1]),1e-3);
                     }
                     float lo=vertical?body[1]:body[0],hi=lo+(vertical?body[3]:body[2]);
                     // Exactly the native length: no minimum diameter.
@@ -174,7 +175,8 @@ public class QsAdaptiveTest {
                 if(p==0){assertArrayEquals(new float[5],body,0);assertArrayEquals(new float[5],cap,0);continue;}
                 assertEquals(300*p,length,1e-3);
                 assertTrue("monotonic",length>previous);previous=length;
-                assertEquals(88,vertical?body[2]:body[3],1e-3);
+                assertEquals(Math.min(88,length),vertical?body[2]:body[3],1e-3);
+                if(length<88)assertEquals(vertical?body[2]:body[3],length,1e-3);
                 assertEquals(Math.min(88,length)/2,body[4],1e-3);
                 assertTrue("cap never longer than the body",(vertical?cap[3]:cap[2])<=length+1e-3);
             }

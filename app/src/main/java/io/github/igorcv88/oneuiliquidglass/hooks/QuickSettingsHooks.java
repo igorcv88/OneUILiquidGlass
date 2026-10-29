@@ -392,7 +392,7 @@ public final class QuickSettingsHooks {
         }
         try {
             QsSliderHooks sliders = new QsSliderHooks(loader,this::enabled,()->style,()->pillShape!=null||style.outer>=1,
-                    this::capture,()->touching,()->edge.suppress(true));
+                    this::capture,()->touching,()->edge.suppress(true),backdrop::tone);
             sliders.onInteraction(edge::suppress);
             sliders.install(bar);
         }

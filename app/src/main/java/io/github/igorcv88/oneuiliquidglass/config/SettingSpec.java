@@ -105,7 +105,7 @@ public final class SettingSpec {
                 break;
             case RGB:
                 value = value.replaceFirst("^#", "");
-                if (value.matches("[0-9a-fA-F]{6}")) return value.toLowerCase(Locale.ROOT);
+                if (value.matches("[0-9a-fA-F]{6}([0-9a-fA-F]{2})?")) return value.toLowerCase(Locale.ROOT);
                 break;
             case ENUM:
                 if (Arrays.asList(choices.split(",")).contains(value)) return value;

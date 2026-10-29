@@ -216,6 +216,9 @@ public final class HeadsUpHooks {
         // the previous shadelightglass value and leave a stable, visible card unchanged until
         // its next unrelated pre-draw (DZIF PR84 trace, 28/10). Redraw after publication too.
         Tuning.onChanged(() -> {
+            // A saved panel knob also needs the last shade-window SemBlurInfo reasserted. Card
+            // invalidation alone cannot update Samsung's own radius/colour adjustment.
+            main.post(this::refreshPanelBlur);
             int visible = 0;
             for (State state : new ArrayList<>(states.values())) {
                 View v = state.background.get();
@@ -751,6 +754,9 @@ public final class HeadsUpHooks {
     private WeakReference<View> panelHost;
     private Object panelInfo;
     private int panelOwnColor, panelApplied;
+    private int panelOwnRadius, panelAppliedRadius;
+    private Object panelOwnAdjustment, panelAppliedAdjustment;
+    private String lastPanelPolicy;
     private boolean panelDim;
     /**
      * The shade window's blur darkened over a light app in the dark theme (debug.oulg.paneldim):
@@ -763,12 +769,45 @@ public final class HeadsUpHooks {
         if (f == null) return;
         try {
             int now = f.getInt(info);
-            if (info != panelInfo || now != panelApplied) panelOwnColor = now;
+            Field radius = Reflect.field(info.getClass(), "mBlurRadius");
+            Field gray = Reflect.field(info.getClass(), "mBGColorAdjustment");
+            int nativeRadius = radius == null ? -1 : radius.getInt(info);
+            Object nativeAdjustment = gray == null ? null : gray.get(info);
+            boolean fresh = info != panelInfo;
+            if (fresh || now != panelApplied) panelOwnColor = now;
+            if (radius != null && (fresh || nativeRadius != panelAppliedRadius)) panelOwnRadius = nativeRadius;
+            if (gray != null && (fresh || nativeAdjustment != panelAppliedAdjustment)) panelOwnAdjustment = nativeAdjustment;
             panelHost = new WeakReference<>(v); panelInfo = info;
-            float dim = Tuning.get().panelDim;
-            panelApplied = panelDim && dim > 0f ? ShadeTone.overNative(Math.round(255f * dim) << 24, panelOwnColor) : panelOwnColor;
+            Tuning tuning = Tuning.get();
+            boolean shade = barState == Eligibility.BAR_SHADE || Boolean.TRUE.equals(shadeExpanded);
+            float dim = tuning.panelDim;
+            int overlay = shade ? tuning.panelColor : 0;
+            int color = overlay == 0 ? panelOwnColor : ShadeTone.overNative(overlay, panelOwnColor);
+            panelApplied = panelDim && dim > 0f ? ShadeTone.overNative(Math.round(255f * dim) << 24, color) : color;
+            panelAppliedRadius = radius == null ? nativeRadius : shade
+                    ? io.github.igorcv88.oneuiliquidglass.glass.PanelBlurPolicy.radius(panelOwnRadius, tuning.panelBlurCap)
+                    : panelOwnRadius;
+            panelAppliedAdjustment = gray == null || !shade || tuning.panelNativeGray ? panelOwnAdjustment : null;
             if (now != panelApplied) f.setInt(info, panelApplied);
+            if (radius != null && nativeRadius != panelAppliedRadius) radius.setInt(info, panelAppliedRadius);
+            if (gray != null && nativeAdjustment != panelAppliedAdjustment) gray.set(info, panelAppliedAdjustment);
+            if (Probe.trace) {
+                String diag = "shade=" + shade + " nativeRadius=" + panelOwnRadius + " appliedRadius=" + panelAppliedRadius
+                        + " nativeAdjustment=" + (panelOwnAdjustment == null ? "none" : panelOwnAdjustment.toString())
+                        + " appliedAdjustment=" + (panelAppliedAdjustment == null ? "none" : "native")
+                        + " nativeColor=" + Integer.toHexString(panelOwnColor) + " appliedColor=" + Integer.toHexString(panelApplied)
+                        + " overlay=" + Integer.toHexString(overlay) + " dim=" + dim;
+                if (!diag.equals(lastPanelPolicy)) { lastPanelPolicy=diag; Probe.log("PANEL_BLUR_POLICY",diag); }
+            }
         } catch (IllegalAccessException | RuntimeException e) { Probe.error("PANEL_DIM_FAILED", e); }
+    }
+
+    /** Push a saved shade-window parameter live, without reintroducing the blur on a closing panel. */
+    private void refreshPanelBlur() {
+        View host=panelHost==null?null:panelHost.get();
+        if(host==null||panelInfo==null||!host.isAttachedToWindow()||!Boolean.TRUE.equals(shadeExpanded))return;
+        try { View.class.getMethod("semSetBlurInfo",Class.forName("android.view.SemBlurInfo")).invoke(host,panelInfo); }
+        catch(ReflectiveOperationException|RuntimeException e){Probe.error("PANEL_BLUR_REFRESH_FAILED",e);}
     }
     /** Turns the panel dim on for this opening's scene, and sets the panel's blur again so it shows now. */
     private void panelDim(boolean on) {

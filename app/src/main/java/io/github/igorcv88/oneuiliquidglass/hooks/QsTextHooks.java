@@ -35,8 +35,15 @@ final class QsTextHooks {
     private final java.util.Map<Object,String> tilePainterNodes=new java.util.WeakHashMap<>();
     private final java.util.Map<Object,Object> tilePainterElementModels=new java.util.WeakHashMap<>();
     private final java.util.Map<Object,Object> tilePainterNodeModels=new java.util.WeakHashMap<>();
+    private final java.util.Map<Object,String> sliderPainterElements=new java.util.WeakHashMap<>();
+    private final java.util.Map<Object,String> sliderPainterNodes=new java.util.WeakHashMap<>();
+    private final java.util.Set<Object> sliderPaintersDrawn=java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>());
+    private final java.util.Set<Object> sliderCanvasDrawn=java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>());
+    private final ThreadLocal<Object> sliderPainterDrawing=new ThreadLocal<>();
     private final java.util.Set<Object> tilePaintersDrawn=java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>());
-    private final java.util.Set<Object> tileInkLogged=java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>());
+    private final java.util.Map<Object,String> tileInkLogged=new java.util.WeakHashMap<>();
+    /** One binding diagnosis per painter/state/revision; never record tile names or app content. */
+    private final java.util.Map<Object,String> tileRouteLogged=new java.util.WeakHashMap<>();
     private final ThreadLocal<Float> iconDrawing=new ThreadLocal<>();
     private final ThreadLocal<TileInk> tileIconDrawing=new ThreadLocal<>();
     private static final class TileInk {
@@ -180,9 +187,12 @@ final class QsTextHooks {
                     QsContentHooks.Frame f=content.get();
                     if(f!=null&&f.header)headerElements.put(p.thisObject,true);
                     if(f!=null&&!f.header&&!f.media&&f.owner.startsWith("tiles.")) {
-                        tilePainterElements.put(p.thisObject,f.owner);
-                        if (tileProbe != null && tileProbe.currentModel() != null)
-                            tilePainterElementModels.put(p.thisObject,tileProbe.currentModel());
+                        if(f.owner.contains("BarKt")) sliderPainterElements.put(p.thisObject,f.owner);
+                        else {
+                            tilePainterElements.put(p.thisObject,f.owner);
+                            if (tileProbe != null && tileProbe.currentModel() != null)
+                                tilePainterElementModels.put(p.thisObject,tileProbe.currentModel());
+                        }
                     }
                 }
             });
@@ -193,6 +203,11 @@ final class QsTextHooks {
                     // Same rule as text nodes: an update from an unknown element keeps the node.
                     if(target!=null&&(header!=null||headerNodes.get(target)==null))headerNodes.put(target,header);
                     String tileOwner=tilePainterElements.get(p.thisObject);
+                    String sliderOwner=sliderPainterElements.get(p.thisObject);
+                    if(target!=null) {
+                        if(sliderOwner!=null)sliderPainterNodes.put(target,sliderOwner);
+                        else sliderPainterNodes.remove(target);
+                    }
                     if(target!=null&&(tileOwner!=null||!tilePainterNodes.containsKey(target))) {
                         if(tileOwner==null){tilePainterNodes.remove(target);tilePainterNodeModels.remove(target);}
                         else {
@@ -209,6 +224,13 @@ final class QsTextHooks {
                 @Override protected void beforeHookedMethod(MethodHookParam p){
                     p.setObjectExtra("qsHeaderIconPrevious",iconDrawing.get());
                     p.setObjectExtra("qsTileIconPrevious",tileIconDrawing.get());
+                    p.setObjectExtra("qsSliderPainterPrevious",sliderPainterDrawing.get());
+                    if(sliderPainterNodes.containsKey(p.thisObject)) {
+                        sliderPainterDrawing.set(p.thisObject);
+                        if(Probe.trace&&sliderPaintersDrawn.add(p.thisObject))
+                            Probe.log("QS_SLIDER_ICON_ROUTE", "phase=painter id="+Integer.toHexString(System.identityHashCode(p.thisObject))
+                                    +" owner="+sliderPainterNodes.get(p.thisObject)+" bound=true nativeInk=awaiting-canvas");
+                    } else sliderPainterDrawing.remove();
                     if(Probe.trace&&tilePainterNodes.containsKey(p.thisObject)&&tilePaintersDrawn.add(p.thisObject))
                         Probe.log("QS_TILE_ICON_NODE", "owner=" + tilePainterNodes.get(p.thisObject)
                                 + " node=" + Integer.toHexString(System.identityHashCode(p.thisObject))
@@ -222,9 +244,20 @@ final class QsTextHooks {
                     Object model=tilePainterNodeModels.get(p.thisObject);
                     QuickSettingsGlass.Kind state=tileProbe==null?null:tileProbe.disc(model);
                     QsScene.Tone sceneTone=scene.get();
-                    if(ready && enabled.getAsBoolean() && model!=null
+                    boolean on=enabled.getAsBoolean();
+                    boolean allowed=ready && on && model!=null
                             && (state==QuickSettingsGlass.Kind.ACTIVE || state==QuickSettingsGlass.Kind.IDLE)
-                            && sceneTone!=QsScene.Tone.UNKNOWN)
+                            && sceneTone!=QsScene.Tone.UNKNOWN;
+                    if(Probe.trace && tilePainterNodes.containsKey(p.thisObject)) {
+                        String signature=ConfigClient.revision()+":"+state+":"+sceneTone+":"+allowed;
+                        if(!signature.equals(tileRouteLogged.put(p.thisObject,signature)))
+                            Probe.log("QS_TILE_ICON_ROUTE", "phase=painter node="+Integer.toHexString(System.identityHashCode(p.thisObject))
+                                    +" owner="+tilePainterNodes.get(p.thisObject)+" model="+(model!=null)
+                                    +" state="+state+" tone="+sceneTone+" enabled="+on+" ready="+ready
+                                    +" eligible="+allowed+" revision="+ConfigClient.revision()
+                                    +" reason="+(!ready?"hooks-unready":!on?"glass-off":model==null?"unbound-model":state==null?"unverified-state":sceneTone==QsScene.Tone.UNKNOWN?"tone-unknown":allowed?"awaiting-canvas":"not-a-disc"));
+                    }
+                    if(allowed)
                         tileIconDrawing.set(new TileInk(style.get(),sceneTone,state,p.thisObject));
                     else tileIconDrawing.remove();
                 }
@@ -233,6 +266,8 @@ final class QsTextHooks {
                     if(previous==null)iconDrawing.remove();else iconDrawing.set(previous);
                     TileInk tilePrevious=(TileInk)p.getObjectExtra("qsTileIconPrevious");
                     if(tilePrevious==null)tileIconDrawing.remove();else tileIconDrawing.set(tilePrevious);
+                    Object previousSlider=p.getObjectExtra("qsSliderPainterPrevious");
+                    if(previousSlider==null)sliderPainterDrawing.remove();else sliderPainterDrawing.set(previousSlider);
                 }
             });
             Class<?> factory=Class.forName("androidx.compose.ui.draw.PainterModifierKt",false,loader);
@@ -265,12 +300,18 @@ final class QsTextHooks {
     /** Apply tile ink only inside a painter bound to an actual QuickTile disc. */
     private void tilePaint(XC_MethodHook.MethodHookParam p, Paint paint) {
         TileInk tile = tileIconDrawing.get();
-        if (tile == null || paint == null || paint.getShader() != null || iconDrawing.get() != null) return;
+        if (tile == null) return;
+        if (paint == null || paint.getShader() != null || iconDrawing.get() != null) {
+            if(Probe.trace && !inkSignature(tile).equals(tileInkLogged.put(tile.node,inkSignature(tile))))
+                Probe.log("QS_TILE_ICON_ROUTE", "phase=canvas node="+Integer.toHexString(System.identityHashCode(tile.node))
+                        +" changed=false reason="+(paint==null?"paint-null":paint.getShader()!=null?"shader-paint":"header-override"));
+            return;
+        }
         ColorFilter originalFilter = paint.getColorFilter();
         Integer nativeFilter = Foreground.filterColor(originalFilter);
         int nativeColor = nativeFilter != null ? nativeFilter : paint.getColor();
         int mapped = tile.palette.tileInk(tile.state,tile.tone,nativeColor);
-        if (Probe.trace && tileInkLogged.add(tile.node))
+        if (Probe.trace && !inkSignature(tile).equals(tileInkLogged.put(tile.node,inkSignature(tile))))
             Probe.log("QS_TILE_ICON_INK", "node=" + Integer.toHexString(System.identityHashCode(tile.node))
                     + " state=" + tile.state + " scene=" + tile.tone
                     + " native=" + Integer.toHexString(nativeColor)
@@ -290,6 +331,9 @@ final class QsTextHooks {
             p.setObjectExtra("qsTileColor",paint.getColor());
             paint.setColor(mapped);
         }
+    }
+    private static String inkSignature(TileInk tile) {
+        return tile.state+":"+tile.tone+":"+ConfigClient.revision();
     }
     /** Decided tone of a registered node (true: dark ink); null for native ink. */
     Boolean toneFor(Object node){
@@ -432,6 +476,15 @@ final class QsTextHooks {
                         if(original!=null)p.setObjectExtra("qsTextColor",original);
                     }else{
                         Float tone=iconDrawing.get();
+                        Object sliderNode=sliderPainterDrawing.get();
+                        if(Probe.trace && sliderNode!=null && sliderCanvasDrawn.add(sliderNode)) {
+                            Paint paint=(Paint)p.args[index];
+                            Probe.log("QS_SLIDER_ICON_ROUTE", "phase=canvas node="+Integer.toHexString(System.identityHashCode(sliderNode))
+                                    +" primitive="+m.getName()+" canvas="+owner
+                                    +" color="+(paint==null?"null":Integer.toHexString(paint.getColor()))
+                                    +" filter="+(paint!=null&&paint.getColorFilter()!=null)
+                                    +" shader="+(paint!=null&&paint.getShader()!=null)+" changed=false reason=read-only");
+                        }
                         if(tone!=null) {
                             ColorFilter original=applyIconPaint((Paint)p.args[index],tone,true);
                             if(original!=null)p.setObjectExtra("qsHeaderFilter",original);
