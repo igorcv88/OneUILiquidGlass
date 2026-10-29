@@ -4,7 +4,7 @@
 
 **Atualização de integração (main após #57):** `lensregiondiff`/gate `region` foram removidos; `popuplock` e `orphandraw` foram adicionados. O inventário ativo agora tem 103 propriedades. O interruptor `sfrefract` pertence ao helper live e não pode ser persistido pela ponte do APK.
 
-**Abrangência:** 99 chaves em Java (`Tuning` e `QsStyle`, incluindo `sf.optics`), 37 no leitor da biblioteca C (incluindo a mesma `sf.optics`), **135 chaves distintas**. O módulo também tem um controle global `glass/enabled` nas SharedPreferences, fora de `debug.oulg.*`. As configurações independentes de perfil, as condições de ativação, os comandos de teste e as ações de recuperação também devem aparecer no APK.
+**Abrangência atual (29/10):** **142 chaves distintas** no catálogo gerador, incluindo as 6 novas configurações de fundo/cores dos controles; `SettingsRegistry` e a matriz são gerados e testados contra essa fonte. O módulo também tem um controle global `glass/enabled` nas SharedPreferences, fora de `debug.oulg.*`. As configurações independentes de perfil, as condições de ativação, os comandos de teste e as ações de recuperação também devem aparecer no APK.
 
 **Exceção para `qs.*`:** são chaves do snapshot do aplicativo, sem leitura de `setprop`.
 
