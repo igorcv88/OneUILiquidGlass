@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
 import java.util.function.BooleanSupplier;
+import java.util.function.DoubleSupplier;
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
 import io.github.igorcv88.oneuiliquidglass.diagnostics.Probe;
@@ -397,7 +398,7 @@ final class QuickSettingsEdgeLight {
         // would create a second, wide halo. Its AGSL hairline follows the artwork exactly.
         if (!usesCompositor(e.spec.token.role)) { e.release(); return; }
         if (!active() || suppressed || fade() <= 0f) { e.release(); return; }
-        alpha = Math.round(255f * edgeFade);
+        alpha = edgeAlpha(edgeFade);
         if (alpha == 0) { e.release(); return; }
         View v = host.get();
         try {
@@ -475,7 +476,8 @@ final class QuickSettingsEdgeLight {
             if (!logged) {
                 logged = true;
                 Probe.log("QS_EDGE_REGION", "size=" + ow + "x" + oh + " border=" + out + " radius=" + radius + " tag=" + tag
-                        + " alpha=" + alpha + " expansion=" + lastExpansion);
+                        + " alpha=" + alpha + " lightScene=" + lightScene.getAsBoolean()
+                        + " sceneGain=" + sceneGain() + " expansion=" + lastExpansion);
             }
         } catch (ReflectiveOperationException | RuntimeException | LinkageError ex) {
             fail(ex);
@@ -520,7 +522,7 @@ final class QuickSettingsEdgeLight {
         boolean on = enabled.getAsBoolean() && ready;
         if (!on && !snapshot) { closeRegions("disabled"); return; }
         float f = fade();
-        boolean now = on && f > 0f && Math.round(255f * f) > 0;
+        boolean now = on && edgeAlpha(f) > 0;
         if (!now) { closeRegions("hidden-or-zero-fade"); observe(false); return; }
         if (!visible) {
             visible = true;
@@ -532,7 +534,7 @@ final class QuickSettingsEdgeLight {
             for (Spec spec : elements) coverage.adopt(spec.token);
             redrawNodes();
         }
-        alpha = Math.round(255f * f);
+        alpha = edgeAlpha(f);
         if (!sf || suppressed) releaseAll();
         else for (Edge e : nodes.values()) if (e.bridge != null) e.bridge.drawable.setAlpha(alpha);
         observe(false);
@@ -598,8 +600,23 @@ final class QuickSettingsEdgeLight {
     private QsCapsuleOptics optics;
     static boolean usesCompositor(String role) { return role == null || !role.startsWith("media"); }
     private BooleanSupplier lightScene = () -> false;
+    private DoubleSupplier lightGain = () -> 1d;
     /** The capsules' glass optics (APK-side, with or without the compositor). */
-    void optics(QsCapsuleOptics o, BooleanSupplier light) { optics = o; lightScene = light == null ? () -> false : light; }
+    void optics(QsCapsuleOptics o, BooleanSupplier light, DoubleSupplier gain) {
+        optics = o;
+        lightScene = light == null ? () -> false : light;
+        lightGain = gain == null ? () -> 1d : gain;
+    }
+
+    private float sceneGain() {
+        if (!lightScene.getAsBoolean()) return 1f;
+        double gain = lightGain.getAsDouble();
+        return Double.isFinite(gain) ? (float) Math.max(0d, Math.min(2d, gain)) : 1f;
+    }
+
+    private int edgeAlpha(float visibility) {
+        return Math.round(255f * Math.max(0f, Math.min(1f, visibility * sceneGain())));
+    }
 
     /** Told whether a box's optics drew (token, drawn, panel session): the per-capsule outline follows it. */
     interface OpticsResult { void drawn(QsOpticsCoverage.Token token, boolean drawn, long session); }
@@ -652,7 +669,7 @@ final class QuickSettingsEdgeLight {
             }
             boolean media = !usesCompositor(e.spec.token.role);
             boolean success = o.draw(node, (android.graphics.Canvas) raw, x, y, w, h, radius,
-                    density, lightScene.getAsBoolean(), rimOnlyOverlay, media);
+                    density, lightScene.getAsBoolean(), rimOnlyOverlay, media, sceneGain());
             boolean first = !e.spec.token.drawn;
             result(e.spec.token, success, success ? "agsl" : "shader-or-size");
             if (success && first && Probe.trace) Probe.log("QS_OPTICS_DRAWN", "session=" + coverage.session()

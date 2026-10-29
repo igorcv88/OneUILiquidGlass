@@ -89,7 +89,26 @@ public final class QuickSettingsGlass {
     }
 
     public static int fill(Kind kind, int nativeFill, QsScene.Tone scene, QsStyle s) {
-        return fill(kind, nativeFill, scene, s.lightColor, s.lightFill);
+        int tone = fill(kind, nativeFill, scene, s.lightColor, s.lightFill);
+        if (kind != Kind.CONTAINER || scene != QsScene.Tone.LIGHT_SCENE || s.lightGlassOpacity <= 0f)
+            return tone;
+        // Two independent films: the optical opacity is a white/colour wash, whereas the
+        // old qs.lightfill is a dark contrast tint. Composite them in the same box instead
+        // of creating a second surface whose radius could drift from the capsule.
+        return over(withAlpha(s.lightGlassColor, alpha(s.lightGlassColor) * s.lightGlassOpacity), tone);
+    }
+
+    /** Non-premultiplied ARGB source-over; the bottom is the existing contrast tint. */
+    public static int over(int top, int bottom) {
+        float a = alpha(top), b = alpha(bottom), out = a + b * (1f - a);
+        if (out <= 0f) return CLEAR;
+        int rgb = 0;
+        for (int shift : new int[]{16, 8, 0}) {
+            int t = (top >>> shift) & 255, s = (bottom >>> shift) & 255;
+            int c = Math.round((t * a + s * b * (1f - a)) / out);
+            rgb |= Math.min(255, Math.max(0, c)) << shift;
+        }
+        return withAlpha(rgb, out);
     }
 
     public static int fill(Kind kind, int nativeFill) { return fill(kind, nativeFill, QsScene.Tone.UNKNOWN, LIGHT_TINT, LIGHT_FILL); }
@@ -208,10 +227,11 @@ public final class QuickSettingsGlass {
         if(lo<0){hi-=lo;lo=0;}
         if(hi>len){lo-=hi-len;hi=len;}
         lo=Math.max(0,lo);
-        // Below one diameter the previous elliptical round rect was a wide, flattened oval.
-        // Shrink both axes together, centred, so the end remains circular all the way to zero.
-        // Zero is still empty; there is no fixed disc left when Samsung reports zero progress.
-        float cross = Math.min(narrow,hi-lo);
+        // Vertical controls have a fixed transverse thickness even when the fill is shorter
+        // than one diameter. Shrinking it made the white shape detach from both glass sides.
+        // The low-fill renderer crops/morphs the UPPER arc; the bottom remains anchored.
+        // Horizontal controls retain their existing symmetric cap behaviour.
+        float cross = vertical ? narrow : Math.min(narrow,hi-lo);
         if(vertical){out[0]=(w-cross)/2f;out[1]=lo;out[2]=cross;out[3]=hi-lo;}
         else{out[0]=lo;out[1]=(h-cross)/2f;out[2]=hi-lo;out[3]=cross;}
         out[4]=Math.min(out[2],out[3])/2f;

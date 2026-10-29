@@ -1,5 +1,68 @@
 # Pendências OneUILiquidGlass, a partir do main pós-PR #83
 
+## Ampliação do PR #92: revisão estética do APK pré-merge (29/10, 12:26–12:32)
+
+- [x] **Sliders verticais, código:** abaixo de um diâmetro, a largura do progresso
+  permanece fixa e centralizada. O desenho especial usa ombro superior progressivamente
+  achatado e curva inferior ancorada à borda de baixo; não deixa um disco independente
+  em 0 %. Preserva a geometria horizontal e o gesto nativo. **Pendente:** validação
+  tátil em 0, 1, 5, 10, 50 e 100 % nos sliders de brilho e volume no DZIF.
+- [x] **Cápsulas QS claras com opacidade separada, código:**
+  `qs.lightglassopacity` (0–1) e `qs.lightglasscolor` (RGBA) compõem um filme claro
+  sobre o tom já usado em `qs.lightfill/qs.lightcolor`, sem criar uma segunda cápsula.
+  Opacidade padrão `0` mantém a estética aprovada; o filme pode clarear a superfície.
+  Cor e opacidade continuam independentes dos discos e dos fundos coloridos.
+- [x] **Luz da lente em fundo claro, código:** `qs.lightoptics` (0–2, padrão 1)
+  atenua o ganho de iluminação AGSL e a região de perfil 3 no compositor apenas
+  quando a cena é clara. Não modifica o ganho global `sf.qslight`, a linha basal
+  `qs.lightrim` nem as cenas escuras; a atenuação da região também reduz sua refração.
+- [x] **Cadência e cancelamento do pop-up, código:** amostragem estacionária de
+  1000→250 ms, confirmação de 200→100 ms e intervalo entre mudanças de 800→220 ms.
+  Uma animação cancelada não finaliza mais a tinta obsoleta em `onAnimationEnd`.
+  **Pendente:** validar latência nos dois sentidos, rampa real de 180 ms e custo de
+  amostragem na SystemUI, em vez de concluir que a transição está perfeita.
+- [ ] **Paleta configurada pelo usuário:** perfil `OneUILiquidGlass-ajustes (6).json`
+  contém `desired.qs.tilelighton=000000` e `desired.qs.tilelightonink=ffffff`.
+  O disco preto é coerente com essa preferência salva quando a cor é aplicada;
+  continuam pendentes a intermitência da aplicação e os ícones que não recebem
+  a tinta correta. Não alterar as preferências do usuário silenciosamente.
+- [ ] **Visual:** comparar cápsulas QS claras com shade clara, sem mudar os valores
+  aprovados de notificações. Testar ganho óptico em 1/0.5/0, opacidade em 0/0.2/0.5,
+  contrastes dos ícones e comportamento do Theme Park ON/OFF. Confirmar compilação
+  Android e review comments antes de merge.
+
+## Diagnóstico complementar pós-PR #91 (29/10, PR seguinte)
+
+- [x] **Rastreio de camadas da shade implementado em código:** `SHADE_LAYER_UPDATE`
+  registra o papel (normal/dimmed/other) e drawable de cada fundo após atualização;
+  `SHADE_LAYER_DRAW` registra qual `NotificationBackgroundView` realmente entrou no
+  `onDraw`, a ordem, alpha, visibilidade, estado do vidro e se o frame foi renderizado
+  pelo vidro ou pela Samsung. Amostra inicial e mudanças são capturadas com limite
+  temporal; somente `trace=1`. Dois testes unitários do classificador e limitador passam.
+- [x] **Origem da paleta dos discos instrumentada:** `QS_PALETTE_EFFECTIVE` informa
+  revisão do provider, revisão do estilo, override bruto de `qs.tilelighton`, fonte
+  (default/provider) e RGBA efetivo das tintas de discos, ícones e sliders. Isso permite
+  confrontar `QS_TILE_COLOR applied=ff000000` com a configuração realmente recebida.
+- [ ] **Shade Theme Park OFF e notificação ao vivo:** no APK pós-PR #90, o usuário
+  reproduziu cartões que piscam, perdem o vidro ou ficam roxos quando chegam/atualizam
+  notificações, tanto na shade padrão como com notificação ao vivo. O padrão visual
+  sugere um mecanismo comum, **ainda não comprovado**. Capturar com `trace=1` e correlacionar
+  `SHADE_LAYER_UPDATE`/`SHADE_LAYER_DRAW` com `LIFECYCLE`, `GLASS_APPLIED`,
+  `SHADE_MATERIAL_DECISION` e `BACKGROUND_UPDATE`, comparando com Theme Park ON.
+- [ ] **Discos QS ativos pretos intermitentes:** foram vistos Wi-Fi/Bluetooth pretos
+  após abrir o QS, recuperando a tinta durante o fechamento parcial. O diagnóstico
+  anterior tinha `QS_TILE_COLOR ... applied=ff000000` para cena clara, sem origem
+  do override efetivo. Comparar agora `QS_PALETTE_EFFECTIVE` com `QS_TILE_COLOR`,
+  `QS_TONE_ENTRY` e `TONE_COMMIT` em abertura direta e shade→QS. Não trocar paleta
+  aprovada nem forçar recoloração de modelos não vinculados antes dessa correlação.
+- [ ] **Validação real:** compilar APK, confirmar a cobertura dos novos eventos na
+  SystemUI do S25 Ultra DZIF; repetir Theme Park OFF/ON e notificação ao vivo,
+  depois reportar se a causa é camada nativa sobreposta, perda do GlassDrawable,
+  configuração de paleta ou outro caminho de desenho.
+
+O protocolo de reprodução e os comandos para coletar o diagnóstico serão entregues
+diretamente na conversa; este arquivo acompanha somente o estado das pendências.
+
 ## Depois do PR #89: instrumentação e ajustes preparados em 29/10
 
 Estado de cada linha: **código/teste local** não equivale à validação visual no S25 Ultra DZIF. O PR permanece em revisão até a coleta física.

@@ -10,7 +10,7 @@ for line in text.splitlines():
  if key in rows: continue
  if key=='sf.optics': default='0'; domain='readonly'; desc='Indicador de versão; não comprova reescrita ou execução do shader.'
  rows[key]=(default,domain,desc or domain)
-assert len(rows)==142,len(rows)
+assert len(rows)==145,len(rows)
 # Literal bounds follow Tuning; native limits are deliberately conservative UI limits, not C clamps.
 bools=set('livelens shadeblur sfrefract liveblur kgwinblur pillglass textswap headertone icontone popuptone popuplock orphandraw shadelocal panelnativegray perf trace sf.debug sf.norewrite qs.tilelight qs.tiledark qs.hideoffdiscs'.split())
 ints=set('qs.edgeblur rimhz hz hzkg tint lensmaxage lenssettle lenstransition liveradius liveshaderadius semradius semradiuslens semalpha kgblurpath shadeblurpath kgblurradius pillblur kgoptics huoptics livedarkalpha livedarkfill kgdarkalpha kgdarkfill shadescaleveil panelblurcap sf.taps sf.kgtaps'.split())
@@ -22,12 +22,15 @@ titles['sf.qslight']='Luz pela borda da Central de controle'
 titles['qs.hideoffdiscs']='Discos desligados sem fundo'
 titles.update({'panelblurcap':'Limite de desfoque do fundo','panelnativegray':'Véu cinza da Samsung','panelcolor':'Cor do fundo da central',
                'qs.glint':'Reflexo extra no topo esquerdo','qs.sliderlightcolor':'Preenchimento de slider claro',
-               'qs.sliderdarkcolor':'Preenchimento de slider colorido'})
+               'qs.sliderdarkcolor':'Preenchimento de slider colorido',
+               'qs.lightglassopacity':'Opacidade das cápsulas sobre fundo claro',
+               'qs.lightglasscolor':'Cor do vidro das cápsulas claras',
+               'qs.lightoptics':'Iluminação da lente sobre fundo claro'})
 q=lambda x:json.dumps(str(x),ensure_ascii=False)
 lines=[]
 for key,(default,domain,desc) in rows.items():
  sf=key.startswith('sf.') and key!='sf.optics'
- typ='READONLY' if key=='sf.optics' else 'BOOLEAN' if key in bools else 'ENUM' if key in enums else 'RGB' if key in ('lighttone','qs.darkcolor','qs.lightcolor','qs.tilelighton','qs.tilelightoff','qs.tilelightonink','qs.tilelightoffink','qs.tiledarkon','qs.tiledarkoff','qs.tiledarkonink','qs.tiledarkoffink','panelcolor','qs.sliderlightcolor','qs.sliderdarkcolor') else 'INT' if key in ints else 'FLOAT'
+ typ='READONLY' if key=='sf.optics' else 'BOOLEAN' if key in bools else 'ENUM' if key in enums else 'RGB' if key in ('lighttone','qs.darkcolor','qs.lightcolor','qs.lightglasscolor','qs.tilelighton','qs.tilelightoff','qs.tilelightonink','qs.tilelightoffink','qs.tiledarkon','qs.tiledarkoff','qs.tiledarkonink','qs.tiledarkoffink','panelcolor','qs.sliderlightcolor','qs.sliderdarkcolor') else 'INT' if key in ints else 'FLOAT'
  default=default.replace('`','').split(' ')[0]
  lo,hi=0,1
  if typ in ('FLOAT','INT'):

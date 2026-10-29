@@ -396,12 +396,12 @@ public final class SurfacesPage implements Page {
                             "qs.tiledarkonink", "qs.tiledarkoffink", "qs.tiledarkoffalpha"}},
             {"Sliders", "Cápsula de vidro e preenchimento branco", Icon.LAYERS,
                     new String[] {"qs.outer", "qs.fill"}},
-            {"Vidro", "Tom das cápsulas sobre apps claros", Icon.PALETTE,
-                    new String[] {"qs.lightfill", "qs.lightcolor"}},
+            {"Vidro", "Opacidade e tom das cápsulas sobre apps claros", Icon.PALETTE,
+                    new String[] {"qs.lightglassopacity", "qs.lightglasscolor", "qs.lightfill", "qs.lightcolor"}},
             {"Contorno", "Linha de luz em volta das cápsulas", Icon.CONTRAST,
                     new String[] {"qs.darkrim", "qs.lightrim"}},
             {"Luz e refração", "Lente dinâmica", Icon.LENS,
-                    new String[] {"sf.qslight", "sf.qslens", "sf.qsbody", "sf.qsdepth", "qs.edgeblur"}},
+                    new String[] {"qs.lightoptics", "sf.qslight", "sf.qslens", "sf.qsbody", "sf.qsdepth", "qs.edgeblur"}},
     };
 
     /**

@@ -4,7 +4,7 @@
 
 **Atualização de integração (main após #57):** `lensregiondiff`/gate `region` foram removidos; `popuplock` e `orphandraw` foram adicionados. O inventário ativo agora tem 103 propriedades. O interruptor `sfrefract` pertence ao helper live e não pode ser persistido pela ponte do APK.
 
-**Abrangência atual (29/10):** **142 chaves distintas** no catálogo gerador, incluindo as 6 novas configurações de fundo/cores dos controles; `SettingsRegistry` e a matriz são gerados e testados contra essa fonte. O módulo também tem um controle global `glass/enabled` nas SharedPreferences, fora de `debug.oulg.*`. As configurações independentes de perfil, as condições de ativação, os comandos de teste e as ações de recuperação também devem aparecer no APK.
+**Abrangência atual (29/10):** **145 chaves distintas** no catálogo gerador, incluindo controles separados de opacidade e iluminação das cápsulas QS; `SettingsRegistry` e a matriz são gerados e testados contra essa fonte. O módulo também tem um controle global `glass/enabled` nas SharedPreferences, fora de `debug.oulg.*`. As configurações independentes de perfil, as condições de ativação, os comandos de teste e as ações de recuperação também devem aparecer no APK.
 
 **Exceção para `qs.*`:** são chaves do snapshot do aplicativo, sem leitura de `setprop`.
 
@@ -180,7 +180,7 @@ Observar que as propriedades `lightglass` e `shadelightglass` se aplicam a super
 
 ## Central de controle — pós-PR #75
 
-Controles `qs.*` são lidos pelo snapshot `QsStyle` em callbacks de configuração e aplicam ao vivo. Cápsulas são vidro transparente sobre fundos escuros/coloridos e recebem um tom escuro discreto (`qs.lightfill`/`qs.lightcolor`, teto 18%) sobre apps claros; o contorno é sempre a luz branca. Discos QuickTile ligados/desligados possuem paletas próprias por cena, com ícones monocromáticos associados ao mesmo modelo. O padrão remove o fundo dos discos desligados identificados; em fundo escuro/colorido, os outros discos mantêm a cor Samsung até ativar a paleta opcional. O Theme Park pode alterar o preenchimento nativo, portanto a identificação dos discos pequenos requer validação. `qs.darkfill`, `qs.darkcolor`, `qs.idle`, `qs.active`, `qs.track` e `qs.lightstyle` são legado, preservados apenas para importar/exportar perfis, e não têm efeito.
+Controles `qs.*` são lidos pelo snapshot `QsStyle` em callbacks de configuração e aplicam ao vivo. Cápsulas são vidro transparente sobre fundos escuros/coloridos e recebem um tom escuro discreto (`qs.lightfill`/`qs.lightcolor`, teto 18%) sobre apps claros; agora podem adicionar um filme claro independente (`qs.lightglassopacity`/`qs.lightglasscolor`, padrão desativado). A luz da lente no fundo claro tem ganho separado `qs.lightoptics`, sem mudar o contorno basal ou as cenas coloridas. Discos QuickTile ligados/desligados possuem paletas próprias por cena, com ícones monocromáticos associados ao mesmo modelo. O padrão remove o fundo dos discos desligados identificados; em fundo escuro/colorido, os outros discos mantêm a cor Samsung até ativar a paleta opcional. O Theme Park pode alterar o preenchimento nativo, portanto a identificação dos discos pequenos requer validação. `qs.darkfill`, `qs.darkcolor`, `qs.idle`, `qs.active`, `qs.track` e `qs.lightstyle` são legado, preservados apenas para importar/exportar perfis, e não têm efeito.
 
 | Chave | Padrão | Tipo/domínio do parser | Controle / consequência |
 | --- | --- | --- | --- |
@@ -188,6 +188,9 @@ Controles `qs.*` são lidos pelo snapshot `QsStyle` em callbacks de configuraç�
 | `qs.lightfill` | .10 | 0–0.18 | Tom escuro das cápsulas sobre apps claros (transparentes sobre fundos escuros/coloridos) |
 | `qs.darkcolor` | ffffff | RGB hexadecimal | Legado sem efeito visual; o interior das cápsulas é sempre transparente |
 | `qs.lightcolor` | 141823 | RGB hexadecimal | Cor do tom das cápsulas sobre apps claros |
+| `qs.lightglassopacity` | 0 | 0–1 | Opacidade extra do interior das cápsulas sobre fundo claro; zero preserva o material atual |
+| `qs.lightglasscolor` | ffffff | RGBA hexadecimal | Cor do filme claro de opacidade das cápsulas |
+| `qs.lightoptics` | 1 | 0–2 | Intensidade óptica do contorno sobre fundo claro, separada da linha basal e da cena colorida |
 | `qs.glint` | 0 | 0–1 | Reflexo especular adicional no canto superior esquerdo das cápsulas; zero elimina brilho duplicado |
 | `qs.sliderlightcolor` | ffffff | RGBA hexadecimal | Preenchimento RGBA de brilho e volume sobre fundo claro |
 | `qs.sliderdarkcolor` | ffffff | RGBA hexadecimal | Preenchimento RGBA de brilho e volume sobre fundo escuro ou colorido |

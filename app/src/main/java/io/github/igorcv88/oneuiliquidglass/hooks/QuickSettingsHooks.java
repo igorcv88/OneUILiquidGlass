@@ -64,6 +64,8 @@ public final class QuickSettingsHooks {
     private final Set<String> logged = new HashSet<>();
     private final Set<String> tileSurfaces = new HashSet<>();
     private final Set<String> tileDecisions = new HashSet<>();
+    private long paletteTraceRevision = -1;
+    private boolean paletteTraceActive;
     private final QsTileProbe tileProbe = new QsTileProbe();
     private final QuickSettingsEdgeLight edge;
     private final QsBackdrop backdrop;
@@ -130,7 +132,8 @@ public final class QuickSettingsHooks {
         capsuleOptics.onFailure(() -> { litRims.clear(); clearRims(); invalidateAll("optics-failed"); });
         edge.onOptics(this::opticsResult);
         edge.optics(capsuleOptics, () -> QuickSettingsHooks.this.backdrop != null
-                && QuickSettingsHooks.this.backdrop.tone() == io.github.igorcv88.oneuiliquidglass.glass.QsScene.Tone.LIGHT_SCENE);
+                        && QuickSettingsHooks.this.backdrop.tone() == io.github.igorcv88.oneuiliquidglass.glass.QsScene.Tone.LIGHT_SCENE,
+                () -> QuickSettingsHooks.this.style.lightOptics);
         BackdropEvents.add(() -> QuickSettingsHooks.this.backdrop.event());
         this.backdrop = new QsBackdrop(this::enabled, edge::expansion, () -> { clearRims(); invalidateAll("backdrop"); },
                 () -> { QsContentHooks c = QuickSettingsHooks.this.content; if (c != null) c.invalidateDraw(); });
@@ -440,6 +443,7 @@ public final class QuickSettingsHooks {
         try {
             bootstrap();
             if (broken) return;
+            tracePalette();
             // Even with the master or the option off, the border constructor captures this box's
             // own scope (see capture), so that switching either on later applies live.
             pending.set(new Pending(a[7], 0L, 0L, null, null, 0f));
@@ -528,6 +532,30 @@ public final class QuickSettingsHooks {
         } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
             fail(e);
         }
+    }
+
+    /** The actual provider snapshot behind QS_TILE_COLOR, not the legacy getprop view. */
+    private void tracePalette() {
+        if (!Probe.trace) { paletteTraceActive = false; return; }
+        long revision = ConfigClient.revision();
+        if (paletteTraceActive && paletteTraceRevision == revision) return;
+        paletteTraceActive = true;
+        paletteTraceRevision = revision;
+        QsStyle s = style;
+        String raw = ConfigClient.override("qs.tilelighton");
+        Probe.log("QS_PALETTE_EFFECTIVE", "revision=" + revision + " qsRevision=" + configRevision
+                + " tileLight=" + s.tileLight + " tileDark=" + s.tileDark
+                + " hideOff=" + s.hideOffDiscs
+                + " lightOn=" + Integer.toHexString(s.tileLightOn)
+                + " lightOnSource=" + (raw == null ? "default" : "provider")
+                + " lightOnRaw=" + (raw == null ? "default" : raw)
+                + " lightOff=" + Integer.toHexString(s.tileLightOff)
+                + " lightInk=" + Integer.toHexString(s.tileLightOnInk)
+                + " darkOn=" + Integer.toHexString(s.tileDarkOn)
+                + " sliderLight=" + Integer.toHexString(s.sliderLightColor)
+                + " glassOpacity=" + s.lightGlassOpacity
+                + " glassColor=" + Integer.toHexString(s.lightGlassColor)
+                + " lightOptics=" + s.lightOptics);
     }
 
     /** A Quick-Settings-only session may never see a notification row: start the provider here. */
