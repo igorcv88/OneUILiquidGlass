@@ -13,12 +13,13 @@ import io.github.igorcv88.oneuiliquidglass.glass.*;
 final class QsContentHooks {
     static final class Frame {
         final boolean header, media;
+        final String owner;
         boolean emptyMedia;
         final Object composer;
         Object shape;
         boolean background;
-        Frame(boolean header, boolean media, Object composer) {
-            this.header=header; this.media=media; this.composer=composer;
+        Frame(boolean header, boolean media, Object composer, String owner) {
+            this.header=header; this.media=media; this.composer=composer; this.owner=owner;
         }
     }
     private final ThreadLocal<Frame> content = new ThreadLocal<>();
@@ -71,7 +72,7 @@ final class QsContentHooks {
                         for(Object a:p.args) if(a!=null && a.getClass().getName().contains("ComposerImpl")) { composer=a; break; }
                         if(composer!=null) capture.accept(composer); // retain live OFF -> ON recomposition
                         Frame previous=content.get(); p.setObjectExtra("qsContentPrevious",previous);
-                        Frame frame = new Frame(header,media,composer);
+                        Frame frame = new Frame(header,media,composer,name);
                         frame.emptyMedia = name.contains("EmptyMediaPlayer");
                         content.set(frame);
                     }

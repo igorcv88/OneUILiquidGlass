@@ -28,6 +28,10 @@ final class QsTextHooks {
     private final QsTextTargets elements=new QsTextTargets();
     private final QsTextTargets nodes=new QsTextTargets();
     private final QsTextTargets headerElements=new QsTextTargets(), headerNodes=new QsTextTargets();
+    /** Read-only identity for painter nodes composed inside tiles; no icon tint is applied. */
+    private final java.util.Map<Object,String> tilePainterElements=new java.util.WeakHashMap<>();
+    private final java.util.Map<Object,String> tilePainterNodes=new java.util.WeakHashMap<>();
+    private final java.util.Set<Object> tilePaintersDrawn=java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>());
     private final ThreadLocal<Float> iconDrawing=new ThreadLocal<>();
     private final SparseArray<ColorFilter> iconFilters=new SparseArray<>();
     private final ThreadLocal<Float> drawing=new ThreadLocal<>();
@@ -154,6 +158,8 @@ final class QsTextHooks {
                 @Override protected void afterHookedMethod(MethodHookParam p){
                     QsContentHooks.Frame f=content.get();
                     if(f!=null&&f.header)headerElements.put(p.thisObject,true);
+                    if(f!=null&&!f.header&&!f.media&&f.owner.startsWith("tiles."))
+                        tilePainterElements.put(p.thisObject,f.owner);
                 }
             });
             XC_MethodHook bind=new XC_MethodHook(){
@@ -162,12 +168,21 @@ final class QsTextHooks {
                     Boolean header=headerElements.get(p.thisObject);
                     // Same rule as text nodes: an update from an unknown element keeps the node.
                     if(target!=null&&(header!=null||headerNodes.get(target)==null))headerNodes.put(target,header);
+                    String tileOwner=tilePainterElements.get(p.thisObject);
+                    if(target!=null&&(tileOwner!=null||!tilePainterNodes.containsKey(target))) {
+                        if(tileOwner==null)tilePainterNodes.remove(target);
+                        else tilePainterNodes.put(target,tileOwner);
+                    }
                 }
             };
             XposedBridge.hookMethod(abi.create,bind);XposedBridge.hookMethod(abi.update,bind);
             XposedBridge.hookMethod(abi.draw,new XC_MethodHook(){
                 @Override protected void beforeHookedMethod(MethodHookParam p){
                     p.setObjectExtra("qsHeaderIconPrevious",iconDrawing.get());
+                    if(Probe.trace&&tilePainterNodes.containsKey(p.thisObject)&&tilePaintersDrawn.add(p.thisObject))
+                        Probe.log("QS_TILE_ICON_NODE", "owner=" + tilePainterNodes.get(p.thisObject)
+                                + " node=" + Integer.toHexString(System.identityHashCode(p.thisObject))
+                                + " bound=true draw=true nativeInk=unverified");
                     // The header follows the panel or the notification shade: the level function gates it.
                     Float tone=ready&&headerReady&&headerNodes.get(p.thisObject)!=null?level.apply(true):null;
                     if(tone!=null)iconDrawing.set(tone);
@@ -372,7 +387,8 @@ final class QsTextHooks {
         unboundClockLoggedAt=now;
         Probe.log("QS_CLOCK_CANDIDATE","role=unbound canvas="+canvas
                 +" paint="+Integer.toHexString(paint.getColor())+" alpha="+paint.getAlpha()
-                +" registered=false mutation=false");
+                +" registered=false mutation=false origin="
+                +QsSliderOrigin.stackHint(QsSliderOrigin.currentStack()));
     }
     void invalidate(){
         if(invalidate==null)return;

@@ -13,20 +13,23 @@
   `shadelightglass=0.4` (23:28:45), `0.35` (23:29:15) e `0.4` (23:29:34), confirmando
   entrega via `ConfigClient` e prioridade do valor salvo no app. A propriedade bruta não é
   o valor efetivo; a UI anterior dava a entender que era.
-- O dispatch do `Tuning` (`listeners=1`) invalidava somente o QS. A shade era invalidada mais
-  cedo, na entrega do `ConfigClient`, quando o `Tuning` assíncrono podia ainda estar antigo.
-  O patch em andamento registra também as notificações no callback pós-publicação e acrescenta
-  `SHADE_TUNING_APPLY` e `SHADE_MATERIAL_DECISION` para diferenciar decisão de material de
-  redesenho visual. Validar em novo APK antes de declarar correção.
+- O PR #85, mesclado, passou a invalidar as notificações após a publicação do `Tuning` e a
+  desenhar o véu claro em `SharedBackdrop` com `shadeblur=0`. O usuário confirmou visualmente a
+  resolução, sem necessidade de ativar blur por cartão.
 - O QS desenhou labels com `finalTone=ff1d1d1d` e manteve óptica (`QS_OPTICS_DRAWN`). A origem
   de ambos os sliders permaneceu `role=unknown` (pilha R8), e **o arraste do volume também
   disparou `QS_EDGE_SUPPRESS`**. O volume continua pendente: não inferir sua identidade pelo
-  `DrawScope`, que é compartilhado.
-- A sonda registrou `QuickTile`/`IconTextTile`, mas os eventos de superfície observados foram
-  `kind=CONTAINER circle=false state=unverified`; ainda não há mapeamento comprovado de disco,
-  ícone, ligado/desligado e Theme Park. Não alterar as cores dos 15 controles sem esse vínculo.
+  `DrawScope`, que é compartilhado. A próxima sondagem registra também a assinatura real e os
+  argumentos tipados de `BidirectionalBar` (`QS_SLIDER_BAR_ABI` / `QS_SLIDER_BAR_ARGS`) para
+  distinguir as barras sem depender da pilha R8.
+- Além dos `CONTAINER`, o log de 23:29:40 já contém círculos `ACTIVE` com `bg=ffffffff`
+  e `NONE` com `bg=0` ou `234b60`. A ausência de `IDLE` não prova sua inexistência; faltava
+  associar os círculos aos modelos e estados reais dos tiles. A próxima sondagem registra
+  o `tileModel` ativo, o owner da composição, os campos tipados dos modelos e os nós de pintura
+  dos ícones. Todos os valores de texto/SSID continuam excluídos. Não mudar cor por heurística.
 - `QS_CLOCK_CANDIDATE role=unbound` ainda aparece: a hora visível não está vinculada ao nó de
-  cabeçalho. A transição do pop-up foi requisitada com `rampMs=180`, sem confirmação visual.
+  cabeçalho. A próxima coleta inclui a origem de pilha sem texto para localizar o desenho.
+  A transição do pop-up foi requisitada com `rampMs=180`, sem confirmação visual.
 
 Revisão 28/10/2026 (horário de Fortaleza). Este documento é o checklist acumulado do relato do usuário;
 não confundir implementação de diagnóstico com correção visual validada no Galaxy S25 Ultra

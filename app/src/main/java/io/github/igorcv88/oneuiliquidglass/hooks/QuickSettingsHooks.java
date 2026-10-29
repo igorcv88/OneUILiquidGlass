@@ -459,7 +459,9 @@ public final class QuickSettingsHooks {
                         + " circle=" + circle + " shape=" + (a[5] == null ? "null" : a[5].getClass().getName())
                         + " bg=" + hex(background) + " outline=" + hex(outline)
                         + " outlined=" + (a[1] instanceof Boolean ? a[1] : "unknown")
-                        + " mask=" + a[9];
+                        + " mask=" + a[9]
+                        + " tileModel=" + tileProbe.currentId()
+                        + " composeOwner=" + (content.current() == null ? "unbound" : content.current().owner);
                 synchronized (tileSurfaces) {
                     if (tileSurfaces.size() < 96 && tileSurfaces.add(key))
                         Probe.log("QS_TILE_SURFACE_COMPOSE", key + " state=unverified");
