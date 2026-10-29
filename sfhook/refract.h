@@ -357,7 +357,7 @@
     "    highp float band = clamp(band1 * r, bevel, r);\n" \
     "    highp float sb = oulg_smootherstep(0.0, band, depth);\n" \
     "    oulg_bw = sb > 0.0 ? pow(sb, %.3f) : 0.0;\n" \
-    "    oulg_br = min(%.2f, %.2f) * oulg_bw;\n" \
+    "    oulg_br = mix(%.2f, min(%.2f, %.2f), oulg_bw);\n" \
     "    highp float R = min(hs.x, hs.y);\n" \
     "    highp vec2 s = -%.4f * q * (R / hs);\n" \
     "    if (l <= 0.0 || depth <= 0.0) return s;\n" \
@@ -367,6 +367,8 @@
     "    highp float t = 1.0 - depth / band;\n" \
     "    return s - n * (min(k, %.4f) * band * t * t * (3.0 - 2.0 * t));\n" \
     "  }\n" \
+    "  if (oulg_pf > 0.5 && band1 <= 0.0 && %.2f > 0.0)\n" \
+    "    oulg_br = mix(%.2f, oulg_br, oulg_smootherstep(0.0, bevel, depth));\n" \
     "  if (l <= 0.0 || depth <= 0.0 || depth >= bevel) return vec2(0.0);\n" \
     "  highp float t = 1.0 - depth / bevel;\n" \
     "  if (oulg_pf > 0.5) {\n" \
@@ -379,6 +381,11 @@
     "}\n" \
     "highp vec2 oulg_field(highp vec2 q, highp vec2 hs, highp float r, highp float kp) {\n" \
     "  highp vec2 s = oulg_shift(q, hs, r, kp);\n" \
+    "  if (kp > 0.0 && oulg_pf < 0.5)\n" \
+    "    s -= %.4f * q * (min(hs.x, hs.y) / max(hs, vec2(1.0)));\n" \
+    "  if (kp > 0.0 && oulg_pf < 1.5)\n" \
+    "    s *= oulg_pf < 0.5 ? %.3f : %.3f;\n" \
+    "  if (oulg_pf < 1.5) oulg_br *= oulg_pf < 0.5 ? %.3f : %.3f;\n" \
     "  highp vec2 w = abs(q) - (hs - vec2(r));\n" \
     "  highp vec2 v = max(w, vec2(0.0));\n" \
     "  highp float l = length(v);\n" \
@@ -401,7 +408,7 @@
 // edge blur radius in px (0: the v0.7 curve).
 struct oulg_profile { float core; int taps; float ramp; float sat; float tone; float rim; float spec; float cap; float lift;
                       float flat; float level; float cool; float tilt; float line; float ccap; float fcap; float cdim; float glow; float bloom; float gradient;
-                      float band; float lensbody; float blurexp; float edge;
+                      float band; float lensbody; float blurexp; float edge; float blur; float refract;
                       float light; float lwidth; float lfloor; float lcap; float lens; float body; };
 #define OULG_CORE_DEFAULT 48.0f
 #define OULG_HU_BLOOM_DEFAULT 0.0f
@@ -409,6 +416,10 @@ struct oulg_profile { float core; int taps; float ramp; float sat; float tone; f
 // smoothstep to the core (see the field). Above 0, one quintic curve from this radius at the outline
 // to the core at ramp bevels. Off by default until it is validated on the device.
 #define OULG_HU_EDGE_DEFAULT 0.0f
+#define OULG_HU_BODYLENS_DEFAULT 0.0f
+#define OULG_KG_EDGE_DEFAULT 0.0f
+#define OULG_GLOBAL_BLUR_DEFAULT 1.0f
+#define OULG_GLOBAL_REFRACT_DEFAULT 1.0f
 #define OULG_TAPS_DEFAULT 24
 #define OULG_RAMP_DEFAULT 1.5f
 // Lockscreen: a wide body blur, so a large dark object behind the card no longer shows as a blotch
@@ -491,19 +502,23 @@ struct oulg_profile { float core; int taps; float ramp; float sat; float tone; f
 #define OULG_OPTICS_VERSION "11"
 static const struct oulg_profile OULG_PROFILES_DEFAULT[OULG_PROFILES] = {
     {OULG_CORE_DEFAULT, OULG_TAPS_DEFAULT, OULG_RAMP_DEFAULT, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 400.0f, 1.0f, 0.0f, 1.0f,
-     OULG_HU_BLOOM_DEFAULT, 0.0f, 0.0f, 0.0f, 1.0f, OULG_HU_EDGE_DEFAULT,
+     OULG_HU_BLOOM_DEFAULT, 0.0f, 0.0f, OULG_HU_BODYLENS_DEFAULT, 1.0f, OULG_HU_EDGE_DEFAULT,
+     OULG_GLOBAL_BLUR_DEFAULT, OULG_GLOBAL_REFRACT_DEFAULT,
      OULG_HU_LIGHT_DEFAULT, OULG_EDGE_LDEPTH_DEFAULT, OULG_EDGE_LFLOOR_DEFAULT, OULG_EDGE_LCAP_DEFAULT, 0.0f, 0.0f},
     {OULG_KG_CORE_DEFAULT, OULG_KG_TAPS_DEFAULT, OULG_KG_RAMP_DEFAULT, OULG_KG_SAT_DEFAULT, OULG_KG_TONE_DEFAULT,
      OULG_KG_RIM_DEFAULT, OULG_KG_SPEC_DEFAULT, 0.0f, 0.0f,
      OULG_KG_FLAT_DEFAULT, OULG_KG_LEVEL_DEFAULT, OULG_KG_COOL_DEFAULT, OULG_KG_TILT_DEFAULT, OULG_KG_LINE_DEFAULT,
      OULG_KG_CCAP_DEFAULT, OULG_KG_FCAP_DEFAULT, OULG_KG_CDIM_DEFAULT, OULG_KG_GLOW_DEFAULT, 0.0f, OULG_KG_GRADIENT_DEFAULT,
-     OULG_KG_BAND_DEFAULT, OULG_KG_LENSBODY_DEFAULT, OULG_KG_BLUREXP_DEFAULT, 0.0f,
+     OULG_KG_BAND_DEFAULT, OULG_KG_LENSBODY_DEFAULT, OULG_KG_BLUREXP_DEFAULT, OULG_KG_EDGE_DEFAULT,
+     OULG_GLOBAL_BLUR_DEFAULT, OULG_GLOBAL_REFRACT_DEFAULT,
      OULG_KG_LIGHT_DEFAULT, OULG_EDGE_LDEPTH_DEFAULT, OULG_EDGE_LFLOOR_DEFAULT, OULG_EDGE_LCAP_DEFAULT, 0.0f, 0.0f},
     {0.0f, OULG_TAPS_DEFAULT, OULG_RAMP_DEFAULT, 1.0f, 0.0f, 0.0f, 0.0f, OULG_SHADE_CAP_DEFAULT, OULG_SHADE_LIFT_DEFAULT,
      0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 400.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f,
+     OULG_GLOBAL_BLUR_DEFAULT, OULG_GLOBAL_REFRACT_DEFAULT,
      OULG_SHADE_LIGHT_DEFAULT, OULG_EDGE_LDEPTH_DEFAULT, OULG_EDGE_LFLOOR_DEFAULT, OULG_EDGE_LCAP_DEFAULT, 0.0f, 0.0f},
     {0.0f, OULG_TAPS_DEFAULT, OULG_RAMP_DEFAULT, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
      0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 400.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f,
+     OULG_GLOBAL_BLUR_DEFAULT, OULG_GLOBAL_REFRACT_DEFAULT,
      OULG_QS_LIGHT_DEFAULT, OULG_QS_LWIDTH_DEFAULT, OULG_QS_LFLOOR_DEFAULT, OULG_QS_LCAP_DEFAULT,
      OULG_QS_LENS_DEFAULT, OULG_QS_BODY_DEFAULT},
 };
@@ -622,6 +637,8 @@ static void oulg_fix_params(struct oulg_profile p[OULG_PROFILES]) {
         if (!(p[i].lensbody >= 0.0f && p[i].lensbody <= 0.15f)) p[i].lensbody = d->lensbody;  // with A <= 0.5: Jacobian >= 0.1
         if (!(p[i].blurexp >= 1.0f && p[i].blurexp <= 4.0f)) p[i].blurexp = d->blurexp;
         if (!(p[i].edge >= 0.0f && p[i].edge <= 48.0f)) p[i].edge = d->edge;
+        if (!(p[i].blur >= 0.0f && p[i].blur <= 2.0f)) p[i].blur = d->blur;
+        if (!(p[i].refract >= 0.0f && p[i].refract <= 1.2f)) p[i].refract = d->refract;
         if (!(p[i].light >= 0.0f && p[i].light <= 2.0f)) p[i].light = d->light;
         if (!(p[i].lwidth >= 1.5f && p[i].lwidth <= 48.0f)) p[i].lwidth = d->lwidth;
         if (!(p[i].lfloor >= 0.0f && p[i].lfloor <= 0.5f)) p[i].lfloor = d->lfloor;
@@ -661,8 +678,11 @@ static int oulg_lib(char *out, size_t cap, int external, const struct oulg_profi
     if (!oulg_append(out, cap, &at, OULG_FS_FIELD_FMT, (double) p[1].gradient, (double) p[3].lens, (double) p[1].ramp, (double) p[1].core, (double) p[1].ccap,
                      (double) p[0].core, (double) p[0].ramp, (double) p[0].edge, (double) p[0].edge, (double) p[0].core, (double) p[0].ramp,
                      (double) p[1].ramp, (double) p[1].core, (double) p[1].ccap,
-                     (double) p[1].band, (double) p[1].blurexp, (double) p[1].core, (double) p[1].ccap, (double) p[1].lensbody,
-                     (0.75 - (double) p[1].lensbody) / 1.5 < 0.5 ? (0.75 - (double) p[1].lensbody) / 1.5 : 0.5)) return 0;
+                     (double) p[1].band, (double) p[1].blurexp, (double) p[1].edge, (double) p[1].core, (double) p[1].ccap, (double) p[1].lensbody,
+                     (0.75 - (double) p[1].lensbody) / 1.5 < 0.5 ? (0.75 - (double) p[1].lensbody) / 1.5 : 0.5,
+                     (double) p[1].edge, (double) p[1].edge,
+                     (double) p[0].lensbody, (double) p[0].refract, (double) p[1].refract,
+                     (double) p[0].blur, (double) p[1].blur)) return 0;
     if (!external && !oulg_append(out, cap, &at, OULG_FS_TONE_FMT, (double) p[2].cap, (double) p[2].lift)) return 0;
     if (!external) {
         if (!oulg_append(out, cap, &at, "%s", OULG_FS_GLOW)) return 0;

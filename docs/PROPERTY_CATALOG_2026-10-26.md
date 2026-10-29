@@ -4,7 +4,7 @@
 
 **Atualização de integração (main após #57):** `lensregiondiff`/gate `region` foram removidos; `popuplock` e `orphandraw` foram adicionados. O inventário ativo agora tem 103 propriedades. O interruptor `sfrefract` pertence ao helper live e não pode ser persistido pela ponte do APK.
 
-**Abrangência atual (29/10):** **146 chaves distintas** no catálogo gerador, incluindo controles separados de opacidade e iluminação das cápsulas QS; `SettingsRegistry` e a matriz são gerados e testados contra essa fonte. O módulo também tem um controle global `glass/enabled` nas SharedPreferences, fora de `debug.oulg.*`. As configurações independentes de perfil, as condições de ativação, os comandos de teste e as ações de recuperação também devem aparecer no APK.
+**Abrangência atual (29/10):** **152 chaves distintas** no catálogo gerador, incluindo controles separados de opacidade e iluminação das cápsulas QS e os seis controles ópticos por região do pop-up/bloqueio; `SettingsRegistry` e a matriz são gerados e testados contra essa fonte. O módulo também tem um controle global `glass/enabled` nas SharedPreferences, fora de `debug.oulg.*`. As configurações independentes de perfil, as condições de ativação, os comandos de teste e as ações de recuperação também devem aparecer no APK.
 
 **Exceção para `qs.*`:** são chaves do snapshot do aplicativo, sem leitura de `setprop`.
 
@@ -125,6 +125,9 @@ Observar que as propriedades `lightglass` e `shadelightglass` se aplicam a super
 | `sf.ramp` | 1.5 | Heads-up: profundidade em biséis até raio pleno |
 | `sf.hubloom` | 0 | Heads-up: supressão de amostras claras/bloom; 0 mantém disco simples |
 | `sf.edgeblur` | 0 | Heads-up: raio do blur no contorno em px, uma curva contínua até o miolo (0 restaura v0.7) |
+| `sf.hublur` | 1 | Heads-up: multiplicador do blur adicional na superfície inteira, independente do blur base |
+| `sf.hubodylens` | 0 | Heads-up: refração difusa do miolo e da superfície contínua (0 desliga) |
+| `sf.hurefract` | 1 | Heads-up: multiplicador de toda a refração (aro e miolo) |
 | `sf.kgcore` | 80 | Lockscreen: raio nominal do miolo em px |
 | `sf.kgtaps` | 48 | Lockscreen: amostras por pixel |
 | `sf.kgramp` | 1.5 | Lockscreen: rampa do blur |
@@ -142,6 +145,9 @@ Observar que as propriedades `lightglass` e `shadelightglass` se aplicam a super
 | `sf.kgband` | 0.85 | Lockscreen: largura da transição óptica (fração do raio do canto; 0 restaura v0.22; abaixo de ~0.42 fica no bisel mínimo) |
 | `sf.kgbodylens` | 0.05 | Lockscreen: curvatura da lente no miolo (ampliação uniforme; 0 desliga) |
 | `sf.kgblurexp` | 2 | Lockscreen: expoente da subida do blur na transição (1–4; maior = menos blur na transição) |
+| `sf.kgedgeblur` | 0 | Lockscreen: raio extra do blur no contorno (0 preserva o desenho anterior) |
+| `sf.kgblur` | 1 | Lockscreen: multiplicador do blur adicional em toda a superfície, independente do blur base |
+| `sf.kgrefract` | 1 | Lockscreen: multiplicador de toda a refração (aro e miolo) |
 | `sf.kgflatcap` | 0.22 | Lockscreen: teto do peso de achatamento |
 | `sf.kgcoredim` | 0.04 | Lockscreen: redução de brilho do miolo |
 | `sf.kgglow` | 0.70 | Lockscreen: largura do glow do aro |

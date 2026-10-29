@@ -315,6 +315,9 @@ static void layered_blur(struct oulg_profile p[OULG_PROFILES]) {
     p[0].ramp = prop_float("debug.oulg.sf.ramp", OULG_RAMP_DEFAULT);
     p[0].bloom = prop_float("debug.oulg.sf.hubloom", OULG_HU_BLOOM_DEFAULT);
     p[0].edge = prop_float("debug.oulg.sf.edgeblur", OULG_HU_EDGE_DEFAULT);
+    p[0].lensbody = prop_float("debug.oulg.sf.hubodylens", OULG_HU_BODYLENS_DEFAULT);
+    p[0].blur = prop_float("debug.oulg.sf.hublur", OULG_GLOBAL_BLUR_DEFAULT);
+    p[0].refract = prop_float("debug.oulg.sf.hurefract", OULG_GLOBAL_REFRACT_DEFAULT);
     p[0].light = prop_float("debug.oulg.sf.hulight", OULG_HU_LIGHT_DEFAULT);
     // Every field first: those without a property (the edge light's depth, floor and cap) must not be
     // left to the stack.
@@ -339,6 +342,9 @@ static void layered_blur(struct oulg_profile p[OULG_PROFILES]) {
     p[1].band = prop_float("debug.oulg.sf.kgband", OULG_KG_BAND_DEFAULT);
     p[1].lensbody = prop_float("debug.oulg.sf.kgbodylens", OULG_KG_LENSBODY_DEFAULT);
     p[1].blurexp = prop_float("debug.oulg.sf.kgblurexp", OULG_KG_BLUREXP_DEFAULT);
+    p[1].edge = prop_float("debug.oulg.sf.kgedgeblur", OULG_KG_EDGE_DEFAULT);
+    p[1].blur = prop_float("debug.oulg.sf.kgblur", OULG_GLOBAL_BLUR_DEFAULT);
+    p[1].refract = prop_float("debug.oulg.sf.kgrefract", OULG_GLOBAL_REFRACT_DEFAULT);
     p[1].light = prop_float("debug.oulg.sf.kglight", OULG_KG_LIGHT_DEFAULT);
     p[2] = OULG_PROFILES_DEFAULT[2];
     p[2].cap = prop_float("debug.oulg.sf.shadecap", OULG_SHADE_CAP_DEFAULT);
