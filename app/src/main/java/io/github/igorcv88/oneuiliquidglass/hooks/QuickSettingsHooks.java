@@ -134,7 +134,7 @@ public final class QuickSettingsHooks {
         this.backdrop = new QsBackdrop(this::enabled, edge::expansion, () -> { clearRims(); invalidateAll("backdrop"); },
                 () -> { QsContentHooks c = QuickSettingsHooks.this.content; if (c != null) c.invalidateDraw(); });
         this.content = new QsContentHooks(loader, this::enabled, () -> style, backdrop::tone, backdrop::headerTone, this::ink,
-                this::capture);
+                this::capture, tileProbe);
     }
 
     private boolean enabled() {
@@ -453,6 +453,10 @@ public final class QuickSettingsHooks {
             if (!QuickSettingsGlass.srgb(outline) || !QuickSettingsGlass.srgb(background)) { log("non-srgb", a); return; }
             boolean circle = a[5] == circleShape;
             Kind kind = QuickSettingsGlass.kind(circle, QuickSettingsGlass.argb(background), QuickSettingsGlass.argb(outline));
+            Kind discKind = circle ? QuickSettingsGlass.tileDiscKind(kind,
+                    QuickSettingsGlass.argb(background),QuickSettingsGlass.argb(outline),
+                    tileProbe.currentModel()!=null) : kind;
+            if (circle) tileProbe.disc(tileProbe.currentModel(), discKind);
             log(kind.name(), a);
             if (Probe.trace) {
                 String key = "kind=" + kind + " backdrop=" + backdrop.tone()
@@ -467,8 +471,22 @@ public final class QuickSettingsHooks {
                         Probe.log("QS_TILE_SURFACE_COMPOSE", key + " state=unverified");
                 }
             }
-            // Discs and placeholders keep Samsung's colours and outline: only containers are glass.
-            if (kind != Kind.CONTAINER) return;
+            // A disc is recoloured only inside a verified QuickTile owner, and only for known
+            // ACTIVE/IDLE states. NONE includes Samsung's intentionally disc-less controls.
+            if (kind != Kind.CONTAINER) {
+                if (circle && tileProbe.currentModel() != null) {
+                    int nativeColor = QuickSettingsGlass.argb(background);
+                    int mapped = style.tileBackground(discKind, backdrop.tone(), nativeColor);
+                    if (mapped != nativeColor) {
+                        a[4] = QuickSettingsGlass.color(mapped);
+                        if (Probe.trace) Probe.log("QS_TILE_COLOR", "model=" + tileProbe.currentId()
+                                + " kind=" + discKind + " nativeKind=" + kind + " backdrop=" + backdrop.tone()
+                                + " native=" + Integer.toHexString(nativeColor)
+                                + " applied=" + Integer.toHexString(mapped));
+                    }
+                }
+                return;
+            }
             boolean dark = dark();
             // Containers: transparent, or the faint dark tint over a light backdrop. Discs: Samsung's.
             long fill = QuickSettingsGlass.color(QuickSettingsGlass.fill(kind, QuickSettingsGlass.argb(background), backdrop.tone(), style));
@@ -595,6 +613,7 @@ public final class QuickSettingsHooks {
         if (valuesChanged && on == applied) {
             edge.check();
             Probe.log("QS_CONFIG_RECEIVED", "revision=" + revision + " styleChanged=true enabled=" + on);
+            content.invalidateDraw();
             invalidateAll("values");
             return;
         }

@@ -4,7 +4,7 @@
 
 **Atualização de integração (main após #57):** `lensregiondiff`/gate `region` foram removidos; `popuplock` e `orphandraw` foram adicionados. O inventário ativo agora tem 103 propriedades. O interruptor `sfrefract` pertence ao helper live e não pode ser persistido pela ponte do APK.
 
-**Abrangência:** 87 chaves em Java (`Tuning` e `QsStyle`, incluindo `sf.optics`), 37 no leitor da biblioteca C (incluindo a mesma `sf.optics`), **123 chaves distintas**. O módulo também tem um controle global `glass/enabled` nas SharedPreferences, fora de `debug.oulg.*`. As configurações independentes de perfil, as condições de ativação, os comandos de teste e as ações de recuperação também devem aparecer no APK.
+**Abrangência:** 99 chaves em Java (`Tuning` e `QsStyle`, incluindo `sf.optics`), 37 no leitor da biblioteca C (incluindo a mesma `sf.optics`), **135 chaves distintas**. O módulo também tem um controle global `glass/enabled` nas SharedPreferences, fora de `debug.oulg.*`. As configurações independentes de perfil, as condições de ativação, os comandos de teste e as ações de recuperação também devem aparecer no APK.
 
 **Exceção para `qs.*`:** são chaves do snapshot do aplicativo, sem leitura de `setprop`.
 
@@ -177,7 +177,7 @@ Observar que as propriedades `lightglass` e `shadelightglass` se aplicam a super
 
 ## Controles rápidos — pós-PR #75
 
-Controles `qs.*` são lidos pelo snapshot `QsStyle` em callbacks de configuração e aplicam ao vivo. Cápsulas são vidro transparente sobre fundos escuros/coloridos e recebem um tom escuro discreto (`qs.lightfill`/`qs.lightcolor`, teto 18%) sobre apps claros; o contorno é sempre a luz branca; círculos e ícones mantêm as cores da Samsung. `qs.darkfill`, `qs.darkcolor`, `qs.idle`, `qs.active`, `qs.track` e `qs.lightstyle` são legado, preservados apenas para importar/exportar perfis, e não têm efeito.
+Controles `qs.*` são lidos pelo snapshot `QsStyle` em callbacks de configuração e aplicam ao vivo. Cápsulas são vidro transparente sobre fundos escuros/coloridos e recebem um tom escuro discreto (`qs.lightfill`/`qs.lightcolor`, teto 18%) sobre apps claros; o contorno é sempre a luz branca. Discos QuickTile ligados/desligados possuem paletas próprias por cena, com ícones monocromáticos associados ao mesmo modelo; o fundo escuro/colorido mantém as cores Samsung por padrão. `qs.darkfill`, `qs.darkcolor`, `qs.idle`, `qs.active`, `qs.track` e `qs.lightstyle` são legado, preservados apenas para importar/exportar perfis, e não têm efeito.
 
 | Chave | Padrão | Tipo/domínio do parser | Controle / consequência |
 | --- | --- | --- | --- |
@@ -185,6 +185,18 @@ Controles `qs.*` são lidos pelo snapshot `QsStyle` em callbacks de configuraç�
 | `qs.lightfill` | .10 | 0–0.18 | Tom escuro das cápsulas sobre apps claros (transparentes sobre fundos escuros/coloridos) |
 | `qs.darkcolor` | ffffff | RGB hexadecimal | Legado sem efeito visual; o interior das cápsulas é sempre transparente |
 | `qs.lightcolor` | 141823 | RGB hexadecimal | Cor do tom das cápsulas sobre apps claros |
+| `qs.tilelight` | 1 | booleano | Habilita contraste de discos e ícones sobre fundo claro sem alterar as cápsulas |
+| `qs.tilelighton` | cdd7e5 | RGB hexadecimal | Disco ligado sobre fundo claro |
+| `qs.tilelightoff` | 202c3c | RGB hexadecimal | Disco desligado sobre fundo claro |
+| `qs.tilelightoffalpha` | .24 | 0–1 | Opacidade do disco desligado sobre fundo claro |
+| `qs.tilelightonink` | 20242e | RGB hexadecimal | Ícone monocromático ligado sobre fundo claro |
+| `qs.tilelightoffink` | 20242e | RGB hexadecimal | Ícone monocromático desligado sobre fundo claro |
+| `qs.tiledark` | 0 | booleano | Habilita paleta personalizada para fundo escuro/colorido (desligado por padrão) |
+| `qs.tiledarkon` | ffffff | RGB hexadecimal | Disco ligado sobre fundo escuro/colorido |
+| `qs.tiledarkoff` | ffffff | RGB hexadecimal | Disco desligado sobre fundo escuro/colorido |
+| `qs.tiledarkoffalpha` | .10 | 0–1 | Opacidade do disco desligado sobre fundo escuro/colorido |
+| `qs.tiledarkonink` | 1d1d1d | RGB hexadecimal | Ícone monocromático ligado sobre fundo escuro/colorido |
+| `qs.tiledarkoffink` | ffffff | RGB hexadecimal | Ícone monocromático desligado sobre fundo escuro/colorido |
 | `qs.idle` | 0 | 0–0.12 | Legado sem efeito visual; discos desligados são sempre transparentes |
 | `qs.active` | .90 | 0–1 | Legado sem efeito visual; os círculos mantêm as cores da Samsung |
 | `qs.darkrim` | .26 | 0–1 | Intensidade do contorno sobre fundos escuros ou coloridos |

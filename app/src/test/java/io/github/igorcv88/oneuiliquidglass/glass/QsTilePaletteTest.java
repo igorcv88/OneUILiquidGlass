@@ -1,0 +1,68 @@
+package io.github.igorcv88.oneuiliquidglass.glass;
+
+import org.junit.Test;
+import static org.junit.Assert.*;
+import static io.github.igorcv88.oneuiliquidglass.glass.QsScene.Tone.*;
+import static io.github.igorcv88.oneuiliquidglass.glass.QuickSettingsGlass.Kind.*;
+
+public class QsTilePaletteTest {
+    @Test public void lightBackdropHasSeparateActiveInactiveBackgroundsAndInk() {
+        QsStyle style = new QsStyle(key -> null);
+        assertEquals(0xffcdd7e5,style.tileBackground(ACTIVE,LIGHT_SCENE,0xffffffff));
+        assertEquals(0x3d202c3c,style.tileBackground(IDLE,LIGHT_SCENE,0x00234b60));
+        assertEquals(0xff20242e,style.tileInk(ACTIVE,LIGHT_SCENE,0xffffffff));
+        assertEquals(0x8020242e,style.tileInk(IDLE,LIGHT_SCENE,0x80ffffff));
+    }
+
+    @Test public void darkBackdropAndUnknownRemainNativeByDefault() {
+        QsStyle style = new QsStyle(key -> null);
+        for (QuickSettingsGlass.Kind kind : QuickSettingsGlass.Kind.values()) {
+            assertEquals(0x99ffffff,style.tileBackground(kind,DARK_SCENE,0x99ffffff));
+            assertEquals(0x99ffffff,style.tileBackground(kind,UNKNOWN,0x99ffffff));
+            assertEquals(0xffeeeeee,style.tileInk(kind,DARK_SCENE,0xffeeeeee));
+        }
+    }
+
+    @Test public void noDiscNeverChangesEvenOnLightBackground() {
+        QsStyle style = new QsStyle(key -> null);
+        for (int nativeColor : new int[]{0,0x00234b60,0xffffffff}) {
+            assertEquals(nativeColor,style.tileBackground(NONE,LIGHT_SCENE,nativeColor));
+            assertEquals(nativeColor,style.tileBackground(CONTAINER,LIGHT_SCENE,nativeColor));
+            assertEquals(nativeColor,style.tileInk(NONE,LIGHT_SCENE,nativeColor));
+        }
+    }
+
+    @Test public void dzifInactiveSentinelIsDifferentFromTrulyDiscLessAndUnbound() {
+        assertEquals(IDLE,QuickSettingsGlass.tileDiscKind(NONE,0x00234b60,0x00234b60,true));
+        assertEquals(NONE,QuickSettingsGlass.tileDiscKind(NONE,0,0,true));
+        assertEquals(NONE,QuickSettingsGlass.tileDiscKind(NONE,0x00234b60,0x00234b60,false));
+        assertEquals(NONE,QuickSettingsGlass.tileDiscKind(NONE,0x00234b60,0,true));
+        assertEquals(ACTIVE,QuickSettingsGlass.tileDiscKind(ACTIVE,0xffffffff,0x00234b60,true));
+    }
+
+    @Test public void customLightAndDarkPalettesAreIndependentAndRejectColoredIcons() {
+        QsStyle style = new QsStyle(k -> {
+            switch (k) {
+                case "qs.tilelighton": return "445566";
+                case "qs.tilelightoffalpha": return ".50";
+                case "qs.tiledark": return "1";
+                case "qs.tiledarkon": return "ddccbb";
+                case "qs.tiledarkonink": return "223344";
+                default: return null;
+            }
+        });
+        assertEquals(0xff445566,style.tileBackground(ACTIVE,LIGHT_SCENE,0xffffffff));
+        assertEquals(0x80202c3c,style.tileBackground(IDLE,LIGHT_SCENE,0x00234b60));
+        assertEquals(0xffddccbb,style.tileBackground(ACTIVE,DARK_SCENE,0xffffffff));
+        assertEquals(0xff223344,style.tileInk(ACTIVE,DARK_SCENE,0xffffffff));
+        assertEquals(0xff12a0ef,style.tileInk(ACTIVE,DARK_SCENE,0xff12a0ef));
+        assertEquals(0,style.tileInk(ACTIVE,DARK_SCENE,0));
+    }
+
+    @Test public void disablingTheLightPaletteLeavesNativeColouredDiscs() {
+        QsStyle disabled = new QsStyle(k -> k.equals("qs.tilelight") ? "0" : null);
+        assertEquals(0xffffffff,disabled.tileBackground(ACTIVE,LIGHT_SCENE,0xffffffff));
+        assertEquals(0xffffffff,disabled.tileInk(IDLE,LIGHT_SCENE,0xffffffff));
+        assertNotEquals(new QsStyle(k -> null),disabled);
+    }
+}

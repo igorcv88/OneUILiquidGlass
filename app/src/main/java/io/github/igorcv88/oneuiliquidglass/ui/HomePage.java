@@ -29,6 +29,8 @@ public final class HomePage implements Page {
     private final Toggle quickSettingsToggle;
     private final LinearLayout quickSettingsRow;
     private final TextView testResult;
+    private final Toggle traceToggle;
+    private final LinearLayout traceRow;
     private String noticeKey = "";
 
     public HomePage(Host host) {
@@ -133,6 +135,19 @@ public final class HomePage implements Page {
         TextView more = Ui.button(a, t, "Mais opções de teste", null, Ui.ButtonStyle.TEXT, true);
         more.setOnClickListener(v -> host.openTestOptions());
         test.addView(more, Ui.match(t.dp(4), 0));
+        test.addView(Ui.divider(a, t, t.dp(16)));
+        traceToggle = new Toggle(a, t);
+        traceToggle.setContentDescription("Registro detalhado para diagnóstico");
+        traceToggle.listener((toggle, on) -> {
+            AppModel.Result result = host.model().save("trace", on ? "1" : "0");
+            if (!result.ok) {
+                if (result.conflict) host.openConflicts();
+                else host.feedback(result.message);
+            } else host.feedback(on ? "Registro detalhado solicitado" : "Registro detalhado desligado");
+        });
+        traceRow = Ui.listRow(a, t, Icon.INFO, "Registro detalhado", "Para coletar diagnósticos", traceToggle);
+        traceRow.setOnClickListener(v -> traceToggle.toggleByUser());
+        test.addView(traceRow);
         content.addView(test, Ui.match());
 
         content.addView(Ui.section(a, t, "Estilo"));
@@ -207,6 +222,12 @@ public final class HomePage implements Page {
         Ui.enable(quickSettingsToggle, st.enabled);
         Ui.setSubtitle(quickSettingsRow, !st.enabled ? "Vidro desligado" : quickOn
                 ? "Ativo · teste os tiles no aparelho" : "Experimental · desativado por padrão");
+        boolean traceRequested = "1".equals(st.shown("trace"));
+        traceToggle.set(traceRequested, true);
+        AppModel.Sync traceSync = m.sync();
+        Ui.setSubtitle(traceRow, !traceRequested ? "Desligado" : traceSync == AppModel.Sync.SYNCED
+                ? "Ativo · configuração recebida pelo SystemUI" : traceSync == AppModel.Sync.WAITING
+                ? "Ativando no SystemUI…" : "Solicitado · sem confirmação do SystemUI");
         notice(st, sync);
     }
 

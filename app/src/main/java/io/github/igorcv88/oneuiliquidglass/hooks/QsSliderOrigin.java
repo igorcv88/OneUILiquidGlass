@@ -25,6 +25,29 @@ final class QsSliderOrigin {
         return brightness ? BRIGHTNESS : VOLUME;
     }
 
+    /**
+     * DZIF inlines the owner out of the draw stack, but its BidirectionalBar composable still
+     * receives a callback built by BrightBarKt or VolumeBarKt (argument 12 in the device log).
+     * Inspect only the callback's class, never its captured values or accessibility labels.
+     */
+    static String identifyArguments(Object[] arguments) {
+        if (arguments == null) return UNKNOWN;
+        java.util.ArrayList<String> names = new java.util.ArrayList<>();
+        for (Object argument : arguments) if (argument != null) names.add(argument.getClass().getName());
+        return identifyClassNames(names);
+    }
+
+    static String identifyClassNames(Iterable<String> names) {
+        boolean brightness = false, volume = false;
+        for (String name : names) {
+            if (name == null) continue;
+            if (name.startsWith("com.android.systemui.samsung.quicksetting.ui.tiles.BrightBarKt$")) brightness = true;
+            if (name.startsWith("com.android.systemui.samsung.quicksetting.ui.tiles.VolumeBarKt$")) volume = true;
+        }
+        if (brightness == volume) return UNKNOWN;
+        return brightness ? BRIGHTNESS : VOLUME;
+    }
+
     static boolean suppress(String role) { return !VOLUME.equals(role); }
 
     static String stackHint(StackTraceElement[] stack) {
