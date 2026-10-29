@@ -73,7 +73,7 @@ final class QsBackdrop {
             if (!enabled.getAsBoolean()) return;
             // Theme or orientation: the sample no longer describes what is behind the panel.
             retire();
-            forget(); publish(false); prefetch();
+            forget(); publish(false); prefetch("configuration");
         }
         @Override public void onLowMemory() {}
     };
@@ -132,11 +132,13 @@ final class QsBackdrop {
 
     private void opened() {
         session++;
+        trace("QS_TONE_ENTRY", "expansion=" + expansion.getAsDouble()
+                + " prefetched=" + pending + " fresh=" + fresh() + " prior=" + tone);
         // The touch that opened the panel already asked for it; its loop starts with the panel.
         if (pending) return;
         if (fresh()) { schedule(RESAMPLE_MS); return; }
         forget(); publish(false);
-        prefetch();
+        prefetch("opening");
     }
 
     /** The top-edge ACTION_DOWN, before Samsung shows the panel. Ignored while it is open. */
@@ -145,19 +147,19 @@ final class QsBackdrop {
         // A new opening decides afresh: no hysteresis or cooldown carried over from the last one.
         // Not published here: the panel is closed, the sample's own publish follows.
         scene.reset(); header.reset(); sceneGate.reset(); headerGate.reset();
-        prefetch();
+        prefetch("top-edge-gesture");
     }
 
     /** The opening's capture: its result is the session's first decision, applied at once. */
-    private void prefetch() {
+    private void prefetch(String source) {
         View v = host.get();
         if (v == null || !v.isAttachedToWindow() || !enabled.getAsBoolean() || pending) return;
         pending = true;
         int ticket = ++generation;
-        trace("TONE_CAPTURE_REQUEST", "scene=qs");
+        trace("TONE_CAPTURE_REQUEST", "scene=qs source=" + source + " expansion=" + expansion.getAsDouble());
         cancel = ShadeTone.prefetch(v, ticket, grid -> {
             if (ticket != generation) return;
-            trace("TONE_CAPTURE_DONE", "scene=qs luma=" + (grid == null ? "unknown" : grid.whole()));
+            trace("TONE_CAPTURE_DONE", "scene=qs source=" + source + " luma=" + (grid == null ? "unknown" : grid.whole()));
             pending = false; cancel = null;
             if (!enabled.getAsBoolean()) return;
             if (grid == null) forget();

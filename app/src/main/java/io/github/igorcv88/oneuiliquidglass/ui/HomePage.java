@@ -111,12 +111,12 @@ public final class HomePage implements Page {
         }
         surfaces.addView(Ui.divider(a, t, t.dp(72)));
         quickSettingsToggle = new Toggle(a, t);
-        quickSettingsToggle.setContentDescription("Vidro nos controles rápidos");
+        quickSettingsToggle.setContentDescription("Vidro da Central de controle");
         quickSettingsToggle.listener((tg, on) -> {
             host.model().flag(ProductFlags.QUICK_SETTINGS, on);
-            host.feedback(on ? "Controles rápidos: vidro ligado" : "Controles rápidos: vidro desligado");
+            host.feedback(on ? "Central de controle: vidro ligado" : "Central de controle: vidro desligado");
         });
-        quickSettingsRow = Ui.listRow(a, t, Icon.SHADE, "Controles rápidos", "Experimental · desativado por padrão", quickSettingsToggle);
+        quickSettingsRow = Ui.listRow(a, t, Icon.SHADE, "Central de controle", "Vidro nos controles e sliders", quickSettingsToggle);
         quickSettingsRow.setOnClickListener(v -> quickSettingsToggle.toggleByUser());
         surfaces.addView(quickSettingsRow);
         content.addView(surfaces, Ui.match());

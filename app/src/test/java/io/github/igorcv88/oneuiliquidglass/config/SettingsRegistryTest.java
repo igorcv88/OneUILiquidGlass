@@ -36,7 +36,7 @@ public class SettingsRegistryTest {
         while (c.find()) readers.add(c.group(1));
         Set<String> registered = new TreeSet<>();
         for (SettingSpec s : SettingsRegistry.all()) registered.add(s.key);
-        assertEquals(135, readers.size());
+        assertEquals(136, readers.size());
         assertEquals(readers, registered);
     }
 

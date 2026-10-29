@@ -11,14 +11,14 @@ import io.github.igorcv88.oneuiliquidglass.config.SettingsRegistry;
  *
  * <p>qs.lightfill / qs.lightcolor are the faint dark tint over light backdrops (capped at 18 %).
  * Retired keys are read and discarded, never applied: qs.darkfill, qs.darkcolor and qs.idle (the
- * white films over dark backdrops and inactive discs), qs.active (replaced by scene-aware tile palette),
+ * white films over dark backdrops and an old global inactive-disc alpha), qs.active (replaced by scene-aware tile palette),
  * qs.track (the third slider surface) and qs.lightstyle. They stay in the catalogue only so that
  * older profiles import and export unchanged; no stored value can bring a film back.</p>
  */
 public final class QsStyle {
     public final float lightFill, darkRim, lightRim, outer, fill;
     public final int lightColor, edgeBlur;
-    public final boolean tileLight, tileDark;
+    public final boolean tileLight, tileDark, hideOffDiscs;
     public final int tileLightOn, tileLightOff, tileLightOnInk, tileLightOffInk;
     public final int tileDarkOn, tileDarkOff, tileDarkOnInk, tileDarkOffInk;
     public final float tileLightOffAlpha, tileDarkOffAlpha;
@@ -37,10 +37,11 @@ public final class QsStyle {
         fill = number("qs.fill", QuickSettingsGlass.SLIDER_FILL);
         tileLight = number("qs.tilelight", 1) >= .5f;
         tileDark = number("qs.tiledark", 0) >= .5f;
+        hideOffDiscs = number("qs.hideoffdiscs", 1) >= .5f;
         tileLightOn = color("qs.tilelighton", 0xcdd7e5);
         tileLightOff = color("qs.tilelightoff", 0x202c3c);
         tileLightOnInk = color("qs.tilelightonink", 0x20242e);
-        tileLightOffInk = color("qs.tilelightoffink", 0x20242e);
+        tileLightOffInk = color("qs.tilelightoffink", 0x343a46);
         tileLightOffAlpha = number("qs.tilelightoffalpha", .24f);
         tileDarkOn = color("qs.tiledarkon", 0xffffff);
         tileDarkOff = color("qs.tiledarkoff", 0xffffff);
@@ -51,12 +52,17 @@ public final class QsStyle {
         prop("qs.darkfill"); prop("qs.darkcolor"); prop("qs.idle"); prop("qs.active");
         prop("qs.track"); prop("qs.lightstyle");
         fingerprint = lightFill+":"+lightColor+":"+darkRim+":"+lightRim+":"+edgeBlur+":"+outer+":"+fill
-                +":"+tileLight+":"+tileDark+":"+tileLightOn+":"+tileLightOff+":"+tileLightOnInk+":"+tileLightOffInk
+                +":"+tileLight+":"+tileDark+":"+hideOffDiscs+":"+tileLightOn+":"+tileLightOff+":"+tileLightOnInk+":"+tileLightOffInk
                 +":"+tileLightOffAlpha+":"+tileDarkOn+":"+tileDarkOff+":"+tileDarkOnInk+":"+tileDarkOffInk+":"+tileDarkOffAlpha;
     }
     /** No change for unknown backgrounds, disc-less tiles and unselected palette modes. */
     public int tileBackground(QuickSettingsGlass.Kind kind, QsScene.Tone tone, int nativeColor) {
         if (kind != QuickSettingsGlass.Kind.ACTIVE && kind != QuickSettingsGlass.Kind.IDLE) return nativeColor;
+        if (tone == QsScene.Tone.UNKNOWN) return nativeColor;
+        // The user-facing default is a genuinely disc-less inactive tile. Do not infer a circle
+        // from a generic Compose shape: this is called only after QuickTile ownership is bound.
+        // It also works when Theme Park is disabled and the native idle disc becomes opaque.
+        if (kind == QuickSettingsGlass.Kind.IDLE && hideOffDiscs) return 0;
         if (tone == QsScene.Tone.LIGHT_SCENE && tileLight)
             return kind == QuickSettingsGlass.Kind.ACTIVE ? 0xff000000 | tileLightOn
                     : QuickSettingsGlass.withAlpha(tileLightOff, tileLightOffAlpha);

@@ -384,8 +384,16 @@ public final class SurfacesPage implements Page {
         list.addView(footer, Ui.match(t.dp(18), 0));
     }
 
-    /** Groups of the Quick Settings block: title, summary, icon, keys (standard first, then advanced). */
+    /** Groups for the Central de controle: same scene splits as the renderer, no hidden palette. */
     private static final Object[][] QS_GROUPS = {
+            {"Discos desligados", "Sem fundo por padrão; permite restaurar e ajustar", Icon.CONTRAST,
+                    new String[] {"qs.hideoffdiscs"}},
+            {"Discos e ícones · fundo claro", "Cores de cada estado, independentes do fundo colorido", Icon.PALETTE,
+                    new String[] {"qs.tilelight", "qs.tilelighton", "qs.tilelightoff",
+                            "qs.tilelightonink", "qs.tilelightoffink", "qs.tilelightoffalpha"}},
+            {"Discos e ícones · fundo colorido", "Opcional: preservar aparência atual até ativar", Icon.PALETTE,
+                    new String[] {"qs.tiledark", "qs.tiledarkon", "qs.tiledarkoff",
+                            "qs.tiledarkonink", "qs.tiledarkoffink", "qs.tiledarkoffalpha"}},
             {"Sliders", "Cápsula de vidro e preenchimento branco", Icon.LAYERS,
                     new String[] {"qs.outer", "qs.fill"}},
             {"Vidro", "Tom das cápsulas sobre apps claros", Icon.PALETTE,
@@ -397,16 +405,16 @@ public final class SurfacesPage implements Page {
     };
 
     /**
-     * Controles rápidos, inside Central: its own opt-in, then one collapsed group per part, like
+     * Central de controle: its own opt-in, then one collapsed group per part, like
      * "Mais ajustes". The values apply live on the panel; the preview above shows notifications,
      * so the switch says so instead of a separate notice.
      */
     private void quickSettings(android.app.Activity a, Set<String> placed) {
-        list.addView(Ui.section(a, t, "Controles rápidos"));
+        list.addView(Ui.section(a, t, "Central de controle"));
         LinearLayout card = Ui.card(a, t);
         qsToggle = new Toggle(a, t);
-        qsRow = Ui.switchRow(a, t, Icon.SHADE, "Vidro nos controles rápidos",
-                "Muda na hora · a prévia acima mostra notificações", qsToggle);
+        qsRow = Ui.switchRow(a, t, Icon.SHADE, "Vidro da Central de controle",
+                "As cores dos discos são independentes das notificações; prévia própria pendente", qsToggle);
         qsToggle.listener((x, on) -> host.model().flag(ProductFlags.QUICK_SETTINGS, on));
         card.addView(qsRow);
         for (Object[] g : QS_GROUPS) {

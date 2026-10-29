@@ -36,7 +36,7 @@ public final class Controls {
         MOTION("Lente e movimento"),
         LENS_TUNING("Lente dinâmica"),
         /** Central only, with its own opt-in: drawn as one block of its own (SurfacesPage). */
-        QUICK_SETTINGS("Controles rápidos"),
+        QUICK_SETTINGS("Central de controle"),
         TECHNICAL("Técnico");
 
         public final String label;
@@ -608,10 +608,10 @@ public final class Controls {
         put(c("sf.shadelight", "Luz pela borda (lente)").fmt(Format.PERCENT_1).in(LENS, ADV).on(SH)
                 .help("Luz que entra pelo contorno dos cartões da central." + light)
                 .show(BEHAV, Channel.NONE));
-        // Controles rápidos: opt-in próprio e um bloco próprio dentro da Central (SurfacesPage).
+        // Central de controle: opt-in próprio e grupos por cena em SurfacesPage.
         // As chaves qs.* valem na hora; as sf.qs* ao reiniciar o userspace, como a lente dinâmica.
-        // Retired: white films over dark backdrops and inactive discs, and the disc opacity (discs
-        // keep Samsung's colours). Read-only so older profiles import and export unchanged.
+        // Retired: white films over dark backdrops and legacy disc/global alpha keys. Dedicated
+        // state palettes replace those keys; old profiles still import/export unchanged.
         for (String[] k : new String[][] {
                 {"qs.darkfill", "Véu sobre fundo colorido (descontinuado)"},
                 {"qs.darkcolor", "Cor do véu escuro (descontinuado)"},
@@ -631,6 +631,11 @@ public final class Controls {
                 .show(BEHAV, Channel.NONE));
         put(c("qs.tilelight", "Discos adaptativos no fundo claro").fmt(Format.TOGGLE).in(QS, STD).on(SH)
                 .help("Personaliza o contraste das bolinhas dos controles sobre apps claros, sem tocar nas cápsulas e nos ícones sem disco.")
+                .show(BEHAV, Channel.NONE));
+        put(c("qs.hideoffdiscs", "Discos desligados sem fundo").fmt(Format.TOGGLE).in(QS, STD).on(SH)
+                .help("Padrão: remove o fundo e a borda dos pequenos controles desligados. O ícone permanece. "
+                        + "Desligue esta opção para usar a cor e a opacidade configuradas para os discos desligados. "
+                        + "Afeta somente discos associados a um controle identificado, não as cápsulas de Wi-Fi ou Bluetooth.")
                 .show(BEHAV, Channel.NONE));
         put(c("qs.tilelighton", "Disco ligado · fundo claro").fmt(Format.COLOR).in(QS, STD).on(SH)
                 .help("Cor dos discos ligados sobre apps claros. Não muda o fundo colorido.")

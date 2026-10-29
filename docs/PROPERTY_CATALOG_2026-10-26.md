@@ -175,9 +175,9 @@ Observar que as propriedades `lightglass` e `shadelightglass` se aplicam a super
 5. Validar o comportamento de cada toggle nos três estados (heads-up, keyguard, shade) e nos dois temas; dependências devem desabilitar controles contextualmente, sem perder valor salvo.
 
 
-## Controles rápidos — pós-PR #75
+## Central de controle — pós-PR #75
 
-Controles `qs.*` são lidos pelo snapshot `QsStyle` em callbacks de configuração e aplicam ao vivo. Cápsulas são vidro transparente sobre fundos escuros/coloridos e recebem um tom escuro discreto (`qs.lightfill`/`qs.lightcolor`, teto 18%) sobre apps claros; o contorno é sempre a luz branca. Discos QuickTile ligados/desligados possuem paletas próprias por cena, com ícones monocromáticos associados ao mesmo modelo; o fundo escuro/colorido mantém as cores Samsung por padrão. `qs.darkfill`, `qs.darkcolor`, `qs.idle`, `qs.active`, `qs.track` e `qs.lightstyle` são legado, preservados apenas para importar/exportar perfis, e não têm efeito.
+Controles `qs.*` são lidos pelo snapshot `QsStyle` em callbacks de configuração e aplicam ao vivo. Cápsulas são vidro transparente sobre fundos escuros/coloridos e recebem um tom escuro discreto (`qs.lightfill`/`qs.lightcolor`, teto 18%) sobre apps claros; o contorno é sempre a luz branca. Discos QuickTile ligados/desligados possuem paletas próprias por cena, com ícones monocromáticos associados ao mesmo modelo. O padrão remove o fundo dos discos desligados identificados; em fundo escuro/colorido, os outros discos mantêm a cor Samsung até ativar a paleta opcional. O Theme Park pode alterar o preenchimento nativo, portanto a identificação dos discos pequenos requer validação. `qs.darkfill`, `qs.darkcolor`, `qs.idle`, `qs.active`, `qs.track` e `qs.lightstyle` são legado, preservados apenas para importar/exportar perfis, e não têm efeito.
 
 | Chave | Padrão | Tipo/domínio do parser | Controle / consequência |
 | --- | --- | --- | --- |
@@ -186,11 +186,12 @@ Controles `qs.*` são lidos pelo snapshot `QsStyle` em callbacks de configuraç�
 | `qs.darkcolor` | ffffff | RGB hexadecimal | Legado sem efeito visual; o interior das cápsulas é sempre transparente |
 | `qs.lightcolor` | 141823 | RGB hexadecimal | Cor do tom das cápsulas sobre apps claros |
 | `qs.tilelight` | 1 | booleano | Habilita contraste de discos e ícones sobre fundo claro sem alterar as cápsulas |
+| `qs.hideoffdiscs` | 1 | booleano | Ocultar fundo e aro dos discos desligados, sem ocultar ícones; aplica em cenas claras e coloridas apenas a tiles identificados |
 | `qs.tilelighton` | cdd7e5 | RGB hexadecimal | Disco ligado sobre fundo claro |
 | `qs.tilelightoff` | 202c3c | RGB hexadecimal | Disco desligado sobre fundo claro |
 | `qs.tilelightoffalpha` | .24 | 0–1 | Opacidade do disco desligado sobre fundo claro |
 | `qs.tilelightonink` | 20242e | RGB hexadecimal | Ícone monocromático ligado sobre fundo claro |
-| `qs.tilelightoffink` | 20242e | RGB hexadecimal | Ícone monocromático desligado sobre fundo claro |
+| `qs.tilelightoffink` | 343a46 | RGB hexadecimal | Ícone monocromático desligado sobre fundo claro |
 | `qs.tiledark` | 0 | booleano | Habilita paleta personalizada para fundo escuro/colorido (desligado por padrão) |
 | `qs.tiledarkon` | ffffff | RGB hexadecimal | Disco ligado sobre fundo escuro/colorido |
 | `qs.tiledarkoff` | ffffff | RGB hexadecimal | Disco desligado sobre fundo escuro/colorido |

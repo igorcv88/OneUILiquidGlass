@@ -66,8 +66,8 @@ final class QsSliderHooks {
     /** A finger is down (any SystemUI input), and what to call when a bar moves under it. */
     private final BooleanSupplier touching;
     private final Runnable dragged;
-    /** Last native body length per bar DrawScope: a change under a finger is a drag. */
-    private final java.util.Map<Object,Float> lengths=new java.util.WeakHashMap<>();
+    /** Samsung uses the same DrawScope for brightness and volume; histories must stay separate. */
+    private final QsSliderLengthHistory lengths=new QsSliderLengthHistory();
     QsSliderHooks(ClassLoader loader,BooleanSupplier enabled,Supplier<QsStyle> style,BooleanSupplier geometryAvailable,
             Consumer<Object> capture){
         this(loader,enabled,style,geometryAvailable,capture,()->false,()->{});
@@ -317,7 +317,7 @@ final class QsSliderHooks {
                 System.arraycopy(g,0,f.body,0,5);f.bodyDrawn=true;
                 float length=f.w<=f.h?y(extent):x(extent);
                 f.progress=Math.max(0f,Math.min(1f,length/Math.max(f.w,f.h)));
-                Float previous=lengths.put(f.scope,length);
+                Float previous=lengths.replace(f.scope,f.role,length);
                 if(QsSliderOrigin.suppress(f.role)&&drag(previous,length,touching.getAsBoolean()))dragged.run();
             }
             if(!(g[2]>0)||!(g[3]>0)){p.setResult(null);return;}

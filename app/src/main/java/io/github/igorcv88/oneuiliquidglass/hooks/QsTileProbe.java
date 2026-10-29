@@ -56,7 +56,7 @@ final class QsTileProbe {
                                 if (model == null) currentModel.remove(); else currentModel.set(model);
                                 if (Probe.trace && model != null) {
                                     String schema = QsTileTrace.modelFields(model);
-                                    String key = model.getClass().getName() + '|' + schema;
+                                    String key = QsTileTrace.modelSnapshotKey(model, schema);
                                     synchronized (models) {
                                         if (models.size() < 48 && models.add(key))
                                             Probe.log("QS_TILE_MODEL", "model=" + currentId() + " fields=" + schema);

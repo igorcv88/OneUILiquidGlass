@@ -1,5 +1,84 @@
 # Pendências OneUILiquidGlass, a partir do main pós-PR #83
 
+## PR #88: Theme Park desligado e paleta de controles, relatos 29/10 09:23–09:26
+
+- [x] **Correção do review P2 do #88, testes locais:** a rampa de `SharedBackdrop`
+  passa a usar `shadeDarkFill`/`shadeLightFill`, que são as tintas efetivamente
+  desenhadas pelo corpo nativo, nos endpoints; `nativeTint` continua para o blur
+  quando ele existe. Teste cobre a continuidade de ida e volta. Validar no DZIF.
+- [x] **Discos desligados sem fundo (contrato e código):** `qs.hideoffdiscs=1`
+  remove somente fundo e contorno do círculo `IDLE` com `QuickTile` identificado,
+  em cenas claras e escuras. Um `NONE` verdadeiro, as cápsulas médias e os estados
+  `UNKNOWN` permanecem nativos. Desligar esse toggle libera a cor/opacidade de
+  discos desligados. Testes unitários cobrindo estados e preservação de conteúdos.
+  **Ainda não comprova** os discos pequenos que não vinculam modelo.
+- [x] **Acesso aos controles existentes na UI (código):** grupos de discos,
+  ícones e opacidade por cena aparecem no bloco da Central de controle; termo
+  `Controles rápidos` removido dos pontos principais. Sem preview QS dedicado.
+- [ ] **Tema Samsung sem Theme Park (regressão alta):** prints mostram cartões
+  cinza/azul opacos, tanto em fundo branco quanto colorido, enquanto lentes QS
+  seguem ativas. Comparar com Theme Park ligado os caminhos `GLASS_APPLIED`,
+  `NATIVE_FALLBACK`, `SHADE_MATERIAL_DECISION`, `DRAW_HOOK_CALLED`, `LIFECYCLE`
+  e as sobreposições (`cmd overlay list`). Não presumir que a classe mudou.
+- [ ] **Classificação de discos com Theme Park desligado:** hoje a distinção
+  ACTIVE/IDLE ainda usa alpha do preenchimento. Um disco cinza opaco que
+  representa controle desligado pode ser classificado ACTIVE. O novo toggle
+  só remove IDLE; precisamos do estado real do modelo para estender a mudança
+  aos pequenos sem alterar por engano os ligados.
+- [ ] **Sliders sem Theme Park:** os ícones de brilho e volume ficam quase
+  invisíveis sobre preenchimento branco. Precisam de tinta estável por estado/cena,
+  independente da composição da barra, sem modificar geometria ou porcentagem.
+- [ ] **Controle de cor RGBA real:** seletor HSV (barra de matiz + quadrado
+  saturação/luminosidade + barra alpha) no editor, inclusive opacidade dos
+  discos ligados e preenchimento dos sliders; cor e alpha por cena e estado.
+  Atualmente somente discos desligados possuem alpha independente, via slider.
+- [ ] **Página exclusiva Central de controle:** preview realista dos discos,
+  cápsulas pequenas/médias, sliders e painel nos fundos claro/colorido/preto,
+  pois a prévia atual de Central mostra notificações. Organizar parâmetros e
+  dependências sem expor nomes internos na tela principal.
+- [ ] **Inglês como idioma padrão + português selecionável:** extrair todas
+  as strings para recursos e implementar configuração de idioma, preservando
+  o português como opção completa. Não traduzir apenas nomes de menus.
+- [ ] **Reflexão dupla no canto superior esquerdo de todas as cápsulas QS:**
+  observada também em capturas antigas; investigar sobreposição da borda Compose,
+  `lightoutline`, luz AGSL e/ou amostragem do compositor. Não reduzir globalmente
+  a luz sem identificar a camada redundante, para preservar colorido/preto.
+
+
+## Revisões dos PRs #85, #86 e #87 (29/10)
+
+- [x] **Review P2 do #85** (`SharedGlassFill`): durante a interpolação, a tinta
+  compartilhada segue todos os frames, independentemente da troca de `lightStyle` no
+  ponto médio; fora da rampa mantém a distinção entre material nativo e claro.
+  Regressão coberta por teste unitário; requer verificação visual no DZIF.
+- [x] **Review P2 do #86** (`QsTileProbe`): a deduplicação inclui identidade da instância
+  e estado, de modo que tiles distintos com os mesmos booleanos não percam snapshots.
+  Teste unitário confirma privacidade e chaves diferentes.
+- [ ] **Review do #87**: ainda em execução quando consultado; não havia comentários
+  técnicos publicados. Reavaliar se aparecerem novos apontamentos.
+
+## Evidência do APK #87, coleta 29/10 08:51–08:53
+
+- [x] **Falso arraste do brilho durante volume, causa comprovada:** os dois sliders usam
+  o mesmo `DrawScope` (`id=d2f618a`). Às 08:52:14, o volume mudou de ~49% a 100%,
+  enquanto o brilho permaneceu em ~61,97%; porém o mapa de comprimentos indexado
+  somente por scope comparou o último valor do volume com o do brilho e disparou
+  `QS_EDGE_SUPPRESS ... released=8` no teste de volume. Histórico separado por
+  **scope + role** e coberto por testes; confirmar no próximo APK. Ainda pode haver
+  mudança real automática de brilho enquanto outro controle recebe toque.
+- [ ] **Discos pequenos:** somente três identidades distintas aparecem em
+  `QS_TILE_COLOR`, todas `ACTIVE`, enquanto `QS_TILE_BIND` identificou quatro modelos
+  de `QuickTile` no trecho coletado; o quarto pode não ter disco. A instrumentação
+  existente é limitada por amostragem, não prova a identidade de cada um dos 15
+  pequenos. Coletar `QS_TILE_COLOR_DECISION` do #88 para identificar os não vinculados.
+- [ ] **Shade → QS:** esta sessão contém etapas colorido, branco, brilho, volume e
+  ajuste ao vivo, mas não marca separadamente a transição horizontal shade → QS.
+  Testá-la com `QS_TONE_ENTRY`, `TONE_CAPTURE_DONE source=...` e
+  `QS_TILE_COLOR_DECISION` no #88.
+- [ ] **Luz no fundo branco:** vídeo do #87 confirma contornos e interiores claros de
+  contraste desigual; `lightoutline` entra no shader apenas em LIGHT_SCENE. Separar
+  visualmente ganho do shader e opacidade do interior antes de alterar a óptica aprovada.
+
 ## Próxima mudança após a coleta QS #86 (29/10, 07:37–07:39)
 
 - [x] Ligado/desligado do slider distinguido pelos callbacks tipados `BrightBarKt` e
@@ -21,6 +100,30 @@
 
 ### Pendências seguintes (não corrigidas por essa mudança)
 
+- [ ] **PR #87 no aparelho, paleta parcial**: relato de 29/10 indica adaptação em alguns
+  tiles grandes (Wi-Fi e controles inferiores), mas nenhum dos pequenos. Correlacionar
+  `QS_TILE_SURFACE_COMPOSE tileModel=unbound`, `QS_TILE_MODEL`, `QS_TILE_COLOR` e
+  `QS_TILE_ICON_NODE` para distinguir círculo sem disco, modelo perdido em lambda Compose
+  e classificação incorreta; não recolorir círculos não verificados por heurística.
+- [ ] **Entrada shade → QS não adapta as cores**: abertura direta adapta ao menos alguns
+  controles, mas a transição horizontal a partir da central de notificações não. Comparar
+  `TONE_CAPTURE_REQUEST/DONE`, `TONE_COMMIT`, `QS_RESAMPLE` e `QS_TILE_SURFACE_COMPOSE`
+  nos dois caminhos para separar captura da cena, atualização e vínculo do tile.
+- [ ] **Sliders sem adaptação de cor à cena**: verificar papel de brilho/volume, cor efetiva
+  da primitiva e desenho no `LIGHT_SCENE`, sem alterar geometria/zero aprovado.
+- [ ] **Fantasma de contornos no gesto horizontal abortado**: no build anterior ao PR #87,
+  ao arrastar parcialmente a shade em direção ao QS e soltar para voltar à shade, aparecem
+  contornos ópticos de cápsulas QS que não ficaram visíveis. Captura em vídeo de 29/10;
+  distinguir resíduo durante a animação de região persistente após o cancelamento. Verificar
+  `expansionFraction`, liberação efetiva de regiões em `QS_EDGE_EXIT`, sessão e alpha do
+  compositor em cada sentido do gesto, inclusive sem cruzar o limiar de abertura completa.
+- [ ] **Excesso aparente de luz nas bordas apenas sobre fundo branco**: comparar a mesma
+  cápsula em cena clara e colorida. A captura clara mostra interior cinzento e contorno
+  mais evidente; hipótese prioritária é contraste entre tinta escura da cápsula e aro
+  branco, não aumento comprovado da energia do AGSL. Avaliar primeiro interior claro com
+  tinta legível dos discos/ícones/labels (dependente da validação do PR #87), preservando
+  cenas coloridas/escuras. Se persistir, medir separadamente aro Compose, óptica AGSL
+  e região do compositor e avaliar ganho por cena. Não mexer no `sf.qslight` global às cegas.
 - [ ] Relógio real da shade (`QS_CLOCK_CANDIDATE` sem nó): localizar hook antes de mudar tinta.
 - [ ] Ícones do lápis e engrenagem: toggle independente dos ícones dos tiles.
 - [ ] Transição gradual do pop-up e confirmação da rampa de 180 ms.

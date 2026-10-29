@@ -1548,13 +1548,15 @@ public final class HeadsUpHooks {
         /** The drawable path could not be built for this card: it keeps the Samsung blur. */
         boolean drawableFailed;
         void pushToneVeil() { pushToneVeil(measuredVeil); }
-        void pushToneVeil(int veil) {
+        void pushToneVeil(int veil) { pushToneVeil(veil, false); }
+        void pushToneVeil(int veil, boolean ramping) {
             try {
                 // A pop-up's veil has its own slot: the shade veil must not reach a lens card.
                 if (SURFACE_POPUP.equals(toneSurface)) { if (compBridge != null) compBridge.setPopupVeil(veil); return; }
                 // SharedBackdrop has no blur bridge: paint the light material over the panel's
-                // existing blur rather than silently discarding shadelightglass with shadeblur=0.
-                if (glass != null && glassKind == Backdrop.Kind.SHARED) glass.setSharedVeil(veil);
+                // existing blur. During a ramp the body follows every frame, even while the edge
+                // light style is still awaiting its midpoint switch.
+                if (glass != null && glassKind == Backdrop.Kind.SHARED) glass.setSharedVeil(veil, ramping);
                 if (compBridge != null) compBridge.setToneVeil(veil);
                 if (semBridge != null) semBridge.setToneVeil(veil);
             } catch (ReflectiveOperationException | RuntimeException e) { Probe.error("SHADE_TONE_APPLY_FAILED", e); }
@@ -1572,7 +1574,19 @@ public final class HeadsUpHooks {
             measuredVeil = veil;
             if (veilRamp != null) { veilRamp.cancel(); veilRamp = null; }
             View v = background.get();
-            int[] ends = io.github.igorcv88.oneuiliquidglass.glass.VeilRamp.ends(from, veil, nativeTint);
+            // SharedBackdrop draws the body's native fill, not the Samsung region tint. Using
+            // nativeTint here caused a visible jump as the ramp entered or left the native side.
+            int rampBase = nativeTint;
+            if (glassKind == Backdrop.Kind.SHARED && v != null) {
+                boolean night = (v.getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK)
+                        == Configuration.UI_MODE_NIGHT_YES;
+                rampBase = night ? spec.shadeDarkFill : spec.shadeLightFill;
+            }
+            int[] ends = io.github.igorcv88.oneuiliquidglass.glass.VeilRamp.ends(from, veil, rampBase);
+            if (Probe.trace && glassKind == Backdrop.Kind.SHARED && ends != null)
+                Probe.log("SHADE_SHARED_RAMP_ENDPOINTS", "viewId=" + Integer.toHexString(System.identityHashCode(v))
+                        + " from=" + Integer.toHexString(ends[0]) + " to=" + Integer.toHexString(ends[1])
+                        + " nativeBody=" + Integer.toHexString(rampBase));
             // A card still fading in (the shade's first frames) takes the new veil at once: a ramp
             // would only replay the old veil under the fade.
             if (ends == null || v == null || !v.isShown() || shownAlpha(v) < 0.5f
@@ -1582,7 +1596,7 @@ public final class HeadsUpHooks {
             android.animation.ValueAnimator a = android.animation.ValueAnimator.ofArgb(ends[0], ends[1]);
             a.setDuration(VEIL_RAMP_MS);
             a.addUpdateListener(an -> {
-                pushToneVeil((Integer) an.getAnimatedValue());
+                pushToneVeil((Integer) an.getAnimatedValue(), true);
                 if (an.getAnimatedFraction() >= 0.5f) { flushPendingSwap(); flushLightStyle(); }
                 invalidate();
             });
@@ -2179,7 +2193,7 @@ public final class HeadsUpHooks {
                 glassWindow = new WeakReference<>(v.getWindowToken());
                 heldFor = null;
                 glass.setLightStyle(lightStyle, Tuning.get().lightEdge);
-                if (kind == Backdrop.Kind.SHARED) glass.setSharedVeil(measuredVeil);
+                if (kind == Backdrop.Kind.SHARED) glass.setSharedVeil(measuredVeil, false);
                 glass.setOutline(outline());
                 inherited = true;
                 glassKind = kind;
