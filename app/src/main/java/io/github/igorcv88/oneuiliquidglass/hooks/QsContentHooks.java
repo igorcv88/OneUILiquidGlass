@@ -28,13 +28,14 @@ final class QsContentHooks {
     private final Supplier<QsStyle> style;
     private final Supplier<QsScene.Tone> scene, headerScene;
     private final Consumer<Object> capture;
+    private final QsTileProbe tileProbe;
     private final java.util.function.Function<Boolean,Float> level;
     private QsTextHooks text;
     QsContentHooks(ClassLoader loader, BooleanSupplier enabled, Supplier<QsStyle> style,
             Supplier<QsScene.Tone> scene, Supplier<QsScene.Tone> headerScene,
-            java.util.function.Function<Boolean,Float> level, Consumer<Object> capture) {
+            java.util.function.Function<Boolean,Float> level, Consumer<Object> capture, QsTileProbe tileProbe) {
         this.loader=loader; this.enabled=enabled; this.style=style; this.scene=scene; this.headerScene=headerScene; this.capture=capture;
-        this.level=level;
+        this.level=level;this.tileProbe=tileProbe;
     }
     Frame current() { return content.get(); }
     private Class<?> optional(String name) {
@@ -93,9 +94,9 @@ final class QsContentHooks {
                     if(f!=null && f.media && !f.background && p.args.length==2) f.shape=p.args[1];
                 }
             });
-        text = new QsTextHooks(loader, this::current, enabled, scene, headerScene, level);
+        text = new QsTextHooks(loader, this::current, enabled, scene, headerScene, level, style, tileProbe);
         text.install();
-        // Tile icons keep Samsung's colours: only labels follow the backdrop.
+        // Tile ink is bound to the verified QuickTile model and its disc state.
         // Both active and empty players use the parent capsule drawContent boundary.
         // No artwork-only transform or second solid stroke.
         Probe.log("QS_CONTENT_READY","owners="+hooked+" firmware=DZIF");

@@ -5,9 +5,12 @@ import java.lang.reflect.Modifier;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.Map;
+import java.util.WeakHashMap;
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
 import io.github.igorcv88.oneuiliquidglass.diagnostics.Probe;
+import io.github.igorcv88.oneuiliquidglass.glass.QuickSettingsGlass;
 
 /** Read-only diagnostic of DZIF's real QuickTile and IconTextTile composition arguments. */
 final class QsTileProbe {
@@ -15,6 +18,16 @@ final class QsTileProbe {
     private final Set<String> samples = Collections.synchronizedSet(new HashSet<>());
     private final Set<String> models = Collections.synchronizedSet(new HashSet<>());
     private final ThreadLocal<Object> currentModel = new ThreadLocal<>();
+    private final Map<Object,QuickSettingsGlass.Kind> discStates =
+            java.util.Collections.synchronizedMap(new WeakHashMap<>());
+
+    Object currentModel() { return currentModel.get(); }
+    void disc(Object model,QuickSettingsGlass.Kind state) {
+        if (model != null && (state == QuickSettingsGlass.Kind.ACTIVE
+                || state == QuickSettingsGlass.Kind.IDLE || state == QuickSettingsGlass.Kind.NONE))
+            discStates.put(model,state);
+    }
+    QuickSettingsGlass.Kind disc(Object model) { return model == null ? null : discStates.get(model); }
 
     String currentId() {
         Object model = currentModel.get();

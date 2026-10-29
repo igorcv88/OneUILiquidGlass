@@ -629,6 +629,38 @@ public final class Controls {
         put(c("qs.lightcolor", "Cor do tom sobre fundo claro").fmt(Format.COLOR).in(QS, ADV).on(SH)
                 .help("Cor do tom das cápsulas sobre apps claros.")
                 .show(BEHAV, Channel.NONE));
+        put(c("qs.tilelight", "Discos adaptativos no fundo claro").fmt(Format.TOGGLE).in(QS, STD).on(SH)
+                .help("Personaliza o contraste das bolinhas dos controles sobre apps claros, sem tocar nas cápsulas e nos ícones sem disco.")
+                .show(BEHAV, Channel.NONE));
+        put(c("qs.tilelighton", "Disco ligado · fundo claro").fmt(Format.COLOR).in(QS, STD).on(SH)
+                .help("Cor dos discos ligados sobre apps claros. Não muda o fundo colorido.")
+                .show(BEHAV, Channel.NONE));
+        put(c("qs.tilelightoff", "Disco desligado · fundo claro").fmt(Format.COLOR).in(QS, STD).on(SH)
+                .help("Cor dos discos desligados sobre apps claros.").show(BEHAV, Channel.NONE));
+        put(c("qs.tilelightoffalpha", "Opacidade do disco desligado · claro").fmt(Format.PERCENT_1).in(QS, ADV).on(SH)
+                .help("Intensidade da cor dos discos desligados, independente do vidro da cápsula.")
+                .show(BEHAV, Channel.NONE));
+        put(c("qs.tilelightonink", "Ícone ligado · fundo claro").fmt(Format.COLOR).in(QS, ADV).on(SH)
+                .help("Cor aplicada apenas a ícones monocromáticos vinculados a discos ligados.")
+                .show(BEHAV, Channel.NONE));
+        put(c("qs.tilelightoffink", "Ícone desligado · fundo claro").fmt(Format.COLOR).in(QS, ADV).on(SH)
+                .help("Cor aplicada apenas a ícones monocromáticos vinculados a discos desligados.")
+                .show(BEHAV, Channel.NONE));
+        put(c("qs.tiledark", "Personalizar discos no fundo colorido").fmt(Format.TOGGLE).in(QS, ADV).on(SH)
+                .help("Desligado por padrão: preserva a aparência aprovada nos fundos escuros e coloridos.")
+                .show(BEHAV, Channel.NONE));
+        put(c("qs.tiledarkon", "Disco ligado · fundo colorido").fmt(Format.COLOR).in(QS, ADV).on(SH)
+                .help("Cor do disco ligado no fundo escuro ou colorido.").show(BEHAV, Channel.NONE));
+        put(c("qs.tiledarkoff", "Disco desligado · fundo colorido").fmt(Format.COLOR).in(QS, ADV).on(SH)
+                .help("Cor do disco desligado no fundo escuro ou colorido.").show(BEHAV, Channel.NONE));
+        put(c("qs.tiledarkoffalpha", "Opacidade do disco desligado · colorido").fmt(Format.PERCENT_1).in(QS, ADV).on(SH)
+                .help("Intensidade da cor desligada no fundo escuro ou colorido.").show(BEHAV, Channel.NONE));
+        put(c("qs.tiledarkonink", "Ícone ligado · fundo colorido").fmt(Format.COLOR).in(QS, ADV).on(SH)
+                .help("Cor dos ícones monocromáticos ligados, se a personalização colorida estiver ativa.")
+                .show(BEHAV, Channel.NONE));
+        put(c("qs.tiledarkoffink", "Ícone desligado · fundo colorido").fmt(Format.COLOR).in(QS, ADV).on(SH)
+                .help("Cor dos ícones monocromáticos desligados, se a personalização colorida estiver ativa.")
+                .show(BEHAV, Channel.NONE));
         put(c("qs.darkrim", "Contorno sobre fundo colorido").fmt(Format.PERCENT_1).in(QS, STD).on(SH)
                 .help("Intensidade da linha de luz em volta das cápsulas sobre fundos escuros ou"
                         + " coloridos.")

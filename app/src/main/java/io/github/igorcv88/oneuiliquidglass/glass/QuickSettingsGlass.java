@@ -10,7 +10,8 @@ package io.github.igorcv88.oneuiliquidglass.glass;
  * page so the labels, which turn dark there, keep their contrast. The outline is always the white
  * optical rim, never darkened. Samsung's discs (active and inactive) and the tile icons keep their
  * own colours: only labels follow the backdrop. The only compositor part is the optional edge
- * light and refraction (sfhook profile 3). Colours are non-premultiplied ARGB.</p>
+ * light and refraction (sfhook profile 3). DZIF's independently bound QuickTile discs may use the
+ * opt-in per-scene palette in QsStyle, without changing the capsules. Colours are non-premultiplied ARGB.</p>
  */
 public final class QuickSettingsGlass {
     private QuickSettingsGlass() {}
@@ -50,6 +51,16 @@ public final class QuickSettingsGlass {
             return a >= 0.5f ? Kind.ACTIVE : a > 0f ? Kind.IDLE : Kind.NONE;
         }
         return alpha(fill) > 0f || alpha(outline) > 0f ? Kind.CONTAINER : Kind.NONE;
+    }
+
+    /**
+     * DZIF draws an inactive QuickTile using the transparent sentinel 0x00234b60 for both
+     * background and outline. A truly disc-less tile uses zero for both. Interpret the sentinel
+     * only inside a verified QuickTile; never turn a native empty or unrelated circle into a disc.
+     */
+    public static Kind tileDiscKind(Kind nativeKind, int fill, int outline, boolean bound) {
+        if (!bound || nativeKind != Kind.NONE) return nativeKind;
+        return fill == 0x00234b60 && outline == fill ? Kind.IDLE : Kind.NONE;
     }
 
     /**
@@ -271,7 +282,7 @@ public final class QuickSettingsGlass {
         return white(dark ? DARK_RIM : LIGHT_RIM);
     }
 
-    static float alpha(int argb) {
+    public static float alpha(int argb) {
         return (argb >>> 24) / 255f;
     }
 

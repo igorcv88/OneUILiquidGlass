@@ -105,6 +105,18 @@ public final class Applicability {
             case "qs.active":
             case "qs.idle":
                 return new Result(Kind.READ_ONLY, "Legado sem efeito visual");
+            case "qs.tilelighton":
+            case "qs.tilelightoff":
+            case "qs.tilelightoffalpha":
+            case "qs.tilelightonink":
+            case "qs.tilelightoffink":
+                return on("qs.tilelight") ? ACTIVE : inactive("Ative Discos adaptativos no fundo claro");
+            case "qs.tiledarkon":
+            case "qs.tiledarkoff":
+            case "qs.tiledarkoffalpha":
+            case "qs.tiledarkonink":
+            case "qs.tiledarkoffink":
+                return on("qs.tiledark") ? ACTIVE : inactive("Ative Personalizar discos no fundo colorido");
             case "sfrefract":
             case "sf.optics":
             case "sf.norewrite":

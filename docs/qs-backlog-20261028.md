@@ -1,5 +1,36 @@
 # Pendências OneUILiquidGlass, a partir do main pós-PR #83
 
+## Próxima mudança após a coleta QS #86 (29/10, 07:37–07:39)
+
+- [x] Ligado/desligado do slider distinguido pelos callbacks tipados `BrightBarKt` e
+  `VolumeBarKt` em `BidirectionalBar` (argumento 12); identidade propagada para a lambda
+  diferida de desenho, em vez de associada ao `DrawScope` compartilhado. Falta confirmar em
+  aparelho `QS_SLIDER_STATUS role=brightness/volume` e volume sem `QS_EDGE_SUPPRESS`.
+- [x] Discos dos QuickTiles: no DZIF, o estado desligado sem alpha usa a sentinela
+  `bg=outline=00234b60` e o item *sem disco* usa `bg=outline=0`. Paleta independente no
+  fundo claro para ligados/desligados, com separação de tinta dos ícones; modo escuro/colorido
+  opt-in desligado para preservar a estética aprovada. Só vinculamos o disco e o ícone ao
+  mesmo modelo identificado por `QsTileProbe`; os ícones não vinculados não mudam.
+  **Ainda não validado no aparelho**: `QS_TILE_COLOR` e `QS_TILE_ICON_INK` devem mostrar
+  aplicação e contraste real em cada estado.
+- [x] `trace` agora aparece na página inicial como toggle de diagnóstico; o estado solicitado
+  vem do app e a legenda diferencia espera de confirmação do SystemUI. A propriedade bruta
+  `getprop debug.oulg.trace` pode continuar `0` enquanto o snapshot efetivo é `1`.
+- [x] Catálogo e matriz de controles regenerados: 135 chaves no total. Preservados os valores
+  de `qs.fill`, `qs.lightfill` e todos os parâmetros ópticos existentes.
+
+### Pendências seguintes (não corrigidas por essa mudança)
+
+- [ ] Relógio real da shade (`QS_CLOCK_CANDIDATE` sem nó): localizar hook antes de mudar tinta.
+- [ ] Ícones do lápis e engrenagem: toggle independente dos ícones dos tiles.
+- [ ] Transição gradual do pop-up e confirmação da rampa de 180 ms.
+- [ ] Baixíssimo preenchimento dos sliders e possível base retificada na curva.
+- [ ] Contraste branco das notificações com controle exclusivo ao fundo claro, sem afetar o colorido.
+- [ ] Live updates não-mídia no estado parado e na lockscreen; depois mídia.
+- [ ] Toast Samsung que substitui o vidro após a criação.
+- [ ] Confirmar tinta dos labels e feedback visual dos controles em todas as cenas.
+- [ ] Validar que o refresh funciona com alterações no app, sem reiniciar SystemUI.
+
 ## Evidência DZIF do PR #84 (28/10, 23:26–23:30)
 
 - Diagnóstico complementar do usuário: desligar `debug.oulg.shadeblur` tornava inoperante

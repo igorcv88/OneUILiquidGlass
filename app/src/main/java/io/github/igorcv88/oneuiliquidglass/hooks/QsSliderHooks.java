@@ -33,6 +33,10 @@ final class QsSliderHooks {
     private final java.util.Set<Object> interactionSources = java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>());
     private final java.util.Map<Object,String> sourceRoles = new java.util.WeakHashMap<>();
     private final ThreadLocal<String> composingRole = new ThreadLocal<>();
+    /** Samsung's deferred draw lambda has no BrightBar/VolumeBar frame in its R8 stack. */
+    private final ThreadLocal<String> drawingRole = new ThreadLocal<>();
+    private final java.util.Map<Object,String> drawLambdaRoles =
+            java.util.Collections.synchronizedMap(new java.util.WeakHashMap<>());
     private final java.util.Set<String> originHints = new java.util.HashSet<>();
     private final java.util.Set<String> barArguments = new java.util.HashSet<>();
     private int originSamples, interactionSamples;
@@ -88,6 +92,7 @@ final class QsSliderHooks {
         nativeCanvas=Class.forName("androidx.compose.ui.graphics.AndroidCanvas",false,loader).getDeclaredField("internalCanvas");
         nativeCanvas.setAccessible(true);
         installInteractions();
+        installDrawRoleHook();
         boolean[] found=new boolean[3];
         for(Method m:scope.getDeclaredMethods()) {
             String n=m.getName();
@@ -119,7 +124,8 @@ final class QsSliderHooks {
                     p.setObjectExtra("qsBarPrevious", composing.get()); composing.set(true);
                     p.setObjectExtra("qsBarRolePrevious", composingRole.get());
                     StackTraceElement[] stack = QsSliderOrigin.currentStack();
-                    String role = QsSliderOrigin.identify(stack);
+                    String role = QsSliderOrigin.identifyArguments(p.args);
+                    if (QsSliderOrigin.UNKNOWN.equals(role)) role = QsSliderOrigin.identify(stack);
                     composingRole.set(role);
                     if(Probe.trace && barArguments.size() < 16) {
                         String args = QsTileTrace.arguments(p.args);
@@ -153,6 +159,67 @@ final class QsSliderHooks {
         }
         if(!callerFound)throw new NoSuchMethodException("drawBidirectionalBarTrackProgressThumbContent-Uzs9YN0");
         Probe.log("QS_SLIDER_READY","surfaces=2 track="+(trackHooked?"hidden":"native")+" thumb=endCap firmware=DZIF");
+    }
+
+    /**
+     * The draw callback is constructed inside BidirectionalBar but invoked after composition.
+     * Tag its instance while the verified owner is on the composing thread, then restore the tag
+     * around invoke. This avoids assigning a role to DrawScope: both bars reuse the same scope.
+     */
+    private void installDrawRoleHook() {
+        try {
+            Class<?> lambda = Class.forName(
+                    "com.android.systemui.samsung.quicksetting.ui.tiles.BidirectionalBarKt$$ExternalSyntheticLambda5",
+                    false, loader);
+            XposedBridge.hookAllConstructors(lambda, new XC_MethodHook() {
+                @Override protected void afterHookedMethod(MethodHookParam p) {
+                    String role = composingRole.get();
+                    if (role != null && !QsSliderOrigin.UNKNOWN.equals(role))
+                        drawLambdaRoles.put(p.thisObject, role);
+                }
+            });
+            int hooks = 0;
+            for (Method m : lambda.getDeclaredMethods()) {
+                if (!m.getName().equals("invoke")) continue;
+                XposedBridge.hookMethod(m, new XC_MethodHook() {
+                    @Override protected void beforeHookedMethod(MethodHookParam p) {
+                        p.setObjectExtra("qsDrawRolePrevious", drawingRole.get());
+                        String role = drawLambdaRoles.get(p.thisObject);
+                        if (role == null) role = capturedDrawRole(p.thisObject);
+                        if (QsSliderOrigin.UNKNOWN.equals(role) || role == null) drawingRole.remove();
+                        else drawingRole.set(role);
+                    }
+                    @Override protected void afterHookedMethod(MethodHookParam p) {
+                        String previous = (String) p.getObjectExtra("qsDrawRolePrevious");
+                        if (previous == null) drawingRole.remove(); else drawingRole.set(previous);
+                    }
+                });
+                hooks++;
+            }
+            Probe.log("QS_SLIDER_DRAW_ROLE_READY", "owner=" + lambda.getName() + " invokes=" + hooks);
+        } catch (ClassNotFoundException | RuntimeException | LinkageError e) {
+            Probe.error("QS_SLIDER_DRAW_ROLE_UNAVAILABLE", e);
+        }
+    }
+
+    private String capturedDrawRole(Object lambda) {
+        // Some DZIF builds cache the synthetic lambda before the composable hook runs. In those
+        // builds its captures may still include a BrightBarKt / VolumeBarKt callback.
+        java.util.ArrayList<Object> captures = new java.util.ArrayList<>();
+        try {
+            for (Field f : lambda.getClass().getDeclaredFields()) {
+                if (Modifier.isStatic(f.getModifiers())) continue;
+                f.setAccessible(true);
+                Object value = f.get(lambda);
+                if (value != null) captures.add(value);
+            }
+        } catch (ReflectiveOperationException | RuntimeException ignored) {
+            drawLambdaRoles.put(lambda, QsSliderOrigin.UNKNOWN);
+            return QsSliderOrigin.UNKNOWN;
+        }
+        String role = QsSliderOrigin.identifyArguments(captures.toArray());
+        drawLambdaRoles.put(lambda, role); // Cache even UNKNOWN: never reflect on each frame.
+        return role;
     }
     private void installInteractions() {
         try {
@@ -210,12 +277,13 @@ final class QsSliderHooks {
             float iw=w<=h?w:w-2*m, ih=w<=h?h-2*m:h;
             Frame frame=new Frame(p.args[0],context,canvas,original,new QsDrawTransaction(canvas,context,setSize,original),iw,ih,
                     "Rtl".equals(String.valueOf(p.args[3])),snapshot,outer);
-            String role=QsSliderOrigin.UNKNOWN;
+            String role=drawingRole.get();
+            if (role == null) role=QsSliderOrigin.UNKNOWN;
             // A DrawScope may be reused for different bars. Never cache its caller's identity.
             // Only pay for a stack sample during a gesture or an opt-in diagnostic session.
             if(touching.getAsBoolean()||Probe.trace) {
                 StackTraceElement[] stack=QsSliderOrigin.currentStack();
-                role=QsSliderOrigin.identify(stack);
+                if (QsSliderOrigin.UNKNOWN.equals(role)) role=QsSliderOrigin.identify(stack);
                 if(Probe.trace&&originSamples<36) {
                     String hint=QsSliderOrigin.stackHint(stack);
                     if(originHints.add(role+"|"+hint)) {
