@@ -61,7 +61,8 @@ public final class QsStyle {
         if (tone == QsScene.Tone.UNKNOWN) return nativeColor;
         // The user-facing default is a genuinely disc-less inactive tile. Do not infer a circle
         // from a generic Compose shape: this is called only after QuickTile ownership is bound.
-        // It also works when Theme Park is disabled and the native idle disc becomes opaque.
+        // With Theme Park disabled an opaque native OFF disc can be misclassified ACTIVE:
+        // only a verified IDLE model reaches this branch. Never guess from circle shape.
         if (kind == QuickSettingsGlass.Kind.IDLE && hideOffDiscs) return 0;
         if (tone == QsScene.Tone.LIGHT_SCENE && tileLight)
             return kind == QuickSettingsGlass.Kind.ACTIVE ? 0xff000000 | tileLightOn

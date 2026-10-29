@@ -2231,7 +2231,21 @@ public final class HeadsUpHooks {
             // debug.oulg.semalpha is set, and the ramp must start or end on that colour.
             int semAlpha = Tuning.get().semAlpha;
             nativeTint = semAlpha >= 0 && (compBridge != null || semBridge != null) ? (tone & 0x00ffffff) | (semAlpha << 24) : tone;
-            glass.configure(original, shape(), fill, tone);
+            // Unlike compositor blur regions, SharedBackdrop is drawn directly in the row.
+            // Its native resting alpha is Theme Park-dependent, so only a verified exit fade
+            // may attenuate the glass independently of the Android View alpha.
+            boolean shadeLeaving = kind == Backdrop.Kind.SHARED && exit.leaving(android.os.SystemClock.uptimeMillis());
+            View shadeRow = row.get();
+            float shadeExitAlpha = shadeLeaving ? (shadeRow == null ? 0f : exitAlpha(shadeRow)) : Float.NaN;
+            glass.configure(original, shape(), fill, tone, shadeExitAlpha);
+            if (kind == Backdrop.Kind.SHARED && Probe.trace) {
+                String signal = original.getAlpha() + ":" + glass.getAlpha() + ":" + shadeLeaving;
+                if (!signal.equals(lastSharedAlpha)) {
+                    lastSharedAlpha = signal;
+                    Probe.log("SHADE_SHARED_ALPHA", "native=" + original.getAlpha()
+                            + " glass=" + glass.getAlpha() + " leaving=" + shadeLeaving);
+                }
+            }
             if (live) {
                 glass.setGlint(!feature("glint") ? 0f : popup ? tn.liveGlint : lock ? tn.kgGlint : !lensSurface() ? tn.shadeGlint : 1f);
                 glass.setRimGain(popup ? tn.liveRim : lock ? tn.kgRim : 1f);
@@ -2307,6 +2321,8 @@ public final class HeadsUpHooks {
         }
         /** Last LIVE_STATE line of this card; logged again only when the material it describes changes. */
         String lastLiveState;
+        /** Theme Park-dependent native alpha vs the shade's effective shared-glass alpha. */
+        String lastSharedAlpha;
         /**
          * What an LSPosed-only card asks the compositor for: the surface, the radius and colour sent to
          * the blur region, the fill, the cross-window capability (false on One UI 9 even when the blur

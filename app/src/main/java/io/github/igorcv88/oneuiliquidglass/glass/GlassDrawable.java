@@ -173,7 +173,7 @@ public final class GlassDrawable extends Drawable {
     /** False once the refraction program failed to compile on this device. */
     public static boolean refractionAvailable() { return !refractBroken; }
     /** fillColor is drawn by the material; blurColor is handed to the backdrop. */
-    public void configure(Drawable original, float[] shape, int fillColor, int tint) throws ReflectiveOperationException {
+    public void configure(Drawable original, float[] shape, int fillColor, int tint, float sharedExitAlpha) throws ReflectiveOperationException {
         nativeDrawable = original;
         boolean changed = !configured || lastTint != tint || !java.util.Arrays.equals(shape, radii)
                 || tuningGeneration != Tuning.generation;
@@ -181,7 +181,13 @@ public final class GlassDrawable extends Drawable {
         this.tintColor = tint;
         // Over a capture the native alpha is Samsung's translucency, not a fade (row fades use view
         // alpha): honoring it would let the unrefracted app show through the refracted one.
-        setAlpha(backdrop instanceof SampledBackdrop ? 255 : original.getAlpha());
+        // Theme Park changes the native shade drawable's *resting* alpha (77 without it,
+        // 255 with it). For SharedBackdrop, that is not the row's visibility: using it makes
+        // the same glass 70% fainter with Theme Park disabled. The row/ancestors supply normal
+        // visibility; an explicit disappear animation supplies its own content fade.
+        setAlpha(backdrop instanceof SampledBackdrop ? 255
+                : backdrop instanceof SharedBackdrop ? SharedShadeAlpha.resolve(original.getAlpha(), sharedExitAlpha)
+                : original.getAlpha());
         if (changed) {
             System.arraycopy(shape, 0, radii, 0, 8);
             backdrop.update(Math.round(spec.blurDp * density), tint, radii);
