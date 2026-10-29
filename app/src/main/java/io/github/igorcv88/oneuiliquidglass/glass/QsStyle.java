@@ -86,14 +86,15 @@ public final class QsStyle {
     public int tileInk(QuickSettingsGlass.Kind kind, QsScene.Tone tone, int nativeColor) {
         if (!QuickSettingsGlass.neutral(nativeColor)) return nativeColor;
         int tint;
+        if (kind != QuickSettingsGlass.Kind.ACTIVE && kind != QuickSettingsGlass.Kind.IDLE
+                && kind != QuickSettingsGlass.Kind.NONE) return nativeColor;
         if (tone == QsScene.Tone.LIGHT_SCENE && tileLight)
-            tint = kind == QuickSettingsGlass.Kind.ACTIVE ? tileLightOnInk
-                    : kind == QuickSettingsGlass.Kind.IDLE || kind == QuickSettingsGlass.Kind.NONE ? tileLightOffInk : -1;
+            tint = kind == QuickSettingsGlass.Kind.ACTIVE ? tileLightOnInk : tileLightOffInk;
         else if (tone == QsScene.Tone.DARK_SCENE && tileDark)
-            tint = kind == QuickSettingsGlass.Kind.ACTIVE ? tileDarkOnInk
-                    : kind == QuickSettingsGlass.Kind.IDLE || kind == QuickSettingsGlass.Kind.NONE ? tileDarkOffInk : -1;
-        else tint = -1;
-        return tint == -1 ? nativeColor : QuickSettingsGlass.withAlpha(tint,
+            tint = kind == QuickSettingsGlass.Kind.ACTIVE ? tileDarkOnInk : tileDarkOffInk;
+        else return nativeColor;
+        // White ARGB (0xffffffff) is -1 as a signed int, so it cannot be a sentinel.
+        return QuickSettingsGlass.withAlpha(tint,
                 QuickSettingsGlass.alpha(tint) * QuickSettingsGlass.alpha(nativeColor));
     }
     private String prop(String key) {
