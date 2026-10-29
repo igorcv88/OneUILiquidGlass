@@ -135,7 +135,13 @@ public final class GlassDrawable extends Drawable {
     /** Light-glass colour for shared-shade cards, which have no compositor blur bridge. */
     private int sharedVeil;
     private boolean sharedVeilRamping;
+    private boolean sharedDarkFrost;
     private int sharedReportedGeneration = -1;
+    public void setSharedDarkFrost(boolean on) {
+        if (sharedDarkFrost == on) return;
+        sharedDarkFrost = on;
+        invalidateSelf();
+    }
     public void setSharedVeil(int veil, boolean ramping) {
         if (sharedVeil != veil || sharedVeilRamping != ramping) {
             sharedVeil = veil;
@@ -228,7 +234,7 @@ public final class GlassDrawable extends Drawable {
                 }
             }
             int body = backdrop instanceof SharedBackdrop
-                    ? SharedGlassFill.resolve(fillColor, sharedVeil, lightStyle, sharedVeilRamping) : fillColor;
+                    ? SharedGlassFill.resolve(fillColor, sharedVeil, lightStyle, sharedVeilRamping, sharedDarkFrost) : fillColor;
             fill.setColor(body);
             fill.setAlpha(android.graphics.Color.alpha(body) * alpha / 255);
             canvas.drawRect(rect, fill);

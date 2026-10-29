@@ -6,6 +6,7 @@
 set -e
 cd "$(dirname "$0")"
 python3 property_check.py
+sh material_controls_check.sh
 DUMP="${1:-testdata/synthetic_dump.txt}"
 EXPECT="${2:-1 5}"
 OUT="$(mktemp -d)"

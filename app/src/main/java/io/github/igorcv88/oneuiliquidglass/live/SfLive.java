@@ -113,9 +113,9 @@ public final class SfLive {
     /** Mirrors the helper's allowlist: the library's reader minus the version marker and the
      * rewrite switch the restart command owns. */
     public static final List<String> WRITABLE = Collections.unmodifiableList(Arrays.asList(
-            "core", "taps", "ramp", "hubloom", "edgeblur", "kgcore", "kgtaps", "kgramp", "kgsat", "kgtone",
+            "core", "taps", "ramp", "hubloom", "edgeblur", "hublur", "hubodylens", "hurefract", "kgcore", "kgtaps", "kgramp", "kgsat", "kgtone",
             "kgrim", "kgspec", "kgflat", "kglevel", "kgcool", "kgtilt", "kgline", "kgcorecap",
-            "kggradient", "kgband", "kgbodylens", "kgblurexp", "kgflatcap", "kgcoredim", "kgglow", "shadecap", "shadelift",
+            "kggradient", "kgband", "kgbodylens", "kgblurexp", "kgedgeblur", "kgblur", "kgrefract", "kgflatcap", "kgcoredim", "kgglow", "shadecap", "shadelift",
             "hulight", "kglight", "shadelight", "qslens", "qsbody", "qsdepth", "qslight", "debug"));
 
     /** key=value lines (the helper's output, a live.prop); comments and other lines are skipped. */

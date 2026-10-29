@@ -35,7 +35,13 @@ int main(int argc, char **argv) {
         else if (!strcmp(kv, "band")) prof[1].band = v;
         else if (!strcmp(kv, "bodylens")) prof[1].lensbody = v;
         else if (!strcmp(kv, "blurexp")) prof[1].blurexp = v;
+        else if (!strcmp(kv, "kgedge")) prof[1].edge = v;
+        else if (!strcmp(kv, "kgblur")) prof[1].blur = v;
+        else if (!strcmp(kv, "kgrefract")) prof[1].refract = v;
         else if (!strcmp(kv, "hubloom")) prof[0].bloom = v;
+        else if (!strcmp(kv, "hubodylens")) prof[0].lensbody = v;
+        else if (!strcmp(kv, "hublur")) prof[0].blur = v;
+        else if (!strcmp(kv, "hurefract")) prof[0].refract = v;
         else if (!strcmp(kv, "hucore")) prof[0].core = v; else if (!strcmp(kv, "hutaps")) prof[0].taps = (int) v;
         else if (!strcmp(kv, "huramp")) prof[0].ramp = v; else if (!strcmp(kv, "huedge")) prof[0].edge = v;
         else if (!strcmp(kv, "qslight")) prof[3].light = v; else if (!strcmp(kv, "qswidth")) prof[3].lwidth = v;

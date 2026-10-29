@@ -328,6 +328,11 @@ final class QsTextHooks {
                     + " state=" + tile.state + " scene=" + tile.tone
                     + " native=" + Integer.toHexString(nativeColor)
                     + " mapped=" + Integer.toHexString(mapped)
+                    + " tileLight=" + tile.palette.tileLight
+                    + " tileDark=" + tile.palette.tileDark
+                    + " lightInk=" + Integer.toHexString(tile.palette.tileLightOnInk)
+                    + " darkInk=" + Integer.toHexString(tile.palette.tileDarkOnInk)
+                    + " revision=" + ConfigClient.revision()
                     + " filtered=" + (nativeFilter != null) + " changed=" + (mapped != nativeColor));
         if (mapped == nativeColor) return;
         if (nativeFilter != null) {

@@ -137,7 +137,12 @@ final class QsBackdrop {
         trace("QS_TONE_ENTRY", "expansion=" + expansion.getAsDouble()
                 + " prefetched=" + pending + " fresh=" + fresh() + " prior=" + tone);
         // The touch that opened the panel already asked for it; its loop starts with the panel.
-        if (pending) return;
+        if (pending) {
+            // The top-edge capture belongs to this opening, but the published paint state may
+            // still belong to the last one. Do not draw that old palette while it completes.
+            publish(false);
+            return;
+        }
         if (fresh()) { schedule(RESAMPLE_MS); return; }
         forget(); publish(false);
         prefetch("opening");
@@ -147,8 +152,9 @@ final class QsBackdrop {
     void gesture() {
         if (shown || pending || fresh() || !enabled.getAsBoolean()) return;
         // A new opening decides afresh: no hysteresis or cooldown carried over from the last one.
-        // Not published here: the panel is closed, the sample's own publish follows.
+        // Clear the old palette while the panel is still closed; the fresh sample will repaint it.
         scene.reset(); header.reset(); sceneGate.reset(); headerGate.reset();
+        publish(false);
         prefetch("top-edge-gesture");
     }
 
@@ -256,6 +262,9 @@ final class QsBackdrop {
         if (cancel != null) cancel.run();
         cancel = null;
         main.removeCallbacks(tick);
+        // Do not reuse a sample from the last panel opening as the next opening's prefetch.
+        // A new gesture will take its own fresh capture before opened() when available.
+        sampledAt = 0;
     }
 
     private void forget() {

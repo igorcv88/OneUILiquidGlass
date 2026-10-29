@@ -112,6 +112,8 @@ set +e; o="$(run restart now)"; rc=$?; set -e
 # Compositor parameters: allowlisted names and numeric values only; nothing is written on refusal.
 o="$(run setprops kgcore=72 kgsat=1.3 core=)"; expect "$o" "setprops=ok"; expect "$o" "set_kgcore=72"
 expect "$o" "set_kgsat=1.3"; expect "$o" "set_core="
+o="$(run setprops hublur=0.75 hubodylens=0.08 hurefract=1.10 kgedgeblur=5 kgblur=0.8 kgrefract=1.05)"
+expect "$o" "setprops=ok"; expect "$o" "set_hubodylens=0.08"; expect "$o" "set_kgedgeblur=5"
 [ "$(cat "$T/prop_debug.oulg.sf.kgcore")" = 72 ] || { echo "FAIL: setprops did not write"; exit 1; }
 for bad in 'optics=9' 'norewrite=1' 'kgcore=1;reboot' 'kgcore=$(id)' 'kgcore=1-2' 'kgcore=1.2.3' 'kgcore' '../x=1'; do
     set +e; o="$(run setprops kgsat=2 "$bad")"; rc=$?; set -e

@@ -529,11 +529,20 @@ public final class Controls {
         put(c("sf.core", "Desfoque interno").fmt(Format.PX).in(LENS, ADV).on(HU)
                 .help("Desfoque do miolo do pop-up dentro da lente; 0 desliga." + restart)
                 .show(DIDACTIC, Channel.CORE_BLUR));
+        put(c("sf.hublur", "Desfoque de toda a lente").fmt(Format.GAIN).in(LENS, ADV).on(HU)
+                .help("Multiplica o desfoque extra do compositor em todo o pop-up; o desfoque"
+                        + " básico continua ajustado em 'Desfoque sob a lente'." + restart));
+        put(c("sf.hubodylens", "Refração difusa do miolo").fmt(Format.PERCENT_1).in(LENS, ADV).on(HU)
+                .help("Curva o fundo em toda a superfície do pop-up, inclusive no miolo,"
+                        + " independentemente da borda." + restart));
+        put(c("sf.hurefract", "Refração de toda a lente").fmt(Format.GAIN).in(LENS, ADV).on(HU)
+                .help("Multiplica a refração do centro e das bordas do pop-up; 1 mantém"
+                        + " a intensidade original." + restart));
         put(c("sf.hubloom", "Contenção de brilho").fmt(Format.PLAIN).in(LENS, ADV).on(HU)
                 .help("Reduz pontos muito claros no miolo do pop-up; 0 mantém o disco simples."
                         + restart)
                 .show(BEHAV, Channel.NONE));
-        put(c("sf.edgeblur", "Desfoque no contorno").fmt(Format.PX).in(TECH, TEC).on(HU)
+        put(c("sf.edgeblur", "Desfoque no contorno").fmt(Format.PX).in(LENS, ADV).on(HU)
                 .help("Desfoque do pop-up já no contorno, numa curva única até o miolo, sem a faixa"
                         + " nítida perto da borda; 0 usa a curva anterior." + restart));
         put(c("sf.taps", "Amostras do pop-up").fmt(Format.COUNT).in(TECH, TEC).on(HU)
@@ -543,6 +552,15 @@ public final class Controls {
         put(c("sf.kgcore", "Desfoque interno").fmt(Format.PX).in(LENS, ADV).on(KG)
                 .help("Desfoque do miolo dos cartões do bloqueio." + restart)
                 .show(DIDACTIC, Channel.CORE_BLUR));
+        put(c("sf.kgblur", "Desfoque de toda a lente").fmt(Format.GAIN).in(LENS, ADV).on(KG)
+                .help("Multiplica o desfoque extra do shader no cartão inteiro, mantendo"
+                        + " separado o desfoque básico do bloqueio." + restart));
+        put(c("sf.kgrefract", "Refração de toda a lente").fmt(Format.GAIN).in(LENS, ADV).on(KG)
+                .help("Multiplica a refração do aro e do centro; para refratar o miolo,"
+                        + " ative a largura da transição óptica." + restart));
+        put(c("sf.kgedgeblur", "Desfoque no contorno").fmt(Format.PX).in(LENS, ADV).on(KG)
+                .help("Desfoque independente da borda do bloqueio; 0 mantém o contorno"
+                        + " atual. O miolo segue o teto de desfoque interno." + restart));
         put(c("sf.kgsat", "Saturação").fmt(Format.GAIN).in(LENS, ADV).on(KG)
                 .help("Vivacidade das cores através do vidro do bloqueio." + restart)
                 .show(DIDACTIC, Channel.SATURATION));
@@ -581,18 +599,18 @@ public final class Controls {
         put(c("sf.kgcoredim", "Escurecer o miolo").fmt(Format.PERCENT_1).in(LENS, ADV).on(KG)
                 .help("Reduz o brilho no centro do cartão do bloqueio." + restart)
                 .show(DIDACTIC, Channel.CORE_DIM));
-        put(c("sf.kgcorecap", "Teto do desfoque interno").fmt(Format.PX).in(TECH, TEC).on(KG)
+        put(c("sf.kgcorecap", "Teto do desfoque interno").fmt(Format.PX).in(LENS, ADV).on(KG)
                 .help("Raio máximo efetivo do desfoque interno do bloqueio." + restart));
         put(c("sf.kggradient", "Transição vidro-miolo").fmt(Format.PERCENT_1).in(TECH, TEC)
                 .on(KG)
                 .help("Transição contínua entre o vidro e o miolo; 0 usa a curva anterior."
                         + restart));
-        put(c("sf.kgband", "Largura da transição óptica").fmt(Format.PERCENT_1).in(TECH, TEC)
+        put(c("sf.kgband", "Largura da transição óptica").fmt(Format.PERCENT_1).in(LENS, ADV)
                 .on(KG)
                 .help("Faixa, a partir do contorno, em que a refração e o desfoque crescem juntos"
                         + " (fração do raio do canto). 0 usa o modelo anterior; de 0 a cerca de 42%"
                         + " a faixa fica na largura mínima, só acima disso ela aumenta." + restart));
-        put(c("sf.kgbodylens", "Lente do miolo").fmt(Format.PERCENT_1).in(TECH, TEC).on(KG)
+        put(c("sf.kgbodylens", "Refração difusa do miolo").fmt(Format.PERCENT_1).in(LENS, ADV).on(KG)
                 .help("Curvatura suave do cartão inteiro: amplia o fundo de forma uniforme."
                         + restart));
         put(c("sf.kgblurexp", "Curva do desfoque na transição").fmt(Format.PLAIN).in(TECH, TEC)

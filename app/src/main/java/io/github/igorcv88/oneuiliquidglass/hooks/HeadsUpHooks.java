@@ -1472,6 +1472,8 @@ public final class HeadsUpHooks {
         /** The theme's own look: no veil, no swapped text; the hysteresis starts on the theme's side. */
         void setNative() {
             sampledTone = false; animateSwap = false;
+            darkNativeFrost = false;
+            if (glass != null) glass.setSharedDarkFrost(false);
             lightBackdrop = !ShadeTone.lightText();
             // At once, never ramped: a ramp would replay the previous opening's (or surface's) veil
             // for VEIL_RAMP_MS on a card that is starting over. Its pending text swap goes with it.
@@ -1493,6 +1495,13 @@ public final class HeadsUpHooks {
         void setTone(float luma, boolean transition) {
             boolean shade = SURFACE_SHADE.equals(toneSurface);
             io.github.igorcv88.oneuiliquidglass.glass.Material m = ShadeTone.materialFor(luma, shade ? shadeScene : popupScene, shade);
+            // The native dark shade does not swap text, and therefore never selected DARK_GLASS.
+            // Use the per-card veil for increases above the approved default; unlike the native
+            // Samsung tint, this survives the global semalpha=0 transparency override.
+            int darkNativeExtra = shade && !m.swap && !m.light && m.veil == 0
+                    ? io.github.igorcv88.oneuiliquidglass.glass.MaterialMath.shadeDarkNativeExtra(Tuning.get().shadeDarkGlass) : 0;
+            darkNativeFrost = darkNativeExtra != 0;
+            if (glass != null) glass.setSharedDarkFrost(darkNativeFrost);
             if (shade && loggedMaterialGeneration != Tuning.generation) {
                 loggedMaterialGeneration = Tuning.generation;
                 View card = background.get();
@@ -1502,6 +1511,8 @@ public final class HeadsUpHooks {
                         + " revision=" + io.github.igorcv88.oneuiliquidglass.config.ConfigClient.revision()
                         + " style=" + m.style() + " veil=" + Integer.toHexString(m.veil)
                         + " shadelightglass=" + Tuning.get().shadeLightGlass
+                        + " shadedarkglass=" + Tuning.get().shadeDarkGlass
+                        + " darkNativeExtra=" + Integer.toHexString(darkNativeExtra)
                         + " changed=" + (m.veil != measuredVeil));
             }
             lightBackdrop = m.light;
@@ -1513,6 +1524,7 @@ public final class HeadsUpHooks {
             // A glass style replaces the tint; in the shade the native side's legibility veil darkens
             // it instead (the pop-up's look is left as approved, 26/10).
             int veil = m.swap || !shade ? m.veil : ShadeTone.overNative(m.veil, nativeTint);
+            if (darkNativeExtra != 0) veil = darkNativeExtra;
             boolean swapLight = m.swap && m.light;
             int da = Math.abs((veil >>> 24) - (measuredVeil >>> 24));
             boolean sameColour = veil == 0 || measuredVeil == 0 || (veil & 0x00ffffff) == (measuredVeil & 0x00ffffff);
@@ -1650,6 +1662,7 @@ public final class HeadsUpHooks {
         boolean lightStyle;
         /** The veil measured for this card at the current shade opening (0: none needed). */
         int measuredVeil;
+        boolean darkNativeFrost;
         /** The drawable path could not be built for this card: it keeps the Samsung blur. */
         boolean drawableFailed;
         void pushToneVeil() { pushToneVeil(measuredVeil); }
@@ -2304,6 +2317,7 @@ public final class HeadsUpHooks {
                 glassWindow = new WeakReference<>(v.getWindowToken());
                 heldFor = null;
                 glass.setLightStyle(lightStyle, Tuning.get().lightEdge);
+                glass.setSharedDarkFrost(darkNativeFrost);
                 if (kind == Backdrop.Kind.SHARED) glass.setSharedVeil(measuredVeil, false);
                 glass.setOutline(outline());
                 inherited = true;
@@ -2394,7 +2408,8 @@ public final class HeadsUpHooks {
         boolean sharedBackdrop() {
             View r = row.get();
             if (r == null || Tuning.get().shadeBlur && feature("per_card_blur")) return false;
-            return Eligibility.sharedBackdrop(shadeExpanded, Reflect.bool(r, "isOnKeyguard", "mOnKeyguard"));
+            return Eligibility.sharedBackdrop(shadeExpanded,
+                    Reflect.bool(r, "isOnKeyguard", "mOnKeyguard"), barState);
         }
         /** Whether the card is a pop-up or lockscreen card (lens surface) rather than a shade card. */
         boolean lensSurface() {
@@ -2435,6 +2450,8 @@ public final class HeadsUpHooks {
         String lastLiveState;
         /** Theme Park-dependent native alpha vs the shade's effective shared-glass alpha. */
         String lastSharedAlpha;
+        /** Keyguard-to-shade routing changes, without per-frame logging. */
+        String lastLockedShadeRoute;
         /**
          * What an LSPosed-only card asks the compositor for: the surface, the radius and colour sent to
          * the blur region, the fill, the cross-window capability (false on One UI 9 even when the blur
@@ -2455,8 +2472,17 @@ public final class HeadsUpHooks {
             View r = row.get();
             Boolean keyguard = Reflect.bool(r, "isOnKeyguard", "mOnKeyguard");
             // The pill is plain light glass: no lens, no compositor material.
-            boolean kgSurface = !pill && Eligibility.keyguardOptics(barState, Reflect.bool(r, "isHeadsUpState", "mIsHeadsUp"));
+            boolean kgSurface = !pill && Eligibility.keyguardOptics(barState,
+                    Reflect.bool(r, "isHeadsUpState", "mIsHeadsUp"), shadeExpanded);
             boolean lens = feature("lens") && !pill && Eligibility.lens(barState, shadeExpanded, keyguard);
+            if (barState != null && (barState == Eligibility.BAR_KEYGUARD || barState == Eligibility.BAR_SHADE_LOCKED)) {
+                String route = "bar=" + barState + " expanded=" + shadeExpanded + " rowKeyguard=" + keyguard
+                        + " lens=" + lens + " lockOptics=" + kgSurface + " shared=" + sharedBackdrop();
+                if (!route.equals(lastLockedShadeRoute)) {
+                    lastLockedShadeRoute = route;
+                    Probe.log("SHADE_LOCKED_ROUTE", "viewId=" + Integer.toHexString(r == null ? 0 : System.identityHashCode(r)) + " " + route);
+                }
+            }
             // The edge shader steps back only for a card the compositor demonstrably lights: profile
             // 1 requested, a tag that survives every program (radius and shape), and a library whose
             // profile-1 optics are confirmed (debug.oulg.sf.optics). Otherwise it keeps its lighting.
