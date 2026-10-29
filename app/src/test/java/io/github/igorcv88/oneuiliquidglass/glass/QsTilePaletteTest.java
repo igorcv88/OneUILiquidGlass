@@ -73,7 +73,14 @@ public class QsTilePaletteTest {
         });
         assertEquals(0xff000000,style.tileBackground(ACTIVE,LIGHT_SCENE,0xffffffff));
         assertEquals(0xffffffff,style.tileInk(ACTIVE,LIGHT_SCENE,0xff000000));
+        assertEquals(0x80ffffff,style.tileInk(ACTIVE,LIGHT_SCENE,0x80000000));
         assertEquals(0xff000000,style.tileInk(ACTIVE,DARK_SCENE,0xff000000));
+        QsStyle dark = new QsStyle(k -> {
+            if (k.equals("qs.tiledark")) return "1";
+            if (k.equals("qs.tiledarkonink")) return "ffffff";
+            return null;
+        });
+        assertEquals(0xffffffff,dark.tileInk(ACTIVE,DARK_SCENE,0xff000000));
     }
 
     @Test public void disablingTheLightPaletteLeavesNativeColouredDiscs() {
