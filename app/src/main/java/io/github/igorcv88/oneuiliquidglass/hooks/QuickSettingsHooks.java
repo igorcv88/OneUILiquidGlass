@@ -65,6 +65,7 @@ public final class QuickSettingsHooks {
     private final Set<String> tileSurfaces = new HashSet<>();
     private final Set<String> tileDecisions = new HashSet<>();
     private long paletteTraceRevision = -1;
+    private long paletteTraceAppliedRevision = -1;
     private boolean paletteTraceActive;
     private final QsTileProbe tileProbe = new QsTileProbe();
     private final QuickSettingsEdgeLight edge;
@@ -423,6 +424,9 @@ public final class QuickSettingsHooks {
                     if (broken || !(p.args[4] instanceof Float) || !(p.args[5] instanceof Float)) return;
                     float[] layout = QuickSettingsGlass.iconLayout((Float) p.args[4], (Float) p.args[5]);
                     if (layout == null) return;
+                    // Samsung explicitly marked this tile as having no disc (start=6, gap=0).
+                    // Bind the state only when a verified QuickTile model owns the invocation.
+                    tileProbe.disc(tileProbe.currentModel(), Kind.NONE);
                     // The caller's scope (QuickTile's tile content): its restart passes the
                     // arguments again, so switching the option applies live.
                     capture(p.args[12]);
@@ -534,13 +538,18 @@ public final class QuickSettingsHooks {
         }
     }
 
-    /** The actual provider snapshot behind QS_TILE_COLOR, not the legacy getprop view. */
+    /** The applied palette and its provider revision, not the legacy getprop view. */
     private void tracePalette() {
-        if (!Probe.trace) { paletteTraceActive = false; return; }
+        // The worker can publish a revision before refresh() applies its QsStyle on the main
+        // thread. Dedup on BOTH revisions: logging the old palette during that interval must
+        // never suppress the subsequent snapshot with the actually applied colours.
+        // Keep this bounded event available even with trace=0.
         long revision = ConfigClient.revision();
-        if (paletteTraceActive && paletteTraceRevision == revision) return;
+        if (paletteTraceActive && paletteTraceRevision == revision
+                && paletteTraceAppliedRevision == configRevision) return;
         paletteTraceActive = true;
         paletteTraceRevision = revision;
+        paletteTraceAppliedRevision = configRevision;
         QsStyle s = style;
         String raw = ConfigClient.override("qs.tilelighton");
         Probe.log("QS_PALETTE_EFFECTIVE", "revision=" + revision + " qsRevision=" + configRevision

@@ -137,7 +137,7 @@ public final class PreviewParams {
             p.darkText = true;
             p.region = swap ? lightGlassColor : spec.samsungLightColor;
         } else {
-            p.region = standard ? (sh ? spec.liveShadeDarkColor : hu ? white(n(value, "livedarkalpha"))
+            p.region = standard ? (sh ? MaterialMath.shadeDarkOpacity(spec.liveShadeDarkColor, n(value, "shadedarkglass")) : hu ? white(n(value, "livedarkalpha"))
                     : white(n(value, "kgdarkalpha"))) : spec.samsungDarkColor;
             if (standard && hu) p.darkFill = n(value, "livedarkfill") / 255f;
             if (standard && kg) p.darkFill = n(value, "kgdarkfill") / 255f;
@@ -145,7 +145,7 @@ public final class PreviewParams {
         if (measured) {
             if (swap && !toneMap) {
                 int[] m = MaterialMath.material(backdropLuma, lightText, cap, lift, max, lo, hi,
-                        lightGlassColor, MaterialMath.DARK_GLASS);
+                        lightGlassColor, sh ? MaterialMath.shadeDarkOpacity(MaterialMath.DARK_GLASS, n(value, "shadedarkglass")) : MaterialMath.DARK_GLASS);
                 if (m[1] == 1) {
                     p.lightGlass = m[2] == 1;
                     p.darkText = p.lightGlass;

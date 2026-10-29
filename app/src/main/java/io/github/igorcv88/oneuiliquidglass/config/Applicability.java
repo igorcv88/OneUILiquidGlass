@@ -199,6 +199,7 @@ public final class Applicability {
                 return on("pillglass") ? ACTIVE : inactive("Ative o vidro no resumo de ícones");
             case "lightglass":
             case "shadelightglass":
+            case "shadedarkglass":
             case "lighttone":
                 return on("textswap") ? ACTIVE : inactive("Ative o texto adaptativo");
             case "popuptone":

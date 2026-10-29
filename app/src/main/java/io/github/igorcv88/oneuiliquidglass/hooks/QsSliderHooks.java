@@ -328,7 +328,7 @@ final class QsSliderHooks {
                 f.progress=Math.max(0f,Math.min(1f,length/Math.max(f.w,f.h)));
                 Float previous=lengths.replace(f.scope,f.role,length);
                 if(QsSliderOrigin.suppress(f.role)&&drag(previous,length,touching.getAsBoolean()))dragged.run();
-                if(Probe.trace && (f.progress <= .12f || f.progress >= .95f)) {
+                if((Probe.trace || f.progress <= .04f) && (f.progress <= .12f || f.progress >= .95f)) {
                     String geo="role="+f.role+" progress="+f.progress+" w="+f.w+" h="+f.h
                             +" nativeOffset="+x(offset)+","+y(offset)+" nativeExtent="+x(extent)+","+y(extent)
                             +" result="+g[0]+","+g[1]+","+g[2]+","+g[3]+" corner="+g[4]
@@ -355,7 +355,7 @@ final class QsSliderHooks {
                 // At the very bottom, the native uniform CornerRadius would flatten BOTH
                 // ends of the circular cap. Draw a top-clipped, bottom-rounded fill instead;
                 // it keeps its full transverse width and Samsung's exact progress height.
-                drawLowVerticalFill(f.canvas,g,fillColor);
+                drawLowVerticalFill(f.canvas,g,fillColor,f.w,f.h);
                 p.setResult(null);
                 return;
             }
@@ -368,7 +368,7 @@ final class QsSliderHooks {
     private final ThreadLocal<android.graphics.Path> lowFillPath = ThreadLocal.withInitial(android.graphics.Path::new);
 
     /** Top shoulder progressively flattens; the lower semicircle stays on the capsule's end. */
-    private void drawLowVerticalFill(Canvas canvas, float[] g, int color) {
+    private void drawLowVerticalFill(Canvas canvas, float[] g, int color, float trackW, float trackH) {
         float x=g[0], y=g[1], w=g[2], h=g[3], bottom=y+h, half=w/2f;
         float topR=Math.max(0f,h-half), bottomR=Math.min(half,h), cx=x+half;
         android.graphics.Path path=lowFillPath.get(); path.reset();
@@ -382,7 +382,13 @@ final class QsSliderHooks {
         if(topR>0f)path.quadTo(x,y,x+topR,y);
         path.close();
         android.graphics.Paint paint=lowFillPaint.get(); paint.setColor(color);paint.setStyle(android.graphics.Paint.Style.FILL);
-        canvas.drawPath(path,paint);
+        // The native draw's changing clipping during the QS exit transition must never allow a
+        // near-zero fill to paint beyond its own inset track, even if the canvas still animates.
+        int checkpoint=canvas.save();
+        try {
+            canvas.clipRect(0f,0f,trackW,trackH);
+            canvas.drawPath(path,paint);
+        } finally { canvas.restoreToCount(checkpoint); }
     }
     private Object fillBrush(int color) {
         Object brush=fillBrushes.get(color);

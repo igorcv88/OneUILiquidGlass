@@ -303,6 +303,11 @@ public final class Controls {
                 .hint("Usada no tema claro ou sobre fundos claros")
                 .help("Opacidade do vidro claro dos cartões da central, separada do pop-up.")
                 .show(FAITH, Channel.LIGHT_ALPHA));
+        put(c("shadedarkglass", "Opacidade do vidro escuro").fmt(Format.PERCENT_1)
+                .in(GLASS, STD).on(SH)
+                .hint("Usada nos cartões com vidro escuro")
+                .help("Aumenta ou reduz a opacidade do vidro escuro das notificações. Em 14%, mantém os materiais escuros anteriores; não altera o pop-up nem o bloqueio.")
+                .show(FAITH, Channel.REGION));
         put(c("shadeblur", "Desfoque próprio por cartão").fmt(Format.TOGGLE).in(GLASS, ADV)
                 .on(SH).feature("per_card_blur")
                 .help("Cada cartão expandido ganha seu próprio desfoque em vez de usar só o do"
@@ -847,9 +852,9 @@ public final class Controls {
             case SHADE:
                 return mode == Mode.STANDARD
                         ? Arrays.asList(
-                                "liveshaderadius", "shadelightglass", "shadeglint", "paneldim",
+                                "liveshaderadius", "shadelightglass", "shadedarkglass", "shadeglint", "paneldim",
                                 "shadetone")
-                        : Arrays.asList("semradius", "shadelightglass", "paneldim", "shadetone");
+                        : Arrays.asList("semradius", "shadelightglass", "shadedarkglass", "paneldim", "shadetone");
             default:
                 return mode == Mode.DYNAMIC_LENS
                         ? Arrays.asList("sflens", "semradiuslens", "lightglass", "popuptone")

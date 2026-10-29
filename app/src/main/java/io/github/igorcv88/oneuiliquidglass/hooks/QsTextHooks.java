@@ -44,6 +44,7 @@ final class QsTextHooks {
     private final java.util.Map<Object,String> tileInkLogged=new java.util.WeakHashMap<>();
     /** One binding diagnosis per painter/state/revision; never record tile names or app content. */
     private final java.util.Map<Object,String> tileRouteLogged=new java.util.WeakHashMap<>();
+    private final java.util.Set<String> tileRouteSummaries=java.util.Collections.synchronizedSet(new java.util.HashSet<>());
     private final ThreadLocal<Float> iconDrawing=new ThreadLocal<>();
     private final ThreadLocal<TileInk> tileIconDrawing=new ThreadLocal<>();
     private static final class TileInk {
@@ -246,8 +247,19 @@ final class QsTextHooks {
                     QsScene.Tone sceneTone=scene.get();
                     boolean on=enabled.getAsBoolean();
                     boolean allowed=ready && on && model!=null
-                            && (state==QuickSettingsGlass.Kind.ACTIVE || state==QuickSettingsGlass.Kind.IDLE)
+                            && (state==QuickSettingsGlass.Kind.ACTIVE || state==QuickSettingsGlass.Kind.IDLE
+                                    || state==QuickSettingsGlass.Kind.NONE)
                             && sceneTone!=QsScene.Tone.UNKNOWN;
+                    // Bounded scene/owner summaries remain available with trace=0, since a
+                    // trace property toggled after opening SystemUI can miss the relevant draw.
+                    String tileOwner=tilePainterNodes.get(p.thisObject);
+                    if(tileOwner!=null && tileRouteSummaries.size()<48) {
+                        String summary=tileOwner+":"+(model!=null)+":"+state+":"+sceneTone+":"+allowed;
+                        if(tileRouteSummaries.add(summary))
+                            Probe.log("QS_TILE_ICON_ROUTE_SUMMARY", "owner="+tileOwner
+                                    +" modelBound="+(model!=null)+" state="+state
+                                    +" scene="+sceneTone+" eligible="+allowed);
+                    }
                     if(Probe.trace && tilePainterNodes.containsKey(p.thisObject)) {
                         String signature=ConfigClient.revision()+":"+state+":"+sceneTone+":"+allowed;
                         if(!signature.equals(tileRouteLogged.put(p.thisObject,signature)))

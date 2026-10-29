@@ -4,7 +4,7 @@
 
 **Atualização de integração (main após #57):** `lensregiondiff`/gate `region` foram removidos; `popuplock` e `orphandraw` foram adicionados. O inventário ativo agora tem 103 propriedades. O interruptor `sfrefract` pertence ao helper live e não pode ser persistido pela ponte do APK.
 
-**Abrangência atual (29/10):** **145 chaves distintas** no catálogo gerador, incluindo controles separados de opacidade e iluminação das cápsulas QS; `SettingsRegistry` e a matriz são gerados e testados contra essa fonte. O módulo também tem um controle global `glass/enabled` nas SharedPreferences, fora de `debug.oulg.*`. As configurações independentes de perfil, as condições de ativação, os comandos de teste e as ações de recuperação também devem aparecer no APK.
+**Abrangência atual (29/10):** **146 chaves distintas** no catálogo gerador, incluindo controles separados de opacidade e iluminação das cápsulas QS; `SettingsRegistry` e a matriz são gerados e testados contra essa fonte. O módulo também tem um controle global `glass/enabled` nas SharedPreferences, fora de `debug.oulg.*`. As configurações independentes de perfil, as condições de ativação, os comandos de teste e as ações de recuperação também devem aparecer no APK.
 
 **Exceção para `qs.*`:** são chaves do snapshot do aplicativo, sem leitura de `setprop`.
 
@@ -80,6 +80,7 @@ O interruptor `sfrefract` **não comprova** que o binário nativo foi carregado:
 | `lightglass` | 0.75 | 0–0.95 | Alpha do vidro claro em pop-up/lockscreen |
 | `lighttone` | `ffffff` | RGB hexadecimal de seis dígitos | Cor-base do vidro claro |
 | `shadelightglass` | 0.27 | 0–0.95 | Alpha separado dos cards claros no shade |
+| `shadedarkglass` | 0.14 | 0–0.95 | Opacidade independente dos cartões escuros da central; o padrão mantém os dois alphas anteriores |
 | `lightoutline` | 0.8 | 0–2 | Força do contorno claro |
 | `lightedge` | 1 | 0–4 | Sombra de espessura da borda clara |
 | `livedarkalpha` | 20 | inteiro 0–255 | Alpha branco da região do pop-up escuro |
