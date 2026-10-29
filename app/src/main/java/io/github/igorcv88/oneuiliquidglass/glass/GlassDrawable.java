@@ -134,9 +134,14 @@ public final class GlassDrawable extends Drawable {
     private float lightEdge = 1f;
     /** Light-glass colour for shared-shade cards, which have no compositor blur bridge. */
     private int sharedVeil;
+    private boolean sharedVeilRamping;
     private int sharedReportedGeneration = -1;
-    public void setSharedVeil(int veil) {
-        if (sharedVeil != veil) { sharedVeil = veil; invalidateSelf(); }
+    public void setSharedVeil(int veil, boolean ramping) {
+        if (sharedVeil != veil || sharedVeilRamping != ramping) {
+            sharedVeil = veil;
+            sharedVeilRamping = ramping;
+            invalidateSelf();
+        }
     }
     /** Bright contour on light glass (debug.oulg.lightoutline); 0 on any other card. */
     private float outline;
@@ -217,7 +222,7 @@ public final class GlassDrawable extends Drawable {
                 }
             }
             int body = backdrop instanceof SharedBackdrop
-                    ? SharedGlassFill.resolve(fillColor, sharedVeil, lightStyle) : fillColor;
+                    ? SharedGlassFill.resolve(fillColor, sharedVeil, lightStyle, sharedVeilRamping) : fillColor;
             fill.setColor(body);
             fill.setAlpha(android.graphics.Color.alpha(body) * alpha / 255);
             canvas.drawRect(rect, fill);

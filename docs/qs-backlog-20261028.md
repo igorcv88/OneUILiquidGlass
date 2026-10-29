@@ -1,5 +1,17 @@
 # Pendências OneUILiquidGlass, a partir do main pós-PR #83
 
+## Revisões dos PRs #85, #86 e #87 (29/10)
+
+- [x] **Review P2 do #85** (`SharedGlassFill`): durante a interpolação, a tinta
+  compartilhada segue todos os frames, independentemente da troca de `lightStyle` no
+  ponto médio; fora da rampa mantém a distinção entre material nativo e claro.
+  Regressão coberta por teste unitário; requer verificação visual no DZIF.
+- [x] **Review P2 do #86** (`QsTileProbe`): a deduplicação inclui identidade da instância
+  e estado, de modo que tiles distintos com os mesmos booleanos não percam snapshots.
+  Teste unitário confirma privacidade e chaves diferentes.
+- [ ] **Review do #87**: ainda em execução quando consultado; não havia comentários
+  técnicos publicados. Reavaliar se aparecerem novos apontamentos.
+
 ## Próxima mudança após a coleta QS #86 (29/10, 07:37–07:39)
 
 - [x] Ligado/desligado do slider distinguido pelos callbacks tipados `BrightBarKt` e
@@ -21,6 +33,30 @@
 
 ### Pendências seguintes (não corrigidas por essa mudança)
 
+- [ ] **PR #87 no aparelho, paleta parcial**: relato de 29/10 indica adaptação em alguns
+  tiles grandes (Wi-Fi e controles inferiores), mas nenhum dos pequenos. Correlacionar
+  `QS_TILE_SURFACE_COMPOSE tileModel=unbound`, `QS_TILE_MODEL`, `QS_TILE_COLOR` e
+  `QS_TILE_ICON_NODE` para distinguir círculo sem disco, modelo perdido em lambda Compose
+  e classificação incorreta; não recolorir círculos não verificados por heurística.
+- [ ] **Entrada shade → QS não adapta as cores**: abertura direta adapta ao menos alguns
+  controles, mas a transição horizontal a partir da central de notificações não. Comparar
+  `TONE_CAPTURE_REQUEST/DONE`, `TONE_COMMIT`, `QS_RESAMPLE` e `QS_TILE_SURFACE_COMPOSE`
+  nos dois caminhos para separar captura da cena, atualização e vínculo do tile.
+- [ ] **Sliders sem adaptação de cor à cena**: verificar papel de brilho/volume, cor efetiva
+  da primitiva e desenho no `LIGHT_SCENE`, sem alterar geometria/zero aprovado.
+- [ ] **Fantasma de contornos no gesto horizontal abortado**: no build anterior ao PR #87,
+  ao arrastar parcialmente a shade em direção ao QS e soltar para voltar à shade, aparecem
+  contornos ópticos de cápsulas QS que não ficaram visíveis. Captura em vídeo de 29/10;
+  distinguir resíduo durante a animação de região persistente após o cancelamento. Verificar
+  `expansionFraction`, liberação efetiva de regiões em `QS_EDGE_EXIT`, sessão e alpha do
+  compositor em cada sentido do gesto, inclusive sem cruzar o limiar de abertura completa.
+- [ ] **Excesso aparente de luz nas bordas apenas sobre fundo branco**: comparar a mesma
+  cápsula em cena clara e colorida. A captura clara mostra interior cinzento e contorno
+  mais evidente; hipótese prioritária é contraste entre tinta escura da cápsula e aro
+  branco, não aumento comprovado da energia do AGSL. Avaliar primeiro interior claro com
+  tinta legível dos discos/ícones/labels (dependente da validação do PR #87), preservando
+  cenas coloridas/escuras. Se persistir, medir separadamente aro Compose, óptica AGSL
+  e região do compositor e avaliar ganho por cena. Não mexer no `sf.qslight` global às cegas.
 - [ ] Relógio real da shade (`QS_CLOCK_CANDIDATE` sem nó): localizar hook antes de mudar tinta.
 - [ ] Ícones do lápis e engrenagem: toggle independente dos ícones dos tiles.
 - [ ] Transição gradual do pop-up e confirmação da rampa de 180 ms.

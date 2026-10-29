@@ -46,4 +46,17 @@ public class QsTileTraceTest {
         private final String ssid = "Home WiFi";
         private final int secretCount = 8192;
     }
+    @Test public void equalStateModelsEmitSeparateSnapshotsByIdentity() {
+        StateModel first = new StateModel(), second = new StateModel();
+        String fields = QsTileTrace.modelFields(first);
+        assertEquals(fields, QsTileTrace.modelFields(second));
+        String a = QsTileTrace.modelSnapshotKey(first, fields);
+        String b = QsTileTrace.modelSnapshotKey(second, fields);
+        assertNotEquals(a, b);
+        assertEquals(a, QsTileTrace.modelSnapshotKey(first, fields));
+        assertFalse(a.contains("Home WiFi"));
+        assertFalse(a.contains("8192"));
+        // Recomposition of the same model with a changed state must also be retained.
+        assertNotEquals(a, QsTileTrace.modelSnapshotKey(first, fields.replace("=true", "=false")));
+    }
 }

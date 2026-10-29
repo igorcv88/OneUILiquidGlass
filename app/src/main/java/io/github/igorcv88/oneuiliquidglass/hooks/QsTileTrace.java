@@ -67,4 +67,11 @@ final class QsTileTrace {
         }
         return out.toString();
     }
+
+    /** Distinguish equal-state tiles without evaluating user content or a model's toString(). */
+    static String modelSnapshotKey(Object model, String fields) {
+        if (model == null) return "missing";
+        return model.getClass().getName() + '@'
+                + Integer.toHexString(System.identityHashCode(model)) + '|' + fields;
+    }
 }

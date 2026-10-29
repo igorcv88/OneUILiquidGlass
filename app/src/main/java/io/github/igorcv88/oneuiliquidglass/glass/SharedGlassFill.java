@@ -7,8 +7,12 @@ package io.github.igorcv88.oneuiliquidglass.glass;
 public final class SharedGlassFill {
     private SharedGlassFill() {}
 
-    /** Use the light material as the whole fill, not a second wash over the baseline fill. */
-    public static int resolve(int nativeFill, int measuredVeil, boolean lightStyle) {
-        return lightStyle ? measuredVeil : nativeFill;
+    /**
+     * The fill follows every animated veil frame regardless of the midpoint switch of the
+     * optical edge style. Outside a ramp, the native material still owns the native side.
+     * This replaces the body fill; it is never a second wash on top of it.
+     */
+    public static int resolve(int nativeFill, int measuredVeil, boolean lightStyle, boolean ramping) {
+        return ramping || lightStyle ? measuredVeil : nativeFill;
     }
 }

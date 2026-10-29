@@ -5,14 +5,28 @@ import static org.junit.Assert.*;
 
 public final class SharedGlassFillTest {
     @Test public void lightGlassReplacesBaselineInsteadOfLayeringAnotherWhiteWash() {
-        assertEquals(0x66ffffff, SharedGlassFill.resolve(0x2effffff, 0x66ffffff, true));
-        assertEquals(0x59ffffff, SharedGlassFill.resolve(0x2effffff, 0x59ffffff, true));
+        assertEquals(0x66ffffff, SharedGlassFill.resolve(0x2effffff, 0x66ffffff, true, false));
+        assertEquals(0x59ffffff, SharedGlassFill.resolve(0x2effffff, 0x59ffffff, true, false));
     }
     @Test public void zeroLightGlassIsActuallyClear() {
-        assertEquals(0, SharedGlassFill.resolve(0x2effffff, 0, true));
+        assertEquals(0, SharedGlassFill.resolve(0x2effffff, 0, true, false));
     }
     @Test public void darkOrColoredNativeShadeRetainsApprovedFill() {
-        assertEquals(0x14ffffff, SharedGlassFill.resolve(0x14ffffff, 0x66000000, false));
-        assertEquals(0x2effffff, SharedGlassFill.resolve(0x2effffff, 0x66ffffff, false));
+        assertEquals(0x14ffffff, SharedGlassFill.resolve(0x14ffffff, 0x66000000, false, false));
+        assertEquals(0x2effffff, SharedGlassFill.resolve(0x2effffff, 0x66ffffff, false, false));
+    }
+    @Test public void sharedBodyFollowsBothHalvesOfRampIndependentlyOfLightEdgeStyle() {
+        int nativeFill = 0x2effffff;
+        int early = 0x37ffffff;
+        int middle = 0x4bffffff;
+        int late = 0x5cffffff;
+        assertEquals(early, SharedGlassFill.resolve(nativeFill, early, false, true));
+        assertEquals(middle, SharedGlassFill.resolve(nativeFill, middle, false, true));
+        assertEquals(late, SharedGlassFill.resolve(nativeFill, late, true, true));
+        assertEquals(0x66ffffff, SharedGlassFill.resolve(nativeFill, 0x66ffffff, true, false));
+        // Reverse ramp: the outline changes first, but the body finishes interpolating.
+        assertEquals(late, SharedGlassFill.resolve(nativeFill, late, true, true));
+        assertEquals(early, SharedGlassFill.resolve(nativeFill, early, false, true));
+        assertEquals(nativeFill, SharedGlassFill.resolve(nativeFill, 0, false, false));
     }
 }

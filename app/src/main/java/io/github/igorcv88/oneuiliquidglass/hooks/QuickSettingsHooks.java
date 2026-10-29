@@ -63,6 +63,7 @@ public final class QuickSettingsHooks {
     private final Set<Object> scopes = Collections.newSetFromMap(new WeakHashMap<>());
     private final Set<String> logged = new HashSet<>();
     private final Set<String> tileSurfaces = new HashSet<>();
+    private final Set<String> tileDecisions = new HashSet<>();
     private final QsTileProbe tileProbe = new QsTileProbe();
     private final QuickSettingsEdgeLight edge;
     private final QsBackdrop backdrop;
@@ -474,15 +475,29 @@ public final class QuickSettingsHooks {
             // A disc is recoloured only inside a verified QuickTile owner, and only for known
             // ACTIVE/IDLE states. NONE includes Samsung's intentionally disc-less controls.
             if (kind != Kind.CONTAINER) {
-                if (circle && tileProbe.currentModel() != null) {
+                if (circle) {
+                    Object model = tileProbe.currentModel();
                     int nativeColor = QuickSettingsGlass.argb(background);
-                    int mapped = style.tileBackground(discKind, backdrop.tone(), nativeColor);
+                    int mapped = model == null ? nativeColor
+                            : style.tileBackground(discKind, backdrop.tone(), nativeColor);
                     if (mapped != nativeColor) {
                         a[4] = QuickSettingsGlass.color(mapped);
                         if (Probe.trace) Probe.log("QS_TILE_COLOR", "model=" + tileProbe.currentId()
                                 + " kind=" + discKind + " nativeKind=" + kind + " backdrop=" + backdrop.tone()
                                 + " native=" + Integer.toHexString(nativeColor)
                                 + " applied=" + Integer.toHexString(mapped));
+                    }
+                    if (Probe.trace) {
+                        String reason = model == null ? "unbound" : discKind == Kind.NONE ? "no-disc"
+                                : backdrop.tone() == QsScene.Tone.UNKNOWN ? "tone-unknown"
+                                : mapped != nativeColor ? "applied" : "native-or-disabled";
+                        String key = "reason=" + reason + " kind=" + discKind + " tone=" + backdrop.tone()
+                                + " owner=" + (content.current() == null ? "unbound" : content.current().owner)
+                                + " model=" + tileProbe.currentId();
+                        synchronized (tileDecisions) {
+                            if (tileDecisions.size() < 96 && tileDecisions.add(key))
+                                Probe.log("QS_TILE_COLOR_DECISION", key);
+                        }
                     }
                 }
                 return;
