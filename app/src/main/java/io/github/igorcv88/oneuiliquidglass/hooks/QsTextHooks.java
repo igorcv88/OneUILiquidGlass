@@ -9,6 +9,7 @@ import java.lang.reflect.*;
 import java.util.function.*;
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
+import io.github.igorcv88.oneuiliquidglass.config.ConfigClient;
 import io.github.igorcv88.oneuiliquidglass.diagnostics.Probe;
 import io.github.igorcv88.oneuiliquidglass.glass.*;
 
@@ -33,6 +34,7 @@ final class QsTextHooks {
     private final ThreadLocal<Object> drawingNode=new ThreadLocal<>();
     private final java.util.Map<Object,String> owners=new java.util.WeakHashMap<>();
     private final java.util.Map<Object,Integer> drawnTones=new java.util.WeakHashMap<>();
+    private final java.util.Map<Object,Long> paintedRevisions=new java.util.WeakHashMap<>();
     private volatile long unboundClockLoggedAt;
     private Method invalidate;
     private boolean ready,headerReady;
@@ -223,6 +225,14 @@ final class QsTextHooks {
         if (node == null) return;
         int bucket = result & 0xffffff;
         boolean h = Boolean.TRUE.equals(nodes.get(node));
+        long revision=ConfigClient.revision();
+        if(revision>0) {
+            Long before=paintedRevisions.put(node,revision);
+            if(before==null||before!=revision)
+                Probe.log("QS_CONFIG_RENDER", "revision=" + revision + " role=" + (h?"header":"label")
+                        + " node=" + Integer.toHexString(System.identityHashCode(node))
+                        + " finalTone=" + Integer.toHexString(result) + " canvas=" + canvas + " drawn=true");
+        }
         // A header node that drew a time of day is the clock: recorded once, and logged again.
         boolean newClock = h && clock && clocks.put(node, Boolean.TRUE) == null;
         Integer previous = drawnTones.put(node, bucket);

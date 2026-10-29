@@ -2,6 +2,12 @@
 
 Documento para continuar o trabalho em outra conversa. Leia inteiro antes de mexer em qualquer coisa. O histórico técnico detalhado está em `docs/architecture.md`; as seções de 2026-10-16 cobrem a central de notificações.
 
+**Continuidade prioritária (28/10/2026, pós-PR #83):** o checklist atualizado e os critérios
+de regressão estão em [`qs-backlog-20261028.md`](qs-backlog-20261028.md); a coleta
+interativa para validar a instrumentação e as atualizações ao vivo do branch seguinte está
+em [`qs-dzif-pr84-protocol.md`](qs-dzif-pr84-protocol.md). Para Quick Settings e
+notificações, use esses dois documentos antes dos relatos antigos abaixo.
+
 ## 0w. Atualização (2026-10-25): rodada 40 — gestos do sistema e abertura de app cortam a faixa, lockscreen restaurada
 
 Base: vídeo do PR #39 (18:45:08) e print da lockscreen (18:46). O log enviado estava vazio. **Não testado no aparelho.**

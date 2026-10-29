@@ -31,6 +31,10 @@ final class QsSliderHooks {
     private Object whiteBrush;
     private final ThreadLocal<Boolean> composing = new ThreadLocal<>();
     private final java.util.Set<Object> interactionSources = java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>());
+    private final java.util.Map<Object,String> sourceRoles = new java.util.WeakHashMap<>();
+    private final ThreadLocal<String> composingRole = new ThreadLocal<>();
+    private final java.util.Set<String> originHints = new java.util.HashSet<>();
+    private int originSamples, interactionSamples;
     private Consumer<Boolean> interaction = on -> {};
     void onInteraction(Consumer<Boolean> listener) { interaction = listener; }
     private final ThreadLocal<Frame> current=new ThreadLocal<>();
@@ -45,6 +49,7 @@ final class QsSliderHooks {
         final float outer;
         final float[] geometry=new float[5], body=new float[5];
         boolean bodyDrawn;
+        String role = QsSliderOrigin.UNKNOWN;
         int stages;
         float progress = Float.NaN;
         Frame(Object scope,Object context,Canvas canvas,long original,QsDrawTransaction transaction,float w,float h,boolean rtl,QsStyle style,float outer){
@@ -109,12 +114,24 @@ final class QsSliderHooks {
                 // The caller's scope: invalidating it re-runs the bar, so its thickness changes live.
                 @Override protected void beforeHookedMethod(MethodHookParam p){
                     p.setObjectExtra("qsBarPrevious", composing.get()); composing.set(true);
-                    for (Object a : p.args) if (a != null && a.getClass().getName().endsWith("MutableInteractionSourceImpl")) interactionSources.add(a);
+                    p.setObjectExtra("qsBarRolePrevious", composingRole.get());
+                    StackTraceElement[] stack = QsSliderOrigin.currentStack();
+                    String role = QsSliderOrigin.identify(stack);
+                    composingRole.set(role);
+                    for (Object a : p.args) if (a != null && a.getClass().getName().endsWith("MutableInteractionSourceImpl")) {
+                        interactionSources.add(a);
+                        if (!QsSliderOrigin.UNKNOWN.equals(role)) sourceRoles.put(a, role);
+                        if (Probe.trace && originSamples++ < 20)
+                            Probe.log("QS_SLIDER_SOURCE", "id=" + Integer.toHexString(System.identityHashCode(a))
+                                    + " role=" + role + " origin=" + QsSliderOrigin.stackHint(stack));
+                    }
                     for(int i=0;i<m.getParameterCount();i++)if(m.getParameterTypes()[i].getName().equals("androidx.compose.runtime.Composer"))capture.accept(p.args[i]);
                 }
                 @Override protected void afterHookedMethod(MethodHookParam p) {
                     Boolean old=(Boolean)p.getObjectExtra("qsBarPrevious");
                     if(old==null)composing.remove();else composing.set(old);
+                    String role=(String)p.getObjectExtra("qsBarRolePrevious");
+                    if(role==null)composingRole.remove();else composingRole.set(role);
                 }
             });
             if(!m.getName().equals("drawBidirectionalBarTrackProgressThumbContent-Uzs9YN0"))continue;
@@ -133,15 +150,28 @@ final class QsSliderHooks {
             Class<?> source=Class.forName("androidx.compose.foundation.interaction.MutableInteractionSourceImpl",false,loader);
             XposedBridge.hookAllConstructors(source,new XC_MethodHook(){
                 @Override protected void afterHookedMethod(MethodHookParam p){
-                    if(Boolean.TRUE.equals(composing.get())) interactionSources.add(p.thisObject);
+                    if(Boolean.TRUE.equals(composing.get())) {
+                        interactionSources.add(p.thisObject);
+                        String role=composingRole.get();
+                        if(role!=null&&!QsSliderOrigin.UNKNOWN.equals(role)) sourceRoles.put(p.thisObject,role);
+                    }
                 }
             });
             for(Method m:source.getDeclaredMethods()) if(m.getName().equals("emit")||m.getName().equals("tryEmit"))
                 XposedBridge.hookMethod(m,new XC_MethodHook(){
                     @Override protected void beforeHookedMethod(MethodHookParam p){
                         if(!enabled.getAsBoolean()||!interactionSources.contains(p.thisObject)||p.args.length==0||p.args[0]==null)return;
+                        String role=sourceRoles.get(p.thisObject);
+                        if(role==null||QsSliderOrigin.UNKNOWN.equals(role)) {
+                            role=QsSliderOrigin.identify(QsSliderOrigin.currentStack());
+                            if(!QsSliderOrigin.UNKNOWN.equals(role))sourceRoles.put(p.thisObject,role);
+                        }
                         String name=p.args[0].getClass().getName();
                         Boolean on=interactionState(name);
+                        if(Probe.trace&&on!=null&&interactionSamples++<24)
+                            Probe.log("QS_SLIDER_INTERACTION","source="+Integer.toHexString(System.identityHashCode(p.thisObject))
+                                    +" role="+role+" event="+p.args[0].getClass().getSimpleName()+" pressed="+on);
+                        if(!QsSliderOrigin.suppress(role))return; // Volume must not fade other capsules.
                         if(on!=null)try{interaction.accept(on);}catch(RuntimeException|LinkageError e){Probe.error("QS_SLIDER_INTERACTION_FAILED",e);}
                     }
                 });
@@ -171,6 +201,22 @@ final class QsSliderHooks {
             float iw=w<=h?w:w-2*m, ih=w<=h?h-2*m:h;
             Frame frame=new Frame(p.args[0],context,canvas,original,new QsDrawTransaction(canvas,context,setSize,original),iw,ih,
                     "Rtl".equals(String.valueOf(p.args[3])),snapshot,outer);
+            String role=QsSliderOrigin.UNKNOWN;
+            // A DrawScope may be reused for different bars. Never cache its caller's identity.
+            // Only pay for a stack sample during a gesture or an opt-in diagnostic session.
+            if(touching.getAsBoolean()||Probe.trace) {
+                StackTraceElement[] stack=QsSliderOrigin.currentStack();
+                role=QsSliderOrigin.identify(stack);
+                if(Probe.trace&&originSamples<36) {
+                    String hint=QsSliderOrigin.stackHint(stack);
+                    if(originHints.add(role+"|"+hint)) {
+                        originSamples++;
+                        Probe.log("QS_SLIDER_ORIGIN", "id=" + Integer.toHexString(System.identityHashCode(p.args[0]))
+                                + " role=" + role + " origin=" + hint);
+                    }
+                }
+            }
+            frame.role=role;
             p.setObjectExtra("qsSliderFrame",frame);p.setObjectExtra("qsSliderPrevious",current.get());current.set(frame);
             canvas.translate(w<=h?0:m,w<=h?m:0);
             setSize.invoke(context,pack(iw,ih));
@@ -195,7 +241,7 @@ final class QsSliderHooks {
                 float length=f.w<=f.h?y(extent):x(extent);
                 f.progress=Math.max(0f,Math.min(1f,length/Math.max(f.w,f.h)));
                 Float previous=lengths.put(f.scope,length);
-                if(drag(previous,length,touching.getAsBoolean()))dragged.run();
+                if(QsSliderOrigin.suppress(f.role)&&drag(previous,length,touching.getAsBoolean()))dragged.run();
             }
             if(!(g[2]>0)||!(g[3]>0)){p.setResult(null);return;}
             p.args[2]=pack(g[0],g[1]);p.args[3]=pack(g[2],g[3]);
@@ -210,11 +256,12 @@ final class QsSliderHooks {
         Object extra=p.getObjectExtra("qsSliderFrame");if(!(extra instanceof Frame))return;
         p.setObjectExtra("qsSliderFrame",null);Frame f=(Frame)extra;
         int bucket = Float.isNaN(f.progress) ? -1 : f.progress <= .01f ? 0 : f.progress >= .99f ? 100 : Math.abs(f.progress-.5f)<.02f ? 50 : 1;
-        int status=(bucket+1)*8+f.stages;
+        int status=(bucket+1)*8+f.stages
+                +(QsSliderOrigin.BRIGHTNESS.equals(f.role)?1024:QsSliderOrigin.VOLUME.equals(f.role)?2048:0);
         Integer old=statuses.put(f.scope,status);
         if(old==null || old!=status) {
             Probe.log("QS_SLIDER_STATUS", "id=" + Integer.toHexString(System.identityHashCode(f.scope))
-                    + " role=other stage0=" + ((f.stages&1)!=0) + " stage1=" + ((f.stages&2)!=0)
+                    + " role=" + f.role + " stage0=" + ((f.stages&1)!=0) + " stage1=" + ((f.stages&2)!=0)
                     + " stage2=" + ((f.stages&4)!=0) + " trackHidden=" + ((f.stages&1)!=0)
                     + " fill=" + f.style.fill + " outer=" + f.outer + " progress=" + f.progress
                     + " rtl=" + f.rtl + " vertical=" + (f.w<=f.h) + " drawn=" + !p.hasThrowable());

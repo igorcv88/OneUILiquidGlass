@@ -304,6 +304,12 @@ public final class Tuning {
     private static volatile long readAt;
     private static String lastLogged;
     private static volatile long configRevision = -1;
+    /** Only process-lifetime listeners (SystemUI hook owners), never one listener per draw. */
+    private static final java.util.concurrent.CopyOnWriteArrayList<Runnable> changeListeners =
+            new java.util.concurrent.CopyOnWriteArrayList<>();
+    public static void onChanged(Runnable listener) {
+        if (listener != null) changeListeners.addIfAbsent(listener);
+    }
     /** A refresh is queued on the worker (at most one at a time). */
     private static final java.util.concurrent.atomic.AtomicBoolean refreshing = new java.util.concurrent.atomic.AtomicBoolean();
     /**
@@ -462,7 +468,24 @@ public final class Tuning {
             String line = next.toString();
             readAt = SystemClock.uptimeMillis(); configRevision = revision;
             // Unchanged values keep the published instance; a change publishes and bumps generation.
-            if (!line.equals(lastLogged)) { lastLogged = line; cached = next; generation++; Probe.log("TUNING", line); }
+            if (!line.equals(lastLogged)) {
+                lastLogged = line; cached = next; generation++;
+                Probe.log("TUNING", line);
+                if (!changeListeners.isEmpty()) {
+                    final int publishedGeneration = generation;
+                    final long publishedRevision = revision;
+                    try {
+                        new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+                            Probe.log("TUNING_DISPATCH", "generation=" + publishedGeneration
+                                    + " revision=" + publishedRevision + " listeners=" + changeListeners.size());
+                            for (Runnable listener : changeListeners) try { listener.run(); }
+                            catch (RuntimeException | LinkageError e) { Probe.error("TUNING_DISPATCH_FAILED", e); }
+                        });
+                    } catch (RuntimeException | LinkageError e) {
+                        Probe.error("TUNING_DISPATCH_FAILED", e);
+                    }
+                }
+            }
             else if (cached == null) cached = next;
         } finally { Perf.end(Perf.TUNING, started); }
     }

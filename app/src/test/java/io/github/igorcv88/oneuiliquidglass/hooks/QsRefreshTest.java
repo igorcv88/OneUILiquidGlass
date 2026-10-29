@@ -12,8 +12,16 @@ import static org.junit.Assert.*;
 @RunWith(RobolectricTestRunner.class) @Config(sdk=34)
 public class QsRefreshTest {
     private Object previous;
-    @Before public void save() throws Exception {previous=field(ConfigClient.class,"current").get(null);setValues(".10");}
-    @After public void restore() throws Exception {field(ConfigClient.class,"current").set(null,previous);}
+    private long previousRevision;
+    @Before public void save() throws Exception {
+        previous=field(ConfigClient.class,"current").get(null);
+        previousRevision=field(ConfigClient.class,"revision").getLong(null);
+        setValues(".10");
+    }
+    @After public void restore() throws Exception {
+        field(ConfigClient.class,"current").set(null,previous);
+        field(ConfigClient.class,"revision").setLong(null,previousRevision);
+    }
     @Test public void numericChangeWhileOnInvalidatesOnlyValidCapturedScopes() throws Exception {
         QuickSettingsHooks hooks=new QuickSettingsHooks(getClass().getClassLoader(),()->true,context->{});
         field(QuickSettingsHooks.class,"ready").set(hooks,true);
@@ -36,6 +44,20 @@ public class QsRefreshTest {
             QuickSettingsHooks hooks=new QuickSettingsHooks(getClass().getClassLoader(),()->true,context->{});
             assertEquals(qs,gate.invoke(hooks));
         }
+    }
+    @Test public void configRevisionInvalidatesDrawEvenWhenQsStyleValuesAreUnchanged() throws Exception {
+        QuickSettingsHooks hooks=new QuickSettingsHooks(getClass().getClassLoader(),()->true,c->{});
+        field(QuickSettingsHooks.class,"ready").set(hooks,true);
+        field(QuickSettingsHooks.class,"applied").set(hooks,true);
+        field(QuickSettingsHooks.class,"invalidate").set(hooks,Scope.class.getMethod("invalidateForResult",Object.class));
+        field(QuickSettingsHooks.class,"valid").set(hooks,Scope.class.getMethod("getValid"));
+        Scope live=new Scope(true);
+        @SuppressWarnings("unchecked") Set<Object> scopes=(Set<Object>)field(QuickSettingsHooks.class,"scopes").get(hooks);
+        scopes.add(live);
+        hooks.refresh();assertEquals(0,live.invalidations);
+        field(ConfigClient.class,"revision").setLong(null,previousRevision+1);
+        hooks.refresh();assertEquals(1,live.invalidations);
+        hooks.refresh();assertEquals(1,live.invalidations);
     }
     @Test public void onlyTheTrackIsSuppressedAndNativeLogicalInputsAreUntouched(){
         assertTrue(QsSliderHooks.suppressTrack(0));
