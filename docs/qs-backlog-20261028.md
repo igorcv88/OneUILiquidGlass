@@ -1,5 +1,37 @@
 # Pendências OneUILiquidGlass, a partir do main pós-PR #83
 
+## Diagnóstico complementar pós-PR #91 (29/10, PR seguinte)
+
+- [x] **Rastreio de camadas da shade implementado em código:** `SHADE_LAYER_UPDATE`
+  registra o papel (normal/dimmed/other) e drawable de cada fundo após atualização;
+  `SHADE_LAYER_DRAW` registra qual `NotificationBackgroundView` realmente entrou no
+  `onDraw`, a ordem, alpha, visibilidade, estado do vidro e se o frame foi renderizado
+  pelo vidro ou pela Samsung. Amostra inicial e mudanças são capturadas com limite
+  temporal; somente `trace=1`. Dois testes unitários do classificador e limitador passam.
+- [x] **Origem da paleta dos discos instrumentada:** `QS_PALETTE_EFFECTIVE` informa
+  revisão do provider, revisão do estilo, override bruto de `qs.tilelighton`, fonte
+  (default/provider) e RGBA efetivo das tintas de discos, ícones e sliders. Isso permite
+  confrontar `QS_TILE_COLOR applied=ff000000` com a configuração realmente recebida.
+- [ ] **Shade Theme Park OFF e notificação ao vivo:** no APK pós-PR #90, o usuário
+  reproduziu cartões que piscam, perdem o vidro ou ficam roxos quando chegam/atualizam
+  notificações, tanto na shade padrão como com notificação ao vivo. O padrão visual
+  sugere um mecanismo comum, **ainda não comprovado**. Capturar com `trace=1` e correlacionar
+  `SHADE_LAYER_UPDATE`/`SHADE_LAYER_DRAW` com `LIFECYCLE`, `GLASS_APPLIED`,
+  `SHADE_MATERIAL_DECISION` e `BACKGROUND_UPDATE`, comparando com Theme Park ON.
+- [ ] **Discos QS ativos pretos intermitentes:** foram vistos Wi-Fi/Bluetooth pretos
+  após abrir o QS, recuperando a tinta durante o fechamento parcial. O diagnóstico
+  anterior tinha `QS_TILE_COLOR ... applied=ff000000` para cena clara, sem origem
+  do override efetivo. Comparar agora `QS_PALETTE_EFFECTIVE` com `QS_TILE_COLOR`,
+  `QS_TONE_ENTRY` e `TONE_COMMIT` em abertura direta e shade→QS. Não trocar paleta
+  aprovada nem forçar recoloração de modelos não vinculados antes dessa correlação.
+- [ ] **Validação real:** compilar APK, confirmar a cobertura dos novos eventos na
+  SystemUI do S25 Ultra DZIF; repetir Theme Park OFF/ON e notificação ao vivo,
+  depois reportar se a causa é camada nativa sobreposta, perda do GlassDrawable,
+  configuração de paleta ou outro caminho de desenho.
+
+O protocolo de reprodução e os comandos para coletar o diagnóstico serão entregues
+diretamente na conversa; este arquivo acompanha somente o estado das pendências.
+
 ## Depois do PR #89: instrumentação e ajustes preparados em 29/10
 
 Estado de cada linha: **código/teste local** não equivale à validação visual no S25 Ultra DZIF. O PR permanece em revisão até a coleta física.

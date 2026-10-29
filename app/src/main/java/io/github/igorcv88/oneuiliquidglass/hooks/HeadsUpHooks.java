@@ -45,6 +45,14 @@ public final class HeadsUpHooks {
     private volatile boolean enabled;
     private boolean configPending;
     private final WeakHashMap<View, State> states = new WeakHashMap<>();
+    /** Draw-time evidence is independent of State so an unmodified Samsung layer is still counted. */
+    private final WeakHashMap<View, LayerSample> layerSamples = new WeakHashMap<>();
+    private long layerDrawOrder;
+    private static final class LayerSample {
+        int draws;
+        long loggedAt;
+        String last = "";
+    }
     private final Set<Method> installed = Collections.newSetFromMap(new java.util.HashMap<>());
     private Class<?> rowClass;
     private Field backgroundField;
@@ -1078,7 +1086,62 @@ public final class HeadsUpHooks {
     }
     private void observeBackground(View bg, String event) {
         View row = findRow(bg);
-        if (row != null) state(bg, row).event(event);
+        if (row != null) {
+            if (Probe.trace) {
+                try { Probe.log("SHADE_LAYER_UPDATE", layerIdentity(bg, row)
+                        + " event=" + event + " native=" + nativeLayer(bg)); }
+                catch (RuntimeException | LinkageError e) { Probe.error("SHADE_LAYER_TRACE_FAILED", e); }
+            }
+            state(bg, row).event(event);
+        }
+    }
+
+    private String layerIdentity(View bg, View row) {
+        Object normal = Reflect.read(row, "mBackgroundNormal");
+        Object dimmed = Reflect.read(row, "mBackgroundDimmed");
+        return "rowId=" + Integer.toHexString(System.identityHashCode(row))
+                + " bgId=" + Integer.toHexString(System.identityHashCode(bg))
+                + " role=" + ShadeLayerTrace.role(bg, normal, dimmed)
+                + " normalKnown=" + (normal instanceof View)
+                + " dimmedKnown=" + (dimmed instanceof View);
+    }
+
+    private String nativeLayer(View bg) {
+        Object nativeDrawable = Reflect.read(bg, "mBackground");
+        return nativeDrawable instanceof Drawable
+                ? nativeDrawable.getClass().getSimpleName() + "@" + ((Drawable) nativeDrawable).getAlpha()
+                : nativeDrawable == null ? "null" : nativeDrawable.getClass().getSimpleName();
+    }
+
+    /** Called after the real onDraw, including layers not intercepted by the glass replacement. */
+    private void traceLayerDraw(View bg, String render, boolean failed) {
+        if (!Probe.trace || !bg.isShown()) return;
+        try { traceLayerDrawSafe(bg, render, failed); }
+        catch (RuntimeException | LinkageError e) { Probe.error("SHADE_LAYER_TRACE_FAILED", e); }
+    }
+
+    private void traceLayerDrawSafe(View bg, String render, boolean failed) {
+        View row = findRow(bg);
+        if (row == null) return;
+        LayerSample sample = layerSamples.get(bg);
+        if (sample == null) { sample = new LayerSample(); layerSamples.put(bg, sample); }
+        sample.draws++;
+        long order = ++layerDrawOrder;
+        long now = android.os.SystemClock.uptimeMillis();
+        State state = states.get(bg);
+        String signature = "render=" + render + " failed=" + failed
+                + " rowAlpha=" + Math.round(row.getAlpha() * 20f)
+                + " bgAlpha=" + Math.round(bg.getAlpha() * 20f)
+                + " bgVisibility=" + bg.getVisibility()
+                + " glassOwned=" + (state != null && state.glass != null)
+                + " suspended=" + (state != null && state.stacked)
+                + " native=" + nativeLayer(bg);
+        if (!ShadeLayerTrace.emit(sample.draws, signature, sample.last, now, sample.loggedAt)) return;
+        sample.last = signature;
+        sample.loggedAt = now;
+        Probe.log("SHADE_LAYER_DRAW", "order=" + order + " uptime=" + now
+                + " " + layerIdentity(bg, row) + " " + signature
+                + " shadeExpanded=" + shadeExpanded + " barState=" + barState);
     }
     private View findRow(View bg) {
         for (ViewParent p = bg.getParent(); p instanceof View; p = p.getParent()) {
@@ -2484,9 +2547,19 @@ public final class HeadsUpHooks {
             } finally { Perf.end(Perf.DRAW_BEFORE, started); }
         }
         @Override protected void afterHookedMethod(MethodHookParam p) {
-            Object real = p.getObjectExtra("oulgCanvas"); if (!(real instanceof Canvas)) return;
-            long started = Perf.start(Perf.DRAW_AFTER);
-            try { composeGlass(p, (Canvas) real); } finally { Perf.end(Perf.DRAW_AFTER, started); }
+            Object real = p.getObjectExtra("oulgCanvas");
+            boolean replaced = real instanceof Canvas;
+            if (replaced) {
+                long started = Perf.start(Perf.DRAW_AFTER);
+                try { composeGlass(p, (Canvas) real); } finally { Perf.end(Perf.DRAW_AFTER, started); }
+            }
+            // ROW_FRAME describes the hierarchy, not which normal/dimmed sibling is drawn.
+            // Report both the replaced and still-native paths, in actual draw order.
+            if (Probe.trace && p.thisObject instanceof View) {
+                Object result = p.getObjectExtra("oulgRendered");
+                String render = result instanceof String ? (String) result : replaced ? "not-rendered" : "native";
+                traceLayerDraw((View) p.thisObject, render, p.hasThrowable());
+            }
         }
         private void composeGlass(MethodHookParam p, Canvas real) {
             View v = (View) p.thisObject;
@@ -2499,6 +2572,7 @@ public final class HeadsUpHooks {
                 Probe.error("NATIVE_DRAW_FAILED", p.getThrowable());
                 try {
                     p.setResult(XposedBridge.invokeOriginalMethod(p.method, p.thisObject, p.args));
+                    p.setObjectExtra("oulgRendered", "native-recovered");
                     Probe.log("NATIVE_DRAW_RECOVERED", "glassDisabled=true");
                 } catch (ReflectiveOperationException | RuntimeException e) { Probe.error("NATIVE_DRAW_RECOVERY_FAILED", e); }
                 return;
@@ -2507,12 +2581,13 @@ public final class HeadsUpHooks {
                 Drawable current = (Drawable) backgroundField.get(v);
                 GlassDrawable glass = (GlassDrawable) p.getObjectExtra("oulgGlass");
                 android.graphics.Rect bounds = current.getBounds();
-                if (bounds.isEmpty()) return;
+                if (bounds.isEmpty()) { p.setObjectExtra("oulgRendered", "empty-bounds"); return; }
                 int save = canvas.save();
                 try {
                     clipLikeNative(v, canvas);
                     glass.setBounds(bounds);
                     glass.draw(canvas);
+                    p.setObjectExtra("oulgRendered", "glass");
                 } finally { canvas.restoreToCount(save); }
             } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
                 if (s != null) { s.failed = true; s.release(); }
