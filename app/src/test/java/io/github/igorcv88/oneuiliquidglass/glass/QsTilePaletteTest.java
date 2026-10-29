@@ -23,13 +23,20 @@ public class QsTilePaletteTest {
         }
     }
 
-    @Test public void noDiscNeverChangesEvenOnLightBackground() {
+    @Test public void noDiscKeepsBackgroundAndOnlyTintsVerifiedMonochromeInk() {
         QsStyle style = new QsStyle(key -> null);
         for (int nativeColor : new int[]{0,0x00234b60,0xffffffff}) {
             assertEquals(nativeColor,style.tileBackground(NONE,LIGHT_SCENE,nativeColor));
             assertEquals(nativeColor,style.tileBackground(CONTAINER,LIGHT_SCENE,nativeColor));
-            assertEquals(nativeColor,style.tileInk(NONE,LIGHT_SCENE,nativeColor));
         }
+        // QsTextHooks may call tileInk(NONE) only for a Painter with a bound QuickTile model.
+        assertEquals(0xff343a46,style.tileInk(NONE,LIGHT_SCENE,0xffffffff));
+        assertEquals(0x80343a46,style.tileInk(NONE,LIGHT_SCENE,0x80ffffff));
+        assertEquals(0xff12a0ef,style.tileInk(NONE,LIGHT_SCENE,0xff12a0ef));
+        assertEquals(0xffffffff,style.tileInk(NONE,DARK_SCENE,0xffffffff));
+        assertEquals(0xffffffff,style.tileInk(NONE,UNKNOWN,0xffffffff));
+        assertEquals(0xffffffff,new QsStyle(k -> k.equals("qs.tilelight") ? "0" : null)
+                .tileInk(NONE,LIGHT_SCENE,0xffffffff));
     }
 
     @Test public void dzifInactiveSentinelIsDifferentFromTrulyDiscLessAndUnbound() {
