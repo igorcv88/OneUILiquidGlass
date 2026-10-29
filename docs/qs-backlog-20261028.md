@@ -1,5 +1,38 @@
 # Pendências OneUILiquidGlass, a partir do main pós-PR #83
 
+## Após merge #88: coleta com Theme Park ON/OFF e build falho (29/10, 09:48–09:49)
+
+- [x] **Falha de compilação #88, corrigida em código:** `QuickSettingsHooks` (pacote
+  `hooks`) acessava `QuickSettingsGlass.CLEAR` (pacote `glass`), que tinha
+  visibilidade de pacote. Constante tornada `public`; teste do pacote consumidor
+  impede voltar a compilar apenas os testes locais e falhar no Android. O erro
+  concreto foi enviado pelo usuário; validar compilação Android no CI do novo PR.
+- [x] **Regressão da shade sem Theme Park, causa encontrada e correção proposta:**
+  `GLASS_APPLIED` ocorre tanto com Theme Park desligado quanto ligado, com
+  `Backdrop=SHARED`. Contudo, o drawable `SeslRecoilDrawable` nativo tem alpha
+  estável **77/255** sem Theme Park e **255/255** ligado. `GlassDrawable.configure`
+  copiava esse alpha para o próprio vidro, deixando-o 70% mais fraco no primeiro
+  caso; a shade compartilhada agora usa alpha 255 em repouso e o alpha do
+  conteúdo apenas durante saída comprovada. Teste unitário cobre 77, 56, 255 e
+  0 de alpha nativo; validação visual ainda pendente.
+- [x] **Overlay realmente muda:** `cmd overlay list` contém
+  `android:ThemePark_NotificationPanel` e `android:ThemePark_dummy` só após religar
+  Theme Park. Não há evidência de mudança da classe da notificação; os mesmos
+  IDs recebiam `GLASS_APPLIED` em ambos os cenários.
+- [x] **Fantasma no gesto cancelado não reproduzido pelo usuário no APK #87:**
+  na etapa de 09:49:41–09:49:54, `QS_EDGE_EXIT` registra
+  `regionsBefore=8 regionsAfter=0 alphaPositiveAfter=0`. Não atribuir essa
+  resolução à PR #87 sem um teste A/B; manter observação como regressão.
+- [ ] **Aparelho:** verificar shade com Theme Park OFF/ON em fundo claro e
+  colorido após o novo APK; comparar `SHADE_SHARED_ALPHA native=77 glass=255`
+  versus `native=255 glass=255`. Confirmar remoção/fade dos cartões para evitar
+  que o vidro sobreviva ao conteúdo.
+- [ ] **Discos pequenos e sliders:** coleta ainda mostra `tileModel=unbound`,
+  `state=unverified` e várias ópticas `fallback` para nós Compose. Não aplicar
+  paleta a círculos sem identificação de classe/estado, nem afirmar correção dos
+  ícones de brilho/volume apenas porque a barra foi desenhada.
+
+
 ## PR #88: Theme Park desligado e paleta de controles, relatos 29/10 09:23–09:26
 
 - [x] **Correção do review P2 do #88, testes locais:** a rampa de `SharedBackdrop`

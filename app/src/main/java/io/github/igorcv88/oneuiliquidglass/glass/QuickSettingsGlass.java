@@ -17,7 +17,8 @@ public final class QuickSettingsGlass {
     private QuickSettingsGlass() {}
 
     /** Transparent: a capsule interior over a dark, coloured or not yet classified backdrop. */
-    static final int CLEAR = 0x00ffffff;
+    /** Transparent colour used by QS hooks in other packages (alpha is zero). */
+    public static final int CLEAR = 0x00ffffff;
     /** Default tint over light backdrops: the colour and alpha of qs.lightcolor / qs.lightfill. */
     static final int LIGHT_TINT = 0x141823;
     static final float LIGHT_FILL = 0.10f, MAX_LIGHT_FILL = 0.18f;
