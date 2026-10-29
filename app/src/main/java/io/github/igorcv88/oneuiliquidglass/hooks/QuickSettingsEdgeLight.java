@@ -602,6 +602,11 @@ final class QuickSettingsEdgeLight {
     private BooleanSupplier lightScene = () -> false;
     private DoubleSupplier lightGain = () -> 1d;
     /** The capsules' glass optics (APK-side, with or without the compositor). */
+    void optics(QsCapsuleOptics o, BooleanSupplier light) {
+        optics(o, light, () -> 1d);
+    }
+
+    /** Scene-specific light gain; legacy callers retain neutral gain through the overload. */
     void optics(QsCapsuleOptics o, BooleanSupplier light, DoubleSupplier gain) {
         optics = o;
         lightScene = light == null ? () -> false : light;
