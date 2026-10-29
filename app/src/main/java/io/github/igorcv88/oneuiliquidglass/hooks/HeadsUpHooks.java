@@ -1181,7 +1181,9 @@ public final class HeadsUpHooks {
     /** How long a card's shade veil takes to move to a new measurement. */
     private static final long VEIL_RAMP_MS = 180;
     /** How often a shown pop-up measures the backdrop under it again (the app may scroll or change). */
-    private static final long POPUP_MEASURE_MS = 1000;
+    // A stationary heads-up still needs to notice a background app switch promptly. One second
+    // missed the white -> dark change even when the outward direction happened immediately.
+    private static final long POPUP_MEASURE_MS = 250;
     private static final long SWAP_WALK_MS = 500;
     /** More than CONTEST_DRIFTS drift repairs of one card within CONTEST_WINDOW_MS: a writer is contesting the colour. */
     private static final int CONTEST_DRIFTS = 6;
@@ -1193,7 +1195,8 @@ public final class HeadsUpHooks {
     /** While a pop-up enters, how often the backdrop under it is measured again. */
     private static final long POPUP_ENTER_MS = 50;
     /** A pop-up's change of side needs a second measurement this much later, and this long since its last change. */
-    private static final long POPUP_CONFIRM_MS = 200, POPUP_DWELL_MS = 800;
+    // Symmetric confirmation in both directions; strong changes still pass immediately.
+    private static final long POPUP_CONFIRM_MS = 100, POPUP_DWELL_MS = 220;
     /** How long after the last touch a shown pop-up keeps measuring at POPUP_ENTER_MS. */
     private static final long POPUP_ACTIVE_MS = 1500;
     private static final String SURFACE_SHADE = "shade", SURFACE_POPUP = "popup";
@@ -1703,7 +1706,13 @@ public final class HeadsUpHooks {
                 invalidate();
             });
             a.addListener(new android.animation.AnimatorListenerAdapter() {
-                @Override public void onAnimationEnd(android.animation.Animator an) { pushToneVeil(); flushPendingSwap(); flushLightStyle(); invalidate(); }
+                private boolean cancelled;
+                @Override public void onAnimationCancel(android.animation.Animator an) { cancelled = true; }
+                @Override public void onAnimationEnd(android.animation.Animator an) {
+                    // ValueAnimator also invokes onEnd after cancel. Finishing an obsolete ramp
+                    // snapped the old colour back over a newer white/dark transition.
+                    if (!cancelled) { pushToneVeil(); flushPendingSwap(); flushLightStyle(); invalidate(); }
+                }
             });
             veilRamp = a;
             a.start();

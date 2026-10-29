@@ -109,6 +109,38 @@ public class QsAdaptiveTest {
         assertEquals(0x141823,light&0xffffff);
     }
 
+    @Test public void capsuleOpacityChangesOnlySelectedLightSceneAndKeepsLegacyDefault(){
+        QsStyle baseline=defaults();
+        QsStyle glass=new QsStyle(k->k.equals("qs.lightglassopacity")?".65":null);
+        int before=QuickSettingsGlass.fill(CONTAINER,0x44000000,LIGHT_SCENE,baseline);
+        int after=QuickSettingsGlass.fill(CONTAINER,0x44000000,LIGHT_SCENE,glass);
+        assertTrue((after>>>24)>(before>>>24));
+        assertNotEquals(before,after);
+        assertEquals(QuickSettingsGlass.fill(CONTAINER,0x44000000,DARK_SCENE,baseline),
+                QuickSettingsGlass.fill(CONTAINER,0x44000000,DARK_SCENE,glass));
+        assertEquals(QuickSettingsGlass.fill(ACTIVE,0xff123456,LIGHT_SCENE,baseline),
+                QuickSettingsGlass.fill(ACTIVE,0xff123456,LIGHT_SCENE,glass));
+    }
+
+    @Test public void lightOpticalGainDoesNotChangeGlassOrBasalOutline(){
+        QsStyle s=new QsStyle(k->k.equals("qs.lightoptics")?".4":null);
+        assertEquals(.4f,s.lightOptics,1e-6f);
+        assertEquals(1f,defaults().lightOptics,1e-6f);
+        assertEquals(QuickSettingsGlass.fill(CONTAINER,0,LIGHT_SCENE,defaults()),
+                QuickSettingsGlass.fill(CONTAINER,0,LIGHT_SCENE,s));
+        assertEquals(QuickSettingsGlass.rim(false,LIGHT_SCENE,defaults()),
+                QuickSettingsGlass.rim(false,LIGHT_SCENE,s));
+    }
+
+    @Test public void rgbaGlassOpacityMultipliesColourAlphaAndDoesNotTouchDarkScene(){
+        QsStyle transparent=new QsStyle(k->k.equals("qs.lightglassopacity")?".5":
+                k.equals("qs.lightglasscolor")?"ffffff80":k.equals("qs.lightfill")?"0":null);
+        assertEquals(0x80,transparent.lightGlassColor>>>24);
+        int rendered=QuickSettingsGlass.fill(CONTAINER,0,LIGHT_SCENE,transparent);
+        assertEquals(64,rendered>>>24); // 0.5 user opacity x 0.5 RGBA alpha.
+        assertEquals(0,QuickSettingsGlass.fill(CONTAINER,0,DARK_SCENE,transparent)>>>24);
+    }
+
     private static float[] primitive(float w,float h,float outer,float fill,float x,float y,float sw,float sh,boolean thumb,float[] body){
         return QuickSettingsGlass.sliderPrimitive(w,h,outer,fill,x,y,sw,sh,thumb,body,new float[5]);
     }
@@ -141,7 +173,7 @@ public class QsAdaptiveTest {
                         assertEquals(Math.min(g[2],g[3])/2,g[4],1e-4);
                         assertTrue(g[0]>=-1e-3&&g[1]>=-1e-3&&g[0]+g[2]<=w+1e-3&&g[1]+g[3]<=h+1e-3);
                         // Centred thickness: the same margin on both sides of the narrow axis.
-                        float visibleThickness=Math.min(d,vertical?g[3]:g[2]);
+                        float visibleThickness=vertical?d:Math.min(d,g[2]);
                         assertEquals(visibleThickness,vertical?g[2]:g[3],1e-3);
                         assertEquals((vertical?w:h)-visibleThickness,2*(vertical?g[0]:g[1]),1e-3);
                     }
@@ -175,8 +207,9 @@ public class QsAdaptiveTest {
                 if(p==0){assertArrayEquals(new float[5],body,0);assertArrayEquals(new float[5],cap,0);continue;}
                 assertEquals(300*p,length,1e-3);
                 assertTrue("monotonic",length>previous);previous=length;
-                assertEquals(Math.min(88,length),vertical?body[2]:body[3],1e-3);
-                if(length<88)assertEquals(vertical?body[2]:body[3],length,1e-3);
+                assertEquals(vertical?88:Math.min(88,length),vertical?body[2]:body[3],1e-3);
+                if(length<88&&vertical)assertEquals(88,body[2],1e-3);
+                if(length<88&&!vertical)assertEquals(body[3],length,1e-3);
                 assertEquals(Math.min(88,length)/2,body[4],1e-3);
                 assertTrue("cap never longer than the body",(vertical?cap[3]:cap[2])<=length+1e-3);
             }

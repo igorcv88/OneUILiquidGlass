@@ -640,6 +640,15 @@ public final class Controls {
         put(c("qs.lightcolor", "Cor do tom sobre fundo claro").fmt(Format.COLOR).in(QS, ADV).on(SH)
                 .help("Cor do tom das cápsulas sobre apps claros.")
                 .show(BEHAV, Channel.NONE));
+        put(c("qs.lightglassopacity", "Opacidade do vidro · fundo claro").fmt(Format.PERCENT_1).in(QS, STD).on(SH)
+                .help("Deixa o interior de cada cápsula mais opaco, sem alterar a intensidade da borda. Zero preserva o atual vidro transparente. O filme claro pode alterar um pouco a luminosidade do interior.")
+                .show(BEHAV, Channel.NONE));
+        put(c("qs.lightglasscolor", "Cor do vidro · fundo claro").fmt(Format.COLOR).in(QS, ADV).on(SH)
+                .help("Cor RGBA do filme que ajusta a opacidade; o alpha desta cor combina com o controle de opacidade.")
+                .show(BEHAV, Channel.NONE));
+        put(c("qs.lightoptics", "Iluminação da lente · fundo claro").fmt(Format.GAIN).in(QS, STD).on(SH)
+                .help("Atenua separadamente a luz que entra pelas cápsulas sobre apps claros. Não muda o contorno branco nem a iluminação aprovada em fundos coloridos. O controle também afeta a região refratada pelo compositor.")
+                .show(BEHAV, Channel.NONE));
         put(c("qs.tilelight", "Discos adaptativos no fundo claro").fmt(Format.TOGGLE).in(QS, STD).on(SH)
                 .help("Personaliza o contraste das bolinhas dos controles sobre apps claros, sem tocar nas cápsulas e nos ícones sem disco.")
                 .show(BEHAV, Channel.NONE));

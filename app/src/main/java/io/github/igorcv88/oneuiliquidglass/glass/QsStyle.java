@@ -17,8 +17,8 @@ import io.github.igorcv88.oneuiliquidglass.config.Rgba;
  * older profiles import and export unchanged; no stored value can bring a film back.</p>
  */
 public final class QsStyle {
-    public final float lightFill, darkRim, lightRim, outer, fill;
-    public final int lightColor, edgeBlur;
+    public final float lightFill, lightGlassOpacity, lightOptics, darkRim, lightRim, outer, fill;
+    public final int lightColor, lightGlassColor, edgeBlur;
     public final boolean tileLight, tileDark, hideOffDiscs;
     public final int tileLightOn, tileLightOff, tileLightOnInk, tileLightOffInk;
     public final int tileDarkOn, tileDarkOff, tileDarkOnInk, tileDarkOffInk;
@@ -34,6 +34,9 @@ public final class QsStyle {
                 * QuickSettingsGlass.alpha(color("qs.lightcolor", 0xff141823));
         // Only a dark tint: an old light or white qs.lightcolor falls back to the default.
         lightColor = QuickSettingsGlass.darkTint(color("qs.lightcolor", 0xff000000 | QuickSettingsGlass.LIGHT_TINT));
+        lightGlassOpacity = number("qs.lightglassopacity", 0f);
+        lightGlassColor = color("qs.lightglasscolor", 0xffffffff);
+        lightOptics = number("qs.lightoptics", 1f);
         darkRim = number("qs.darkrim", .26f); lightRim = number("qs.lightrim", .18f);
         edgeBlur = Math.round(number("qs.edgeblur", 8));
         outer = number("qs.outer", 1);
@@ -56,7 +59,8 @@ public final class QsStyle {
         // Registered for profile round-trips only: read and discarded, so no stored value can draw.
         prop("qs.darkfill"); prop("qs.darkcolor"); prop("qs.idle"); prop("qs.active");
         prop("qs.track"); prop("qs.lightstyle");
-        fingerprint = lightFill+":"+lightColor+":"+darkRim+":"+lightRim+":"+edgeBlur+":"+outer+":"+fill
+        fingerprint = lightFill+":"+lightColor+":"+lightGlassOpacity+":"+lightGlassColor+":"+lightOptics
+                +":"+darkRim+":"+lightRim+":"+edgeBlur+":"+outer+":"+fill
                 +":"+tileLight+":"+tileDark+":"+hideOffDiscs+":"+tileLightOn+":"+tileLightOff+":"+tileLightOnInk+":"+tileLightOffInk
                 +":"+tileLightOffAlpha+":"+tileDarkOn+":"+tileDarkOff+":"+tileDarkOnInk+":"+tileDarkOffInk+":"+tileDarkOffAlpha
                 +":"+sliderLightColor+":"+sliderDarkColor;

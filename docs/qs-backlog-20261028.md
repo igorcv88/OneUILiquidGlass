@@ -1,5 +1,36 @@
 # Pendências OneUILiquidGlass, a partir do main pós-PR #83
 
+## Ampliação do PR #92: revisão estética do APK pré-merge (29/10, 12:26–12:32)
+
+- [x] **Sliders verticais, código:** abaixo de um diâmetro, a largura do progresso
+  permanece fixa e centralizada. O desenho especial usa ombro superior progressivamente
+  achatado e curva inferior ancorada à borda de baixo; não deixa um disco independente
+  em 0 %. Preserva a geometria horizontal e o gesto nativo. **Pendente:** validação
+  tátil em 0, 1, 5, 10, 50 e 100 % nos sliders de brilho e volume no DZIF.
+- [x] **Cápsulas QS claras com opacidade separada, código:**
+  `qs.lightglassopacity` (0–1) e `qs.lightglasscolor` (RGBA) compõem um filme claro
+  sobre o tom já usado em `qs.lightfill/qs.lightcolor`, sem criar uma segunda cápsula.
+  Opacidade padrão `0` mantém a estética aprovada; o filme pode clarear a superfície.
+  Cor e opacidade continuam independentes dos discos e dos fundos coloridos.
+- [x] **Luz da lente em fundo claro, código:** `qs.lightoptics` (0–2, padrão 1)
+  atenua o ganho de iluminação AGSL e a região de perfil 3 no compositor apenas
+  quando a cena é clara. Não modifica o ganho global `sf.qslight`, a linha basal
+  `qs.lightrim` nem as cenas escuras; a atenuação da região também reduz sua refração.
+- [x] **Cadência e cancelamento do pop-up, código:** amostragem estacionária de
+  1000→250 ms, confirmação de 200→100 ms e intervalo entre mudanças de 800→220 ms.
+  Uma animação cancelada não finaliza mais a tinta obsoleta em `onAnimationEnd`.
+  **Pendente:** validar latência nos dois sentidos, rampa real de 180 ms e custo de
+  amostragem na SystemUI, em vez de concluir que a transição está perfeita.
+- [ ] **Paleta configurada pelo usuário:** perfil `OneUILiquidGlass-ajustes (6).json`
+  contém `desired.qs.tilelighton=000000` e `desired.qs.tilelightonink=ffffff`.
+  O disco preto é coerente com essa preferência salva quando a cor é aplicada;
+  continuam pendentes a intermitência da aplicação e os ícones que não recebem
+  a tinta correta. Não alterar as preferências do usuário silenciosamente.
+- [ ] **Visual:** comparar cápsulas QS claras com shade clara, sem mudar os valores
+  aprovados de notificações. Testar ganho óptico em 1/0.5/0, opacidade em 0/0.2/0.5,
+  contrastes dos ícones e comportamento do Theme Park ON/OFF. Confirmar compilação
+  Android e review comments antes de merge.
+
 ## Diagnóstico complementar pós-PR #91 (29/10, PR seguinte)
 
 - [x] **Rastreio de camadas da shade implementado em código:** `SHADE_LAYER_UPDATE`

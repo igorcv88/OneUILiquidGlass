@@ -132,7 +132,8 @@ public final class QuickSettingsHooks {
         capsuleOptics.onFailure(() -> { litRims.clear(); clearRims(); invalidateAll("optics-failed"); });
         edge.onOptics(this::opticsResult);
         edge.optics(capsuleOptics, () -> QuickSettingsHooks.this.backdrop != null
-                && QuickSettingsHooks.this.backdrop.tone() == io.github.igorcv88.oneuiliquidglass.glass.QsScene.Tone.LIGHT_SCENE);
+                        && QuickSettingsHooks.this.backdrop.tone() == io.github.igorcv88.oneuiliquidglass.glass.QsScene.Tone.LIGHT_SCENE,
+                () -> QuickSettingsHooks.this.style.lightOptics);
         BackdropEvents.add(() -> QuickSettingsHooks.this.backdrop.event());
         this.backdrop = new QsBackdrop(this::enabled, edge::expansion, () -> { clearRims(); invalidateAll("backdrop"); },
                 () -> { QsContentHooks c = QuickSettingsHooks.this.content; if (c != null) c.invalidateDraw(); });
@@ -551,7 +552,10 @@ public final class QuickSettingsHooks {
                 + " lightOff=" + Integer.toHexString(s.tileLightOff)
                 + " lightInk=" + Integer.toHexString(s.tileLightOnInk)
                 + " darkOn=" + Integer.toHexString(s.tileDarkOn)
-                + " sliderLight=" + Integer.toHexString(s.sliderLightColor));
+                + " sliderLight=" + Integer.toHexString(s.sliderLightColor)
+                + " glassOpacity=" + s.lightGlassOpacity
+                + " glassColor=" + Integer.toHexString(s.lightGlassColor)
+                + " lightOptics=" + s.lightOptics);
     }
 
     /** A Quick-Settings-only session may never see a notification row: start the provider here. */

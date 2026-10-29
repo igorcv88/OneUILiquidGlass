@@ -15,7 +15,8 @@ import io.github.igorcv88.oneuiliquidglass.glass.*;
  * rect is never drawn; the body's rounded rect already includes the moving cap, so drawing the
  * Samsung thumb on top would produce a second antialiased edge at low values. The progress keeps
  * the same margin to the capsule on all four sides
- * and a full circle at the minimum (QuickSettingsGlass.sliderPrimitive). Drawing only: layout,
+ * and at low vertical values its upper arc flattens while its lower arc stays anchored.
+ * Drawing only: layout,
  * hit area, drag and the slider's value are Samsung's.
  */
 final class QsSliderHooks {
@@ -350,8 +351,38 @@ final class QsSliderHooks {
                 if(barArguments.add(key)) Probe.log("QS_SLIDER_COLOR", "role="+f.role+" scene="+tone.get()
                         +" fill="+Integer.toHexString(fillColor)+" brush=SolidColor rgba=true");
             }
+            if(stage==1 && f.w<=f.h && g[3]<g[2]) {
+                // At the very bottom, the native uniform CornerRadius would flatten BOTH
+                // ends of the circular cap. Draw a top-clipped, bottom-rounded fill instead;
+                // it keeps its full transverse width and Samsung's exact progress height.
+                drawLowVerticalFill(f.canvas,g,fillColor);
+                p.setResult(null);
+                return;
+            }
             p.args[1]=stage==1?fillBrush(fillColor):QuickSettingsGlass.color(fillColor);
         }catch(RuntimeException|LinkageError e){fail(e);}
+    }
+
+    private final ThreadLocal<android.graphics.Paint> lowFillPaint = ThreadLocal.withInitial(() ->
+            new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG));
+    private final ThreadLocal<android.graphics.Path> lowFillPath = ThreadLocal.withInitial(android.graphics.Path::new);
+
+    /** Top shoulder progressively flattens; the lower semicircle stays on the capsule's end. */
+    private void drawLowVerticalFill(Canvas canvas, float[] g, int color) {
+        float x=g[0], y=g[1], w=g[2], h=g[3], bottom=y+h, half=w/2f;
+        float topR=Math.max(0f,h-half), bottomR=Math.min(half,h), cx=x+half;
+        android.graphics.Path path=lowFillPath.get(); path.reset();
+        path.moveTo(x+topR,y);
+        path.lineTo(x+w-topR,y);
+        if(topR>0f)path.quadTo(x+w,y,x+w,y+topR);
+        path.lineTo(x+w,bottom-bottomR);
+        path.cubicTo(x+w,bottom-bottomR*.4477f,cx+half*.5523f,bottom,cx,bottom);
+        path.cubicTo(cx-half*.5523f,bottom,x,bottom-bottomR*.4477f,x,bottom-bottomR);
+        path.lineTo(x,y+topR);
+        if(topR>0f)path.quadTo(x,y,x+topR,y);
+        path.close();
+        android.graphics.Paint paint=lowFillPaint.get(); paint.setColor(color);paint.setStyle(android.graphics.Paint.Style.FILL);
+        canvas.drawPath(path,paint);
     }
     private Object fillBrush(int color) {
         Object brush=fillBrushes.get(color);

@@ -60,6 +60,11 @@ final class QsCapsuleOptics {
     /** Media receives a narrow, subdued perimeter immediately adjacent to the native artwork. */
     boolean draw(Object node, Canvas canvas, float x, float y, float w, float h, float radius,
             float density, boolean light, boolean rimOnlyOverlay, boolean media) {
+        return draw(node, canvas, x, y, w, h, radius, density, light, rimOnlyOverlay, media, 1f);
+    }
+
+    boolean draw(Object node, Canvas canvas, float x, float y, float w, float h, float radius,
+            float density, boolean light, boolean rimOnlyOverlay, boolean media, float lightGain) {
         if (broken || !canvas.isHardwareAccelerated() || !(w > 2f) || !(h > 2f)) return false;
         try {
             Paint paint;
@@ -72,7 +77,7 @@ final class QsCapsuleOptics {
                 }
             }
             RuntimeShader s = (RuntimeShader) paint.getShader();
-            uniforms(s, spec, Tuning.get(), w, h, radius, density, light, media);
+            uniforms(s, spec, Tuning.get(), w, h, radius, density, light, media, lightGain);
             int save = canvas.save();
             try {
                 canvas.translate(x, y);
@@ -125,6 +130,12 @@ final class QsCapsuleOptics {
 
     static void uniforms(RuntimeShader s, GlassSpec spec, Tuning t, float w, float h, float radius,
             float density, boolean light, boolean media) {
+        uniforms(s, spec, t, w, h, radius, density, light, media, 1f);
+    }
+
+    static void uniforms(RuntimeShader s, GlassSpec spec, Tuning t, float w, float h, float radius,
+            float density, boolean light, boolean media, float lightGain) {
+        float illumination = light ? Math.max(0f, Math.min(2f, lightGain)) : 1f;
         float r = Math.max(0f, Math.min(radius, Math.min(w, h) / 2f));
         s.setFloatUniform("size", w, h);
         s.setFloatUniform("origin", 0f, 0f);
@@ -133,7 +144,7 @@ final class QsCapsuleOptics {
         s.setFloatUniform("hair", GlassSpec.hairPx(spec.hairDp, density));
         s.setFloatUniform("fringe", spec.fringe);
         s.setFloatUniform("light", spec.lightX, spec.lightY);
-        s.setFloatUniform("specular", spec.specular * (media ? .65f : 1f));
+        s.setFloatUniform("specular", spec.specular * (media ? .65f : 1f) * illumination);
         s.setFloatUniform("shadow", spec.innerShadow * (light ? t.lightEdge : 1f));
         s.setFloatUniform("hairGain", 1f);
         s.setFloatUniform("decor", t.liveOptics);
@@ -145,8 +156,8 @@ final class QsCapsuleOptics {
         // Lower-right opposed highlight is the visible second arc on QS capsules; notification
         // cards keep innerGain=1 in GlassDrawable. Fresnel and the actual lit rim remain.
         s.setFloatUniform("innerGain", 0f);
-        s.setFloatUniform("rimGain", media ? .55f : 1f);
-        s.setFloatUniform("outline", light ? t.lightOutline * (media ? .5f : 1f) : 0f);
+        s.setFloatUniform("rimGain", (media ? .55f : 1f) * illumination);
+        s.setFloatUniform("outline", light ? t.lightOutline * (media ? .5f : 1f) * illumination : 0f);
     }
 
     void clear() { synchronized (paints) { paints.clear(); } }
