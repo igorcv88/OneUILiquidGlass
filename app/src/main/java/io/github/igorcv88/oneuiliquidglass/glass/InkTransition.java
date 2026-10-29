@@ -13,7 +13,7 @@ public final class InkTransition {
     private InkTransition() {}
 
     /** Duration of a tone change at animator scale 1. */
-    public static final long DURATION_MS = 120;
+    public static final long DURATION_MS = 180;
 
     /** Per-channel blend of two ARGB colours (alpha included), {@code t} clamped to [0, 1]. */
     public static int lerp(int from, int to, float t) {

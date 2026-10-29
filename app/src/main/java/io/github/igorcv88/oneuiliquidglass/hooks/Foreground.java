@@ -27,6 +27,8 @@ final class Foreground {
     private Foreground() {}
     /** Views whose tone this class changed: what they had, and what they were given. */
     private static final WeakHashMap<Object, Rec> swapped = new WeakHashMap<>();
+    /** Read-only routing for custom RemoteViews text; signatures contain no notification text. */
+    private static final WeakHashMap<Object,String> customTextLogged = new WeakHashMap<>();
     static final class Rec {
         Object saved;
         int applied;
@@ -655,6 +657,15 @@ final class Foreground {
         int changed = 0;
         if (v instanceof TextView) {
             boolean eligible = textEligible(v);
+            if (io.github.igorcv88.oneuiliquidglass.diagnostics.Probe.trace && !standard(v, false)
+                    && customTextLogged.size() < 120) {
+                String signature=swap+":"+eligible+":"+Integer.toHexString(((TextView)v).getCurrentTextColor());
+                if(!signature.equals(customTextLogged.put(v,signature)))
+                    io.github.igorcv88.oneuiliquidglass.diagnostics.Probe.log("CUSTOM_TEXT_ROUTE",
+                            "id="+Integer.toHexString(System.identityHashCode(v))+" class="+v.getClass().getSimpleName()
+                            +" eligible="+eligible+" swap="+swap+" nativeColor="+Integer.toHexString(((TextView)v).getCurrentTextColor())
+                            +" privateSurface="+!customSurface(v)+" tracked="+swapped.containsKey(v));
+            }
             if (eligible || swapped.containsKey(v)) {
                 changed += ink(new Text((TextView) v), swap && eligible, lightText, swapped, animating) ? 1 : 0;
                 Rec record = swapped.get(v);

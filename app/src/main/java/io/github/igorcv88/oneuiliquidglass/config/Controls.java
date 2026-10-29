@@ -419,6 +419,17 @@ public final class Controls {
                 .hint("Sobre apps claros, no tema escuro")
                 .help("Escurece o fundo da central aberta sobre um app claro no tema escuro.")
                 .show(FAITH, Channel.PANEL_DIM));
+        put(c("panelblurcap", "Desfoque do fundo da central").fmt(Format.PX).auto("Nativo").in(GLASS, STD).on(SH)
+                .hint("Limita o blur atrás das notificações e controles")
+                .help("Até 52 px, como observado com Theme Park ligado. -1 deixa a Samsung decidir (250 px foram medidos com Theme Park desligado). Não altera o blur individual dos cartões.")
+                .show(BEHAV, Channel.NONE));
+        put(c("panelnativegray", "Véu cinza da Samsung").fmt(Format.TOGGLE).in(COLOR, STD).on(SH)
+                .help("Reaplica o ajuste de cor nativo da Samsung sobre o fundo do painel. Desligado remove esse ajuste, sem alterar o blur ou o vidro dos cartões.")
+                .show(BEHAV, Channel.NONE));
+        put(c("panelcolor", "Cor do fundo da central").fmt(Format.COLOR).in(COLOR, STD).on(SH)
+                .hint("Escolha a cor e a opacidade do fundo, independentemente dos cartões")
+                .help("Camada RGBA aplicada ao desfoque da janela da central. Transparente deixa o fundo sem tinta adicional. Não altera os fundos das notificações.")
+                .show(BEHAV, Channel.NONE));
         put(c("lighttone", "Cor do vidro claro").fmt(Format.COLOR).in(COLOR, ADV).all()
                 .help("Cor-base do vidro claro. Branco é o padrão.")
                 .show(FAITH, Channel.LIGHT_TONE));
@@ -672,6 +683,15 @@ public final class Controls {
                 .show(BEHAV, Channel.NONE));
         put(c("qs.lightrim", "Contorno sobre fundo claro").fmt(Format.PERCENT_1).in(QS, STD).on(SH)
                 .help("Intensidade da linha de luz em volta das cápsulas sobre apps claros.")
+                .show(BEHAV, Channel.NONE));
+        put(c("qs.glint", "Reflexo extra das cápsulas").fmt(Format.PERCENT_1).in(QS, ADV).on(SH)
+                .help("Reflexo especular secundário no canto superior esquerdo. Padrão 0: elimina a luz duplicada e mantém o contorno principal.")
+                .show(BEHAV, Channel.NONE));
+        put(c("qs.sliderlightcolor", "Preenchimento · brilho e volume · claro").fmt(Format.COLOR).in(QS, STD).on(SH)
+                .help("Escolha cor e transparência do progresso dos sliders sobre fundos claros.")
+                .show(BEHAV, Channel.NONE));
+        put(c("qs.sliderdarkcolor", "Preenchimento · brilho e volume · colorido").fmt(Format.COLOR).in(QS, ADV).on(SH)
+                .help("Escolha cor e transparência do progresso dos sliders sobre fundos escuros e coloridos.")
                 .show(BEHAV, Channel.NONE));
         put(c("qs.outer", "Espessura do slider").fmt(Format.PERCENT_1).in(QS, STD).on(SH)
                 .hint("Pílula inteira de brilho e volume")

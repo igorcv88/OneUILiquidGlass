@@ -118,8 +118,8 @@ public final class PreviewParams {
         float cap = n(value, "shadecap"), lift = n(value, "shadelift"), max = n(value, "veilmax");
         float lo = n(value, "stylelo"), hi = Math.max(lo, n(value, "stylehi"));
         float lightAlpha = sh ? n(value, "shadelightglass") : n(value, "lightglass");
-        int tone = rgb(value.apply("lighttone"));
-        int lightGlassColor = Math.round(255f * clamp01(lightAlpha)) << 24 | tone;
+        int tone = rgba(value.apply("lighttone"));
+        int lightGlassColor = Math.round(255f * clamp01(lightAlpha) * ((tone >>> 24) / 255f)) << 24 | (tone & 0xffffff);
         String shadeTone = value.apply("shadetone");
         boolean toneMap = sh && lensMode && "1".equals(shadeTone);
         if (toneMap) {
@@ -218,9 +218,13 @@ public final class PreviewParams {
 
     private static int rgb(String hex) {
         try {
-            return Integer.parseInt(hex == null ? "ffffff" : hex.replace("#", ""), 16) & 0xffffff;
-        } catch (NumberFormatException e) {
+            return Rgba.rgb(hex == null ? "ffffff" : hex);
+        } catch (IllegalArgumentException e) {
             return 0xffffff;
         }
+    }
+    private static int rgba(String hex) {
+        try { return Rgba.argb(hex == null ? "ffffff" : hex); }
+        catch(IllegalArgumentException e) { return 0xffffffff; }
     }
 }

@@ -34,6 +34,9 @@ public class ControlMatrixTest {
         out.computeIfAbsent("backdrop", k -> new TreeSet<>()).add("live");
         out.put("kglens", new TreeSet<>(Collections.singletonList("kgLens")));
         out.put("semshape", new TreeSet<>(Collections.singletonList("semShape")));
+        // RGBA colours have separate channel/opacity consumers and can be parsed through a local.
+        out.put("lighttone", new TreeSet<>(Arrays.asList("lightTone", "lightToneOpacity")));
+        out.put("panelcolor", new TreeSet<>(Collections.singletonList("panelColor")));
         return out;
     }
 
@@ -98,8 +101,14 @@ public class ControlMatrixTest {
                 readers = "sfhook/oulg_sf.c" + (fields.containsKey(s.key) ? ", " + String.join(", ", readers(fields.get(s.key))) : "");
             } else if (s.key.startsWith("qs.")) {
                 String source = new String(Files.readAllBytes(SRC.resolve("glass/QsStyle.java")), StandardCharsets.UTF_8);
-                assertTrue(s.key, source.contains("\"" + s.key + "\""));
-                readers = "glass/QsStyle, glass/QuickSettingsGlass, hooks/QuickSettingsHooks, hooks/QsSliderHooks";
+                if (s.key.equals("qs.glint")) {
+                    assertTrue(s.key, fields.containsKey(s.key));
+                    assertTrue(s.key, new String(Files.readAllBytes(SRC.resolve("hooks/QsCapsuleOptics.java")), StandardCharsets.UTF_8).contains("t.qsGlint"));
+                    readers = "glass/Tuning, hooks/QsCapsuleOptics";
+                } else {
+                    assertTrue(s.key, source.contains("\"" + s.key + "\""));
+                    readers = "glass/QsStyle, glass/QuickSettingsGlass, hooks/QuickSettingsHooks, hooks/QsSliderHooks";
+                }
             } else {
                 Set<String> f = fields.get(s.key);
                 assertNotNull("no Tuning field for " + s.key, f);

@@ -87,4 +87,19 @@ public class QsTilePaletteTest {
         assertEquals(0x66202c3c, style.tileBackground(IDLE, LIGHT_SCENE, 0xff999999));
         assertEquals(0x33ffffff, style.tileBackground(IDLE, DARK_SCENE, 0xff999999));
     }
+    @Test public void rgbaPaletteAndSlidersPreserveTheChosenAlphaInEachScene() {
+        QsStyle style=new QsStyle(k -> {
+            switch(k) {
+                case "qs.tilelighton": return "e6f1fa80";
+                case "qs.tilelightonink": return "20242eaa";
+                case "qs.sliderlightcolor": return "ffffffa0";
+                case "qs.sliderdarkcolor": return "e6eefcff";
+                default: return null;
+            }
+        });
+        assertEquals(0x80e6f1fa,style.tileBackground(ACTIVE,LIGHT_SCENE,0xffffffff));
+        assertEquals(0xaa20242e,style.tileInk(ACTIVE,LIGHT_SCENE,0xffffffff));
+        assertEquals(0xa0ffffff,style.sliderLightColor);
+        assertEquals(0xffe6eefc,style.sliderDarkColor);
+    }
 }

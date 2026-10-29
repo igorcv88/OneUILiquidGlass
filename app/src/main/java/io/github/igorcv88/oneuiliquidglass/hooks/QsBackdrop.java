@@ -38,6 +38,8 @@ import io.github.igorcv88.oneuiliquidglass.glass.ToneGrid;
  * panel is collapsed. Only when the expansion cannot be read does visibility stand in for it.</p>
  */
 final class QsBackdrop {
+    /** Same material transition duration as the notification cards. */
+    static final long INK_RAMP_MS = 180;
     /** A sample this young belongs to the opening that follows it. */
     static final long FRESH_MS = 600;
     static final long RESAMPLE_MS = 900, ACTIVE_RESAMPLE_MS = 250, BURST_RESAMPLE_MS = 100, ACTIVE_WINDOW_MS = 1500, CONFIRM_MS = 150, DWELL_MS = 600;
@@ -248,6 +250,7 @@ final class QsBackdrop {
 
     /** Ends this generation: a capture still in flight is cancelled and its result dropped. */
     private void retire() {
+        if (inkAnimator != null) { inkAnimator.cancel(); inkAnimator = null; }
         generation++;
         pending = false;
         if (cancel != null) cancel.run();
@@ -278,10 +281,36 @@ final class QsBackdrop {
         QsScene.Tone before = tone, beforeHeader = headerTone;
         tone = next; headerTone = nextHeader;
         float toScene = level(next), toHeader = level(nextHeader);
+        boolean rampScene = Float.isFinite(toScene) && Float.isFinite(sceneInk) && toScene != sceneInk;
+        boolean rampHeader = Float.isFinite(toHeader) && Float.isFinite(headerInk) && toHeader != headerInk;
+        boolean motionAllowed;
+        try { motionAllowed=ValueAnimator.areAnimatorsEnabled(); }
+        catch(RuntimeException | LinkageError ex) { motionAllowed=false; }
+        boolean ramp = animate && shown && motionAllowed && (rampScene || rampHeader);
+        float fromScene = sceneInk, fromHeader = headerInk;
         Probe.log("QS_BACKDROP", "state=" + next + " header=" + nextHeader + " previous=" + before + "/" + beforeHeader
-                + " generation=" + generation + " transition=immediate");
+                + " generation=" + generation + " transition=" + (ramp ? "ramp180" : "immediate"));
         if (inkAnimator != null) { inkAnimator.cancel(); inkAnimator = null; }
-        sceneInk = toScene; headerInk = toHeader;
+        if (ramp) {
+            inkAnimator = ValueAnimator.ofFloat(0f,1f);
+            inkAnimator.setDuration(INK_RAMP_MS);
+            inkAnimator.addUpdateListener(a -> {
+                float t=io.github.igorcv88.oneuiliquidglass.glass.InkTransition.ease((Float)a.getAnimatedValue());
+                sceneInk=rampScene ? fromScene+(toScene-fromScene)*t : toScene;
+                headerInk=rampHeader ? fromHeader+(toHeader-fromHeader)*t : toHeader;
+                redraw.run();
+            });
+            inkAnimator.addListener(new android.animation.AnimatorListenerAdapter() {
+                @Override public void onAnimationEnd(android.animation.Animator a) {
+                    if (inkAnimator != a) return;
+                    sceneInk=toScene; headerInk=toHeader; inkAnimator=null; changed.run();
+                    trace("QS_INK_TRANSITION", "phase=done scene=" + next + " header=" + nextHeader);
+                }
+            });
+            trace("QS_INK_TRANSITION", "phase=start from=" + fromScene + "/" + fromHeader
+                    + " to=" + toScene + "/" + toHeader + " duration=" + INK_RAMP_MS);
+            inkAnimator.start();
+        } else { sceneInk = toScene; headerInk = toHeader; }
         trace("TONE_COMMIT", "scene=" + next + " tone=" + nextHeader);
         changed.run();
     }

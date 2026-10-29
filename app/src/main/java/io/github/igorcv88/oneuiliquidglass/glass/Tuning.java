@@ -212,6 +212,8 @@ public final class Tuning {
      */
     public final float lightGlass;
     public final int lightTone;
+    /** RGBA opacity of the user-selected hue, multiplied into the material strength. */
+    public final float lightToneOpacity;
     /** Bright contour and edge Fresnel on light glass, shade and pop-up (debug.oulg.lightoutline). */
     public final float lightOutline;
     /**
@@ -281,6 +283,13 @@ public final class Tuning {
     public final boolean shadeLocal;
     /** Black over the shade window's blur over a light app in the dark theme (debug.oulg.paneldim, alpha 0-0.4). */
     public final float panelDim;
+    /** Upper bound of Samsung's shade window blur (-1 follows native). */
+    public final int panelBlurCap;
+    /** Keep Samsung's gray BGColorAdjustment over the blur. */
+    public final boolean panelNativeGray;
+    /** Optional RGBA overlay on the shade window blur, unrelated to card tint. */
+    public final int panelColor;
+    public final float qsGlint;
     /**
      * The sfhook version whose optics are confirmed live (debug.oulg.sf.optics). The library sets it
      * when a rewrite compiles, and the module's boot script sets it; with a live swap set it by hand.
@@ -384,7 +393,11 @@ public final class Tuning {
         styleHi = clamp(number("stylehi", 0.62f), 0.3f, 1f);
         styleLo = Math.min(styleHi, clamp(number("stylelo", 0.48f), 0.2f, 1f));
         lightGlass = clamp(number("lightglass", 0.75f), 0f, 0.95f);
-        lightTone = rgb(prop("lighttone", "ffffff"), 0xffffff);
+        int selectedLightTone;
+        try { selectedLightTone=io.github.igorcv88.oneuiliquidglass.config.Rgba.argb(prop("lighttone", "ffffff")); }
+        catch(IllegalArgumentException e) { selectedLightTone=0xffffffff; }
+        lightTone = selectedLightTone & 0xffffff;
+        lightToneOpacity = (selectedLightTone >>> 24) / 255f;
         shadeLightGlass = clamp(number("shadelightglass", 0.27f), 0f, 0.95f);
         lightOutline = clamp(number("lightoutline", 0.8f), 0f, 2f);
         lightEdge = clamp(number("lightedge", 1f), 0f, 4f);
@@ -403,6 +416,12 @@ public final class Tuning {
         orphanDraw = number("orphandraw", 1f) >= 1f;
         shadeLocal = number("shadelocal", 0f) >= 1f;
         panelDim = clamp(number("paneldim", 0.12f), 0f, 0.4f);
+        panelBlurCap = Math.round(clamp(number("panelblurcap", 52f), -1f, 400f));
+        panelNativeGray = number("panelnativegray", 0f) >= 1f;
+        try {
+            panelColor = io.github.igorcv88.oneuiliquidglass.config.Rgba.argb(prop("panelcolor", "00000000"));
+        } catch (IllegalArgumentException e) { panelColor = 0; }
+        qsGlint = clamp(number("qs.glint", 0f), 0f, 1f);
         shadeScaleVeil = Math.round(Math.max(0f, Math.min(255f, number("shadescaleveil", 115f))));
         sfOptics = Math.round(clamp(number("sf.optics", 0f), 0f, 1000f));
         headerGap = clamp(number("headergap", 4f), 0f, 8f);
@@ -494,14 +513,14 @@ public final class Tuning {
         return "backdrop=" + backdrop + " profile=" + profile + " lens=" + lens + " rimhz=" + rimHz + " rimblur=" + rimBlur
                 + " refract=" + refract + " ior=" + ior + " blur=" + blur + " sat=" + saturation
                 + " disp=" + dispersion + " hz=" + hz + " hzkg=" + keyguardHz + " tint=" + tintAlpha
-                + " semradius=" + semRadius + " semradiuslens=" + semRadiusLens + " sflens=" + sfLens + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " live=" + live + " liveradius=" + liveRadius + " liveshaderadius=" + liveShadeRadius + " liveoptics=" + liveOptics + " livesheen=" + liveSheen + " liveglint=" + liveGlint + " shadeglint=" + shadeGlint + " livelens=" + liveLens + " lensmaxage=" + lensMaxAge + " lenssettle=" + lensSettle + " lensgate=" + lensGate + " lenstransition=" + lensTransition + " kgblurpath=" + kgBlurPath + " shadeblurpath=" + shadeBlurPath + " shadefadecut=" + shadeFadeCut + " kgblurradius=" + kgBlurRadius + " pillglass=" + pillGlass + " pillblur=" + pillBlur + " kgoptics=" + kgOptics + " huoptics=" + huOptics + " kglens=" + kgLens + " shadetone=" + shadeTone + " shadeveil=" + shadeVeil + " shadeadaptive=" + shadeAdaptive + " shadecap=" + shadeCap + " shadelift=" + shadeLift + " veilmax=" + veilMax + " stylelo=" + styleLo + " stylehi=" + styleHi + " lightglass=" + lightGlass + " lighttone=" + Integer.toHexString(lightTone) + " lightedge=" + lightEdge + " lightoutline=" + lightOutline + " shadelightglass=" + shadeLightGlass + " livedarkalpha=" + liveDarkAlpha + " livedarkfill=" + liveDarkFill + " liverim=" + liveRim + " kgdarkalpha=" + kgDarkAlpha + " kgdarkfill=" + kgDarkFill + " kgrim=" + kgRim + " kgglint=" + kgGlint + " textswap=" + textSwap + " headertone=" + headerTone + " icontone=" + iconTone + " popuptone=" + popupTone + " popuplock=" + popupLock + " orphandraw=" + orphanDraw + " shadescaleveil=" + shadeScaleVeil + " shadelocal=" + shadeLocal + " paneldim=" + panelDim + " sfoptics=" + sfOptics + " kgwinblur=" + kgWinBlur + " headergap=" + headerGap + " perf=" + perf + " trace=" + trace;
+                + " semradius=" + semRadius + " semradiuslens=" + semRadiusLens + " sflens=" + sfLens + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " live=" + live + " liveradius=" + liveRadius + " liveshaderadius=" + liveShadeRadius + " liveoptics=" + liveOptics + " livesheen=" + liveSheen + " liveglint=" + liveGlint + " shadeglint=" + shadeGlint + " livelens=" + liveLens + " lensmaxage=" + lensMaxAge + " lenssettle=" + lensSettle + " lensgate=" + lensGate + " lenstransition=" + lensTransition + " kgblurpath=" + kgBlurPath + " shadeblurpath=" + shadeBlurPath + " shadefadecut=" + shadeFadeCut + " kgblurradius=" + kgBlurRadius + " pillglass=" + pillGlass + " pillblur=" + pillBlur + " kgoptics=" + kgOptics + " huoptics=" + huOptics + " kglens=" + kgLens + " shadetone=" + shadeTone + " shadeveil=" + shadeVeil + " shadeadaptive=" + shadeAdaptive + " shadecap=" + shadeCap + " shadelift=" + shadeLift + " veilmax=" + veilMax + " stylelo=" + styleLo + " stylehi=" + styleHi + " lightglass=" + lightGlass + " lighttone=" + Integer.toHexString(lightTone) + " lightedge=" + lightEdge + " lightoutline=" + lightOutline + " shadelightglass=" + shadeLightGlass + " livedarkalpha=" + liveDarkAlpha + " livedarkfill=" + liveDarkFill + " liverim=" + liveRim + " kgdarkalpha=" + kgDarkAlpha + " kgdarkfill=" + kgDarkFill + " kgrim=" + kgRim + " kgglint=" + kgGlint + " textswap=" + textSwap + " headertone=" + headerTone + " icontone=" + iconTone + " popuptone=" + popupTone + " popuplock=" + popupLock + " orphandraw=" + orphanDraw + " shadescaleveil=" + shadeScaleVeil + " shadelocal=" + shadeLocal + " paneldim=" + panelDim + " panelblurcap=" + panelBlurCap + " panelnativegray=" + panelNativeGray + " panelcolor=" + Integer.toHexString(panelColor) + " sfoptics=" + sfOptics + " kgwinblur=" + kgWinBlur + " headergap=" + headerGap + " perf=" + perf + " trace=" + trace;
     }
 
     /** A hex RGB value (with or without #), or the fallback. */
     static int rgb(String v, int fallback) {
         String h = v.startsWith("#") ? v.substring(1) : v;
-        if (h.length() != 6) return fallback;
-        try { return Integer.parseInt(h, 16) & 0xffffff; } catch (NumberFormatException e) { return fallback; }
+        try { return io.github.igorcv88.oneuiliquidglass.config.Rgba.rgb(h); }
+        catch (IllegalArgumentException e) { return fallback; }
     }
     private static float clamp(float v, float lo, float hi) { return Float.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : lo; }
 

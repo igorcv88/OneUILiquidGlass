@@ -23,12 +23,15 @@ final class QsSliderHooks {
     private final BooleanSupplier enabled;
     private final BooleanSupplier geometryAvailable;
     private final Supplier<QsStyle> style;
+    private final Supplier<QsScene.Tone> tone;
     private final Consumer<Object> capture;
     private Method drawContext, size, setSize, getCanvas;
     private Field nativeCanvas;
     private boolean broken, trackHooked;
     private final java.util.Map<Object,Integer> statuses=new java.util.WeakHashMap<>();
     private Object whiteBrush;
+    private Constructor<?> solidColor;
+    private final java.util.Map<Integer,Object> fillBrushes=new java.util.HashMap<>();
     private final ThreadLocal<Boolean> composing = new ThreadLocal<>();
     private final java.util.Set<Object> interactionSources = java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>());
     private final java.util.Map<Object,String> sourceRoles = new java.util.WeakHashMap<>();
@@ -70,20 +73,25 @@ final class QsSliderHooks {
     private final QsSliderLengthHistory lengths=new QsSliderLengthHistory();
     QsSliderHooks(ClassLoader loader,BooleanSupplier enabled,Supplier<QsStyle> style,BooleanSupplier geometryAvailable,
             Consumer<Object> capture){
-        this(loader,enabled,style,geometryAvailable,capture,()->false,()->{});
+        this(loader,enabled,style,geometryAvailable,capture,()->false,()->{},()->QsScene.Tone.UNKNOWN);
     }
     QsSliderHooks(ClassLoader loader,BooleanSupplier enabled,Supplier<QsStyle> style,BooleanSupplier geometryAvailable,
             Consumer<Object> capture,BooleanSupplier touching,Runnable dragged){
+        this(loader,enabled,style,geometryAvailable,capture,touching,dragged,()->QsScene.Tone.UNKNOWN);
+    }
+    QsSliderHooks(ClassLoader loader,BooleanSupplier enabled,Supplier<QsStyle> style,BooleanSupplier geometryAvailable,
+            Consumer<Object> capture,BooleanSupplier touching,Runnable dragged,Supplier<QsScene.Tone> tone){
         this.loader=loader;this.enabled=enabled;this.style=style;this.capture=capture;
-        this.geometryAvailable=geometryAvailable;this.touching=touching;this.dragged=dragged;
+        this.geometryAvailable=geometryAvailable;this.touching=touching;this.dragged=dragged;this.tone=tone;
     }
     /** Whether a bar's value moved while a finger is down (the user is dragging it). */
     static boolean drag(Float previous,float length,boolean touching){
         return touching&&previous!=null&&Math.abs(previous-length)>.5f;
     }
     void install(Class<?> bar) throws ReflectiveOperationException {
-        Constructor<?> solid=Class.forName("androidx.compose.ui.graphics.SolidColor",false,loader).getDeclaredConstructor(long.class);
-        solid.setAccessible(true);whiteBrush=solid.newInstance(QuickSettingsGlass.color(0xffffffff));
+        solidColor=Class.forName("androidx.compose.ui.graphics.SolidColor",false,loader).getDeclaredConstructor(long.class);
+        solidColor.setAccessible(true);whiteBrush=solidColor.newInstance(QuickSettingsGlass.color(0xffffffff));
+        fillBrushes.put(0xffffffff,whiteBrush);
         Class<?> scope=Class.forName("androidx.compose.ui.graphics.drawscope.DrawScope",false,loader);
         drawContext=scope.getMethod("getDrawContext");
         Class<?> ctx=drawContext.getReturnType();
@@ -319,6 +327,15 @@ final class QsSliderHooks {
                 f.progress=Math.max(0f,Math.min(1f,length/Math.max(f.w,f.h)));
                 Float previous=lengths.replace(f.scope,f.role,length);
                 if(QsSliderOrigin.suppress(f.role)&&drag(previous,length,touching.getAsBoolean()))dragged.run();
+                if(Probe.trace && (f.progress <= .12f || f.progress >= .95f)) {
+                    String geo="role="+f.role+" progress="+f.progress+" w="+f.w+" h="+f.h
+                            +" nativeOffset="+x(offset)+","+y(offset)+" nativeExtent="+x(extent)+","+y(extent)
+                            +" result="+g[0]+","+g[1]+","+g[2]+","+g[3]+" corner="+g[4]
+                            +" cap="+(Math.min(g[2],g[3])*0.5f);
+                    // Only one sample per narrow progress bucket: no log flood during a drag.
+                    String key=f.role+":"+(int)(f.progress*100f);
+                    if(barArguments.add("geometry:"+key))Probe.log("QS_SLIDER_GEOMETRY",geo);
+                }
             }
             if(!(g[2]>0)||!(g[3]>0)){p.setResult(null);return;}
             p.args[2]=pack(g[0],g[1]);p.args[3]=pack(g[2],g[3]);
@@ -326,8 +343,25 @@ final class QsSliderHooks {
             // At low values a circle-radius round rect becomes a flat-ended trapezoid. Elliptic
             // corner radii instead keep a smooth oval as the fill shrinks toward zero.
             p.args[4]=QuickSettingsGlass.sliderCorners(g[2],g[3],f.w<=f.h);
-            p.args[1]=stage==1?whiteBrush:QuickSettingsGlass.color(0xffffffff);
+            int fillColor = tone.get()==QsScene.Tone.LIGHT_SCENE ? s.sliderLightColor
+                    : tone.get()==QsScene.Tone.DARK_SCENE ? s.sliderDarkColor : 0xffffffff;
+            if(Probe.trace && stage==1 && barArguments.size()<96){
+                String key="slider-color:"+f.role+":"+tone.get()+":"+Integer.toHexString(fillColor);
+                if(barArguments.add(key)) Probe.log("QS_SLIDER_COLOR", "role="+f.role+" scene="+tone.get()
+                        +" fill="+Integer.toHexString(fillColor)+" brush=SolidColor rgba=true");
+            }
+            p.args[1]=stage==1?fillBrush(fillColor):QuickSettingsGlass.color(fillColor);
         }catch(RuntimeException|LinkageError e){fail(e);}
+    }
+    private Object fillBrush(int color) {
+        Object brush=fillBrushes.get(color);
+        if(brush!=null)return brush;
+        try {
+            brush=solidColor.newInstance(QuickSettingsGlass.color(color));
+            if(fillBrushes.size()>=12)fillBrushes.clear();
+            fillBrushes.put(color,brush);
+            return brush;
+        }catch(ReflectiveOperationException|RuntimeException e){Probe.error("QS_SLIDER_COLOR_FAILED",e);return whiteBrush;}
     }
     private void end(XC_MethodHook.MethodHookParam p){
         Object extra=p.getObjectExtra("qsSliderFrame");if(!(extra instanceof Frame))return;

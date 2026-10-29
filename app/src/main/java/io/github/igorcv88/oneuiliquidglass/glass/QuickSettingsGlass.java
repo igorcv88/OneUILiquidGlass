@@ -208,8 +208,12 @@ public final class QuickSettingsGlass {
         if(lo<0){hi-=lo;lo=0;}
         if(hi>len){lo-=hi-len;hi=len;}
         lo=Math.max(0,lo);
-        if(vertical){out[0]=across;out[1]=lo;out[2]=narrow;out[3]=hi-lo;}
-        else{out[0]=lo;out[1]=across;out[2]=hi-lo;out[3]=narrow;}
+        // Below one diameter the previous elliptical round rect was a wide, flattened oval.
+        // Shrink both axes together, centred, so the end remains circular all the way to zero.
+        // Zero is still empty; there is no fixed disc left when Samsung reports zero progress.
+        float cross = Math.min(narrow,hi-lo);
+        if(vertical){out[0]=(w-cross)/2f;out[1]=lo;out[2]=cross;out[3]=hi-lo;}
+        else{out[0]=lo;out[1]=(h-cross)/2f;out[2]=hi-lo;out[3]=cross;}
         out[4]=Math.min(out[2],out[3])/2f;
         return out;
     }

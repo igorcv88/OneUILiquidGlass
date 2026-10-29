@@ -139,7 +139,9 @@ final class QsCapsuleOptics {
         s.setFloatUniform("decor", t.liveOptics);
         s.setFloatUniform("live", 1f);
         s.setFloatUniform("sheen", media ? 0f : t.liveSheen);
-        s.setFloatUniform("glintGain", media ? 0f : t.shadeGlint);
+        // Independent from notification cards: a second bright spot at top-left was visually
+        // stacked over the compositor/AGSL optical rim. Default 0 keeps a single lit contour.
+        s.setFloatUniform("glintGain", media ? 0f : t.qsGlint);
         // Lower-right opposed highlight is the visible second arc on QS capsules; notification
         // cards keep innerGain=1 in GlassDrawable. Fresnel and the actual lit rim remain.
         s.setFloatUniform("innerGain", 0f);

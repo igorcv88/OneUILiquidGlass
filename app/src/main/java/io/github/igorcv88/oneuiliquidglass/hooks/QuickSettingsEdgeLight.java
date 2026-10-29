@@ -660,6 +660,14 @@ final class QuickSettingsEdgeLight {
                     + " radius=" + radius + " hardware=true layer="
                     + (rimOnlyOverlay ? "after-node-rim" : "drawContent")
                     + " light=" + lightScene.getAsBoolean());
+            if (success && first && Probe.trace) {
+                io.github.igorcv88.oneuiliquidglass.glass.Tuning tuning = io.github.igorcv88.oneuiliquidglass.glass.Tuning.get();
+                Probe.log("QS_EDGE_LAYER_STACK", "session="+coverage.session()+" id="+e.spec.token.id
+                        +" role="+e.spec.token.role+" composeOutline=true agsl="+success
+                        +" compositor="+usesCompositor(e.spec.token.role)+" fallbackOverlay="+rimOnlyOverlay
+                        +" lightScene="+lightScene.getAsBoolean()+" qsGlint="+tuning.qsGlint
+                        +" liveSheen="+tuning.liveSheen+" outline="+tuning.lightOutline);
+            }
             if (success && first && media) Probe.log("QS_MEDIA_EDGE_DRAWN", "session=" + coverage.session()
                     + " id=" + e.spec.token.id + " role=" + e.spec.token.role
                     + " insetDp=0 border=native-artwork-edge compositor=false");
