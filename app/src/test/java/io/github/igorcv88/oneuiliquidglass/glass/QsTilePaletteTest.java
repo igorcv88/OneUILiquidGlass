@@ -65,6 +65,16 @@ public class QsTilePaletteTest {
         assertEquals(0xff12a0ef,style.tileInk(ACTIVE,DARK_SCENE,0xff12a0ef));
         assertEquals(0,style.tileInk(ACTIVE,DARK_SCENE,0));
     }
+    @Test public void blackActiveDiscDoesNotForceItsMonochromeIconToRemainBlack() {
+        QsStyle style = new QsStyle(k -> {
+            if (k.equals("qs.tilelighton")) return "000000";
+            if (k.equals("qs.tilelightonink")) return "ffffff";
+            return null;
+        });
+        assertEquals(0xff000000,style.tileBackground(ACTIVE,LIGHT_SCENE,0xffffffff));
+        assertEquals(0xffffffff,style.tileInk(ACTIVE,LIGHT_SCENE,0xff000000));
+        assertEquals(0xff000000,style.tileInk(ACTIVE,DARK_SCENE,0xff000000));
+    }
 
     @Test public void disablingTheLightPaletteLeavesNativeColouredDiscs() {
         QsStyle disabled = new QsStyle(k -> k.equals("qs.tilelight") ? "0" : null);

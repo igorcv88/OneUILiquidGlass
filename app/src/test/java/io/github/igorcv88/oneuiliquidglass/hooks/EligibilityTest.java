@@ -64,6 +64,16 @@ public final class EligibilityTest {
         assertTrue(Eligibility.lens(null, true, true));
         assertFalse(Eligibility.lens(null, true, false));
     }
+    @Test public void expandedLockedShadeDoesNotKeepLockscreenOptics() {
+        assertTrue(Eligibility.sharedBackdrop(true, true, Eligibility.BAR_SHADE_LOCKED));
+        assertFalse(Eligibility.lens(Eligibility.BAR_SHADE_LOCKED, true, true));
+        assertFalse(Eligibility.keyguardOptics(Eligibility.BAR_SHADE_LOCKED, false, true));
+        assertFalse(Eligibility.sharedBackdrop(false, true, Eligibility.BAR_SHADE_LOCKED));
+        assertTrue(Eligibility.lens(Eligibility.BAR_SHADE_LOCKED, false, true));
+        // Previous regression fix: a partial pull-down in KEYGUARD keeps its lens.
+        assertTrue(Eligibility.lens(Eligibility.BAR_KEYGUARD, true, false));
+        assertTrue(Eligibility.keyguardOptics(Eligibility.BAR_KEYGUARD, false, true));
+    }
     @Test public void textToneOnlyWhileGlassIsDrawn() {
         assertTrue(Eligibility.textTone(true, true, false, true));
         // Module disabled with the hooks installed: native text.

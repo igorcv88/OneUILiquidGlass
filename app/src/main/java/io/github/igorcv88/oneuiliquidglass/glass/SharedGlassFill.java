@@ -15,4 +15,11 @@ public final class SharedGlassFill {
     public static int resolve(int nativeFill, int measuredVeil, boolean lightStyle, boolean ramping) {
         return ramping || lightStyle ? measuredVeil : nativeFill;
     }
+
+    /** Native dark shade: add only the user-requested opacity to the existing shared-card fill. */
+    public static int resolve(int nativeFill, int measuredVeil, boolean lightStyle, boolean ramping,
+                              boolean nativeDarkFrost) {
+        if (nativeDarkFrost && !lightStyle) return VeilMath.over(measuredVeil, nativeFill);
+        return resolve(nativeFill, measuredVeil, lightStyle, ramping);
+    }
 }

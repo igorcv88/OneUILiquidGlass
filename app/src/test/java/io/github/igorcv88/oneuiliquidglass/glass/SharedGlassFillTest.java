@@ -15,6 +15,15 @@ public final class SharedGlassFillTest {
         assertEquals(0x14ffffff, SharedGlassFill.resolve(0x14ffffff, 0x66000000, false, false));
         assertEquals(0x2effffff, SharedGlassFill.resolve(0x2effffff, 0x66ffffff, false, false));
     }
+    @Test public void optionalDarkOpacityAddsOnlyRequestedFrostWithoutChangingDefault() {
+        int nativeBody = 0x14ffffff;
+        assertEquals(nativeBody, SharedGlassFill.resolve(nativeBody, 0, false, false, false));
+        assertEquals(nativeBody, SharedGlassFill.resolve(nativeBody, 0, false, false, true));
+        assertEquals(0x8affffff, SharedGlassFill.resolve(nativeBody, 0x80ffffff, false, false, true));
+        assertEquals(0x8affffff, SharedGlassFill.resolve(nativeBody, 0x80ffffff, false, true, true));
+        assertEquals(0x80ffffff, SharedGlassFill.resolve(nativeBody, 0x80ffffff, true, false, true));
+        assertEquals(nativeBody, SharedGlassFill.resolve(nativeBody, 0x80ffffff, false, false, false));
+    }
     @Test public void sharedBodyFollowsBothHalvesOfRampIndependentlyOfLightEdgeStyle() {
         int nativeFill = 0x2effffff;
         int early = 0x37ffffff;

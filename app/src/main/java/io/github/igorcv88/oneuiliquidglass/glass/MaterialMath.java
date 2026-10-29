@@ -36,6 +36,19 @@ public final class MaterialMath {
         return (nativeGlass & 0x00ffffff) | (alpha << 24);
     }
 
+    /**
+     * Extra dark-shade frost when its scene already uses native light text. That scene never
+     * enters the swapped Material branch, so shadeDarkOpacity alone could not change it. Keep
+     * the approved 14% default untouched and apply only the requested additional opacity.
+     * The caller sends this to the shade's per-card veil, independently of semalpha=0.
+     */
+    public static int shadeDarkNativeExtra(float opacity) {
+        int desired = shadeDarkOpacity(DARK_GLASS, opacity) >>> 24;
+        int baseline = DARK_GLASS >>> 24;
+        int extra = Math.max(0, desired - baseline);
+        return extra == 0 ? 0 : (extra << 24) | (DARK_GLASS & 0x00ffffff);
+    }
+
     /** Dark glass under light text in the light theme (ShadeTone.DARK_GLASS). */
     public static final int DARK_GLASS = ShadeTone.DARK_GLASS;
 }

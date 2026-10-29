@@ -32,7 +32,7 @@ public final class Eligibility {
      */
     public static boolean lens(Integer barState, Boolean shadeExpanded, Boolean keyguard) {
         if (barState != null && barState == BAR_KEYGUARD) return true;
-        return !sharedBackdrop(shadeExpanded, keyguard);
+        return !sharedBackdrop(shadeExpanded, keyguard, barState);
     }
     /**
      * Whether a lens card takes the lockscreen optics profile, by the status bar state like
@@ -46,6 +46,12 @@ public final class Eligibility {
         if (barState == null) return false;
         if (barState == BAR_KEYGUARD) return true;
         return barState == BAR_SHADE_LOCKED && !Boolean.TRUE.equals(headsUp);
+    }
+    /** The expanded locked shade uses shade optics, even when the row remains on keyguard. */
+    public static boolean keyguardOptics(Integer barState, Boolean headsUp, Boolean shadeExpanded) {
+        if (barState != null && barState == BAR_SHADE_LOCKED && Boolean.TRUE.equals(shadeExpanded))
+            return false;
+        return keyguardOptics(barState, headsUp);
     }
     /** Diagnostic label only; unknown firmware state does not block rendering. */
     public static String surface(Boolean headsUp, Boolean keyguard, Boolean shadeExpanded) {
@@ -61,6 +67,12 @@ public final class Eligibility {
      */
     public static boolean sharedBackdrop(Boolean shadeExpanded, Boolean keyguard) {
         return Boolean.TRUE.equals(shadeExpanded) && Boolean.FALSE.equals(keyguard);
+    }
+    /** Samsung may retain mOnKeyguard=true after a row moves into the locked shade. */
+    public static boolean sharedBackdrop(Boolean shadeExpanded, Boolean keyguard, Integer barState) {
+        return Boolean.TRUE.equals(shadeExpanded)
+                && ((barState != null && barState == BAR_SHADE_LOCKED)
+                    || Boolean.FALSE.equals(keyguard));
     }
     /**
      * Rows with an app or the wallpaper directly behind the shade window, which a capture that

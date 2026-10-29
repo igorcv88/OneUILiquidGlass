@@ -16,4 +16,14 @@ public class ShadeDarkOpacityTest {
         assertEquals(0xf21a2b3c,MaterialMath.shadeDarkOpacity(0x241a2b3c,2f));
         assertEquals(0x241a2b3c,MaterialMath.shadeDarkOpacity(0x241a2b3c,Float.NaN));
     }
+
+    @Test public void nativeDarkSceneGetsAnIndependentOptionalFrost() {
+        assertEquals(0,MaterialMath.shadeDarkNativeExtra(0f));
+        assertEquals(0,MaterialMath.shadeDarkNativeExtra(.14f));
+        int mid = MaterialMath.shadeDarkNativeExtra(.50f);
+        int maximum = MaterialMath.shadeDarkNativeExtra(.95f);
+        assertTrue((mid >>> 24) > 0);
+        assertTrue((maximum >>> 24) > (mid >>> 24));
+        assertEquals(0x00ffffff,maximum & 0x00ffffff);
+    }
 }

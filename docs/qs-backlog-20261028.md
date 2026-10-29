@@ -1,5 +1,44 @@
 # Pendências OneUILiquidGlass, a partir do main pós-PR #83
 
+## Após o APK PR #96: coleta interativa 29/10, 15:27–15:37
+
+- [x] **Cor QS reaproveitada entre aberturas, correção proposta:** `QS_TONE_ENTRY`
+  registrou `fresh=true` com cor decidida na sessão anterior quando o painel foi
+  reaberto rapidamente. `QsBackdrop.retire()` cancelava a captura mas mantinha
+  `sampledAt` válido por 600 ms; agora invalida essa amostra. Uma nova abertura
+  limpa a paleta anterior antes do prefetch do gesto. **Pendente:** validar no
+  aparelho se a abertura rápida deixa de exibir discos pretos temporários.
+- [x] **Controle `shadedarkglass` sem efeito, causa e código:** na coleta de opacidade
+  o valor variou de 0.95 a 0.14 e foi recebido pelo SystemUI, mas
+  `SHADE_MATERIAL_DECISION style=native veil=0` não usava essa configuração.
+  Um ganho de alpha acima do padrão 0.14 agora chega ao blur individual por
+  `setToneVeil` e, na rota SHARED, é composto sobre o corpo nativo. Padrão e
+  preferência estética existente são preservados. **Limite:** valores de 0 a
+  0.14 ainda equivalem à aparência padrão na rota nativa sem tinta Samsung
+  (`semalpha=0`); resta avaliar necessidade de clareamento abaixo do padrão.
+- [x] **Central bloqueada, rota de estado:** durante a abertura da shade, o log
+  alterna entre `BAR_KEYGUARD=1` e `BAR_SHADE_LOCKED=2`. No estado 2 com painel
+  expandido, agora o cartão usa as ópticas e a elegibilidade da shade, mesmo se
+  a row conservar `mOnKeyguard=true`. `BAR_KEYGUARD` na abertura parcial conserva
+  a lente de bloqueio. `SHADE_LOCKED_ROUTE` registra a decisão por row.
+  **Pendente:** reproduzir o cartão isolado do print e testar o mesmo aplicativo
+  com uma notificação nova, conferindo camada e rebind.
+- [x] **Diagnóstico de ícones reforçado:** `QS_TILE_ICON_INK` passa a registrar
+  a paleta efetivamente capturada pelo Painter, e um teste cobre a preferência
+  `tilelighton=000000`, `tilelightonink=ffffff`. A coleta indica discos pretos
+  configurados intencionalmente, mas não prova por que certos ícones continuam
+  com tinta preta nem cobre todos os modelos pequenos.
+- [ ] **Slider no final:** no log de geometria o progresso permanece centralizado
+  no trilho interno; o vídeo mostra um defeito no trecho extremo que pode vir
+  de uma camada nativa distinta ou da animação. Geometria mantida para não
+  regredir o trecho já aprovado. Fazer captura com `QS_SLIDER_ORIGIN`,
+  `QS_SLIDER_GEOMETRY` e vídeo 0–5% de brilho e volume na próxima revisão.
+- [ ] **Validação pendente:** CI Android Debug/Release e suíte completa, revisão
+  de PR, percurso KEYGUARD→SHADE_LOCKED, Theme Park OFF/ON, `shadedarkglass`
+  0.14/0.5/0.95, QS em fundo branco/escuro, sliders e todos os tiles pequenos.
+  A coleta exclui regressão generalizada sem Theme Park, não prova solução
+  definitiva de todas as mudanças visuais.
+
 ## PR #95: coleta PR92, opacidade escura e reprodução da troca de formato (29/10)
 
 - [x] **Controle da opacidade escura na shade, código:** `shadedarkglass` (0–0.95,
