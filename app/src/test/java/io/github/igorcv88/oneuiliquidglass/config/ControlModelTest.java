@@ -166,6 +166,16 @@ public class ControlModelTest {
     }
 
     @Test
+    public void savedShadeLightGlassOverridesStaleDeviceProperty() {
+        Map<String, String> observed = Collections.singletonMap("shadelightglass", "0.34");
+        ControlState s = state(observed, Collections.singletonMap("shadelightglass", "0.4"));
+        assertEquals("0.4", s.device("shadelightglass"));
+        assertEquals("0.4", s.shown("shadelightglass"));
+        assertEquals("0.34", s.observed.get("shadelightglass"));
+        assertFalse(s.pendingRestart("shadelightglass"));
+    }
+
+    @Test
     public void flagsDefaultOnAndAppearInTheSharedMap() {
         Map<String, String> m = state(Collections.emptyMap(), Collections.singletonMap("surface.shade.enabled", "0")).shownMap();
         assertEquals("0", m.get("surface.shade.enabled"));
