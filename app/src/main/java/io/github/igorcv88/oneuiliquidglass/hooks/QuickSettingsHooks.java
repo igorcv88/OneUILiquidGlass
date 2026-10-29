@@ -65,6 +65,7 @@ public final class QuickSettingsHooks {
     private final Set<String> tileSurfaces = new HashSet<>();
     private final Set<String> tileDecisions = new HashSet<>();
     private long paletteTraceRevision = -1;
+    private long paletteTraceAppliedRevision = -1;
     private boolean paletteTraceActive;
     private final QsTileProbe tileProbe = new QsTileProbe();
     private final QuickSettingsEdgeLight edge;
@@ -537,14 +538,18 @@ public final class QuickSettingsHooks {
         }
     }
 
-    /** The actual provider snapshot behind QS_TILE_COLOR, not the legacy getprop view. */
+    /** The applied palette and its provider revision, not the legacy getprop view. */
     private void tracePalette() {
-        // One event per provider revision even with trace disabled: a user may have temporarily
-        // setprop trace=1 while the app still stores trace=0, losing painter-specific traces.
+        // The worker can publish a revision before refresh() applies its QsStyle on the main
+        // thread. Dedup on BOTH revisions: logging the old palette during that interval must
+        // never suppress the subsequent snapshot with the actually applied colours.
+        // Keep this bounded event available even with trace=0.
         long revision = ConfigClient.revision();
-        if (paletteTraceActive && paletteTraceRevision == revision) return;
+        if (paletteTraceActive && paletteTraceRevision == revision
+                && paletteTraceAppliedRevision == configRevision) return;
         paletteTraceActive = true;
         paletteTraceRevision = revision;
+        paletteTraceAppliedRevision = configRevision;
         QsStyle s = style;
         String raw = ConfigClient.override("qs.tilelighton");
         Probe.log("QS_PALETTE_EFFECTIVE", "revision=" + revision + " qsRevision=" + configRevision
