@@ -343,10 +343,16 @@ final class ControlSheet extends Sheet {
     private void values(LinearLayout body, ControlState st) {
         String saved = st.saved.get(c.key), device = st.device(c.key);
         StringBuilder b = new StringBuilder();
-        if (saved != null) b.append("Salvo no app: ").append(ValueFormat.display(c, saved));
+        if (saved != null) b.append("Salvo no aplicativo: ").append(ValueFormat.display(c, saved));
         if (model.observedAvailable()) {
             String o = st.observed.get(c.key);
-            if (o != null && !o.isEmpty()) b.append(b.length() == 0 ? "" : "\n").append("Definido no aparelho: ").append(ValueFormat.display(c, o));
+            if (o != null && !o.isEmpty()) {
+                b.append(b.length() == 0 ? "" : "\n").append("Propriedade do sistema: ")
+                        .append(ValueFormat.display(c, o));
+                if (saved != null && c.spec().applyMode == SettingSpec.ApplyMode.LIVE
+                        && !c.spec().helperOwned() && !saved.equals(o))
+                    b.append("\nO valor do aplicativo tem prioridade; o valor do sistema pode permanecer diferente.");
+            }
         }
         if (c.needsRestart())
             b.append(b.length() == 0 ? "" : "\n").append("Em uso pela lente: ").append(ValueFormat.display(c, device));

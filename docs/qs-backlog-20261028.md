@@ -1,5 +1,33 @@
 # Pendências OneUILiquidGlass, a partir do main pós-PR #83
 
+## Evidência DZIF do PR #84 (28/10, 23:26–23:30)
+
+- Diagnóstico complementar do usuário: desligar `debug.oulg.shadeblur` tornava inoperante
+  `shadelightglass`. Confirmado no código: `SharedBackdrop` descartava `measuredVeil` porque
+  `pushToneVeil` somente notificava `compBridge` ou `semBridge`, ausentes no blur compartilhado.
+  A correção pinta a cor clara diretamente na cápsula, sem blur por cartão, substituindo o
+  preenchimento fixo para não somar dois véus brancos. Novo log: `SHADE_SHARED_DRAW`.
+
+- O arquivo `OULG_PR84_DIAG_20261028_232634.tar.gz` registrou todas as nove etapas. A propriedade
+  bruta `debug.oulg.shadelightglass=0.34` ficou estável, mas o **Tuning efetivo** passou por
+  `shadelightglass=0.4` (23:28:45), `0.35` (23:29:15) e `0.4` (23:29:34), confirmando
+  entrega via `ConfigClient` e prioridade do valor salvo no app. A propriedade bruta não é
+  o valor efetivo; a UI anterior dava a entender que era.
+- O dispatch do `Tuning` (`listeners=1`) invalidava somente o QS. A shade era invalidada mais
+  cedo, na entrega do `ConfigClient`, quando o `Tuning` assíncrono podia ainda estar antigo.
+  O patch em andamento registra também as notificações no callback pós-publicação e acrescenta
+  `SHADE_TUNING_APPLY` e `SHADE_MATERIAL_DECISION` para diferenciar decisão de material de
+  redesenho visual. Validar em novo APK antes de declarar correção.
+- O QS desenhou labels com `finalTone=ff1d1d1d` e manteve óptica (`QS_OPTICS_DRAWN`). A origem
+  de ambos os sliders permaneceu `role=unknown` (pilha R8), e **o arraste do volume também
+  disparou `QS_EDGE_SUPPRESS`**. O volume continua pendente: não inferir sua identidade pelo
+  `DrawScope`, que é compartilhado.
+- A sonda registrou `QuickTile`/`IconTextTile`, mas os eventos de superfície observados foram
+  `kind=CONTAINER circle=false state=unverified`; ainda não há mapeamento comprovado de disco,
+  ícone, ligado/desligado e Theme Park. Não alterar as cores dos 15 controles sem esse vínculo.
+- `QS_CLOCK_CANDIDATE role=unbound` ainda aparece: a hora visível não está vinculada ao nó de
+  cabeçalho. A transição do pop-up foi requisitada com `rampMs=180`, sem confirmação visual.
+
 Revisão 28/10/2026 (horário de Fortaleza). Este documento é o checklist acumulado do relato do usuário;
 não confundir implementação de diagnóstico com correção visual validada no Galaxy S25 Ultra
 DZIF (Android 17). Base aprovada: efeito óptico atual das cápsulas QS sobre fundo colorido/preto,

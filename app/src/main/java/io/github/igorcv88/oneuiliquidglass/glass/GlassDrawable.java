@@ -132,6 +132,12 @@ public final class GlassDrawable extends Drawable {
     /** Light glass (ShadeTone light style): the thickness shadow is scaled by {@code edge} (debug.oulg.lightedge, shadeedge). */
     private boolean lightStyle;
     private float lightEdge = 1f;
+    /** Light-glass colour for shared-shade cards, which have no compositor blur bridge. */
+    private int sharedVeil;
+    private int sharedReportedGeneration = -1;
+    public void setSharedVeil(int veil) {
+        if (sharedVeil != veil) { sharedVeil = veil; invalidateSelf(); }
+    }
     /** Bright contour on light glass (debug.oulg.lightoutline); 0 on any other card. */
     private float outline;
     public void setOutline(float o) { if (outline != o) { outline = o; invalidateSelf(); } }
@@ -210,9 +216,17 @@ public final class GlassDrawable extends Drawable {
                     try { dropLens(); } catch (RuntimeException ignored) { lens = null; lensWeight = 0f; }
                 }
             }
-            fill.setColor(fillColor);
-            fill.setAlpha(android.graphics.Color.alpha(fillColor) * alpha / 255);
+            int body = backdrop instanceof SharedBackdrop
+                    ? SharedGlassFill.resolve(fillColor, sharedVeil, lightStyle) : fillColor;
+            fill.setColor(body);
+            fill.setAlpha(android.graphics.Color.alpha(body) * alpha / 255);
             canvas.drawRect(rect, fill);
+            if (backdrop instanceof SharedBackdrop && lightStyle && sharedReportedGeneration != Tuning.generation) {
+                sharedReportedGeneration = Tuning.generation;
+                Probe.log("SHADE_SHARED_DRAW", "generation=" + sharedReportedGeneration
+                        + " source=panel-blur blurRegion=none fill=" + Integer.toHexString(body)
+                        + " nativeAlpha=" + alpha);
+            }
             drawPressed(canvas);
             if (shader != null && !compositorLit) {
                 edgeUniforms(shader, bounds);

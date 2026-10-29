@@ -211,6 +211,22 @@ public final class HeadsUpHooks {
         // QS is an independent opt-in surface: no notification-state or drawing hooks are shared.
         quickSettings = new QuickSettingsHooks(loader, () -> enabled, this::resolveConfig);
         quickSettings.install();
+        // ConfigClient dispatches immediately, but Tuning publishes its new material on a
+        // worker. Invalidating notifications at CONFIG_DISPATCH can therefore repaint with
+        // the previous shadelightglass value and leave a stable, visible card unchanged until
+        // its next unrelated pre-draw (DZIF PR84 trace, 28/10). Redraw after publication too.
+        Tuning.onChanged(() -> {
+            int visible = 0;
+            for (State state : new ArrayList<>(states.values())) {
+                View v = state.background.get();
+                if (v == null || !v.isAttachedToWindow() || !v.isShown()) continue;
+                state.invalidate();
+                visible++;
+            }
+            Probe.log("SHADE_TUNING_APPLY", "generation=" + Tuning.generation
+                    + " revision=" + io.github.igorcv88.oneuiliquidglass.config.ConfigClient.revision()
+                    + " visibleInvalidated=" + visible + " repaint=unverified");
+        });
         // A task change re-measures the shown surfaces at once (periodic sampling stays the fallback).
         BackdropEvents.install(loader);
         BackdropEvents.add(this::backdropChanged);
@@ -1129,6 +1145,8 @@ public final class HeadsUpHooks {
         final float[] lastRadii = new float[8];
         final int[] location = new int[2], lastLocation = {Integer.MIN_VALUE, Integer.MIN_VALUE};
         int tuningGeneration;
+        /** A material decision is logged once per published Tuning generation, not each draw. */
+        int loggedMaterialGeneration = -1;
         /** The row is scaled into a collapsed group's stack (see onPreDraw). */
         boolean stacked;
         /** The shade opening whose backdrop this card's veil was taken from (shadetone=3). */
@@ -1370,6 +1388,17 @@ public final class HeadsUpHooks {
         void setTone(float luma, boolean transition) {
             boolean shade = SURFACE_SHADE.equals(toneSurface);
             io.github.igorcv88.oneuiliquidglass.glass.Material m = ShadeTone.materialFor(luma, shade ? shadeScene : popupScene, shade);
+            if (shade && loggedMaterialGeneration != Tuning.generation) {
+                loggedMaterialGeneration = Tuning.generation;
+                View card = background.get();
+                Probe.log("SHADE_MATERIAL_DECISION", "viewId="
+                        + Integer.toHexString(card == null ? 0 : System.identityHashCode(card))
+                        + " generation=" + loggedMaterialGeneration
+                        + " revision=" + io.github.igorcv88.oneuiliquidglass.config.ConfigClient.revision()
+                        + " style=" + m.style() + " veil=" + Integer.toHexString(m.veil)
+                        + " shadelightglass=" + Tuning.get().shadeLightGlass
+                        + " changed=" + (m.veil != measuredVeil));
+            }
             lightBackdrop = m.light;
             if (!shade) popupScene = m.light;
             toneAt = android.os.SystemClock.uptimeMillis();
@@ -1523,6 +1552,9 @@ public final class HeadsUpHooks {
             try {
                 // A pop-up's veil has its own slot: the shade veil must not reach a lens card.
                 if (SURFACE_POPUP.equals(toneSurface)) { if (compBridge != null) compBridge.setPopupVeil(veil); return; }
+                // SharedBackdrop has no blur bridge: paint the light material over the panel's
+                // existing blur rather than silently discarding shadelightglass with shadeblur=0.
+                if (glass != null && glassKind == Backdrop.Kind.SHARED) glass.setSharedVeil(veil);
                 if (compBridge != null) compBridge.setToneVeil(veil);
                 if (semBridge != null) semBridge.setToneVeil(veil);
             } catch (ReflectiveOperationException | RuntimeException e) { Probe.error("SHADE_TONE_APPLY_FAILED", e); }
@@ -1543,7 +1575,8 @@ public final class HeadsUpHooks {
             int[] ends = io.github.igorcv88.oneuiliquidglass.glass.VeilRamp.ends(from, veil, nativeTint);
             // A card still fading in (the shade's first frames) takes the new veil at once: a ramp
             // would only replay the old veil under the fade.
-            if (ends == null || v == null || !v.isShown() || shownAlpha(v) < 0.5f || (compBridge == null && semBridge == null)) {
+            if (ends == null || v == null || !v.isShown() || shownAlpha(v) < 0.5f
+                    || (compBridge == null && semBridge == null && glassKind != Backdrop.Kind.SHARED)) {
                 pushToneVeil(); invalidate(); flushLightStyle(); return false;
             }
             android.animation.ValueAnimator a = android.animation.ValueAnimator.ofArgb(ends[0], ends[1]);
@@ -2146,6 +2179,7 @@ public final class HeadsUpHooks {
                 glassWindow = new WeakReference<>(v.getWindowToken());
                 heldFor = null;
                 glass.setLightStyle(lightStyle, Tuning.get().lightEdge);
+                if (kind == Backdrop.Kind.SHARED) glass.setSharedVeil(measuredVeil);
                 glass.setOutline(outline());
                 inherited = true;
                 glassKind = kind;
