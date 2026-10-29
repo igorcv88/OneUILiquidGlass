@@ -34,6 +34,7 @@ final class QsSliderHooks {
     private final java.util.Map<Object,String> sourceRoles = new java.util.WeakHashMap<>();
     private final ThreadLocal<String> composingRole = new ThreadLocal<>();
     private final java.util.Set<String> originHints = new java.util.HashSet<>();
+    private final java.util.Set<String> barArguments = new java.util.HashSet<>();
     private int originSamples, interactionSamples;
     private Consumer<Boolean> interaction = on -> {};
     void onInteraction(Consumer<Boolean> listener) { interaction = listener; }
@@ -110,7 +111,9 @@ final class QsSliderHooks {
         trackHooked=found[0];
         boolean callerFound=false;
         for(Method m:bar.getDeclaredMethods()) {
-            if(m.getName().startsWith("BidirectionalBar-"))XposedBridge.hookMethod(m,new XC_MethodHook(){
+            if(m.getName().startsWith("BidirectionalBar-")) {
+            Probe.log("QS_SLIDER_BAR_ABI", "method=" + m.toGenericString());
+            XposedBridge.hookMethod(m,new XC_MethodHook(){
                 // The caller's scope: invalidating it re-runs the bar, so its thickness changes live.
                 @Override protected void beforeHookedMethod(MethodHookParam p){
                     p.setObjectExtra("qsBarPrevious", composing.get()); composing.set(true);
@@ -118,6 +121,11 @@ final class QsSliderHooks {
                     StackTraceElement[] stack = QsSliderOrigin.currentStack();
                     String role = QsSliderOrigin.identify(stack);
                     composingRole.set(role);
+                    if(Probe.trace && barArguments.size() < 16) {
+                        String args = QsTileTrace.arguments(p.args);
+                        if(barArguments.add(args))
+                            Probe.log("QS_SLIDER_BAR_ARGS", "role=" + role + " args=" + args);
+                    }
                     for (Object a : p.args) if (a != null && a.getClass().getName().endsWith("MutableInteractionSourceImpl")) {
                         interactionSources.add(a);
                         if (!QsSliderOrigin.UNKNOWN.equals(role)) sourceRoles.put(a, role);
@@ -134,6 +142,7 @@ final class QsSliderHooks {
                     if(role==null)composingRole.remove();else composingRole.set(role);
                 }
             });
+            }
             if(!m.getName().equals("drawBidirectionalBarTrackProgressThumbContent-Uzs9YN0"))continue;
             callerFound=true;
             XposedBridge.hookMethod(m,new XC_MethodHook(){

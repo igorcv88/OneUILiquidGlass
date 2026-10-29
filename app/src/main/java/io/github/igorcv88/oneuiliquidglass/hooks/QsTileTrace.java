@@ -1,6 +1,8 @@
 package io.github.igorcv88.oneuiliquidglass.hooks;
 
 import java.util.Locale;
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 
 /** Privacy-safe descriptions of Samsung's Compose tile arguments; never stringify user text. */
 final class QsTileTrace {
@@ -32,6 +34,35 @@ final class QsTileTrace {
                 // without logging SSIDs, app labels, accessibility text or toString().
                 if (!(value instanceof CharSequence) && type.toLowerCase(Locale.ROOT).contains("tile"))
                     out.append('@').append(Integer.toHexString(System.identityHashCode(value)));
+            }
+        }
+        return out.toString();
+    }
+
+    /**
+     * Observe only field schemas and simple control-state scalars. Never stringify a tile, its
+     * names, SSID, payload, arbitrary nested models, or an app-provided value.
+     */
+    static String modelFields(Object model) {
+        if (model == null) return "missing";
+        StringBuilder out = new StringBuilder();
+        int count = 0;
+        for (Class<?> type = model.getClass(); type != null && type != Object.class && count < 32;
+             type = type.getSuperclass()) {
+            for (Field f : type.getDeclaredFields()) {
+                if (Modifier.isStatic(f.getModifiers()) || f.isSynthetic() || count++ >= 32) continue;
+                if (out.length() > 0) out.append(',');
+                out.append(f.getName()).append(':').append(f.getType().getName());
+                // The only runtime values recorded are booleans and enums (the shape of a state).
+                // All reference data, strings, integers and artwork remain private.
+                if (f.getType() == boolean.class || f.getType() == Boolean.class || f.getType().isEnum()) {
+                    try {
+                        f.setAccessible(true);
+                        Object v = f.get(model);
+                        if (v instanceof Boolean) out.append('=').append(v);
+                        else if (v instanceof Enum<?>) out.append('=').append(((Enum<?>) v).name());
+                    } catch (ReflectiveOperationException | RuntimeException ignored) { out.append("=unavailable"); }
+                }
             }
         }
         return out.toString();

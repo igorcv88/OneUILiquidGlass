@@ -29,4 +29,21 @@ public class QsTileTraceTest {
     private static final class TileModel {
         @Override public String toString() { return "private tile state"; }
     }
+    @Test public void modelProbeReadsBooleanAndEnumStateWithoutLeakingPrivateFields() {
+        StateModel model = new StateModel();
+        String result = QsTileTrace.modelFields(model);
+        assertTrue(result.contains("enabled:boolean=true"));
+        assertTrue(result.contains("state:" + State.class.getName() + "=ON"));
+        assertTrue(result.contains("ssid:java.lang.String"));
+        assertTrue(result.contains("secretCount:int"));
+        assertFalse(result.contains("Home WiFi"));
+        assertFalse(result.contains("8192"));
+    }
+    private enum State { ON, OFF }
+    private static final class StateModel {
+        private final boolean enabled = true;
+        private final State state = State.ON;
+        private final String ssid = "Home WiFi";
+        private final int secretCount = 8192;
+    }
 }
