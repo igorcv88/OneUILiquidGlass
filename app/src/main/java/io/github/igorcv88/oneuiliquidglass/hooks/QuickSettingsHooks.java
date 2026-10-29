@@ -482,6 +482,10 @@ public final class QuickSettingsHooks {
                             : style.tileBackground(discKind, backdrop.tone(), nativeColor);
                     if (mapped != nativeColor) {
                         a[4] = QuickSettingsGlass.color(mapped);
+                        // Theme Park off may give idle discs a separate outline; clearing only
+                        // the fill left a gray ring around the supposedly backgroundless icon.
+                        if (discKind == Kind.IDLE && mapped == 0)
+                            a[3] = QuickSettingsGlass.color(QuickSettingsGlass.CLEAR);
                         if (Probe.trace) Probe.log("QS_TILE_COLOR", "model=" + tileProbe.currentId()
                                 + " kind=" + discKind + " nativeKind=" + kind + " backdrop=" + backdrop.tone()
                                 + " native=" + Integer.toHexString(nativeColor)

@@ -9,15 +9,15 @@ public class QsTilePaletteTest {
     @Test public void lightBackdropHasSeparateActiveInactiveBackgroundsAndInk() {
         QsStyle style = new QsStyle(key -> null);
         assertEquals(0xffcdd7e5,style.tileBackground(ACTIVE,LIGHT_SCENE,0xffffffff));
-        assertEquals(0x3d202c3c,style.tileBackground(IDLE,LIGHT_SCENE,0x00234b60));
+        assertEquals(0,style.tileBackground(IDLE,LIGHT_SCENE,0x00234b60));
         assertEquals(0xff20242e,style.tileInk(ACTIVE,LIGHT_SCENE,0xffffffff));
-        assertEquals(0x8020242e,style.tileInk(IDLE,LIGHT_SCENE,0x80ffffff));
+        assertEquals(0x80343a46,style.tileInk(IDLE,LIGHT_SCENE,0x80ffffff));
     }
 
     @Test public void darkBackdropAndUnknownRemainNativeByDefault() {
         QsStyle style = new QsStyle(key -> null);
         for (QuickSettingsGlass.Kind kind : QuickSettingsGlass.Kind.values()) {
-            assertEquals(0x99ffffff,style.tileBackground(kind,DARK_SCENE,0x99ffffff));
+            assertEquals(kind == IDLE ? 0 : 0x99ffffff,style.tileBackground(kind,DARK_SCENE,0x99ffffff));
             assertEquals(0x99ffffff,style.tileBackground(kind,UNKNOWN,0x99ffffff));
             assertEquals(0xffeeeeee,style.tileInk(kind,DARK_SCENE,0xffeeeeee));
         }
@@ -52,7 +52,7 @@ public class QsTilePaletteTest {
             }
         });
         assertEquals(0xff445566,style.tileBackground(ACTIVE,LIGHT_SCENE,0xffffffff));
-        assertEquals(0x80202c3c,style.tileBackground(IDLE,LIGHT_SCENE,0x00234b60));
+        assertEquals(0,style.tileBackground(IDLE,LIGHT_SCENE,0x00234b60));
         assertEquals(0xffddccbb,style.tileBackground(ACTIVE,DARK_SCENE,0xffffffff));
         assertEquals(0xff223344,style.tileInk(ACTIVE,DARK_SCENE,0xffffffff));
         assertEquals(0xff12a0ef,style.tileInk(ACTIVE,DARK_SCENE,0xff12a0ef));
@@ -64,5 +64,27 @@ public class QsTilePaletteTest {
         assertEquals(0xffffffff,disabled.tileBackground(ACTIVE,LIGHT_SCENE,0xffffffff));
         assertEquals(0xffffffff,disabled.tileInk(IDLE,LIGHT_SCENE,0xffffffff));
         assertNotEquals(new QsStyle(k -> null),disabled);
+    }
+
+    @Test public void themeParkOffHasNoInactiveDiscInEitherSceneByDefault() {
+        QsStyle style = new QsStyle(k -> null);
+        assertEquals(0, style.tileBackground(IDLE, LIGHT_SCENE, 0xff999999));
+        assertEquals(0, style.tileBackground(IDLE, DARK_SCENE, 0xff999999));
+        assertEquals(0xff999999, style.tileBackground(CONTAINER, LIGHT_SCENE, 0xff999999));
+        assertEquals(0xff999999, style.tileBackground(NONE, LIGHT_SCENE, 0xff999999));
+    }
+
+    @Test public void inactiveDiscCanBeRestoredWithIndependentOpacityAndColors() {
+        QsStyle style = new QsStyle(k -> {
+            switch (k) {
+                case "qs.hideoffdiscs": return "0";
+                case "qs.tilelightoffalpha": return ".40";
+                case "qs.tiledark": return "1";
+                case "qs.tiledarkoffalpha": return ".20";
+                default: return null;
+            }
+        });
+        assertEquals(0x66202c3c, style.tileBackground(IDLE, LIGHT_SCENE, 0xff999999));
+        assertEquals(0x33ffffff, style.tileBackground(IDLE, DARK_SCENE, 0xff999999));
     }
 }

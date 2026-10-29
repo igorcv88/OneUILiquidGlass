@@ -29,4 +29,18 @@ public final class SharedGlassFillTest {
         assertEquals(early, SharedGlassFill.resolve(nativeFill, early, false, true));
         assertEquals(nativeFill, SharedGlassFill.resolve(nativeFill, 0, false, false));
     }
+    @Test public void sharedRampStartsAndEndsAtTheActualNativeBodyFill() {
+        int nativeBody = 0x14ffffff;
+        int nativeBlurTint = 0x66101216;
+        int veil = 0x47101216;
+        int[] entering = VeilRamp.ends(0, veil, nativeBody);
+        assertArrayEquals(new int[] {nativeBody, veil}, entering);
+        assertEquals(entering[0], SharedGlassFill.resolve(nativeBody, 0, false, false));
+        assertEquals(entering[0], SharedGlassFill.resolve(nativeBody, entering[0], false, true));
+        int[] leaving = VeilRamp.ends(veil, 0, nativeBody);
+        assertArrayEquals(new int[] {veil, nativeBody}, leaving);
+        assertEquals(leaving[1], SharedGlassFill.resolve(nativeBody, 0, false, false));
+        assertNotEquals(nativeBlurTint, entering[0]);
+        assertNotEquals(nativeBlurTint, leaving[1]);
+    }
 }

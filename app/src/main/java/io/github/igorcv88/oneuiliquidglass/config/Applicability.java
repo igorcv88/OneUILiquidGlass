@@ -106,17 +106,21 @@ public final class Applicability {
             case "qs.idle":
                 return new Result(Kind.READ_ONLY, "Legado sem efeito visual");
             case "qs.tilelighton":
-            case "qs.tilelightoff":
-            case "qs.tilelightoffalpha":
             case "qs.tilelightonink":
             case "qs.tilelightoffink":
                 return on("qs.tilelight") ? ACTIVE : inactive("Ative Discos adaptativos no fundo claro");
+            case "qs.tilelightoff":
+            case "qs.tilelightoffalpha":
+                return on("qs.hideoffdiscs") ? inactive("Desative Discos desligados sem fundo")
+                        : on("qs.tilelight") ? ACTIVE : inactive("Ative Discos adaptativos no fundo claro");
             case "qs.tiledarkon":
-            case "qs.tiledarkoff":
-            case "qs.tiledarkoffalpha":
             case "qs.tiledarkonink":
             case "qs.tiledarkoffink":
                 return on("qs.tiledark") ? ACTIVE : inactive("Ative Personalizar discos no fundo colorido");
+            case "qs.tiledarkoff":
+            case "qs.tiledarkoffalpha":
+                return on("qs.hideoffdiscs") ? inactive("Desative Discos desligados sem fundo")
+                        : on("qs.tiledark") ? ACTIVE : inactive("Ative Personalizar discos no fundo colorido");
             case "sfrefract":
             case "sf.optics":
             case "sf.norewrite":
@@ -268,7 +272,7 @@ public final class Applicability {
                         : c.surfaces;
         if (!globalOn()) return new Result(Kind.OFF, "O vidro está desligado");
         if (key.startsWith("qs.") || key.startsWith("sf.qs")) {
-            if (!flag(ProductFlags.QUICK_SETTINGS)) return new Result(Kind.OFF, "Ative Controles rápidos");
+            if (!flag(ProductFlags.QUICK_SETTINGS)) return new Result(Kind.OFF, "Ative Central de controle");
             return rule;
         }
         if (surface != null && where.contains(surface)) {

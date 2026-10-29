@@ -1574,7 +1574,19 @@ public final class HeadsUpHooks {
             measuredVeil = veil;
             if (veilRamp != null) { veilRamp.cancel(); veilRamp = null; }
             View v = background.get();
-            int[] ends = io.github.igorcv88.oneuiliquidglass.glass.VeilRamp.ends(from, veil, nativeTint);
+            // SharedBackdrop draws the body's native fill, not the Samsung region tint. Using
+            // nativeTint here caused a visible jump as the ramp entered or left the native side.
+            int rampBase = nativeTint;
+            if (glassKind == Backdrop.Kind.SHARED && v != null) {
+                boolean night = (v.getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK)
+                        == Configuration.UI_MODE_NIGHT_YES;
+                rampBase = night ? spec.shadeDarkFill : spec.shadeLightFill;
+            }
+            int[] ends = io.github.igorcv88.oneuiliquidglass.glass.VeilRamp.ends(from, veil, rampBase);
+            if (Probe.trace && glassKind == Backdrop.Kind.SHARED && ends != null)
+                Probe.log("SHADE_SHARED_RAMP_ENDPOINTS", "viewId=" + Integer.toHexString(System.identityHashCode(v))
+                        + " from=" + Integer.toHexString(ends[0]) + " to=" + Integer.toHexString(ends[1])
+                        + " nativeBody=" + Integer.toHexString(rampBase));
             // A card still fading in (the shade's first frames) takes the new veil at once: a ramp
             // would only replay the old veil under the fade.
             if (ends == null || v == null || !v.isShown() || shownAlpha(v) < 0.5f

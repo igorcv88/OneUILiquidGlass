@@ -1,5 +1,50 @@
 # Pendências OneUILiquidGlass, a partir do main pós-PR #83
 
+## PR #88: Theme Park desligado e paleta de controles, relatos 29/10 09:23–09:26
+
+- [x] **Correção do review P2 do #88, testes locais:** a rampa de `SharedBackdrop`
+  passa a usar `shadeDarkFill`/`shadeLightFill`, que são as tintas efetivamente
+  desenhadas pelo corpo nativo, nos endpoints; `nativeTint` continua para o blur
+  quando ele existe. Teste cobre a continuidade de ida e volta. Validar no DZIF.
+- [x] **Discos desligados sem fundo (contrato e código):** `qs.hideoffdiscs=1`
+  remove somente fundo e contorno do círculo `IDLE` com `QuickTile` identificado,
+  em cenas claras e escuras. Um `NONE` verdadeiro, as cápsulas médias e os estados
+  `UNKNOWN` permanecem nativos. Desligar esse toggle libera a cor/opacidade de
+  discos desligados. Testes unitários cobrindo estados e preservação de conteúdos.
+  **Ainda não comprova** os discos pequenos que não vinculam modelo.
+- [x] **Acesso aos controles existentes na UI (código):** grupos de discos,
+  ícones e opacidade por cena aparecem no bloco da Central de controle; termo
+  `Controles rápidos` removido dos pontos principais. Sem preview QS dedicado.
+- [ ] **Tema Samsung sem Theme Park (regressão alta):** prints mostram cartões
+  cinza/azul opacos, tanto em fundo branco quanto colorido, enquanto lentes QS
+  seguem ativas. Comparar com Theme Park ligado os caminhos `GLASS_APPLIED`,
+  `NATIVE_FALLBACK`, `SHADE_MATERIAL_DECISION`, `DRAW_HOOK_CALLED`, `LIFECYCLE`
+  e as sobreposições (`cmd overlay list`). Não presumir que a classe mudou.
+- [ ] **Classificação de discos com Theme Park desligado:** hoje a distinção
+  ACTIVE/IDLE ainda usa alpha do preenchimento. Um disco cinza opaco que
+  representa controle desligado pode ser classificado ACTIVE. O novo toggle
+  só remove IDLE; precisamos do estado real do modelo para estender a mudança
+  aos pequenos sem alterar por engano os ligados.
+- [ ] **Sliders sem Theme Park:** os ícones de brilho e volume ficam quase
+  invisíveis sobre preenchimento branco. Precisam de tinta estável por estado/cena,
+  independente da composição da barra, sem modificar geometria ou porcentagem.
+- [ ] **Controle de cor RGBA real:** seletor HSV (barra de matiz + quadrado
+  saturação/luminosidade + barra alpha) no editor, inclusive opacidade dos
+  discos ligados e preenchimento dos sliders; cor e alpha por cena e estado.
+  Atualmente somente discos desligados possuem alpha independente, via slider.
+- [ ] **Página exclusiva Central de controle:** preview realista dos discos,
+  cápsulas pequenas/médias, sliders e painel nos fundos claro/colorido/preto,
+  pois a prévia atual de Central mostra notificações. Organizar parâmetros e
+  dependências sem expor nomes internos na tela principal.
+- [ ] **Inglês como idioma padrão + português selecionável:** extrair todas
+  as strings para recursos e implementar configuração de idioma, preservando
+  o português como opção completa. Não traduzir apenas nomes de menus.
+- [ ] **Reflexão dupla no canto superior esquerdo de todas as cápsulas QS:**
+  observada também em capturas antigas; investigar sobreposição da borda Compose,
+  `lightoutline`, luz AGSL e/ou amostragem do compositor. Não reduzir globalmente
+  a luz sem identificar a camada redundante, para preservar colorido/preto.
+
+
 ## Revisões dos PRs #85, #86 e #87 (29/10)
 
 - [x] **Review P2 do #85** (`SharedGlassFill`): durante a interpolação, a tinta
