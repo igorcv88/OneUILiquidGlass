@@ -12,6 +12,28 @@
 - [ ] **Review do #87**: ainda em execução quando consultado; não havia comentários
   técnicos publicados. Reavaliar se aparecerem novos apontamentos.
 
+## Evidência do APK #87, coleta 29/10 08:51–08:53
+
+- [x] **Falso arraste do brilho durante volume, causa comprovada:** os dois sliders usam
+  o mesmo `DrawScope` (`id=d2f618a`). Às 08:52:14, o volume mudou de ~49% a 100%,
+  enquanto o brilho permaneceu em ~61,97%; porém o mapa de comprimentos indexado
+  somente por scope comparou o último valor do volume com o do brilho e disparou
+  `QS_EDGE_SUPPRESS ... released=8` no teste de volume. Histórico separado por
+  **scope + role** e coberto por testes; confirmar no próximo APK. Ainda pode haver
+  mudança real automática de brilho enquanto outro controle recebe toque.
+- [ ] **Discos pequenos:** somente três identidades distintas aparecem em
+  `QS_TILE_COLOR`, todas `ACTIVE`, enquanto `QS_TILE_BIND` identificou quatro modelos
+  de `QuickTile` no trecho coletado; o quarto pode não ter disco. A instrumentação
+  existente é limitada por amostragem, não prova a identidade de cada um dos 15
+  pequenos. Coletar `QS_TILE_COLOR_DECISION` do #88 para identificar os não vinculados.
+- [ ] **Shade → QS:** esta sessão contém etapas colorido, branco, brilho, volume e
+  ajuste ao vivo, mas não marca separadamente a transição horizontal shade → QS.
+  Testá-la com `QS_TONE_ENTRY`, `TONE_CAPTURE_DONE source=...` e
+  `QS_TILE_COLOR_DECISION` no #88.
+- [ ] **Luz no fundo branco:** vídeo do #87 confirma contornos e interiores claros de
+  contraste desigual; `lightoutline` entra no shader apenas em LIGHT_SCENE. Separar
+  visualmente ganho do shader e opacidade do interior antes de alterar a óptica aprovada.
+
 ## Próxima mudança após a coleta QS #86 (29/10, 07:37–07:39)
 
 - [x] Ligado/desligado do slider distinguido pelos callbacks tipados `BrightBarKt` e
