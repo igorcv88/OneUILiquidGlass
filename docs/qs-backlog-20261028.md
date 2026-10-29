@@ -1,5 +1,39 @@
 # Pendências OneUILiquidGlass, a partir do main pós-PR #83
 
+## PR #95: coleta PR92, opacidade escura e reprodução da troca de formato (29/10)
+
+- [x] **Controle da opacidade escura na shade, código:** `shadedarkglass` (0–0.95,
+  padrão 0.14) ficou independente de `shadelightglass` e visível entre os controles
+  principais da Central. As duas tintas escuras originais mantêm os alphas nativos
+  com o padrão; a escolha também aparece no preview e cobre a notificação ao vivo.
+  Testes unitários adicionados; **pendente** compilar e validar no Galaxy.
+- [x] **Rota de ícones sem disco, código conservador:** um `QuickTile` comprovadamente
+  sem disco (`Kind.NONE`) permite tinta monocromática configurada de ícone apagado na
+  cena clara. Modelos não vinculados, cenas incertas e logotipos coloridos continuam
+  sem override. Não afirmar que os 13 controles pequenos já estejam cobertos.
+- [x] **Instrumentação adicional, código:** `QS_TILE_ICON_ROUTE_SUMMARY` e
+  `QS_PALETTE_EFFECTIVE` podem ser emitidos com `trace=0`, em amostragem limitada.
+  A deduplicação da paleta acompanha tanto a revisão do provider quanto a revisão
+  realmente aplicada pelo `refresh()`, corrigindo o review P2 do PR #92.
+- [x] **Slider quase no zero, código defensivo:** clip do desenho especial na área
+  interna do trilho sem alterar a curvatura, largura ou âncora aprovadas; captura
+  `QS_SLIDER_GEOMETRY` até 4% sem depender de trace. **Pendente:** conferir se o
+  transbordamento relatado pelo usuário vinha dessa pintura ou de outra camada
+  durante a animação; nenhuma correção visual está confirmada no DZIF.
+- [x] **Verificação estática:** gerador de configurações, testes de distribuição
+  (4 testes) e `git diff --check`. O Gradle local conseguiu iniciar, mas não rodou
+  os testes Android: o ambiente não tem SDK. **Pendente:** CI do PR #95.
+- [ ] **Experimento físico controlado:** manter todas as cores iguais, gravar e
+  coletar logs do mesmo Quick Share primeiro como cápsula individual e depois
+  movido para a grade pequena (e vice-versa), com cenas branca e colorida.
+  Comparar `QS_TILE_BIND`, `QS_TILE_ICON_ROUTE_SUMMARY`, `QS_TILE_ICON_INK`,
+  `QS_PALETTE_EFFECTIVE` e mudança de estado/modelo. Não assumir que a classe do
+  modelo muda junto com o composable visual.
+- [ ] **Instabilidade restante:** Theme Park OFF/notificação ao vivo que perde vidro,
+  ícones pequenos/slider sem mudança de cor, pop-up com atraso na volta do branco,
+  luz duplicada das cápsulas e extrapolação de preenchimento precisam de validação
+  no novo APK. `qs.lightglassopacity` e `qs.lightoptics` já existiam no #92.
+
 ## Ampliação do PR #92: revisão estética do APK pré-merge (29/10, 12:26–12:32)
 
 - [x] **Sliders verticais, código:** abaixo de um diâmetro, a largura do progresso
