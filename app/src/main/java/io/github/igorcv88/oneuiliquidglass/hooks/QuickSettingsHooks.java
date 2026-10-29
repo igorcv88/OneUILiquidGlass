@@ -19,6 +19,7 @@ import io.github.igorcv88.oneuiliquidglass.config.ConfigClient;
 import io.github.igorcv88.oneuiliquidglass.config.ProductFlags;
 import io.github.igorcv88.oneuiliquidglass.diagnostics.Probe;
 import io.github.igorcv88.oneuiliquidglass.glass.QuickSettingsGlass;
+import io.github.igorcv88.oneuiliquidglass.glass.Tuning;
 import io.github.igorcv88.oneuiliquidglass.glass.QsStyle;
 import io.github.igorcv88.oneuiliquidglass.glass.QsScene;
 import io.github.igorcv88.oneuiliquidglass.glass.QuickSettingsGlass.Kind;
@@ -61,6 +62,8 @@ public final class QuickSettingsHooks {
     /** BoxWithOutline's own recompose scopes, invalidated when the setting changes (live switch). */
     private final Set<Object> scopes = Collections.newSetFromMap(new WeakHashMap<>());
     private final Set<String> logged = new HashSet<>();
+    private final Set<String> tileSurfaces = new HashSet<>();
+    private final QsTileProbe tileProbe = new QsTileProbe();
     private final QuickSettingsEdgeLight edge;
     private final QsBackdrop backdrop;
     private final QsContentHooks content;
@@ -82,6 +85,7 @@ public final class QuickSettingsHooks {
     private final QsLitRims litRims = new QsLitRims();
     private boolean ready, broken, configStarted, applied;
     private volatile boolean iconLogged;
+    private long configRevision;
     private android.content.Context app;
     /**
      * Set by BoxWithOutline for the two element constructors it runs next. Per thread: a box being
@@ -116,6 +120,7 @@ public final class QuickSettingsHooks {
         this.loader = loader;
         this.master = master;
         this.startConfig = startConfig;
+        this.configRevision = ConfigClient.revision();
         this.edge = new QuickSettingsEdgeLight(loader, this::enabled,
                 () -> ConfigClient.flag(ProductFlags.QUICK_SETTINGS), master);
         // After a drag the released edge regions are rebuilt by the containers' next draw.
@@ -222,9 +227,16 @@ public final class QuickSettingsHooks {
             hookPanel();
             hookSlider();
             hookIconTile();
+            tileProbe.install(loader);
             content.install();
             installPrefetchGesture();
             ready = true;
+            Tuning.onChanged(() -> {
+                if (!ready || !enabled()) return;
+                Probe.log("QS_TUNING_APPLY", "generation=" + Tuning.generation
+                        + " revision=" + ConfigClient.revision() + " visiblePaint=unverified");
+                invalidateAll("tuning");
+            });
             Probe.log("QS_COMPOSE_READY", "method=" + boxMethod.toGenericString()
                     + " liveRefresh=" + (invalidate != null)
                     + " optIn=" + ConfigClient.flag(ProductFlags.QUICK_SETTINGS));
@@ -442,6 +454,17 @@ public final class QuickSettingsHooks {
             boolean circle = a[5] == circleShape;
             Kind kind = QuickSettingsGlass.kind(circle, QuickSettingsGlass.argb(background), QuickSettingsGlass.argb(outline));
             log(kind.name(), a);
+            if (Probe.trace) {
+                String key = "kind=" + kind + " backdrop=" + backdrop.tone()
+                        + " circle=" + circle + " shape=" + (a[5] == null ? "null" : a[5].getClass().getName())
+                        + " bg=" + hex(background) + " outline=" + hex(outline)
+                        + " outlined=" + (a[1] instanceof Boolean ? a[1] : "unknown")
+                        + " mask=" + a[9];
+                synchronized (tileSurfaces) {
+                    if (tileSurfaces.size() < 96 && tileSurfaces.add(key))
+                        Probe.log("QS_TILE_SURFACE_COMPOSE", key + " state=unverified");
+                }
+            }
             // Discs and placeholders keep Samsung's colours and outline: only containers are glass.
             if (kind != Kind.CONTAINER) return;
             boolean dark = dark();
@@ -553,6 +576,9 @@ public final class QuickSettingsHooks {
     /** Called on the ConfigProvider callback (main thread), including when the master switch changes. */
     public void refresh() {
         if (!ready) return;
+        long revision = ConfigClient.revision();
+        boolean newRevision = revision != configRevision;
+        configRevision = revision;
         boolean on = enabled();
         QsStyle next = QsStyle.read();
         boolean valuesChanged = !next.equals(style);
@@ -564,11 +590,26 @@ public final class QuickSettingsHooks {
         }
         style = next;
         if (on != applied) backdrop.configuration();
-        if (valuesChanged && on == applied) { edge.check(); invalidateAll("values"); return; }
+        if (valuesChanged && on == applied) {
+            edge.check();
+            Probe.log("QS_CONFIG_RECEIVED", "revision=" + revision + " styleChanged=true enabled=" + on);
+            invalidateAll("values");
+            return;
+        }
         // Include effective tuning even if only a compositor gate changed (no Compose toggle).
-        if (on == applied) { edge.check(); return; }
+        if (on == applied) {
+            edge.check();
+            if (newRevision) {
+                // A label/ink/material preference is not part of QsStyle. Previously such a
+                // change waited for a Samsung recomposition or a backdrop transition.
+                Probe.log("QS_CONFIG_RECEIVED", "revision=" + revision + " styleChanged=false enabled=" + on);
+                invalidateAll("config");
+            }
+            return;
+        }
         edge.status(on ? "on" : "off");
         applied = on;
+        Probe.log("QS_CONFIG_RECEIVED", "revision=" + revision + " enabled=" + on + " gateChanged=true");
         invalidateAll(on ? "on" : "off");
     }
 
