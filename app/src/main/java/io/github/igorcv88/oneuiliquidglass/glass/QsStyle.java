@@ -82,16 +82,16 @@ public final class QsStyle {
                     : QuickSettingsGlass.withAlpha(tileDarkOff, QuickSettingsGlass.alpha(tileDarkOff)*tileDarkOffAlpha);
         return nativeColor;
     }
-    /** Tint only neutral monochrome icon ink; coloured icons keep their native tint. */
+    /** Tint only neutral monochrome ink; verified disc-less controls use off-ink on light glass. */
     public int tileInk(QuickSettingsGlass.Kind kind, QsScene.Tone tone, int nativeColor) {
         if (!QuickSettingsGlass.neutral(nativeColor)) return nativeColor;
         int tint;
         if (tone == QsScene.Tone.LIGHT_SCENE && tileLight)
             tint = kind == QuickSettingsGlass.Kind.ACTIVE ? tileLightOnInk
-                    : kind == QuickSettingsGlass.Kind.IDLE ? tileLightOffInk : -1;
+                    : kind == QuickSettingsGlass.Kind.IDLE || kind == QuickSettingsGlass.Kind.NONE ? tileLightOffInk : -1;
         else if (tone == QsScene.Tone.DARK_SCENE && tileDark)
             tint = kind == QuickSettingsGlass.Kind.ACTIVE ? tileDarkOnInk
-                    : kind == QuickSettingsGlass.Kind.IDLE ? tileDarkOffInk : -1;
+                    : kind == QuickSettingsGlass.Kind.IDLE || kind == QuickSettingsGlass.Kind.NONE ? tileDarkOffInk : -1;
         else tint = -1;
         return tint == -1 ? nativeColor : QuickSettingsGlass.withAlpha(tint,
                 QuickSettingsGlass.alpha(tint) * QuickSettingsGlass.alpha(nativeColor));

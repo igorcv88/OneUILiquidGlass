@@ -2331,7 +2331,8 @@ public final class HeadsUpHooks {
             boolean lock = !popup && !pill && lensSurface();
             Tuning tn = Tuning.get();
             if (live && dark) fill = popup && !lightStyle ? tn.liveDarkFill << 24 : lock ? tn.kgDarkFill << 24 : 0;
-            int tone = live && dark ? (popup ? (tn.liveDarkAlpha << 24 | 0xffffff) : lock ? (tn.kgDarkAlpha << 24 | 0xffffff) : spec.liveShadeDarkColor)
+            int tone = live && dark ? (popup ? (tn.liveDarkAlpha << 24 | 0xffffff) : lock ? (tn.kgDarkAlpha << 24 | 0xffffff)
+                    : io.github.igorcv88.oneuiliquidglass.glass.MaterialMath.shadeDarkOpacity(spec.liveShadeDarkColor, tn.shadeDarkGlass))
                     : glass.hybrid() || kind == Backdrop.Kind.SAMSUNG || compBridge != null ? (dark ? spec.samsungDarkColor : spec.samsungLightColor)
                     : kind == Backdrop.Kind.SAMPLED ? (dark ? spec.captureDarkTint : spec.captureLightTint)
                     : dark ? spec.darkBlurColor : spec.lightBlurColor;

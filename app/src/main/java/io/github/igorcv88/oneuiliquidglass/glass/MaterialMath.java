@@ -19,6 +19,23 @@ public final class MaterialMath {
         return VeilMath.veil(VeilMath.need(luma, lightText, cap, lift), lightText, max);
     }
 
+    /**
+     * Independent shade-dark opacity. At the default 0.14 the two existing dark materials retain
+     * their different native alphas (0x24 and 0x1c); changing the setting scales both together.
+     * This avoids changing the user's already approved dark appearance on upgrade.
+     */
+    public static int shadeDarkOpacity(int nativeGlass, float opacity) {
+        if (!Float.isFinite(opacity)) opacity = 0.14f;
+        float level = Math.max(0f, Math.min(0.95f, opacity));
+        int baseline = nativeGlass >>> 24;
+        // Match the existing two materials at 14%, then converge on the same 95% endpoint.
+        // A simple multiplier would leave the 0x1c material capped near 75% at the UI maximum.
+        float target = level <= .14f ? baseline * level / .14f
+                : baseline + (255f * .95f - baseline) * (level - .14f) / (.95f - .14f);
+        int alpha = Math.max(0, Math.min(255, Math.round(target)));
+        return (nativeGlass & 0x00ffffff) | (alpha << 24);
+    }
+
     /** Dark glass under light text in the light theme (ShadeTone.DARK_GLASS). */
     public static final int DARK_GLASS = ShadeTone.DARK_GLASS;
 }

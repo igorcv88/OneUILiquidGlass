@@ -79,6 +79,13 @@ public class QsAdaptiveTest {
         assertEquals(0xff12a0ef,QuickSettingsGlass.ink(0xff12a0ef,.5f));
         assertEquals(0,QuickSettingsGlass.ink(0,.5f));
     }
+    @Test public void verifiedNoDiscMonochromeIconsFollowLightSceneAndKeepAccentArtwork(){
+        QsStyle s=defaults();
+        assertEquals(0xff343a46,s.tileInk(NONE,LIGHT_SCENE,0xffffffff));
+        assertEquals(0xffffffff,s.tileInk(NONE,DARK_SCENE,0xffffffff));
+        assertEquals(0xff12a0ef,s.tileInk(NONE,LIGHT_SCENE,0xff12a0ef));
+        assertEquals(0xffffffff,s.tileInk(NONE,UNKNOWN,0xffffffff));
+    }
     @Test public void legacyProfilesCannotRestoreAFilmOrVisualTrack(){
         QsStyle a=defaults();
         String[][] retired={{"qs.lightstyle","obsidian"},{"qs.track",".1"},{"qs.darkfill","1"},{"qs.idle",".12"},

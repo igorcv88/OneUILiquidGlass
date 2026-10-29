@@ -213,8 +213,9 @@ public final class ShadeTone implements CaptureHub.Client {
             return new Material(VeilMath.veil(VeilMath.need(luma, lightText(), t.shadeCap, t.shadeLift), lightText(), t.veilMax), false, light);
         }
         int lightGlass = Math.round(255f * (shade ? t.shadeLightGlass : t.lightGlass) * t.lightToneOpacity) << 24 | t.lightTone;
+        int darkGlass = shade ? MaterialMath.shadeDarkOpacity(DARK_GLASS, t.shadeDarkGlass) : DARK_GLASS;
         return VeilMath.material(luma, scene, lightText(), t.shadeCap, t.shadeLift, t.veilMax, t.styleLo, t.styleHi,
-                lightGlass, DARK_GLASS);
+                lightGlass, darkGlass);
     }
     /**
      * A native-side veil laid over the card's native tint instead of replacing it: the veil

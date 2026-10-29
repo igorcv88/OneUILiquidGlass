@@ -56,6 +56,7 @@ public final class SettingsRegistry {
         add(new SettingSpec("lightglass","Cor e contraste","all","Transparência clara","Alpha do vidro claro em pop-up/lockscreen",SettingSpec.Type.FLOAT,"0.75",0.0,0.95,.01,"","","",false,"MATERIAL"));
         add(new SettingSpec("lighttone","Cor e contraste","all","Cor do vidro claro","Cor-base do vidro claro",SettingSpec.Type.RGB,"ffffff",0,1,.01,"","","",false,"MATERIAL"));
         add(new SettingSpec("shadelightglass","Cor e contraste","shade","Transparência clara da central","Alpha separado dos cards claros no shade",SettingSpec.Type.FLOAT,"0.27",0.0,0.95,.01,"","","",false,"MATERIAL"));
+        add(new SettingSpec("shadedarkglass","Cor e contraste","shade","Opacidade escura da central","Opacidade independente dos cartões escuros da central; o padrão mantém os dois alphas anteriores",SettingSpec.Type.FLOAT,"0.14",0.0,0.95,.01,"","","",false,"MATERIAL"));
         add(new SettingSpec("lightoutline","Bordas e luz","all","Contorno do vidro claro","Força do contorno claro",SettingSpec.Type.FLOAT,"0.8",0.0,2.0,.01,"","","",false,"DIAGRAM"));
         add(new SettingSpec("lightedge","Bordas e luz","all","Espessura da borda clara","Sombra de espessura da borda clara",SettingSpec.Type.FLOAT,"1",0.0,4.0,.01,"","","",false,"DIAGRAM"));
         add(new SettingSpec("livedarkalpha","Cor e contraste","headsup","Alpha claro no pop-up escuro","Alpha branco da região do pop-up escuro",SettingSpec.Type.INT,"20",0.0,255.0,1,"","","liveblur=1;sfrefract=0;backdrop=auto",false,"MATERIAL"));

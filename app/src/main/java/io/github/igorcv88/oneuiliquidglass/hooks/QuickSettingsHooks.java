@@ -423,6 +423,9 @@ public final class QuickSettingsHooks {
                     if (broken || !(p.args[4] instanceof Float) || !(p.args[5] instanceof Float)) return;
                     float[] layout = QuickSettingsGlass.iconLayout((Float) p.args[4], (Float) p.args[5]);
                     if (layout == null) return;
+                    // Samsung explicitly marked this tile as having no disc (start=6, gap=0).
+                    // Bind the state only when a verified QuickTile model owns the invocation.
+                    tileProbe.disc(tileProbe.currentModel(), Kind.NONE);
                     // The caller's scope (QuickTile's tile content): its restart passes the
                     // arguments again, so switching the option applies live.
                     capture(p.args[12]);
@@ -536,7 +539,8 @@ public final class QuickSettingsHooks {
 
     /** The actual provider snapshot behind QS_TILE_COLOR, not the legacy getprop view. */
     private void tracePalette() {
-        if (!Probe.trace) { paletteTraceActive = false; return; }
+        // One event per provider revision even with trace disabled: a user may have temporarily
+        // setprop trace=1 while the app still stores trace=0, losing painter-specific traces.
         long revision = ConfigClient.revision();
         if (paletteTraceActive && paletteTraceRevision == revision) return;
         paletteTraceActive = true;
