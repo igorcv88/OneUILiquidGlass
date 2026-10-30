@@ -1,5 +1,28 @@
 # Pendências OneUILiquidGlass, a partir do main pós-PR #83
 
+## Após PR #98: variação QS claro ao entrar pela shade (29/10, 21:32–21:34)
+
+- [x] **Causa de abertura inconsistente identificada nos logs:** a abertura direta
+  dispõe do prefetch do gesto superior, enquanto a passagem horizontal
+  Notificações → QS chega com `expansion=1.0`, `prefetched=false`,
+  `QS_BACKDROP state=UNKNOWN` e `QS_TILE_ICON_ROUTE reason=tone-unknown`.
+  O painel fica temporariamente sob a paleta nativa. A shade havia medido
+  `sceneLuma=0.87` menos de um segundo antes; sua captura não era aproveitada.
+- [x] **Handoff provisório implementado em código:** uma amostra recente da shade,
+  classificada pelos limiares do próprio QS, preenche a cena e a banda separada do cabeçalho na
+  entrada lateral enquanto o QS faz sua própria captura. Exige expansão ≥95%,
+  idade ≤2,5 s e ausência de troca de app após a medição. A abertura direta e
+  o caminho com captura já pendente continuam inalterados.
+- [x] **Amostras recentes em shade estacionária:** a shade repassa ao QS também as
+  capturas de rotina sem mudança de tom; a banda superior continua independente
+  e a frequência de amostragem do QS não foi alterada.
+- [ ] **Validação no DZIF:** repetir 10 aberturas diretas e 10 passagens
+  horizontais na mesma tela branca, comparando Wi-Fi, ícones do cabeçalho e
+  `QS_SHADE_HANDOFF`/`QS_BACKDROP`/`QS_TILE_ICON_INK`. Confirmar a ausência da
+  paleta nativa visível e de oscilação após a reamostragem. Repetir numa tela
+  colorida/escura e numa tela recém-trocada. Código e testes unitários não
+  constituem confirmação visual.
+
 ## Após o APK PR #96: coleta interativa 29/10, 15:27–15:37
 
 - [x] **Cor QS reaproveitada entre aberturas, correção proposta:** `QS_TONE_ENTRY`

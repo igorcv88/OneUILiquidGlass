@@ -709,6 +709,11 @@ public final class QuickSettingsHooks {
     private volatile float shadeHeaderInk = Float.NaN;
     private android.animation.ValueAnimator shadeHeaderAnimator;
 
+    /** Fresh shade capture for a lateral shade-to-QS opening; no styling changes while in shade. */
+    public void shadeBackdrop(float luma, float headerLuma, long capturedAt) {
+        backdrop.shadeHint(luma, headerLuma, capturedAt);
+    }
+
     /** Main thread, from HeadsUpHooks. A change between two known tones moves smoothly; anything else at once. */
     public void shadeHeader(Boolean light) {
         float target = light == null ? Float.NaN : light ? 1f : 0f, from = shadeHeaderInk;

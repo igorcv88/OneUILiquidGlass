@@ -14,6 +14,19 @@ public final class QsBackdropTest {
         assertTrue(QsBackdrop.open(true, -1));
         assertFalse(QsBackdrop.open(false, -1));
     }
+
+    @Test public void onlyFreshShadeCaptureMaySeedTheLateralOpening() {
+        long sampled = 10_000;
+        assertTrue(QsBackdrop.shadeHandoff(1.0, false, sampled + 140, sampled, sampled - 1));
+        assertTrue(QsBackdrop.shadeHandoff(.95, false, sampled + 2500, sampled, sampled));
+        assertFalse("direct pull-down", QsBackdrop.shadeHandoff(.03, false, sampled + 140, sampled, sampled - 1));
+        assertFalse("own gesture capture already in flight", QsBackdrop.shadeHandoff(1.0, true, sampled + 140, sampled, sampled - 1));
+        assertFalse("stale previous screen", QsBackdrop.shadeHandoff(1.0, false, sampled + 2501, sampled, sampled - 1));
+        assertFalse("app changed since shade capture", QsBackdrop.shadeHandoff(1.0, false, sampled + 140, sampled, sampled + 1));
+        assertFalse("future capture timestamp", QsBackdrop.shadeHandoff(1.0, false, sampled - 1, sampled, 0));
+        assertFalse("no shade measurement", QsBackdrop.shadeHandoff(1.0, false, 500, 0, 0));
+    }
+
     /** In-session: white to black behind the open panel needs a confirming capture; noise is ignored. */
     @Test public void sessionChangesAreConfirmedAndNoiseIsIgnored() {
         io.github.igorcv88.oneuiliquidglass.glass.QsScene scene = new io.github.igorcv88.oneuiliquidglass.glass.QsScene();
