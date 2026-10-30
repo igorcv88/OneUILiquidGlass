@@ -7,10 +7,40 @@ import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 import io.github.igorcv88.oneuiliquidglass.glass.QsScene;
+import io.github.igorcv88.oneuiliquidglass.glass.QuickSettingsGlass;
 import static org.junit.Assert.*;
 
 @RunWith(RobolectricTestRunner.class) @Config(sdk=34)
 public class QsTextHooksTest {
+    private static final class FakeBlendModeColorFilter {
+        final long color;
+        FakeBlendModeColorFilter(int tint){color=QuickSettingsGlass.color(tint);}
+    }
+    @Test public void composeFilterGateInspectsNeutralTintAndLeavesColoredLogosUntouched(){
+        QsTextHooks hooks=new QsTextHooks(getClass().getClassLoader(),()->null,()->true,
+                ()->QsScene.Tone.LIGHT_SCENE,()->QsScene.Tone.LIGHT_SCENE);
+        assertTrue(hooks.neutralComposeFilter(new FakeBlendModeColorFilter(0xff000000)));
+        assertTrue(hooks.neutralComposeFilter(new FakeBlendModeColorFilter(0xffffffff)));
+        assertFalse(hooks.neutralComposeFilter(new FakeBlendModeColorFilter(0xff00aaff)));
+        assertFalse(hooks.neutralComposeFilter(new Object()));
+        assertFalse(hooks.neutralComposeFilter(null));
+    }
+    @Test public void composeTintIsOnlyForVerifiedActiveFilteredIconsOnLightBackground(){
+        assertTrue(QsTextHooks.composeTileEligible(QsScene.Tone.LIGHT_SCENE,
+                QuickSettingsGlass.Kind.ACTIVE,true,true));
+        assertFalse(QsTextHooks.composeTileEligible(QsScene.Tone.DARK_SCENE,
+                QuickSettingsGlass.Kind.ACTIVE,true,true));
+        assertFalse(QsTextHooks.composeTileEligible(QsScene.Tone.UNKNOWN,
+                QuickSettingsGlass.Kind.ACTIVE,true,true));
+        assertFalse(QsTextHooks.composeTileEligible(QsScene.Tone.LIGHT_SCENE,
+                QuickSettingsGlass.Kind.IDLE,true,true));
+        assertFalse(QsTextHooks.composeTileEligible(QsScene.Tone.LIGHT_SCENE,
+                QuickSettingsGlass.Kind.NONE,true,true));
+        assertFalse(QsTextHooks.composeTileEligible(QsScene.Tone.LIGHT_SCENE,
+                QuickSettingsGlass.Kind.ACTIVE,false,true));
+        assertFalse("untinted or coloured icon",QsTextHooks.composeTileEligible(QsScene.Tone.LIGHT_SCENE,
+                QuickSettingsGlass.Kind.ACTIVE,true,false));
+    }
     @Test public void repeatedRenderTransitionsRestoreNativePaintAndNeverNeedTextStyle(){
         Paint paint=new Paint();paint.setColor(0xffffffff);
         for(int i=0;i<100;i++)for(Boolean tone:new Boolean[]{true,false,null}){

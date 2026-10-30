@@ -339,6 +339,15 @@ final class QsSliderHooks {
                 }
             }
             if(!(g[2]>0)||!(g[3]>0)){p.setResult(null);return;}
+            // The body's computed rectangle is already inset. Bound its actual rasterization
+            // to the same rounded track: a long native roundrect or animated draw must not
+            // flatten the top cap or bleed beyond the full-height slider at 100%.
+            if(stage==1 && f.w<=f.h)try {
+                clipVerticalTrack(f.canvas,f.w,f.h,g[2]);
+                if(Probe.trace && barArguments.add("clip:"+f.role))
+                    Probe.log("QS_SLIDER_CLIP","role="+f.role+" width="+g[2]
+                            +" inset="+((f.w-g[2])/2f)+" height="+f.h+" radius="+(g[2]/2f));
+            }catch(RuntimeException | LinkageError e){Probe.error("QS_SLIDER_CLIP_UNAVAILABLE",e);}
             p.args[2]=pack(g[0],g[1]);p.args[3]=pack(g[2],g[3]);
             p.args[last]=explicitGeometryMask(mask,stage!=0);
             // At low values a circle-radius round rect becomes a flat-ended trapezoid. Elliptic
@@ -366,6 +375,15 @@ final class QsSliderHooks {
     private final ThreadLocal<android.graphics.Paint> lowFillPaint = ThreadLocal.withInitial(() ->
             new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG));
     private final ThreadLocal<android.graphics.Path> lowFillPath = ThreadLocal.withInitial(android.graphics.Path::new);
+    private final ThreadLocal<android.graphics.Path> verticalTrackClip = ThreadLocal.withInitial(android.graphics.Path::new);
+
+    /** Canvas is already translated to the inset DrawScope; the saved frame restores this clip. */
+    private void clipVerticalTrack(Canvas canvas,float frameWidth,float frameHeight,float fillWidth) {
+        float left=(frameWidth-fillWidth)/2f, right=left+fillWidth, radius=fillWidth/2f;
+        android.graphics.Path path=verticalTrackClip.get();path.reset();
+        path.addRoundRect(left,0f,right,frameHeight,radius,radius,android.graphics.Path.Direction.CW);
+        canvas.clipPath(path);
+    }
 
     /** Top shoulder progressively flattens; the lower semicircle stays on the capsule's end. */
     private void drawLowVerticalFill(Canvas canvas, float[] g, int color, float trackW, float trackH) {

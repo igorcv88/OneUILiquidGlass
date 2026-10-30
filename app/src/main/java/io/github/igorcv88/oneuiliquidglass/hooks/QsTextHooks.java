@@ -42,6 +42,14 @@ final class QsTextHooks {
     private final ThreadLocal<Object> sliderPainterDrawing=new ThreadLocal<>();
     private final java.util.Set<Object> tilePaintersDrawn=java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>());
     private final java.util.Map<Object,String> tileInkLogged=new java.util.WeakHashMap<>();
+    /** Compose PainterNode can tint a vector without dispatching an Android Canvas Paint hook. */
+    private Field composeFilterField;
+    private Method composeTintMethod;
+    private Object composeTintCompanion;
+    private int composeSrcIn;
+    private final java.util.Map<Integer,Object> composeFilters=new java.util.HashMap<>();
+    private final java.util.Map<Object,Boolean> composeNeutralFilters=new java.util.WeakHashMap<>();
+    private final java.util.Map<Object,String> composeFilterLogged=new java.util.WeakHashMap<>();
     /** One binding diagnosis per painter/state/revision; never record tile names or app content. */
     private final java.util.Map<Object,String> tileRouteLogged=new java.util.WeakHashMap<>();
     private final java.util.Set<String> tileRouteSummaries=java.util.Collections.synchronizedSet(new java.util.HashSet<>());
@@ -52,6 +60,7 @@ final class QsTextHooks {
         final QsScene.Tone tone;
         final QuickSettingsGlass.Kind state;
         final Object node;
+        int canvasCalls;
         TileInk(QsStyle palette, QsScene.Tone tone, QuickSettingsGlass.Kind state, Object node) {
             this.palette=palette;this.tone=tone;this.state=state;this.node=node;
         }
@@ -183,6 +192,7 @@ final class QsTextHooks {
             Class<?> node=Class.forName("androidx.compose.ui.draw.PainterNode",false,loader);
             Class<?> scope=Class.forName("androidx.compose.ui.graphics.drawscope.ContentDrawScope",false,loader);
             QsNodeAbi abi=QsNodeAbi.resolve(element,node,scope);
+            resolveComposeFilter(node);
             XposedBridge.hookAllConstructors(element,new XC_MethodHook(){
                 @Override protected void afterHookedMethod(MethodHookParam p){
                     QsContentHooks.Frame f=content.get();
@@ -272,8 +282,21 @@ final class QsTextHooks {
                     if(allowed)
                         tileIconDrawing.set(new TileInk(style.get(),sceneTone,state,p.thisObject));
                     else tileIconDrawing.remove();
+                    TileInk tile=tileIconDrawing.get();
+                    if(tile!=null)applyComposeTileFilter(p,tile);
                 }
                 @Override protected void afterHookedMethod(MethodHookParam p){
+                    TileInk tile=tileIconDrawing.get();
+                    if(tile!=null && Probe.trace && tile.state==QuickSettingsGlass.Kind.ACTIVE
+                            && tile.tone==QsScene.Tone.LIGHT_SCENE && !composeFilterLogged.containsKey(tile.node)) {
+                        composeFilterLogged.put(tile.node,"canvas-"+tile.canvasCalls);
+                        Probe.log("QS_TILE_DRAW_RESULT", "node="+Integer.toHexString(System.identityHashCode(tile.node))
+                                +" state=ACTIVE tone=LIGHT_SCENE canvasPaintCalls="+tile.canvasCalls);
+                    }
+                    Object previousCompose=p.getObjectExtra("qsComposeFilterPrevious");
+                    if(previousCompose!=null && composeFilterField!=null)try {
+                        composeFilterField.set(p.thisObject,previousCompose);
+                    }catch(IllegalAccessException | RuntimeException e){Probe.error("QS_TILE_COMPOSE_FILTER_RESTORE_FAILED",e);}
                     Float previous=(Float)p.getObjectExtra("qsHeaderIconPrevious");
                     if(previous==null)iconDrawing.remove();else iconDrawing.set(previous);
                     TileInk tilePrevious=(TileInk)p.getObjectExtra("qsTileIconPrevious");
@@ -289,6 +312,105 @@ final class QsTextHooks {
             headerReady=true;Probe.log("QS_HEADER_ICONS_READY","renderOnly=true");
         }catch(ReflectiveOperationException|RuntimeException|LinkageError e){
             headerReady=false;headerNodes.clear();headerElements.clear();Probe.error("QS_HEADER_ICONS_INCOMPATIBLE","painter",e);
+        }
+    }
+
+    /** Only a verified active monochrome painter with a neutral native filter may be tinted upstream. */
+    static boolean composeTileEligible(QsScene.Tone tone, QuickSettingsGlass.Kind state,
+                                       boolean lightPalette, boolean neutralNativeFilter) {
+        return tone==QsScene.Tone.LIGHT_SCENE && state==QuickSettingsGlass.Kind.ACTIVE
+                && lightPalette && neutralNativeFilter;
+    }
+
+    /** Compose's packed Color tint is stored on BlendModeColorFilter; unknown/colourful stays native. */
+    boolean neutralComposeFilter(Object filter) {
+        if(filter==null)return false;
+        Boolean cached=composeNeutralFilters.get(filter);
+        if(cached!=null)return cached;
+        boolean neutral=false;
+        if(filter.getClass().getSimpleName().contains("BlendModeColorFilter"))try {
+            for(Field field:filter.getClass().getDeclaredFields())
+                if(field.getType()==long.class && field.getName().toLowerCase(java.util.Locale.ROOT).contains("color")) {
+                    field.setAccessible(true);
+                    long packed=field.getLong(filter);
+                    neutral=QuickSettingsGlass.srgb(packed)
+                            && QuickSettingsGlass.neutral(QuickSettingsGlass.argb(packed));
+                    break;
+                }
+        }catch(IllegalAccessException | RuntimeException ignored) {neutral=false;}
+        composeNeutralFilters.put(filter,neutral);
+        return neutral;
+    }
+
+    /** Resolve the installed Compose ABI once; an unknown firmware leaves the previous path intact. */
+    private void resolveComposeFilter(Class<?> node) {
+        try {
+            Class<?> filter=Class.forName("androidx.compose.ui.graphics.ColorFilter",false,loader);
+            Field field=null;
+            for(Class<?> owner=node;owner!=null;owner=owner.getSuperclass())
+                for(Field candidate:owner.getDeclaredFields())
+                    if(filter.isAssignableFrom(candidate.getType())) {
+                        if(field!=null)throw new NoSuchFieldException("ambiguous PainterNode ColorFilter fields");
+                        field=candidate;
+                    }
+            if(field==null)throw new NoSuchFieldException("PainterNode.colorFilter");
+            field.setAccessible(true);
+            Object companion=filter.getField("Companion").get(null);
+            Method tint=null;
+            for(Method m:companion.getClass().getDeclaredMethods())
+                if(m.getName().startsWith("tint-") && m.getParameterCount()==2
+                        && m.getParameterTypes()[0]==long.class && m.getParameterTypes()[1]==int.class
+                        && filter.isAssignableFrom(m.getReturnType())) {
+                    if(tint!=null)throw new NoSuchMethodException("ambiguous Compose tint methods");
+                    tint=m;
+                }
+            if(tint==null)throw new NoSuchMethodException("ColorFilter.Companion.tint(long,int)");
+            Class<?> blend=Class.forName("androidx.compose.ui.graphics.BlendMode",false,loader);
+            Object blendCompanion=blend.getField("Companion").get(null);
+            Method sourceIn=null;
+            for(Method m:blendCompanion.getClass().getDeclaredMethods())
+                if(m.getName().startsWith("getSrcIn-") && m.getParameterCount()==0
+                        && m.getReturnType()==int.class)sourceIn=m;
+            if(sourceIn==null)throw new NoSuchMethodException("BlendMode.Companion.getSrcIn()");
+            sourceIn.setAccessible(true);tint.setAccessible(true);
+            int srcIn=(Integer)sourceIn.invoke(blendCompanion);
+            composeFilterField=field;composeTintCompanion=companion;composeTintMethod=tint;composeSrcIn=srcIn;
+            Probe.log("QS_TILE_COMPOSE_FILTER_READY","owner="+node.getName()+" field="+field.getName()
+                    +" tint="+tint.getName()+" mode=SrcIn");
+        }catch(ReflectiveOperationException | RuntimeException | LinkageError e){
+            composeFilterField=null;Probe.error("QS_TILE_COMPOSE_FILTER_UNAVAILABLE",e);
+        }
+    }
+
+    /** This change lasts for one PainterNode.draw only; unrelated and coloured painters stay native. */
+    private void applyComposeTileFilter(XC_MethodHook.MethodHookParam p,TileInk tile) {
+        if(composeFilterField==null || tile.state!=QuickSettingsGlass.Kind.ACTIVE
+                || tile.tone!=QsScene.Tone.LIGHT_SCENE || !tile.palette.tileLight)return;
+        try {
+            Object nativeFilter=composeFilterField.get(p.thisObject);
+            if(!composeTileEligible(tile.tone,tile.state,tile.palette.tileLight,neutralComposeFilter(nativeFilter))) {
+                if(Probe.trace && !composeFilterLogged.containsKey(tile.node))
+                    Probe.log("QS_TILE_COMPOSE_FILTER", "node="+Integer.toHexString(System.identityHashCode(tile.node))
+                            +" applied=false reason=unverified-native-filter native="
+                            +(nativeFilter==null?"none":nativeFilter.getClass().getSimpleName()));
+                return;
+            }
+            int color=tile.palette.tileLightOnInk;
+            Object replacement=composeFilters.get(color);
+            if(replacement==null) {
+                replacement=composeTintMethod.invoke(composeTintCompanion,QuickSettingsGlass.color(color),composeSrcIn);
+                if(composeFilters.size()>16)composeFilters.clear();
+                composeFilters.put(color,replacement);
+            }
+            if(replacement==null || replacement.equals(nativeFilter))return;
+            composeFilterField.set(p.thisObject,replacement);
+            p.setObjectExtra("qsComposeFilterPrevious",nativeFilter);
+            if(Probe.trace && !composeFilterLogged.containsKey(tile.node))
+                Probe.log("QS_TILE_COMPOSE_FILTER", "node="+Integer.toHexString(System.identityHashCode(tile.node))
+                        +" applied=true state=ACTIVE scene=LIGHT_SCENE color="+Integer.toHexString(color));
+        }catch(ReflectiveOperationException | RuntimeException | LinkageError e){
+            composeFilterField=null;
+            Probe.error("QS_TILE_COMPOSE_FILTER_FAILED",e);
         }
     }
     ColorFilter applyIconPaint(Paint paint,Boolean dark,boolean on){
@@ -313,6 +435,7 @@ final class QsTextHooks {
     private void tilePaint(XC_MethodHook.MethodHookParam p, Paint paint) {
         TileInk tile = tileIconDrawing.get();
         if (tile == null) return;
+        tile.canvasCalls++;
         if (paint == null || paint.getShader() != null || iconDrawing.get() != null) {
             if(Probe.trace && !inkSignature(tile).equals(tileInkLogged.put(tile.node,inkSignature(tile))))
                 Probe.log("QS_TILE_ICON_ROUTE", "phase=canvas node="+Integer.toHexString(System.identityHashCode(tile.node))
