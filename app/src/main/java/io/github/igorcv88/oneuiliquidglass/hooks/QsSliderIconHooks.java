@@ -18,6 +18,7 @@ final class QsSliderIconHooks {
     private final BooleanSupplier enabled;
     private final Supplier<QsStyle> style;
     private final Supplier<QsScene.Tone> scene;
+    private final Supplier<Float> lightFraction;
     private final Consumer<Object> capture;
     private final ThreadLocal<Float> brightness=new ThreadLocal<>();
     private final ThreadLocal<Integer> volume=new ThreadLocal<>();
@@ -27,8 +28,9 @@ final class QsSliderIconHooks {
     private QsComposeSignal signal;
     private Object lastKey;
     private int brightFailures;
-    QsSliderIconHooks(ClassLoader l,BooleanSupplier on,Supplier<QsStyle> s,Supplier<QsScene.Tone> t,Consumer<Object> c) {
-        loader=l;enabled=on;style=s;scene=t;capture=c;
+    QsSliderIconHooks(ClassLoader l,BooleanSupplier on,Supplier<QsStyle> s,Supplier<QsScene.Tone> t,
+            Supplier<Float> lightFraction,Consumer<Object> c) {
+        loader=l;enabled=on;style=s;scene=t;this.lightFraction=lightFraction;capture=c;
     }
     private Class<?> type(String name)throws ClassNotFoundException{return Class.forName(name,false,loader);}
     void install() {
@@ -124,11 +126,19 @@ final class QsSliderIconHooks {
     private final Map<Object,Integer> initialLevels=new WeakHashMap<>();
     private int map(int nativeColor,boolean empty) {
         if(!enabled.getAsBoolean()||scene.get()==QsScene.Tone.UNKNOWN)return nativeColor;
-        QsStyle s=style.get();boolean light=scene.get()==QsScene.Tone.LIGHT_SCENE;
+        QsStyle s=style.get();Float fraction=lightFraction.get();
+        if(fraction!=null) {
+            int dark=QsSurfaceInk.onSurface(nativeColor,empty?0:s.sliderDarkColor,false);
+            int light=QsSurfaceInk.onSurface(nativeColor,empty?0:s.sliderLightColor,true);
+            return InkTransition.lerpPremultiplied(dark,light,fraction);
+        }
+        boolean light=scene.get()==QsScene.Tone.LIGHT_SCENE;
         return QsSurfaceInk.onSurface(nativeColor,empty?0:light?s.sliderLightColor:s.sliderDarkColor,light);
     }
     void refresh() {
-        Object key=Arrays.asList(enabled.getAsBoolean(),scene.get(),style.get());
+        Float fraction=lightFraction.get();
+        Object key=Arrays.asList(enabled.getAsBoolean(),scene.get(),style.get(),
+                fraction==null?-1:Math.round(fraction*4f));
         if(key.equals(lastKey))return;lastKey=key;
         try {if(signal!=null)signal.update(key);}catch(ReflectiveOperationException e){Probe.error("QS_BRIGHT_ICON_FAILED",e);}
         if(updateVolume!=null)for(Map.Entry<Object,Integer> entry:new ArrayList<>(volumes.entrySet())) {

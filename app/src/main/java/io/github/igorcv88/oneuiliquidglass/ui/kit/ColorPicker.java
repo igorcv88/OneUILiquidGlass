@@ -20,7 +20,7 @@ public final class ColorPicker extends LinearLayout {
     private int alpha = 255;
     private final Plane plane;
     private final Bar hue, opacity;
-    private final View swatch;
+    private final PreviewSwatch swatch;
     private Consumer<String> listener;
 
     public ColorPicker(Context context, Theme theme) {
@@ -42,8 +42,17 @@ public final class ColorPicker extends LinearLayout {
         opacity=new Bar(context,false);
         opacity.setContentDescription("Opacidade da cor, de transparente a sólida");
         addView(opacity,new LayoutParams(-1,theme.dp(32)));
-        swatch=new View(context);
-        swatch.setContentDescription("Cor selecionada");
+        TextView alphaHint = Ui.text(context,theme,
+                "O alpha preserva o RGB. Quanto menor a opacidade, mais o fundo altera a cor vista.",
+                Theme.CAPTION,theme.inkMuted,false);
+        alphaHint.setPadding(0,theme.dp(8),0,0);
+        addView(alphaHint);
+        TextView previewLabel = Ui.text(context,theme,"Prévia: fundo claro  /  fundo escuro",
+                Theme.CAPTION,theme.inkMuted,false);
+        previewLabel.setPadding(0,theme.dp(10),0,0);
+        addView(previewLabel);
+        swatch=new PreviewSwatch(context);
+        swatch.setContentDescription("Cor selecionada sobre branco à esquerda e escuro à direita");
         LayoutParams p=new LayoutParams(-1,theme.dp(32));
         p.topMargin=theme.dp(12);
         addView(swatch,p);
@@ -70,7 +79,24 @@ public final class ColorPicker extends LinearLayout {
         plane.invalidate();
         hue.invalidate();
         opacity.invalidate();
-        swatch.setBackground(Ui.rounded(selected(),getResources().getDisplayMetrics().density*12));
+        swatch.invalidate();
+    }
+
+    /** The RGB stays identical; only its visible composite changes with the backdrop. */
+    private final class PreviewSwatch extends View {
+        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        PreviewSwatch(Context context) { super(context); }
+        @Override protected void onDraw(Canvas canvas) {
+            float w=getWidth(),h=getHeight();
+            if (w<=0||h<=0)return;
+            paint.setStyle(Paint.Style.FILL);
+            paint.setColor(0xfffafafa);
+            canvas.drawRect(0,0,w/2,h,paint);
+            paint.setColor(0xff15232d);
+            canvas.drawRect(w/2,0,w,h,paint);
+            paint.setColor(selected());
+            canvas.drawRect(0,0,w,h,paint);
+        }
     }
 
     private final class Plane extends View {

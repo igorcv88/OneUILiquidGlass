@@ -2,6 +2,8 @@ package io.github.igorcv88.oneuiliquidglass.glass;
 
 /** One immutable decision per captured frame, shared by both panels on the main thread. */
 public final class PanelScene {
+    /** A clearly bright page is safe to classify before the second 100 ms QS capture. */
+    static final float FAST_LIGHT_LUMA = .80f;
     public static final class Snapshot {
         public final ToneGrid grid;
         public final QsScene.Tone body, header;
@@ -22,7 +24,12 @@ public final class PanelScene {
         QsScene.Tone previous=gate.tone()==null?QsScene.Tone.UNKNOWN:gate.tone()?QsScene.Tone.LIGHT_SCENE:QsScene.Tone.DARK_SCENE;
         QsScene.Tone next=QsScene.classify(luma,previous);
         if(next==QsScene.Tone.UNKNOWN)return previous;
-        gate.offer(next==QsScene.Tone.LIGHT_SCENE,at,ToneGate.strong(luma,QsScene.MID));
+        // The DZIF task transition often first shows a .80-.87 white frame. The original
+        // .20 strong-distance threshold made the bright direction wait 150-300 ms longer
+        // than the dark direction (observed on the Galaxy, 30/10); keep the dwell guard.
+        boolean strong = ToneGate.strong(luma,QsScene.MID)
+                || next == QsScene.Tone.LIGHT_SCENE && luma >= FAST_LIGHT_LUMA;
+        gate.offer(next==QsScene.Tone.LIGHT_SCENE,at,strong);
         return gate.tone()?QsScene.Tone.LIGHT_SCENE:QsScene.Tone.DARK_SCENE;
     }
     public void clear(){latest=null;body.reset();header.reset();}

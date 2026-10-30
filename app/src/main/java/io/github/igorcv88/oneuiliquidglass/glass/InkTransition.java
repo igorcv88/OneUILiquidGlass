@@ -27,6 +27,22 @@ public final class InkTransition {
         return out;
     }
 
+    /** Source-over-friendly colour crossfade: transparent sentinel RGB must not create a white veil. */
+    public static int lerpPremultiplied(int from,int to,float t) {
+        if(!(t>0f))return from;
+        if(t>=1f)return to;
+        float a=(from>>>24)/255f,b=(to>>>24)/255f;
+        float outA=a+(b-a)*t;
+        if(outA<=0f)return from&0xffffff;
+        int rgb=0;
+        for(int shift:new int[]{16,8,0}){
+            int left=(from>>>shift)&255,right=(to>>>shift)&255;
+            int channel=Math.round(((1f-t)*a*left+t*b*right)/outA);
+            rgb|=Math.max(0,Math.min(255,channel))<<shift;
+        }
+        return ((Math.round(outA*255f)&255)<<24)|rgb;
+    }
+
     /** Symmetric smoothstep: slow at both ends, fastest across the low-contrast middle. */
     public static float ease(float t) {
         if (!(t > 0f)) return 0f;

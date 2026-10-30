@@ -46,8 +46,8 @@ public final class Controls {
         }
     }
 
-    /** STANDARD rows appear in their group; ADVANCED inside "Avançado"; TECHNICAL only in the
-     * technical list and search; INTERNAL is state shown elsewhere and never edited as a row. */
+    /** STANDARD rows appear in their group; ADVANCED inside "Avançado"; TECHNICAL in a
+     * collapsed surface-specific section and the full catalogue; INTERNAL is never edited. */
     public enum Tier {
         STANDARD,
         ADVANCED,

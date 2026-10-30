@@ -27,6 +27,16 @@ public final class QsSurfaceInk {
         int contrasted=onSurface(nativeInk,surface,light);
         return QuickSettingsGlass.withAlpha(contrasted,QuickSettingsGlass.alpha(chosen));
     }
+    /** Both RoundIcon and its painter read the same frame's fractional scene palette. */
+    public static int onVerifiedTile(int nativeInk,int surface,int state,QsScene.Tone scene,QsStyle style,Float lightFraction) {
+        if(lightFraction==null||scene==QsScene.Tone.UNKNOWN)
+            return onVerifiedTile(nativeInk,surface,state,scene,style);
+        int dark=style!=null&&style.tileDark
+                ?onVerifiedTile(nativeInk,surface,state,QsScene.Tone.DARK_SCENE,style):nativeInk;
+        int light=style!=null&&style.tileLight
+                ?onVerifiedTile(nativeInk,surface,state,QsScene.Tone.LIGHT_SCENE,style):nativeInk;
+        return InkTransition.lerpPremultiplied(dark,light,lightFraction);
+    }
     public static int onSurface(int nativeInk,int surface,boolean lightScene) {
         if(!QuickSettingsGlass.neutral(nativeInk))return nativeInk;
         int opaque=QuickSettingsGlass.over(surface,lightScene?0xffffffff:0xff000000);

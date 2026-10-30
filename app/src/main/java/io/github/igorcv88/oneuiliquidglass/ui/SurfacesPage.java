@@ -373,6 +373,28 @@ public final class SurfacesPage implements Page {
         }
         if (any) list.addView(groups, Ui.match());
 
+        // Keep the advanced provider catalogue discoverable from its own surface page.
+        // Previously all TECHNICAL-tier controls disappeared here and existed only in
+        // "Todos os parâmetros". Keep them collapsed to avoid crowding the visual controls.
+        List<String> technical = new ArrayList<>();
+        for (Controls.Control c : Controls.all())
+            if (c.on(surface) && Controls.editable(c.key) && !placed.contains(c.key)
+                    && (c.section == Controls.Section.TECHNICAL || c.tier == Controls.Tier.TECHNICAL))
+                technical.add(c.key);
+        if (!technical.isEmpty()) {
+            String id=surface.id + ".technical";
+            View[] d=Ui.disclosure(a,t,Icon.RESTART,"Ajustes técnicos da superfície",
+                    technical.size()+" ajustes",open.contains(id),on->{
+                        if(on)open.add(id);else open.remove(id);
+                    });
+            LinearLayout group=Ui.card(a,t);
+            group.addView(d[0]);
+            LinearLayout body=(LinearLayout)d[1];
+            for(String k:technical)addRow(body,k,placed);
+            group.addView(body);
+            list.addView(group,Ui.match(t.dp(8),0));
+        }
+
         LinearLayout footer = Ui.row(a);
         TextView search = Ui.button(a, t, "Buscar ajuste", Icon.SEARCH, Ui.ButtonStyle.OUTLINED, true);
         search.setOnClickListener(v -> new SearchSheet(host, surface).show());
@@ -394,12 +416,12 @@ public final class SurfacesPage implements Page {
             {"Discos e ícones · fundo colorido", "Opcional: preservar aparência atual até ativar", Icon.PALETTE,
                     new String[] {"qs.tiledark", "qs.tiledarkon", "qs.tiledarkoff",
                             "qs.tiledarkonink", "qs.tiledarkoffink", "qs.tiledarkoffalpha"}},
-            {"Sliders", "Cápsula de vidro e preenchimento branco", Icon.LAYERS,
-                    new String[] {"qs.outer", "qs.fill"}},
+            {"Sliders", "Espessura e cores RGBA para cada fundo", Icon.LAYERS,
+                    new String[] {"qs.outer", "qs.fill", "qs.sliderlightcolor", "qs.sliderdarkcolor"}},
             {"Vidro", "Opacidade e tom das cápsulas sobre apps claros", Icon.PALETTE,
                     new String[] {"qs.lightglassopacity", "qs.lightglasscolor", "qs.lightfill", "qs.lightcolor"}},
             {"Contorno", "Linha de luz em volta das cápsulas", Icon.CONTRAST,
-                    new String[] {"qs.darkrim", "qs.lightrim"}},
+                    new String[] {"qs.darkrim", "qs.lightrim", "qs.glint"}},
             {"Luz e refração", "Lente dinâmica", Icon.LENS,
                     new String[] {"qs.lightoptics", "sf.qslight", "sf.qslens", "sf.qsbody", "sf.qsdepth", "qs.edgeblur"}},
     };
@@ -440,6 +462,27 @@ public final class SurfacesPage implements Page {
                 body.addView(label);
             }
             for (String k : adv) addRow(body, k, placed);
+            card.addView(body);
+        }
+        // The catalogue is the source of truth. A newly added QS setting must never become
+        // accessible only through "Todos os parâmetros" because a manual group was not updated.
+        // INTERNAL/READONLY legacy keys stay available for profile round-trips, but never appear
+        // in these user-facing pages.
+        List<String> remaining = new ArrayList<>();
+        for (Controls.Control c : Controls.all())
+            if (c.section == Controls.Section.QUICK_SETTINGS && c.on(surface)
+                    && Controls.editable(c.key) && !placed.contains(c.key)) remaining.add(c.key);
+        if (!remaining.isEmpty()) {
+            String id = surface.id + ".qs.remaining";
+            View[] d = Ui.disclosure(a, t, Icon.SHADE, "Outros ajustes atuais",
+                    remaining.size() + " ajustes", open.contains(id), on -> {
+                        if (on) open.add(id);
+                        else open.remove(id);
+                    });
+            card.addView(Ui.divider(a, t, t.dp(72)));
+            card.addView(d[0]);
+            LinearLayout body = (LinearLayout)d[1];
+            for (String key : remaining) addRow(body, key, placed);
             card.addView(body);
         }
         list.addView(card, Ui.match());

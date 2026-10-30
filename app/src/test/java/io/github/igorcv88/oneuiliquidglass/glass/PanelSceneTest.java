@@ -28,4 +28,12 @@ public class PanelSceneTest {
         scene.clear();assertNull(scene.accept(null));
         assertEquals(QsScene.Tone.LIGHT_SCENE,scene.accept(grid(1f,2300)).body);
     }
+    @Test public void brightBackdropNeedsNoSecondConfirmationAfterStableDarkScene(){
+        PanelScene scene=new PanelScene();
+        scene.accept(grid(.04f,1000));
+        assertEquals(QsScene.Tone.LIGHT_SCENE,scene.accept(grid(.81f,1230)).body);
+        // The dwell bound still rejects an immediate opposite reading.
+        assertEquals(QsScene.Tone.LIGHT_SCENE,scene.accept(grid(.05f,1240)).body);
+        assertEquals(QsScene.Tone.DARK_SCENE,scene.accept(grid(.05f,1350)).body);
+    }
 }

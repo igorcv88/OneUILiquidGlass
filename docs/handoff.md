@@ -1,5 +1,26 @@
 # Handoff — OneUILiquidGlass (2026-10-16)
 
+**QS108 continuação (30/10/2026, vídeo 86054.mp4, log `OULG_QS_TRANS_20261030_172138`):**
+o log confirma 145 escopos Compose invalidados em cada mudança e nenhuma rampa
+(`QS_BACKDROP transition=immediate`). Num ciclo, troca de app às 17:21:55.423,
+amostras de fundo branco de luminância 0,80/0,87 às 55.650/55.762 e só
+confirmação `LIGHT_SCENE` às 55.873: ~450 ms após o evento. A direção escura
+usa leitura forte e costuma confirmar em ~130 ms. A condição `acceptShared`
+publicava sempre `false`, apesar da rampa de 180 ms já existir.
+
+**Correção de transição em análise:** `PanelScene` classifica com confiança
+luminância >=0,80 como forte (mantém dwell de 100 ms), `QsBackdrop` habilita
+rampa somente durante sessão conhecida, e todas as cores QS passam a consumir
+o mesmo progresso 0..1 (`ink(false)`): discos, 15 glyphs, cápsulas, bordas,
+sliders, ícones nativos e painter. Interpolação de fundo RGB com alpha pré-
+multiplicado evita véu branco de `CLEAR=0x00ffffff` durante a rampa. Invalidações
+Compose são agrupadas em >=34 ms; texto mantém o draw original. A página
+Central agora inclui slider RGBA claro/colorido, glint e fallback para toda
+nova chave QS editável. O picker mostra a composição da mesma cor sobre branco
+e escuro; alpha de 0x89 no RGB 000C21 *estava* sendo aplicado (log), porém
+fisicamente se mistura ao fundo claro e vira cinza azulado. Validação no Galaxy
+continua obrigatória; não foi mexida a transição de notificações.
+
 **QS108 (30/10/2026, vídeo 86044.mp4, aparelho com PR #107 instalado):**
 os controles pequenos OFF continuam pretos/brancos com alpha pleno, enquanto SmartThings
 respeita `qs.tilelightoffink`/`qs.tiledarkoffink`. Causa no fonte: a rota nativa
@@ -12,8 +33,8 @@ sem reinício, apps com transições em ambas as direções. A mudança de app c
 aberto ainda demora principalmente branco → colorido e pode dessincronizar discos
 grandes; **o PR #107 de cadência não resolveu isso**. Coletar logs novos com
 `BACKDROP_EVENT`, `TONE_CAPTURE_*`, `QS_BACKDROP`, `QS_COMPOSE_REFRESH`,
-`QS_TILE_COLOR`, `QS_TILEBOX_INK` antes de alterar o algoritmo de cena/animar
-ícones separadamente. Não mexer nos sliders de brilho/volume ou nas notificações.
+`QS_TILE_COLOR`, `QS_TILEBOX_INK` para validar o algoritmo com QS aberto. Preservar
+geometria e interação nativas de brilho/volume e a aparência das notificações.
 
 **Continuidade QS105 (30/10/2026):** ler primeiro
 [qs105-semantic-ink.md](qs105-semantic-ink.md). A nova rota do tile box, o coordenador
