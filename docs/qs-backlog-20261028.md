@@ -1,5 +1,35 @@
 # Pendências OneUILiquidGlass, a partir do main pós-PR #83
 
+## PR #103 — ícones da grade e cabeçalho (30/10, pós-merge #102)
+
+- [x] **Evidência do pacote QS #101:** `QS_TILE_ICON_ROUTE_SUMMARY` reconhece
+  `ACTIVE`, `IDLE`, `NONE` e o `QuickTileKt` vinculado. Às 00:19:15, dois
+  `PainterNode`s ACTIVE têm `canvasPaintCalls=0` e um tem `canvasPaintCalls=1`.
+  Os desenhos que não passam por Canvas precisam de tint Compose. Há dois
+  `QS_TILE_ICON_INK` de IDLE que mudam de cinza para preto, comprovando que a
+  paleta está correta quando o caminho de desenho é alcançado.
+- [x] **Correção para pequenos controles:** estende a elegibilidade Compose de
+  `ACTIVE` para `IDLE` e `NONE` no fundo claro, usando `tilelightoffink` nos
+  dois estados. Exige QuickTile vinculado e filtro neutro (BlendMode ou
+  wrapper nativo com tinta identificável); se filtro for nulo,
+  estados IDLE/NONE exigem também `VectorPainter` verificado. Bitmap, arte
+  colorida, contexto sem modelo e fundo escuro preservam a renderização nativa.
+  Restituição do filtro anterior é por draw, incluindo `null`. Um evento
+  `QS_TILE_DRAW_RESULT` por estado agora diagnostica também ícones IDLE/NONE.
+- [x] **Cabeçalho:** captura provenance dos PainterElements criados dentro do
+  `SecQuickSettingHeader` e conserva o vínculo com PainterNodes. Usa a decisão
+  própria de luminosidade do cabeçalho (`level(true)`) e só altera filtro
+  neutro ou VectorPainter sem filtro. Registra `QS_HEADER_ICON_CAPTURE` e
+  `QS_HEADER_ICON_ROUTE` (outcome de cada draw) sem coletar texto ou conteúdos.
+  O filtro original é restaurado após cada desenho. Ícones sem vínculo ficam
+  intocados: o log físico indicará se os três botões estão nesta rota.
+- [ ] **Validação física ainda necessária:** instalar APK do PR #103 após merge,
+  confirmar `QS_TILE_COMPOSE_FILTER_READY`, `QS_TILE_COMPOSE_FILTER applied=true
+  state=IDLE|NONE`, `QS_HEADER_ICON_CAPTURE`, `QS_HEADER_ICON_ROUTE` e verificar
+  visualmente os 15 ícones no fundo branco, editar/desligar/configurações,
+  transição direta/lateral, fundo colorido/escuro, slides 0–100%, mídia tocando,
+  notificações e pop-ups. O pacote anterior era do #101 e não comprova o #102.
+
 ## Rodada pós-PR #101 (30/10, 00:18–00:22, DZIF, Theme Park ON)
 
 - [x] **Falha de reflexão confirmada, sem filtro efetivo:** `OULG_QS101_20261030_001851`

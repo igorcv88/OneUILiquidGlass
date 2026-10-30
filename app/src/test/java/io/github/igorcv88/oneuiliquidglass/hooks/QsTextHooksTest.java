@@ -26,6 +26,10 @@ public class QsTextHooksTest {
         final ColorFilter colorFilter;
         FakeNativeTintConstructor(ColorFilter colorFilter){this.colorFilter=colorFilter;}
     }
+    private static final class FakeNativeColorFilter {
+        final ColorFilter colorFilter;
+        FakeNativeColorFilter(int argb){colorFilter=new PorterDuffColorFilter(argb,PorterDuff.Mode.SRC_IN);}
+    }
     private static final class UnrelatedConstructor {
         UnrelatedConstructor(String ignored){}
     }
@@ -53,26 +57,30 @@ public class QsTextHooksTest {
         assertTrue(hooks.neutralComposeFilter(new FakeBlendModeColorFilter(0xff000000)));
         assertTrue(hooks.neutralComposeFilter(new FakeBlendModeColorFilter(0xffffffff)));
         assertFalse(hooks.neutralComposeFilter(new FakeBlendModeColorFilter(0xff00aaff)));
+        assertTrue(hooks.neutralComposeFilter(new FakeNativeColorFilter(0xffd8d8d8)));
+        assertFalse(hooks.neutralComposeFilter(new FakeNativeColorFilter(0xff00aaff)));
         assertFalse(hooks.neutralComposeFilter(new Object()));
         assertFalse(hooks.neutralComposeFilter(null));
     }
-    @Test public void composeTintIsOnlyForVerifiedActiveFilteredIconsOnLightBackground(){
+    @Test public void composeTintIncludesVerifiedActiveInactiveAndDiscLessIconsOnLightBackground(){
         assertTrue(QsTextHooks.composeTileEligible(QsScene.Tone.LIGHT_SCENE,
                 QuickSettingsGlass.Kind.ACTIVE,true,true));
         assertFalse(QsTextHooks.composeTileEligible(QsScene.Tone.DARK_SCENE,
                 QuickSettingsGlass.Kind.ACTIVE,true,true));
         assertFalse(QsTextHooks.composeTileEligible(QsScene.Tone.UNKNOWN,
                 QuickSettingsGlass.Kind.ACTIVE,true,true));
-        assertFalse(QsTextHooks.composeTileEligible(QsScene.Tone.LIGHT_SCENE,
+        assertTrue(QsTextHooks.composeTileEligible(QsScene.Tone.LIGHT_SCENE,
                 QuickSettingsGlass.Kind.IDLE,true,true));
-        assertFalse(QsTextHooks.composeTileEligible(QsScene.Tone.LIGHT_SCENE,
+        assertTrue(QsTextHooks.composeTileEligible(QsScene.Tone.LIGHT_SCENE,
                 QuickSettingsGlass.Kind.NONE,true,true));
+        assertFalse(QsTextHooks.composeTileEligible(QsScene.Tone.LIGHT_SCENE,
+                QuickSettingsGlass.Kind.CONTAINER,true,true));
         assertFalse(QsTextHooks.composeTileEligible(QsScene.Tone.LIGHT_SCENE,
                 QuickSettingsGlass.Kind.ACTIVE,false,true));
         assertFalse("untinted or coloured icon",QsTextHooks.composeTileEligible(QsScene.Tone.LIGHT_SCENE,
                 QuickSettingsGlass.Kind.ACTIVE,true,false));
     }
-    @Test public void unfilteredComposeFallbackRequiresBoundQuickTileActiveOnLight(){
+    @Test public void unfilteredComposeFallbackRequiresBoundQuickTileAndVectorForInactive(){
         String owner="tiles.QuickTileKt$$ExternalSyntheticLambda14";
         assertTrue(QsTextHooks.composeUnfilteredQuickTileEligible(QsScene.Tone.LIGHT_SCENE,
                 QuickSettingsGlass.Kind.ACTIVE,true,owner,true));
@@ -94,6 +102,33 @@ public class QsTextHooksTest {
                 QuickSettingsGlass.Kind.NONE,true,owner,true));
         assertFalse(QsTextHooks.composeUnfilteredQuickTileEligible(QsScene.Tone.LIGHT_SCENE,
                 QuickSettingsGlass.Kind.IDLE,true,owner,true));
+        assertTrue(QsTextHooks.composeUnfilteredQuickTileEligible(QsScene.Tone.LIGHT_SCENE,
+                QuickSettingsGlass.Kind.IDLE,true,owner,true,true));
+        assertTrue(QsTextHooks.composeUnfilteredQuickTileEligible(QsScene.Tone.LIGHT_SCENE,
+                QuickSettingsGlass.Kind.NONE,true,owner,true,true));
+        assertFalse(QsTextHooks.composeUnfilteredQuickTileEligible(QsScene.Tone.LIGHT_SCENE,
+                QuickSettingsGlass.Kind.NONE,true,owner,false,true));
+        assertFalse(QsTextHooks.composeUnfilteredQuickTileEligible(QsScene.Tone.LIGHT_SCENE,
+                QuickSettingsGlass.Kind.IDLE,true,"tiles.QuickTileBoxKt",true,true));
+        assertFalse(QsTextHooks.composeUnfilteredQuickTileEligible(QsScene.Tone.DARK_SCENE,
+                QuickSettingsGlass.Kind.IDLE,true,owner,true,true));
+    }
+    @Test public void headerComposeTintRequiresHeaderProvenanceAndMonochromePainter(){
+        String header="panel.SecQuickSettingHeaderKt$$ExternalSyntheticLambda9";
+        assertTrue(QsTextHooks.composeHeaderEligible(1f,header,true,false));
+        assertTrue(QsTextHooks.composeHeaderEligible(0f,header,false,true));
+        assertTrue(QsTextHooks.composeHeaderEligible(.5f,header,true,false));
+        assertFalse(QsTextHooks.composeHeaderEligible(null,header,true,true));
+        assertFalse(QsTextHooks.composeHeaderEligible(Float.NaN,header,true,true));
+        assertFalse(QsTextHooks.composeHeaderEligible(1f,"tiles.QuickTileKt",true,true));
+        assertFalse(QsTextHooks.composeHeaderEligible(1f,null,true,true));
+        assertFalse(QsTextHooks.composeHeaderEligible(1f,header,false,false));
+        assertTrue(QsTextHooks.isComposeVectorPainter("androidx.compose.ui.graphics.vector.VectorPainter"));
+        assertFalse(QsTextHooks.isComposeVectorPainter("androidx.compose.ui.graphics.painter.BitmapPainter"));
+        assertFalse(QsTextHooks.isComposeVectorPainter("androidx.compose.ui.graphics.painter.ColorPainter"));
+        assertFalse(QsTextHooks.isComposeVectorPainter("unknown"));
+        assertEquals(0xff1d1d1d,QuickSettingsGlass.ink(0xffffffff,1f));
+        assertEquals(0xffffffff,QuickSettingsGlass.ink(0xffffffff,0f));
     }
     @Test public void repeatedRenderTransitionsRestoreNativePaintAndNeverNeedTextStyle(){
         Paint paint=new Paint();paint.setColor(0xffffffff);

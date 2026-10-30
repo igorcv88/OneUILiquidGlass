@@ -30,6 +30,11 @@ final class QsTextHooks {
     private final QsTextTargets elements=new QsTextTargets();
     private final QsTextTargets nodes=new QsTextTargets();
     private final QsTextTargets headerElements=new QsTextTargets(), headerNodes=new QsTextTargets();
+    /** Header painter provenance is separate from tile states: edit, power and settings are not QuickTiles. */
+    private final java.util.Map<Object,String> headerPainterElements=new java.util.WeakHashMap<>();
+    private final java.util.Map<Object,String> headerPainterNodes=new java.util.WeakHashMap<>();
+    private final java.util.Map<Object,String> headerPainterLogged=new java.util.WeakHashMap<>();
+    private final java.util.Set<String> headerCaptureSummaries=java.util.Collections.synchronizedSet(new java.util.HashSet<>());
     /** Identity and owner model for painter nodes composed inside a QuickTile. */
     private final java.util.Map<Object,String> tilePainterElements=new java.util.WeakHashMap<>();
     private final java.util.Map<Object,String> tilePainterNodes=new java.util.WeakHashMap<>();
@@ -48,6 +53,7 @@ final class QsTextHooks {
     // Resolve this from the ABI-independent value, not a potentially R8-renamed getter.
     private static final int COMPOSE_SRC_IN=5;
     private Field composeFilterField;
+    private Field composePainterField;
     private Constructor<?> composeTintConstructor;
     private boolean composeTintNative;
     private Method composeTintMethod;
@@ -57,6 +63,7 @@ final class QsTextHooks {
     private final java.util.Map<Integer,Object> composeFilters=new java.util.HashMap<>();
     private final java.util.Map<Object,Boolean> composeNeutralFilters=new java.util.WeakHashMap<>();
     private final java.util.Map<Object,String> composeFilterLogged=new java.util.WeakHashMap<>();
+    private final java.util.Map<Object,String> tileDrawLogged=new java.util.WeakHashMap<>();
     /** One binding diagnosis per painter/state/revision; never record tile names or app content. */
     private final java.util.Map<Object,String> tileRouteLogged=new java.util.WeakHashMap<>();
     private final java.util.Set<String> tileRouteSummaries=java.util.Collections.synchronizedSet(new java.util.HashSet<>());
@@ -115,7 +122,7 @@ final class QsTextHooks {
         try{paints=installPaint();}
         catch(ReflectiveOperationException|RuntimeException|LinkageError e){Probe.error("QS_TEXT_INCOMPATIBLE","paint",e);}
         ready=families>0&&paints>0;
-        if(!ready){nodes.clear();elements.clear();headerNodes.clear();headerElements.clear();}
+        if(!ready){nodes.clear();elements.clear();headerNodes.clear();headerElements.clear();headerPainterElements.clear();headerPainterNodes.clear();}
         Probe.log("QS_TEXT_STATUS","ready="+ready+" families="+families+" paintHooks="+paints
                 +" headerIcons="+headerReady+" invalidateDraw="+(invalidate!=null));
         // Constructors may be inlined into BasicText by ART; deoptimize their caller only.
@@ -203,7 +210,12 @@ final class QsTextHooks {
             XposedBridge.hookAllConstructors(element,new XC_MethodHook(){
                 @Override protected void afterHookedMethod(MethodHookParam p){
                     QsContentHooks.Frame f=content.get();
-                    if(f!=null&&f.header)headerElements.put(p.thisObject,true);
+                    if(f!=null&&f.header) {
+                        headerElements.put(p.thisObject,true);
+                        headerPainterElements.put(p.thisObject,f.owner);
+                        if(headerCaptureSummaries.size()<24&&headerCaptureSummaries.add(f.owner))
+                            Probe.log("QS_HEADER_ICON_CAPTURE","owner="+f.owner+" painterElement=true");
+                    }
                     if(f!=null&&!f.header&&!f.media&&f.owner.startsWith("tiles.")) {
                         if(f.owner.contains("BarKt")) sliderPainterElements.put(p.thisObject,f.owner);
                         else {
@@ -220,6 +232,11 @@ final class QsTextHooks {
                     Boolean header=headerElements.get(p.thisObject);
                     // Same rule as text nodes: an update from an unknown element keeps the node.
                     if(target!=null&&(header!=null||headerNodes.get(target)==null))headerNodes.put(target,header);
+                    String headerOwner=headerPainterElements.get(p.thisObject);
+                    if(target!=null&&(headerOwner!=null||!headerPainterNodes.containsKey(target))) {
+                        if(headerOwner==null)headerPainterNodes.remove(target);
+                        else headerPainterNodes.put(target,headerOwner);
+                    }
                     String tileOwner=tilePainterElements.get(p.thisObject);
                     String sliderOwner=sliderPainterElements.get(p.thisObject);
                     if(target!=null) {
@@ -259,6 +276,8 @@ final class QsTextHooks {
                     Float tone=ready&&headerReady&&headerNodes.get(p.thisObject)!=null?level.apply(true):null;
                     if(tone!=null)iconDrawing.set(tone);
                     else iconDrawing.remove();
+                    String headerOwner=headerPainterNodes.get(p.thisObject);
+                    if(headerOwner!=null)applyComposeHeaderFilter(p,tone,headerOwner);
                     Object model=tilePainterNodeModels.get(p.thisObject);
                     QuickSettingsGlass.Kind state=tileProbe==null?null:tileProbe.disc(model);
                     QsScene.Tone sceneTone=scene.get();
@@ -294,11 +313,11 @@ final class QsTextHooks {
                 }
                 @Override protected void afterHookedMethod(MethodHookParam p){
                     TileInk tile=tileIconDrawing.get();
-                    if(tile!=null && Probe.trace && tile.state==QuickSettingsGlass.Kind.ACTIVE
-                            && tile.tone==QsScene.Tone.LIGHT_SCENE && !composeFilterLogged.containsKey(tile.node)) {
-                        composeFilterLogged.put(tile.node,"canvas-"+tile.canvasCalls);
-                        Probe.log("QS_TILE_DRAW_RESULT", "node="+Integer.toHexString(System.identityHashCode(tile.node))
-                                +" state=ACTIVE tone=LIGHT_SCENE canvasPaintCalls="+tile.canvasCalls);
+                    if(tile!=null && Probe.trace && tile.tone==QsScene.Tone.LIGHT_SCENE) {
+                        String signature=tile.state+":"+ConfigClient.revision()+":"+tile.canvasCalls;
+                        if(!signature.equals(tileDrawLogged.put(tile.node,signature)))
+                            Probe.log("QS_TILE_DRAW_RESULT", "node="+Integer.toHexString(System.identityHashCode(tile.node))
+                                    +" state="+tile.state+" tone=LIGHT_SCENE canvasPaintCalls="+tile.canvasCalls);
                     }
                     Object previousCompose=p.getObjectExtra("qsComposeFilterPrevious");
                     Object installedField=p.getObjectExtra("qsComposeFilterField");
@@ -320,14 +339,17 @@ final class QsTextHooks {
             }catch(ReflectiveOperationException|RuntimeException ignored){}
             headerReady=true;Probe.log("QS_HEADER_ICONS_READY","renderOnly=true");
         }catch(ReflectiveOperationException|RuntimeException|LinkageError e){
-            headerReady=false;headerNodes.clear();headerElements.clear();Probe.error("QS_HEADER_ICONS_INCOMPATIBLE","painter",e);
+            headerReady=false;headerNodes.clear();headerElements.clear();headerPainterElements.clear();headerPainterNodes.clear();
+            Probe.error("QS_HEADER_ICONS_INCOMPATIBLE","painter",e);
         }
     }
 
-    /** Only a verified active monochrome painter with a neutral native filter may be tinted upstream. */
+    /** Every verified QuickTile disc state has its own ink, including the disc-less small controls. */
     static boolean composeTileEligible(QsScene.Tone tone, QuickSettingsGlass.Kind state,
                                        boolean lightPalette, boolean neutralNativeFilter) {
-        return tone==QsScene.Tone.LIGHT_SCENE && state==QuickSettingsGlass.Kind.ACTIVE
+        return tone==QsScene.Tone.LIGHT_SCENE
+                && (state==QuickSettingsGlass.Kind.ACTIVE || state==QuickSettingsGlass.Kind.IDLE
+                        || state==QuickSettingsGlass.Kind.NONE)
                 && lightPalette && neutralNativeFilter;
     }
 
@@ -335,8 +357,20 @@ final class QsTextHooks {
      * Never use this fallback for arbitrary PainterNodes, media, headers or colour-filtered art. */
     static boolean composeUnfilteredQuickTileEligible(QsScene.Tone tone,QuickSettingsGlass.Kind state,
             boolean lightPalette,String verifiedOwner,boolean nativeFilterMissing) {
+        return composeUnfilteredQuickTileEligible(tone,state,lightPalette,verifiedOwner,nativeFilterMissing,false);
+    }
+
+    /** An unfiltered inactive/empty glyph must additionally be a verified Compose vector. */
+    static boolean composeUnfilteredQuickTileEligible(QsScene.Tone tone,QuickSettingsGlass.Kind state,
+            boolean lightPalette,String verifiedOwner,boolean nativeFilterMissing,boolean vectorPainter) {
         return composeTileEligible(tone,state,lightPalette,nativeFilterMissing)
-                && verifiedOwner!=null && verifiedOwner.startsWith("tiles.QuickTileKt");
+                && verifiedOwner!=null && verifiedOwner.startsWith("tiles.QuickTileKt")
+                && (state==QuickSettingsGlass.Kind.ACTIVE || vectorPainter);
+    }
+
+    static boolean composeHeaderEligible(Float level,String owner,boolean neutralFilter,boolean vectorPainter) {
+        return level!=null && Float.isFinite(level) && owner!=null && owner.startsWith("panel.SecQuickSettingHeader")
+                && (neutralFilter||vectorPainter);
     }
 
     /** Compose's packed Color tint is stored on BlendModeColorFilter; unknown/colourful stays native. */
@@ -345,13 +379,23 @@ final class QsTextHooks {
         Boolean cached=composeNeutralFilters.get(filter);
         if(cached!=null)return cached;
         boolean neutral=false;
-        if(filter.getClass().getSimpleName().contains("BlendModeColorFilter"))try {
+        String type=filter.getClass().getSimpleName();
+        if(type.contains("BlendModeColorFilter"))try {
             for(Field field:filter.getClass().getDeclaredFields())
                 if(field.getType()==long.class && field.getName().toLowerCase(java.util.Locale.ROOT).contains("color")) {
                     field.setAccessible(true);
                     long packed=field.getLong(filter);
                     neutral=QuickSettingsGlass.srgb(packed)
                             && QuickSettingsGlass.neutral(QuickSettingsGlass.argb(packed));
+                    break;
+                }
+        }catch(IllegalAccessException | RuntimeException ignored) {neutral=false;}
+        else if(type.contains("NativeColorFilter")||type.contains("AndroidColorFilter"))try {
+            for(Field field:filter.getClass().getDeclaredFields())
+                if(android.graphics.ColorFilter.class.isAssignableFrom(field.getType())) {
+                    field.setAccessible(true);
+                    Integer argb=Foreground.filterColor((android.graphics.ColorFilter)field.get(filter));
+                    neutral=argb!=null && QuickSettingsGlass.neutral(argb);
                     break;
                 }
         }catch(IllegalAccessException | RuntimeException ignored) {neutral=false;}
@@ -410,6 +454,20 @@ final class QsTextHooks {
                     }
             if(field==null)throw new NoSuchFieldException("PainterNode.colorFilter");
             field.setAccessible(true);
+            // Optional: only an actual VectorPainter may use the null-filter fallback for
+            // inactive/disc-less icons. Never classify a bitmap/logo as a monochrome vector.
+            try {
+                Class<?> painterType=Class.forName("androidx.compose.ui.graphics.painter.Painter",false,loader);
+                Field found=null;
+                int count=0;
+                for(Class<?> owner=node;owner!=null;owner=owner.getSuperclass())
+                    for(Field candidate:owner.getDeclaredFields())
+                        if(painterType.isAssignableFrom(candidate.getType())) {
+                            count++;
+                            if(count==1)found=candidate;
+                        }
+                if(count==1){found.setAccessible(true);composePainterField=found;}
+            }catch(ClassNotFoundException|RuntimeException ignored){composePainterField=null;}
             Class<?> blend=null;
             try {blend=Class.forName("androidx.compose.ui.graphics.BlendModeColorFilter",false,loader);}
             catch(ClassNotFoundException ignored) {}
@@ -438,6 +496,7 @@ final class QsTextHooks {
             composeFilterUnavailableReason=null;
             Probe.log("QS_TILE_COMPOSE_FILTER_READY","owner="+node.getName()+" field="+field.getName()
                     +" factory="+(ctor==null?"companion:"+tint.getName():nativeWrapper?"native-wrapper":"blend-constructor")
+                    +" painterField="+(composePainterField==null?"missing":composePainterField.getName())
                     +" mode=SrcIn(5)");
         }catch(ReflectiveOperationException | RuntimeException | LinkageError e){
             composeFilterField=null;
@@ -446,10 +505,74 @@ final class QsTextHooks {
         }
     }
 
+    static boolean isComposeVectorPainter(String painterClass) {
+        return "androidx.compose.ui.graphics.vector.VectorPainter".equals(painterClass);
+    }
+
+    private String painterClass(Object node) {
+        if(composePainterField==null)return "unavailable";
+        try {
+            Object painter=composePainterField.get(node);
+            return painter==null?"null":painter.getClass().getName();
+        }catch(IllegalAccessException|RuntimeException e){return "unavailable";}
+    }
+
+    private Object composeTint(int color) throws ReflectiveOperationException {
+        Object tint=composeFilters.get(color);
+        if(tint==null) {
+            tint=composeTintConstructor!=null
+                    ?constructComposeTint(composeTintConstructor,composeTintNative,color)
+                    :composeTintMethod.invoke(composeTintCompanion,QuickSettingsGlass.color(color),COMPOSE_SRC_IN);
+            if(composeFilters.size()>16)composeFilters.clear();
+            composeFilters.put(color,tint);
+        }
+        return tint;
+    }
+
+    /** Header ink follows its own light sample, including when only the notification shade is open.
+     * Never touch media artwork, system status icons or an unverified/non-neutral painter. */
+    private void applyComposeHeaderFilter(XC_MethodHook.MethodHookParam p,Float darkness,String owner) {
+        Object node=p.thisObject;
+        String painter=painterClass(node);
+        if(composeFilterField==null){
+            logHeaderPainter(node,owner,painter,"abi-unavailable",darkness,null);
+            return;
+        }
+        try {
+            Object nativeFilter=composeFilterField.get(node);
+            boolean neutral=neutralComposeFilter(nativeFilter);
+            boolean unfilteredVector=nativeFilter==null&&isComposeVectorPainter(painter);
+            if(!composeHeaderEligible(darkness,owner,neutral,unfilteredVector)){
+                logHeaderPainter(node,owner,painter,darkness==null?"tone-unavailable":"unverified-filter",darkness,null);
+                return;
+            }
+            int color=QuickSettingsGlass.ink(0xffffffff,darkness);
+            Object replacement=composeTint(color);
+            if(replacement==null||replacement.equals(nativeFilter)){
+                logHeaderPainter(node,owner,painter,"already-matched",darkness,color);
+                return;
+            }
+            composeFilterField.set(node,replacement);
+            p.setObjectExtra("qsComposeFilterField",composeFilterField);
+            p.setObjectExtra("qsComposeFilterPrevious",nativeFilter==null?NULL_COMPOSE_FILTER:nativeFilter);
+            logHeaderPainter(node,owner,painter,unfilteredVector?"vector-tinted":"neutral-tinted",darkness,color);
+        }catch(ReflectiveOperationException|RuntimeException|LinkageError e){
+            Probe.error("QS_HEADER_COMPOSE_FILTER_FAILED","owner="+owner,e);
+        }
+    }
+
+    private void logHeaderPainter(Object node,String owner,String painter,String outcome,Float level,Integer color) {
+        if(!Probe.trace)return;
+        String signature=ConfigClient.revision()+":"+(level==null?"unknown":Math.round(level*16f))+":"+outcome;
+        if(!signature.equals(headerPainterLogged.put(node,signature)))
+            Probe.log("QS_HEADER_ICON_ROUTE","owner="+owner+" painter="+painter
+                    +" outcome="+outcome+" level="+level
+                    +" color="+(color==null?"native":Integer.toHexString(color)));
+    }
+
     /** This change lasts for one PainterNode.draw only; unrelated and coloured painters stay native. */
     private void applyComposeTileFilter(XC_MethodHook.MethodHookParam p,TileInk tile) {
-        if(tile.state!=QuickSettingsGlass.Kind.ACTIVE
-                || tile.tone!=QsScene.Tone.LIGHT_SCENE || !tile.palette.tileLight)return;
+        if(tile.tone!=QsScene.Tone.LIGHT_SCENE || !tile.palette.tileLight)return;
         if(composeFilterField==null) {
             if(!composeFilterMissingLogged){
                 composeFilterMissingLogged=true;
@@ -461,25 +584,21 @@ final class QsTextHooks {
         try {
             Object nativeFilter=composeFilterField.get(p.thisObject);
             boolean neutral=neutralComposeFilter(nativeFilter);
+            String painter=painterClass(p.thisObject);
             boolean unfilteredQuickTile=composeUnfilteredQuickTileEligible(tile.tone,tile.state,
-                    tile.palette.tileLight,tilePainterNodes.get(p.thisObject),nativeFilter==null);
+                    tile.palette.tileLight,tilePainterNodes.get(p.thisObject),nativeFilter==null,
+                    isComposeVectorPainter(painter));
             if(!composeTileEligible(tile.tone,tile.state,tile.palette.tileLight,neutral)
                     && !unfilteredQuickTile) {
                 if(Probe.trace && !composeFilterLogged.containsKey(tile.node))
                     Probe.log("QS_TILE_COMPOSE_FILTER", "node="+Integer.toHexString(System.identityHashCode(tile.node))
-                            +" applied=false reason=unverified-native-filter native="
-                            +(nativeFilter==null?"none":nativeFilter.getClass().getSimpleName()));
+                            +" applied=false state="+tile.state+" reason=unverified-native-filter painter="+painter
+                            +" native="+(nativeFilter==null?"none":nativeFilter.getClass().getSimpleName()));
                 return;
             }
-            int color=tile.palette.tileLightOnInk;
-            Object replacement=composeFilters.get(color);
-            if(replacement==null) {
-                replacement=composeTintConstructor!=null
-                        ?constructComposeTint(composeTintConstructor,composeTintNative,color)
-                        :composeTintMethod.invoke(composeTintCompanion,QuickSettingsGlass.color(color),COMPOSE_SRC_IN);
-                if(composeFilters.size()>16)composeFilters.clear();
-                composeFilters.put(color,replacement);
-            }
+            int color=tile.state==QuickSettingsGlass.Kind.ACTIVE
+                    ?tile.palette.tileLightOnInk:tile.palette.tileLightOffInk;
+            Object replacement=composeTint(color);
             if(replacement==null || replacement.equals(nativeFilter))return;
             composeFilterField.set(p.thisObject,replacement);
             // Keep the exact field for unconditional restoration even if another hook disables
@@ -489,8 +608,9 @@ final class QsTextHooks {
                     nativeFilter==null?NULL_COMPOSE_FILTER:nativeFilter);
             if(Probe.trace && !composeFilterLogged.containsKey(tile.node))
                 Probe.log("QS_TILE_COMPOSE_FILTER", "node="+Integer.toHexString(System.identityHashCode(tile.node))
-                        +" applied=true state=ACTIVE scene=LIGHT_SCENE color="+Integer.toHexString(color)
-                        +" route="+(unfilteredQuickTile?"unfiltered-quicktile":"neutral-filter"));
+                        +" applied=true state="+tile.state+" scene=LIGHT_SCENE color="+Integer.toHexString(color)
+                        +" route="+(unfilteredQuickTile?"unfiltered-quicktile":"neutral-filter")
+                        +" painter="+painter);
         }catch(ReflectiveOperationException | RuntimeException | LinkageError e){
             composeFilterField=null;
             composeFilterUnavailableReason="runtime:"+e.getClass().getSimpleName()+":"+e.getMessage();
