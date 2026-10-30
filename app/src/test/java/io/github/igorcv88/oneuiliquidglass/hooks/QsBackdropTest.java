@@ -4,6 +4,14 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public final class QsBackdropTest {
+    @Test public void taskSwitchUsesBurstThenReturnsToIdleWithoutPerpetualPolling() {
+        long taskAt=10_000, lastTouch=9_900;
+        assertEquals(QsBackdrop.BURST_RESAMPLE_MS, QsBackdrop.resampleInterval(taskAt,taskAt,lastTouch));
+        assertEquals(QsBackdrop.BURST_RESAMPLE_MS, QsBackdrop.resampleInterval(taskAt+599,taskAt,lastTouch));
+        assertEquals(QsBackdrop.ACTIVE_RESAMPLE_MS, QsBackdrop.resampleInterval(taskAt+600,taskAt,lastTouch));
+        assertEquals(QsBackdrop.RESAMPLE_MS, QsBackdrop.resampleInterval(taskAt+1500,taskAt,lastTouch));
+        assertEquals(QsBackdrop.RESAMPLE_MS, QsBackdrop.resampleInterval(taskAt,taskAt+1,lastTouch-3000));
+    }
     /** A VISIBLE compose root over a collapsed panel is not an opening; expansion decides. */
     @Test public void openingFollowsTheExpansionNotTheVisibility() {
         assertFalse(QsBackdrop.open(true, 0));
