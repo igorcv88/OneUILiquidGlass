@@ -84,8 +84,12 @@ sh qs-ab-termux.sh A 90
 sh qs-ab-termux.sh B 90
 ```
 
-Para **sobrecarga total**, A=OULG desativado pelo controle mestre do app,
-B=OULG ativado, no mesmo APK. Para **ganho de uma otimização**, A=build atual
+Para **custo incremental do efeito ativo**, A=OULG desativado pelo controle
+mestre do app, B=OULG ativado, no mesmo APK. O controle mestre não descarrega
+os hooks nem necessariamente interrompe toda a checagem ociosa do CaptureHub;
+**não equivale ao SystemUI sem o módulo instalado**. Para medir sobrecarga
+total instalada, repetir A com o módulo LSPosed desativado e SystemUI reiniciado,
+igualando o aquecimento e assumindo a mudança de ambiente. Para **ganho de uma otimização**, A=build atual
 com OULG ativado, B=build candidato com OULG ativado. São comparações distintas.
 
 Antes de cada sessão: mesmo brilho fixo, taxa 120 Hz/adaptativa igual, carga/temperatura
