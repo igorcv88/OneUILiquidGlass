@@ -22,6 +22,14 @@ final class QsTileBoxHooks {
     private final ThreadLocal<Object> model=new ThreadLocal<>();
     private final WeakIdentityMap<Object,WeakReference<Object>> painters=new WeakIdentityMap<>();
     private final WeakIdentityMap<Object,Integer> states=new WeakIdentityMap<>();
+    /** iconColor.invoke can feed its mapped colour back into RoundIcon in the same tile. */
+    private static final class DerivedInk {
+        final int state, original, mapped;
+        DerivedInk(int state,int original,int mapped) {
+            this.state=state;this.original=original;this.mapped=mapped;
+        }
+    }
+    private final WeakIdentityMap<Object,DerivedInk> derivedInks=new WeakIdentityMap<>();
     private final WeakIdentityMap<Object,String> roundLogged=new WeakIdentityMap<>();
     private final WeakIdentityMap<Object,String> logged=new WeakIdentityMap<>();
     private final WeakIdentityMap<Object,Boolean> ambiguous=new WeakIdentityMap<>();
@@ -84,7 +92,9 @@ final class QsTileBoxHooks {
                         long nativeBg=(Long)circle.invoke(picker.get(p.thisObject),state);
                         if(!QuickSettingsGlass.srgb(nativeInk)||!QuickSettingsGlass.srgb(nativeBg))return;
                         int bg=background(state,QuickSettingsGlass.argb(nativeBg));
-                        int ink=ink(state,QuickSettingsGlass.argb(nativeInk),bg);
+                        int originalInk=QuickSettingsGlass.argb(nativeInk);
+                        int ink=ink(state,originalInk,bg);
+                        derivedInks.put(tile,new DerivedInk(state,originalInk,ink));
                         if(ink!=QuickSettingsGlass.argb(nativeInk))p.setResult(box.invoke(null,QuickSettingsGlass.color(ink)));
                         trace(tile,state,nativeInk,ink,bg,"derived");
                     }catch(ReflectiveOperationException|RuntimeException e){runtimeFailure(e);}
@@ -132,7 +142,11 @@ final class QsTileBoxHooks {
                             if(!QuickSettingsGlass.srgb(raw)||!QuickSettingsGlass.srgb(rawInk))return;
                             int bg=background(state,QuickSettingsGlass.argb(raw));
                             if(bg!=QuickSettingsGlass.argb(raw))p.args[1]=bgConstructor.newInstance(QuickSettingsGlass.color(bg));
-                            int ink=ink(state,QuickSettingsGlass.argb(rawInk),bg);
+                            int originalInk=QuickSettingsGlass.argb(rawInk);
+                            DerivedInk derived=derivedInks.get(tile);
+                            if(derived!=null&&derived.state==state)
+                                originalInk=QsSurfaceInk.originalForRound(originalInk,derived.original,derived.mapped);
+                            int ink=ink(state,originalInk,bg);
                             p.args[4]=QuickSettingsGlass.color(ink);
                             // Icon colour is param 4: clear its stale Compose dirty bits so the
                             // child observes the new argument even when its caller marked it same.

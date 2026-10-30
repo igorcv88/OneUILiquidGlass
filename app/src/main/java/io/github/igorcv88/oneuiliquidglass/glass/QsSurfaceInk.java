@@ -3,6 +3,12 @@ package io.github.igorcv88.oneuiliquidglass.glass;
 /** Contrast on the effective surface, independent of a control's ON/OFF state. */
 public final class QsSurfaceInk {
     private QsSurfaceInk() {}
+
+    /** RoundIcon sometimes receives iconColor.invoke's already-interpolated value. Restore
+     * the native input before calculating this frame's tint, so the phase is applied once. */
+    public static int originalForRound(int roundInk,int derivedNative,int derivedMapped) {
+        return roundInk==derivedMapped?derivedNative:roundInk;
+    }
     /**
      * The native RoundIcon path supplies a verified QuickTile state. Use the same configurable
      * palette as the Compose painter path; otherwise the small OFF icons remain opaque native
