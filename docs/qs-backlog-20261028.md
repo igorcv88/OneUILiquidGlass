@@ -1,5 +1,37 @@
 # Pendências OneUILiquidGlass, a partir do main pós-PR #83
 
+## Validação física PR #99 (29/10, 22:37–22:42, Theme Park ON)
+
+- [x] **Configuração verificada:** JSON `OneUILiquidGlass-ajustes (9)` informa
+  `qs.tilelighton=000000`, `qs.tilelightonink=ffffff`, `qs.lightglassopacity=0`,
+  `qs.lightoptics=0.36`, `qs.tilelightoff=e8f6f8` e `trace=1`. O disco preto com
+  ícone branco é preferência explícita; não substituir cores ou defaults.
+- [x] **Handoff ocorreu, mas não encerrou a falha de ícones:** entre 22:38:46 e
+  22:38:49 ocorreram quatro entradas laterais com `QS_SHADE_HANDOFF`, idades
+  91–637 ms e `LIGHT_SCENE`. `QS_TILE_COLOR` registrou preto `ff000000` em
+  modelos `ACTIVE`. Os painters ativos aparecem `eligible=true`, mas sem
+  `QS_TILE_ICON_INK` na rota `BaseCanvas`; os `IDLE` apresentam eventos de
+  tinta. Nas capturas brancas, Bluetooth e Quick Share exibem disco preto sem
+  glifo visível. A intermitência dos ícones não se reduz a cena `UNKNOWN`.
+- [x] **Nova rota restrita em código, pendente teste:** para um `PainterNode`
+  ligado a modelo `ACTIVE` no fundo claro, com filtro Compose nativo identificado
+  como um tint monocromático neutro,
+  um `ColorFilter` temporário aplica `qs.tilelightonink` durante `draw` e
+  restaura o original ao sair. Sem filtro, modelo incerto ou fundo escuro,
+  mantém nativo. `QS_TILE_COMPOSE_FILTER` e `QS_TILE_DRAW_RESULT` discriminam
+  aplicação e passagem pelas primitivas Canvas. Falha de ABI desativa só
+  essa rota, sem desativar demais hooks.
+- [x] **Slider no fim:** em 100%, os dois sliders registram `stage0/1/2=true`;
+  brilho informa `w=268 h=554.8 result=20.1,0,227.8,554.8`, geometria dentro
+  do DrawScope inset. O usuário ainda vê preenchimento que ultrapassa/retifica
+  na extremidade. Recorte arredondado adicional dentro do próprio frame
+  vertical foi implementado, sem alterar tamanho ou percurso do gesto.
+- [ ] **Próxima validação:** confirmar filtro Compose em Bluetooth/Quick Share,
+  cores pretas/brancas em abertura direta e lateral (espera longa incluída),
+  sem alterar a estética colorida, e confirmar extremo 100% de brilho/volume.
+  As capturas no próximo protocolo serão manuais, sem espera cronometrada:
+  Enter encerra cada etapa; o script reúne logs e capturas feitas pelo usuário.
+
 ## Após PR #98: variação QS claro ao entrar pela shade (29/10, 21:32–21:34)
 
 - [x] **Causa de abertura inconsistente identificada nos logs:** a abertura direta
