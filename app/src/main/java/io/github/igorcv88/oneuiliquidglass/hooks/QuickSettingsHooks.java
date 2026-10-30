@@ -154,14 +154,16 @@ public final class QuickSettingsHooks {
         this.backdrop = new QsBackdrop(this::enabled, edge::expansion,
                 () -> { clearRims(); edge.backdropChanged(); invalidateAll("backdrop"); },
                 () -> {
-                    QsContentHooks c = QuickSettingsHooks.this.content;
-                    if (c != null) c.invalidateDraw();
                     long now = android.os.SystemClock.uptimeMillis();
                     if (now - lastPaletteFrameAt >= 34L) {
                         lastPaletteFrameAt = now;
                         clearRims();
                         invalidateAll("backdrop-crossfade");
-                    } else discBackground.refresh();
+                    } else {
+                        QsContentHooks c = QuickSettingsHooks.this.content;
+                        if (c != null) c.invalidateDraw();
+                        discBackground.refresh();
+                    }
                 });
         this.content = new QsContentHooks(loader, this::enabled, () -> style, backdrop::tone, backdrop::headerTone, this::ink,
                 this::capture, tileProbe);

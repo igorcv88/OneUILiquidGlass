@@ -1,5 +1,112 @@
 # Pendências OneUILiquidGlass, a partir do main pós-PR #83
 
+## Checklist vigente — 30/10/2026, após merge do PR #111
+
+Fonte: checklist acumulado neste documento, lista consolidada do PR #95 e
+confirmação do usuário no Galaxy S25 Ultra DZIF após o PR #111. A atualização
+preserva o histórico abaixo. **✅** confirmado visualmente/funcionalmente no
+Galaxy; **🔧** implementado no código, sem prova física de todos os cenários;
+**☐** pendente de implementar, testar especificamente ou medir. Um relato geral
+de estabilidade não encerra automaticamente testes específicos de Theme Park,
+notificações personalizadas, live updates ou traduções.
+
+### Central de notificações e pop-ups
+
+- ✅ Vidro das notificações em fundos claro, colorido e preto com Theme Park ON
+  (aceitação física anterior, estética aprovada).
+- ✅ Fantasma após gesto horizontal cancelado não reproduzido após PR #87;
+  manter monitoramento de regressão.
+- ✅ `shadelightglass` independente, inclusive o caso de `shadeblur=0`
+  confirmado após PR #85.
+- 🔧 `shadedarkglass` independente; a correção pós-#95 aplica opacidade acima
+  do valor nativo 0.14, mas ainda falta validar visualmente a faixa completa.
+- 🔧 `SHADE_LAYER_UPDATE/DRAW`, origem da camada opaca e rota
+  `BAR_SHADE_LOCKED` instrumentadas; falta evidência física decisiva.
+- 🔧 Rampa de véu e tinta do heads-up de 180 ms, tratamento de cancelamento e
+  amostragem acelerada implementados; **sem crossfade visual confirmado**.
+- ☐ Corrigir atraso e mudança abrupta nas duas direções branco/colorido no
+  pop-up e medir início, quadros visíveis e P95 de latência.
+- ☐ Theme Park OFF: confirmar ausência de perda intermitente de vidro,
+  sobreposição cinza/roxa ou regressão após chegada de notificação ao vivo.
+- ☐ Distinguir a causa de instabilidade de notificação comum versus live
+  update; o código compartilha rotas, não há prova de causa única.
+- ☐ Validar notificações customizadas `RemoteViews`, incluindo Drogasil,
+  com texto, fundo e camadas próprios.
+- ☐ Corrigir/validar toast que recebe vidro na criação e é recriado opaco
+  pela Samsung.
+- ☐ Live updates não-mídia imóveis/expandidos e na lockscreen: preservar o
+  vidro após o gesto/rebind; mídia na lockscreen só depois dessa validação.
+
+### Central de Controle / Quick Settings
+
+- 🔧 `panelblurcap` e `panelnativegray`: desfoque e véu nativo independentes,
+  ainda pendentes de teste comparado Theme Park ON/OFF.
+- 🔧 `panelcolor`: tint RGBA separada para fundo do painel, sem alterar shade.
+- 🔧 `qs.lightglassopacity`/`qs.lightglasscolor`: controle da cápsula no
+  fundo claro; falta cobertura de toda a faixa e combinações de opacidade.
+- 🔧 `qs.lightoptics` e `qs.glint`: ganho óptico claro e reflexo extra
+  separados; confirmar em físico remoção da linha dupla sem perder borda boa.
+- ✅ Paletas claras/coloridas, cores RGBA de discos, ícones ON/OFF e
+  preenchimentos de brilho/volume operam no aparelho com configurações do usuário.
+- ✅ Cobertura visual dos 15 controles pequenos e adaptação de ícones sem disco
+  no build após #111, conforme relato final do usuário.
+- ✅ Wi-Fi, Bluetooth e Quick Share: glifo e disco das cápsulas grandes mudam
+  juntos, inclusive com QS aberto sobre troca de aplicativo.
+- ✅ Abertura direta, shade→QS e cenas clara/colorida/escura sem regressão
+  funcional de paleta/ícones no build atual.
+- ✅ Geometria, tinta e ícones dos sliders aprovados em uso normal pelo usuário.
+- 🔧 Recorte defensivo de brilho/volume próximo de zero e no final implementado;
+  ☐ testar separadamente 0/1/4/5/50/99/100%, duas orientações e ausência
+  de disco residual/arte cortada.
+- ☐ Ícones de brilho/volume com Theme Park OFF: comprovar legibilidade em
+  todos os extremos, independentemente do fill.
+- 🔧 Captura de `PainterNode` do cabeçalho; ☐ confirmar individualmente
+  relógio, lápis, energia e engrenagem, com opção distinta dos tiles quando
+  necessário.
+- ☐ Player de mídia **vazio**: glifos brancos continuam pouco legíveis em
+  fundo branco. Preservar player ativo, capa e comandos já aprovados.
+- 🔧 Fase de transição QS de 120 ms implementada; ☐ crossfade real em
+  disco/cápsula/ícone/slider e redução do atraso de captura→quadro visível.
+- ☐ Revalidar brilho/reflexo do canto superior esquerdo em fundo claro e
+  padrões estéticos, preservando o aspecto aprovado no colorido.
+- ☐ Experimento Quick Share grande versus pequeno (owner, modelo e estado):
+  histórico opcional para cobertura estrutural, sem reabrir bug visual resolvido.
+- 🔧 Propagação ao vivo de configuração, invalidadores e snapshots do provider;
+  ☐ medir latência de cada preferência até o pixel visível.
+
+### Aplicativo, diagnósticos e validação
+
+- ✅ Color picker HSV/RGBA (matiz, área SV, alpha, hexadecimal) disponível e
+  usado pelo usuário; a mistura com o branco abaixo de um alfa baixo é esperada.
+- 🔧 Instrumentação `QS_PALETTE_EFFECTIVE`, `QS_TILE_ICON_ROUTE`,
+  `QS_SLIDER_GEOMETRY`, `QS_INK_TRANSITION`, camadas shade e `Perf`.
+- 🔧 `trace` disponível na inicial e sincronizado com configuração; conferir
+  persistência em reinicialização específica se necessário.
+- 🔧 Organização nova dos grupos QS e parâmetros de cena na seção da Central;
+  controles descontinuados não devem aparecer na UI principal. Rever cobertura
+  final por parâmetro e nomes expostos.
+- ☐ Página realmente **exclusiva** da Central de Controle: hoje os controles
+  estão dentro da página da shade, cujo preview ainda desenha notificações.
+- ☐ Previews fiéis dos discos, grade, cápsulas, sliders e painel em fundos
+  claro/colorido/preto, além dos previews das demais superfícies relevantes.
+- 🔧 Favoritos dentro das páginas de superfície; ☐ atalhos de favoritos
+  diretamente na **tela inicial**.
+- ☐ Inglês como idioma padrão, português selecionável e strings Android
+  traduzidas integralmente (não há recursos localizados completos).
+- 🔧 Rótulos principais revisados (`Central de controle` substituiu
+  `Controles rápidos`); ☐ auditoria final dos nomes e dependências.
+- ☐ Teste A/B **real no Galaxy**: OULG OFF/ON, build atual/candidato,
+  abertura/latência P50/P95, FPS/jank, CPU, PSS, captura, aquecimento e
+  bateria em duração suficiente. Telemetria deve ficar desligada no ensaio
+  principal e ligada apenas na coleta diagnóstica separada.
+- ☐ Testes de regressão e build Android/CI do PR atual; Theme Park ON/OFF,
+  tela bloqueada, live updates, toque, segurança e SystemUI estável.
+
+O **protocolo de medição Termux** é fornecido diretamente na conversa, não
+mantido como um novo documento ou script no repositório. O histórico técnico
+abaixo continua válido como registro das hipóteses, logs e PRs anteriores;
+linhas antigas pendentes não devem ser interpretadas como regressões atuais.
+
 ## QS105 — nova implementação, validação física pendente
 
 - [x] Rota específica de `QuickTileBoxItemLayout`, tinta derivada observável e

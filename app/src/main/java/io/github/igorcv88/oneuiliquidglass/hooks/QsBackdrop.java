@@ -26,8 +26,8 @@ import io.github.igorcv88.oneuiliquidglass.glass.ToneGrid;
  * (before Samsung shows the panel) or else on the first open frame; a sample younger than
  * {@link #FRESH_MS} is that opening's. That first decision applies at once.</p>
  *
- * <p>While open: the backdrop is captured again every {@link #RESAMPLE_MS} (never per frame,
- * never while the panel is hidden). A reading on the other side of the classifier changes the
+ * <p>While open: the QS-specific sampler can capture again every {@link #RESAMPLE_MS} (never
+ * per frame; the shared low-resolution preview may continue while hidden). A reading on the other side of the classifier changes the
  * decision only once the next capture, {@link #CONFIRM_MS} later, confirms it ({@link ToneGate});
  * a confidently bright reading can commit immediately after the dwell guard. A confirmed change
  * moves ink, discs, sliders and glass tints through one short transition ({@link #ink}). A close
@@ -175,6 +175,9 @@ final class QsBackdrop {
         scene.force(snapshot.body,snapshot.grid.takenAt);
         header.force(snapshot.header,snapshot.grid.takenAt);
         sampledAt=snapshot.grid.takenAt;
+        if (Probe.trace) trace("QS_TONE_SAMPLE", "sampleAgeMs=" + Math.max(0L,SystemClock.uptimeMillis()-sampledAt)
+                + " body=" + snapshot.body + " header=" + snapshot.header
+                + " taskAgeMs=" + Math.max(0L,SystemClock.uptimeMillis()-BackdropEvents.lastChange()));
         // The panel's glyphs, discs, sliders and container tint now consume the same
         // fractional ink phase. Only a known-to-known in-session change may crossfade;
         // first opening and unknown scenes still apply immediately.
@@ -371,15 +374,26 @@ final class QsBackdrop {
         boolean motionAllowed;
         try { motionAllowed=ValueAnimator.areAnimatorsEnabled(); }
         catch(RuntimeException | LinkageError ex) { motionAllowed=false; }
+        float durationScale;
+        try { durationScale=(Float)ValueAnimator.class.getMethod("getDurationScale").invoke(null); }
+        catch(ReflectiveOperationException | RuntimeException | LinkageError ex) { durationScale=Float.NaN; }
         boolean ramp = animate && shown && motionAllowed && (rampScene || rampHeader);
         float fromScene = sceneInk, fromHeader = headerInk;
         Probe.log("QS_BACKDROP", "state=" + next + " header=" + nextHeader + " previous=" + before + "/" + beforeHeader
-                + " generation=" + generation + " transition=" + (ramp ? "ramp"+INK_RAMP_MS : "immediate"));
+                + " generation=" + generation + " transition=" + (ramp ? "ramp"+INK_RAMP_MS : "immediate")
+                + " animatedRequested=" + animate + " panelShown=" + shown
+                + " animatorsEnabled=" + motionAllowed + " durationScale=" + durationScale
+                + " sampleAgeMs=" + (sampledAt==0?-1:SystemClock.uptimeMillis()-sampledAt));
         if (inkAnimator != null) { inkAnimator.cancel(); inkAnimator = null; }
         if (ramp) {
+            final long startedAt=SystemClock.uptimeMillis();
+            final int[] callbacks={0};
+            final long[] firstFrameAt={-1};
             inkAnimator = ValueAnimator.ofFloat(0f,1f);
             inkAnimator.setDuration(INK_RAMP_MS);
             inkAnimator.addUpdateListener(a -> {
+                callbacks[0]++;
+                if(firstFrameAt[0]<0)firstFrameAt[0]=SystemClock.uptimeMillis()-startedAt;
                 float t=io.github.igorcv88.oneuiliquidglass.glass.InkTransition.ease((Float)a.getAnimatedValue());
                 sceneInk=rampScene ? fromScene+(toScene-fromScene)*t : toScene;
                 headerInk=rampHeader ? fromHeader+(toHeader-fromHeader)*t : toHeader;
@@ -389,11 +403,18 @@ final class QsBackdrop {
                 @Override public void onAnimationEnd(android.animation.Animator a) {
                     if (inkAnimator != a) return;
                     sceneInk=toScene; headerInk=toHeader; inkAnimator=null; changed.run();
-                    trace("QS_INK_TRANSITION", "phase=done scene=" + next + " header=" + nextHeader);
+                    trace("QS_INK_TRANSITION", "phase=done scene=" + next + " header=" + nextHeader
+                            + " callbacks=" + callbacks[0] + " firstFrameMs=" + firstFrameAt[0]
+                            + " elapsedMs=" + (SystemClock.uptimeMillis()-startedAt));
+                }
+                @Override public void onAnimationCancel(android.animation.Animator a) {
+                    trace("QS_INK_TRANSITION", "phase=cancel callbacks=" + callbacks[0]
+                            + " elapsedMs=" + (SystemClock.uptimeMillis()-startedAt));
                 }
             });
             trace("QS_INK_TRANSITION", "phase=start from=" + fromScene + "/" + fromHeader
-                    + " to=" + toScene + "/" + toHeader + " duration=" + INK_RAMP_MS);
+                    + " to=" + toScene + "/" + toHeader + " duration=" + INK_RAMP_MS
+                    + " durationScale=" + durationScale);
             inkAnimator.start();
         } else { sceneInk = toScene; headerInk = toHeader; }
         trace("TONE_COMMIT", "scene=" + next + " tone=" + nextHeader);

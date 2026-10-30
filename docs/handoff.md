@@ -1,5 +1,19 @@
 # Handoff — OneUILiquidGlass (2026-10-16)
 
+**Estado vigente (30/10/2026, pós-merge #111):** o usuário confirmou no Galaxy
+que o build novo corrigiu a adaptação de discos/ícones pequenos e grandes,
+sliders, abertura e mudança de aplicativos com a QS aberta. Não persistem os
+erros funcionais descritos nas rodadas QS108–111 abaixo. Restam a ausência
+visual de crossfade, atraso de decisão, custo de CPU/memória/captura e o player
+vazio claro sobre fundo claro. O [checklist oficial atualizado](qs-backlog-20261028.md)
+mantém **todas** as categorias históricas (notificações, Theme Park, live
+updates, toasts, Central, previews, favoritos, idiomas e desempenho) com
+status separados por prova física versus implementação. O protocolo A/B
+é entregue em bloco Termux diretamente na conversa, sem novo arquivo no repo.
+Instrumentação nova registra gate, latência de amostra, escala do animator,
+número de callbacks e duração efetiva; **não comprova** por si só quadros na
+tela nem impacto de bateria. Preservar comportamento estável durante a medição.
+
 **Pós-merge #109/#110 (30/10/2026; correção de compilação e review):**
 O CI de #110 falhou em `QuickSettingsHooks.java`: dois callbacks de
 `QsBackdrop` liam `discBackground`, campo `final` ainda não atribuído.

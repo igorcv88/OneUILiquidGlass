@@ -32,17 +32,24 @@ public final class ShadeTone implements CaptureHub.Client {
     private static final Map<View,Preview> PREVIEWS=new WeakHashMap<>();
     private static volatile ToneGrid liveGrid;
     private static final PanelScene PANELS=new PanelScene();
+    private static PanelScene.Snapshot lastPublished;
     private static final java.util.List<java.util.function.Consumer<PanelScene.Snapshot>> listeners=new java.util.ArrayList<>();
     private static int previewEpoch;
     public static void listen(java.util.function.Consumer<PanelScene.Snapshot> listener) {listeners.add(listener);}
     public static PanelScene.Snapshot decision(ToneGrid grid) {return PANELS.accept(grid);}
     private static void publish(ToneGrid grid) {
         if(grid==null || (liveGrid!=null&&grid.takenAt<=liveGrid.takenAt))return;
+        PanelScene.Snapshot previous=lastPublished;
         PanelScene.Snapshot snapshot=PANELS.accept(grid);
         // A one-shot capture can have committed a newer snapshot while this preview was reduced.
         // Never publish the older grid as "live" with the newer palette attached to it.
         if(snapshot==null||snapshot.grid.takenAt!=grid.takenAt)return;
         liveGrid=grid;
+        lastPublished=snapshot;
+        if(Probe.trace && (previous==null || previous.body!=snapshot.body || previous.header!=snapshot.header))
+            Probe.log("PANEL_SCENE_COMMIT", "body="+snapshot.body+" header="+snapshot.header
+                    +" sampleAgeMs="+Math.max(0L,android.os.SystemClock.uptimeMillis()-grid.takenAt)
+                    +" prev="+(previous==null?"none":previous.body+"/"+previous.header));
         for(java.util.function.Consumer<PanelScene.Snapshot> listener:new java.util.ArrayList<>(listeners)) {
             try {listener.accept(snapshot);}catch(RuntimeException|LinkageError e){Probe.error("PANEL_SCENE_LISTENER",e);}
         }
@@ -91,7 +98,7 @@ public final class ShadeTone implements CaptureHub.Client {
         @Override public boolean evenHidden() {return true;}
         @Override public boolean fullDisplayCapture() {return true;}
         @Override public float scale() {return PREFETCH_SCALE;}
-        @Override public void onUnavailable() {liveGrid=null;previewEpoch++;PANELS.clear();}
+        @Override public void onUnavailable() {liveGrid=null;lastPublished=null;previewEpoch++;PANELS.clear();}
         @Override public void onFrame(CaptureHub.Frame frame) {
             // QS and shade may both own a preview client. They receive one shared Frame;
             // convert it only once and keep only luminance bands, never the bitmap.
