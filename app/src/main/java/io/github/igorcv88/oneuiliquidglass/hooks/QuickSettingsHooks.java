@@ -133,7 +133,9 @@ public final class QuickSettingsHooks {
         capsuleOptics.onFailure(() -> { litRims.clear(); clearRims(); invalidateAll("optics-failed"); });
         edge.onOptics(this::opticsResult);
         edge.optics(capsuleOptics, () -> QuickSettingsHooks.this.backdrop != null
-                        && QuickSettingsHooks.this.backdrop.tone() == io.github.igorcv88.oneuiliquidglass.glass.QsScene.Tone.LIGHT_SCENE,
+                        // On a cold/expired first frame UNKNOWN must not mean full-strength
+                        // white optics. Hold the safe light-scene gain until classification.
+                        && QuickSettingsHooks.this.backdrop.tone() != io.github.igorcv88.oneuiliquidglass.glass.QsScene.Tone.DARK_SCENE,
                 () -> QuickSettingsHooks.this.style.lightOptics);
         BackdropEvents.add(() -> QuickSettingsHooks.this.backdrop.event());
         this.backdrop = new QsBackdrop(this::enabled, edge::expansion,
@@ -613,7 +615,8 @@ public final class QuickSettingsHooks {
         Object cached = lit ? (dark ? darkLitRim : lightLitRim) : (dark ? darkRim : lightRim);
         if (cached != null) return cached;
         Object brush = solidColor.newInstance(QuickSettingsGlass.color(QuickSettingsGlass.basalRim(
-                QuickSettingsGlass.rim(dark, backdrop.tone(), style), lit)));
+                QuickSettingsGlass.rim(dark, backdrop.tone() == QsScene.Tone.UNKNOWN
+                        ? QsScene.Tone.LIGHT_SCENE : backdrop.tone(), style), lit)));
         if (lit) { if (dark) darkLitRim = brush; else lightLitRim = brush; }
         else if (dark) darkRim = brush; else lightRim = brush;
         return brush;

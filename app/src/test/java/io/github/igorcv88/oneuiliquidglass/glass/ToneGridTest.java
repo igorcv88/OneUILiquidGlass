@@ -35,4 +35,13 @@ public final class ToneGridTest {
         assertEquals(500, pre.takenAt);
         assertEquals(0.9f, pre.luma(0, 100), 0f);
     }
+    @Test public void firstFrameIsChosenFromRecentPixelsNotFromAnAppOrOldOpening() {
+        ToneGrid white=new ToneGrid(0,100,new float[]{.95f},new float[]{1f},-1,1000);
+        ToneGrid dark=new ToneGrid(0,100,new float[]{.08f},new float[]{.12f},-1,1100);
+        assertTrue(ToneGrid.recent(white,1250,250));
+        assertFalse(ToneGrid.recent(white,1251,250));
+        assertTrue("same task, different pixels",ToneGrid.recent(dark,1100,250));
+        assertFalse("future frame",ToneGrid.recent(dark,1099,250));
+        assertFalse(ToneGrid.recent(null,1100,250));
+    }
 }

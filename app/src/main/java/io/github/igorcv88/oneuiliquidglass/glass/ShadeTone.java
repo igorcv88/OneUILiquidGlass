@@ -4,6 +4,9 @@ import android.graphics.Bitmap;
 import android.graphics.Rect;
 import android.view.View;
 import java.lang.ref.WeakReference;
+import java.util.Map;
+import java.util.WeakHashMap;
+import java.util.function.BooleanSupplier;
 import io.github.igorcv88.oneuiliquidglass.diagnostics.Probe;
 
 /**
@@ -25,6 +28,62 @@ import io.github.igorcv88.oneuiliquidglass.diagnostics.Probe;
  * arithmetic is in {@link VeilMath}.</p>
  */
 public final class ShadeTone implements CaptureHub.Client {
+    /** One low-resolution pixel source shared by QS and the notification shade. */
+    private static final Map<View,Preview> PREVIEWS=new WeakHashMap<>();
+    private static volatile ToneGrid liveGrid;
+    private static boolean previewWorking;
+    private static long previewFrameAt;
+    private static long previewAcceptedAt;
+    /** A preview older than this is not allowed to choose a first-frame palette. */
+    public static final long LIVE_MAX_AGE_MS=250;
+
+    /** Track actual display pixels even while the panel is closed; never classify by app identity. */
+    public static void observe(View anchor, BooleanSupplier enabled) {
+        if(anchor==null || enabled==null)return;
+        synchronized(PREVIEWS) {
+            if(PREVIEWS.containsKey(anchor))return;
+            Preview client=new Preview(anchor,enabled);
+            PREVIEWS.put(anchor,client);
+            anchor.addOnAttachStateChangeListener(client);
+            if(anchor.isAttachedToWindow())CaptureHub.register(client);
+        }
+    }
+
+    /** Latest full-display capture, if still current enough for the panel's first frame. */
+    public static ToneGrid live() {
+        ToneGrid grid=liveGrid;
+        return ToneGrid.recent(grid,android.os.SystemClock.uptimeMillis(),LIVE_MAX_AGE_MS)?grid:null;
+    }
+
+    private static final class Preview implements CaptureHub.Client,View.OnAttachStateChangeListener {
+        private final WeakReference<View> anchor;
+        private final BooleanSupplier enabled;
+        Preview(View anchor,BooleanSupplier enabled) {this.anchor=new WeakReference<>(anchor);this.enabled=enabled;}
+        @Override public void onViewAttachedToWindow(View v) {CaptureHub.register(this);}
+        @Override public void onViewDetachedFromWindow(View v) {CaptureHub.unregister(this);}
+        @Override public View view() {return anchor.get();}
+        @Override public int hz() {return enabled.getAsBoolean()?8:0;}
+        @Override public boolean evenHidden() {return true;}
+        @Override public boolean fullDisplayCapture() {return true;}
+        @Override public float scale() {return PREFETCH_SCALE;}
+        @Override public void onUnavailable() {liveGrid=null;}
+        @Override public void onFrame(CaptureHub.Frame frame) {
+            // QS and shade may both own a preview client. They receive one shared Frame;
+            // convert it only once and keep only luminance bands, never the bitmap.
+            if(previewWorking || previewFrameAt==frame.capturedAt
+                    || frame.capturedAt-previewAcceptedAt<125)return;
+            previewWorking=true;previewFrameAt=frame.capturedAt;
+            previewAcceptedAt=frame.capturedAt;
+            frame.retain();
+            worker().post(() -> {
+                ToneGrid grid=grid(frame,-1);
+                MAIN.post(() -> {
+                    frame.release();previewWorking=false;
+                    if(grid!=null)liveGrid=grid;
+                });
+            });
+        }
+    }
     private final WeakReference<View> view;
     private final java.util.function.DoubleConsumer result;
     private boolean done;

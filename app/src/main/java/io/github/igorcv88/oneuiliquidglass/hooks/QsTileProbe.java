@@ -18,10 +18,19 @@ final class QsTileProbe {
     private final Set<String> samples = Collections.synchronizedSet(new HashSet<>());
     private final Set<String> models = Collections.synchronizedSet(new HashSet<>());
     private final ThreadLocal<Object> currentModel = new ThreadLocal<>();
+    /** IconTextTile receives deferred Compose lambdas. Their invocation can outlive QuickTile(). */
+    private final Map<Object,Object> tileLambdas = Collections.synchronizedMap(new WeakHashMap<>());
+    private final Set<Object> ambiguousLambdas = Collections.newSetFromMap(new WeakHashMap<>());
+    private final ThreadLocal<Boolean> inTileLambda = new ThreadLocal<>();
+    private final Set<Object> routedLambdas = Collections.newSetFromMap(new WeakHashMap<>());
     private final Map<Object,QuickSettingsGlass.Kind> discStates =
             java.util.Collections.synchronizedMap(new WeakHashMap<>());
 
     Object currentModel() { return currentModel.get(); }
+    boolean inTileLambda() { return Boolean.TRUE.equals(inTileLambda.get()); }
+    static boolean tileLambdaType(String className) {
+        return className != null && className.startsWith("androidx.compose.runtime.internal.ComposableLambda");
+    }
     void disc(Object model,QuickSettingsGlass.Kind state) {
         if (model != null && (state == QuickSettingsGlass.Kind.ACTIVE
                 || state == QuickSettingsGlass.Kind.IDLE || state == QuickSettingsGlass.Kind.NONE))
@@ -37,6 +46,47 @@ final class QsTileProbe {
     void install(ClassLoader loader) {
         hook(loader, "com.android.systemui.samsung.quicksetting.ui.tiles.QuickTileKt", "QuickTile");
         hook(loader, "com.android.systemui.samsung.quicksetting.ui.tiles.IconTextTileKt", "IconTextTile");
+        hookDeferredTileLambdas(loader);
+    }
+
+    /** Restore a verified model only during the exact lambdas passed by IconTextTile. */
+    private void hookDeferredTileLambdas(ClassLoader loader) {
+        try {
+            Class<?> type=Class.forName("androidx.compose.runtime.internal.ComposableLambdaImpl",false,loader);
+            int hooks=0;
+            for(Method m:type.getDeclaredMethods()) {
+                if(!m.getName().equals("invoke") || Modifier.isStatic(m.getModifiers())
+                        || m.getParameterCount()!=2) continue;
+                XposedBridge.hookMethod(m,new XC_MethodHook(){
+                    @Override protected void beforeHookedMethod(MethodHookParam p) {
+                        Object model=tileLambdas.get(p.thisObject);
+                        if(model==null)return;
+                        p.setObjectExtra("qsDeferredTileBound",true);
+                        p.setObjectExtra("qsDeferredTileModelPrevious",currentModel.get());
+                        p.setObjectExtra("qsDeferredTileLambdaPrevious",inTileLambda.get());
+                        currentModel.set(model);
+                        inTileLambda.set(true);
+                        if(Probe.trace && routedLambdas.add(p.thisObject))
+                            Probe.log("QS_TILE_DEFERRED_ROUTE", "model="+currentId()+" lambda="
+                                    +Integer.toHexString(System.identityHashCode(p.thisObject))
+                                    +" method="+m.getName()+" provenance=IconTextTile");
+                    }
+                    @Override protected void afterHookedMethod(MethodHookParam p) {
+                        if(!Boolean.TRUE.equals(p.getObjectExtra("qsDeferredTileBound")))return;
+                        Object old=p.getObjectExtra("qsDeferredTileModelPrevious");
+                        if(old==null)currentModel.remove();else currentModel.set(old);
+                        Object oldLambda=p.getObjectExtra("qsDeferredTileLambdaPrevious");
+                        if(oldLambda==null)inTileLambda.remove();else inTileLambda.set((Boolean)oldLambda);
+                    }
+                });
+                try { XposedBridge.class.getMethod("deoptimizeMethod",java.lang.reflect.Member.class).invoke(null,m); }
+                catch(ReflectiveOperationException|RuntimeException ignored){}
+                hooks++;
+            }
+            Probe.log("QS_TILE_DEFERRED_READY", "methods="+hooks+" owner=IconTextTile");
+        } catch(ClassNotFoundException|RuntimeException|LinkageError e) {
+            Probe.error("QS_TILE_DEFERRED_MISSING",e);
+        }
     }
 
     private void hook(ClassLoader loader, String name, String prefix) {
@@ -60,6 +110,22 @@ final class QsTileProbe {
                                     synchronized (models) {
                                         if (models.size() < 48 && models.add(key))
                                             Probe.log("QS_TILE_MODEL", "model=" + currentId() + " fields=" + schema);
+                                    }
+                                }
+                            }
+                            if ("IconTextTile".equals(prefix) && currentModel.get()!=null) {
+                                // DZIF ABI: two Function2 composable slots (icon and text) at
+                                // indices 2 and 3; no global ComposableLambda tinting.
+                                for(int index=2;index<=3&&index<p.args.length;index++) {
+                                    Object lambda=p.args[index];
+                                    if(lambda!=null && tileLambdaType(lambda.getClass().getName())
+                                            && !ambiguousLambdas.contains(lambda)) {
+                                        Object previous=tileLambdas.get(lambda);
+                                        if(previous!=null && previous!=currentModel.get()) {
+                                            tileLambdas.remove(lambda);
+                                            ambiguousLambdas.add(lambda);
+                                            Probe.log("QS_TILE_DEFERRED_AMBIGUOUS", "sharedLambda=true skipped=true");
+                                        } else tileLambdas.put(lambda,currentModel.get());
                                     }
                                 }
                             }

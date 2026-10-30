@@ -112,6 +112,16 @@ public class QsTextHooksTest {
                 QuickSettingsGlass.Kind.IDLE,true,"tiles.QuickTileBoxKt",true,true));
         assertFalse(QsTextHooks.composeUnfilteredQuickTileEligible(QsScene.Tone.DARK_SCENE,
                 QuickSettingsGlass.Kind.IDLE,true,owner,true,true));
+        String deferred="tiles.IconTextTile.deferred";
+        assertTrue("verified deferred icon vector",QsTextHooks.composeUnfilteredQuickTileEligible(
+                QsScene.Tone.LIGHT_SCENE,QuickSettingsGlass.Kind.NONE,true,deferred,true,true));
+        assertFalse("do not recolor deferred bitmap art",QsTextHooks.composeUnfilteredQuickTileEligible(
+                QsScene.Tone.LIGHT_SCENE,QuickSettingsGlass.Kind.ACTIVE,true,deferred,true,false));
+    }
+    @Test public void deferredModelBindingAcceptsOnlySamsungComposeLambdaType(){
+        assertTrue(QsTileProbe.tileLambdaType("androidx.compose.runtime.internal.ComposableLambdaImpl"));
+        assertFalse(QsTileProbe.tileLambdaType("androidx.compose.foundation.text.BasicTextKt"));
+        assertFalse(QsTileProbe.tileLambdaType(null));
     }
     @Test public void headerComposeTintRequiresHeaderProvenanceAndMonochromePainter(){
         String header="panel.SecQuickSettingHeaderKt$$ExternalSyntheticLambda9";
