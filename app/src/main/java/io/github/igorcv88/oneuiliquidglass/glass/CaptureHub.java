@@ -84,6 +84,8 @@ public final class CaptureHub {
          * refracted band.
          */
         default float scale() { return SCALE; }
+        /** A luminance preview classifies the entire app frame, never a tile's local crop. */
+        default boolean fullDisplayCapture() { return false; }
     }
 
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
@@ -165,6 +167,7 @@ public final class CaptureHub {
                 }
             } catch (ReflectiveOperationException | RuntimeException e) { stats.note(e.getClass().getSimpleName()); }
         }
+        for (Client c : shown) if (c.fullDisplayCapture()) { crop = new Rect(display); break; }
         // Without excluding our own window the capture would contain the glass it is drawn into.
         if (crop == null || windows.isEmpty() || !crop.intersect(display)) { release(windows.values()); return; }
         SurfaceControl[] exclude = windows.values().toArray(new SurfaceControl[0]);

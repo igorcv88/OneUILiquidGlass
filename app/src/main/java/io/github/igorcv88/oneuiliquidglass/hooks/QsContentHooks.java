@@ -88,6 +88,32 @@ final class QsContentHooks {
                 hooked++;
             }
         }
+        // DZIF's IconTextTile passes icon and label as deferred ComposableLambdaImpl objects.
+        // QuickTile() has returned by the time their PainterElements are built, so a frame
+        // bound only to QuickTileKt could never reach the fifteen small grid controls.
+        // QsTileProbe first verifies and binds each exact lambda to its QuickTile model.
+        Class<?> deferred=optional("androidx.compose.runtime.internal.ComposableLambdaImpl");
+        if(deferred!=null) for(Method m:deferred.getDeclaredMethods()) {
+            if(!m.getName().equals("invoke") || java.lang.reflect.Modifier.isStatic(m.getModifiers())
+                    || m.getParameterCount()!=2)continue;
+            XposedBridge.hookMethod(m,new XC_MethodHook(){
+                @Override protected void beforeHookedMethod(MethodHookParam p) {
+                    if(tileProbe==null || !tileProbe.inTileLambda())return;
+                    Object composer=null;
+                    for(Object a:p.args)if(a!=null&&a.getClass().getName().contains("ComposerImpl")){composer=a;break;}
+                    if(composer!=null)capture.accept(composer);
+                    p.setObjectExtra("qsDeferredContentBound",true);
+                    p.setObjectExtra("qsDeferredContentPrevious",content.get());
+                    content.set(new Frame(false,false,composer,"tiles.IconTextTile.deferred"));
+                }
+                @Override protected void afterHookedMethod(MethodHookParam p) {
+                    if(!Boolean.TRUE.equals(p.getObjectExtra("qsDeferredContentBound")))return;
+                    Frame old=(Frame)p.getObjectExtra("qsDeferredContentPrevious");
+                    if(old==null)content.remove();else content.set(old);
+                }
+            });
+            hooked++;
+        }
         Class<?> clip=optional("androidx.compose.ui.draw.ClipKt");
         if(clip!=null) for(Method m:clip.getDeclaredMethods()) if(m.getName().equals("clip"))
             XposedBridge.hookMethod(m,new XC_MethodHook(){

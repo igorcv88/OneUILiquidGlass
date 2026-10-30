@@ -573,6 +573,8 @@ public final class HeadsUpHooks {
     private void preOpen(long gesture) {
         Tuning t = Tuning.get();
         if (!shadeConfigEnabled() || !t.shadeAdaptive || barState == null || barState != Eligibility.BAR_SHADE || Boolean.TRUE.equals(shadeExpanded)) return;
+        ToneGrid live=ShadeTone.live();
+        if (live!=null && BackdropEvents.lastChange()<=live.takenAt) return;
         if (gesture == preGesture || gesture != gestureDown) return;
         View anchor = panelView == null ? null : panelView.get();
         if (anchor == null || !anchor.isAttachedToWindow()) return;
@@ -704,6 +706,16 @@ public final class HeadsUpHooks {
         View anchor = panelView == null ? null : panelView.get();
         if (anchor == null || !anchor.isAttachedToWindow()) return;
         if (!anchor.isShown()) { scheduleResample(RESAMPLE_MS); return; }
+        ToneGrid shared=ShadeTone.live();
+        if(shared!=null && shared.takenAt>shadeGrid.takenAt) {
+            long now=android.os.SystemClock.uptimeMillis();
+            offerGrid(shared.forGeneration(shadeOpens),now-shared.takenAt);
+            boolean pending=sceneGate.pending()||headerInk.pending()||shadeHeaderGate.pending();
+            long idle=resampleInterval(now);
+            scheduleResample(pending?Math.max(CONFIRM_MS,Math.min(idle,
+                    sceneGate.pending()?sceneGate.confirmIn(now):CONFIRM_MS)):idle);
+            return;
+        }
         int generation = shadeOpens, ticket = ++resampleTicket;
         long requested = android.os.SystemClock.uptimeMillis();
         boolean[] landed = {false};
@@ -895,6 +907,12 @@ public final class HeadsUpHooks {
         boolean preOk = pre != null && preValid(preGridGesture, pre);
         Probe.log("SHADE_OPEN_BEGIN", "generation=" + generation + " adaptive=" + adaptive + " preAge=" + preAge + " preValid=" + preOk);
         if (!adaptive) return;
+        ToneGrid current=ShadeTone.live();
+        if(current!=null && BackdropEvents.lastChange()>current.takenAt)current=null;
+        if(current!=null && (!preOk || current.takenAt>=pre.takenAt)) {
+            adoptGrid(current.forGeneration(generation),"shared-live");
+            return;
+        }
         if (preOk) { adoptGrid(pre.forGeneration(generation), "preopen"); return; }
         Object panel = Reflect.read(controller, "mView");
         View anchor = panel instanceof View && ((View) panel).isAttachedToWindow() ? (View) panel : null;
@@ -1019,7 +1037,10 @@ public final class HeadsUpHooks {
     private void applyShade(Object controller) {
         if (panelView == null || panelView.get() == null) {
             Object pv = Reflect.read(controller, "mView");
-            if (pv instanceof View) panelView = new WeakReference<>((View) pv);
+            if (pv instanceof View) {
+                panelView = new WeakReference<>((View) pv);
+                ShadeTone.observe((View)pv, this::shadeConfigEnabled);
+            }
         }
         Object height = Reflect.read(controller, "mExpandedHeight");
         if (!(height instanceof Number)) height = Reflect.read(controller, "expandedHeight");

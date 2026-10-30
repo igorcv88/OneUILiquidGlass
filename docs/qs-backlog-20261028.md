@@ -583,3 +583,31 @@ brilho. Preservar `qs.fill=0.85` e `qs.lightfill=0.05`; não escurecer cartões 
 3. Fotos comparáveis claro/colorido/preto e gravação curta para latência/lifecycle.
 4. Confirmar ausência de alterações indevidas em player, vidro do QS escuro/colorido,
    shade escura/colorida e fantasma do brilho antes de merge.
+# PR #104 — primeira pintura por pixels compartilhados (30/10/2026)
+
+- [x] O vídeo `85798.mp4` mostra a abertura da QS com o material inicialmente branco e
+  uma troca tardia para a tinta escura. O log de #103 registra `QS_BACKDROP UNKNOWN` na
+  entrada e a classificação aproximadamente 150 ms depois. No estado UNKNOWN as lentes
+  usavam ganho óptico 1.0; na cena clara, 0.36, produzindo um clarão de contorno.
+- [x] `ShadeTone.observe` mantém **um único frame capturado no CaptureHub** (8 Hz, 1/8 da
+  resolução, somente luminância, todo o display) e acessível tanto à QS quanto à shade.
+  Cada painel escolhe a tinta a partir do mesmo frame real com até 250 ms; nenhum cache
+  baseado no pacote/app anterior. Enquanto o painel está aberto, os resamples preferem
+  essa fonte; a captura de abertura existente continua como fallback se a amostra não
+  estiver disponível. Sem pixels recentes não há garantia de primeira tinta correta.
+- [x] Enquanto o estado óptico é desconhecido, usa o ganho/contorno conservador de fundo
+  claro em vez do branco com intensidade máxima. Preserva a potência aprovada em fundo
+  escuro após a classificação, assim como a geometria dos sliders e arte do player ativo.
+- [x] `QsTileProbe` vincula `ComposableLambdaImpl` do `IconTextTile` ao modelo real
+  `QuickTile`, por identidade. `QsContentHooks` transfere a origem para os nós Painter
+  criados no corpo diferido. Só um modelo verificado, estado ACTIVE/IDLE/NONE e filtro
+  monocromático podem receber nova tinta; lambdas compartilhadas por modelos diferentes
+  são ignoradas. `QS_TILE_DEFERRED_READY`, `QS_TILE_DEFERRED_ROUTE` e
+  `QS_TILE_ICON_ROUTE_SUMMARY owner=tiles.IconTextTile.deferred` permitem confirmar no DZIF.
+
+**Validação pendente em aparelho:** a fonte passiva tem custo contínuo de captura e deve
+ser aferida quanto a bateria, jank e `CAPTURE_STATS`. Testar troca de páginas branca/escura
+no mesmo Chrome e vídeos claros/escuros no mesmo aplicativo, abertura direta e lateral
+(notificações → QS). Se a origem diferida não aparecer em `QS_TILE_DEFERRED_ROUTE`, os
+15 ícones continuam não comprovados, mesmo com testes JVM verdes. Captura protegida ou
+falta do `CaptureHub` ainda pode exibir a tinta nativa no primeiro frame.

@@ -128,6 +128,7 @@ final class QsBackdrop {
         if (observer != null && observer.isAlive()) observer.removeOnPreDrawListener(draw);
         observer = v.getViewTreeObserver();
         observer.addOnPreDrawListener(draw);
+        ShadeTone.observe(v, enabled);
     }
 
     /** Open: shown and expanded at all; with no readable expansion, shown. */
@@ -139,6 +140,25 @@ final class QsBackdrop {
     static boolean shadeHandoff(double expansion, boolean pending, long now, long shadeAt, long taskChangedAt) {
         return !pending && expansion >= LATERAL_EXPANSION && shadeAt > 0 && now >= shadeAt
                 && now - shadeAt <= SHADE_HANDOFF_MAX_MS && taskChangedAt <= shadeAt;
+    }
+
+    /** Commit the same recent pixel sample that the shade can consume, before the first draw. */
+    private boolean adoptLive(String source) {
+        ToneGrid grid=ShadeTone.live();
+        if(grid==null || BackdropEvents.lastChange()>grid.takenAt)return false;
+        long now=SystemClock.uptimeMillis();
+        scene.reset();header.reset();sceneGate.reset();headerGate.reset();
+        scene.accept(grid.whole(),now);
+        header.accept(headerLuma(grid),now);
+        if(scene.tone()==QsScene.Tone.UNKNOWN||header.tone()==QsScene.Tone.UNKNOWN)return false;
+        sceneGate.offer(scene.tone()==QsScene.Tone.LIGHT_SCENE,now);
+        headerGate.offer(header.tone()==QsScene.Tone.LIGHT_SCENE,now);
+        sampledAt=grid.takenAt;
+        trace("QS_TONE_LIVE", "source="+source+" ageMs="+(now-grid.takenAt)
+                +" scene="+scene.tone()+" header="+header.tone());
+        publish(false);
+        schedule(RESAMPLE_MS);
+        return true;
     }
 
     private boolean fresh() {
@@ -161,12 +181,11 @@ final class QsBackdrop {
                 + " prefetched=" + pending + " fresh=" + fresh() + " prior=" + tone);
         // The touch that opened the panel already asked for it; its loop starts with the panel.
         if (pending) {
-            // The top-edge capture belongs to this opening, but the published paint state may
-            // still belong to the last one. Do not draw that old palette while it completes.
-            publish(false);
+            if (tone==QsScene.Tone.UNKNOWN)adoptLive("pending-entry");
             return;
         }
-        if (fresh()) { schedule(RESAMPLE_MS); return; }
+        if (fresh() && BackdropEvents.lastChange() <= sampledAt) { schedule(RESAMPLE_MS); return; }
+        if (adoptLive("entry"))return;
         long now = SystemClock.uptimeMillis();
         boolean handoff = shadeHint != QsScene.Tone.UNKNOWN && shadeHeaderHint != QsScene.Tone.UNKNOWN
                 && shadeHandoff(fraction, pending, now, shadeHintAt, BackdropEvents.lastChange());
@@ -190,8 +209,8 @@ final class QsBackdrop {
     /** The top-edge ACTION_DOWN, before Samsung shows the panel. Ignored while it is open. */
     void gesture() {
         if (shown || pending || fresh() || !enabled.getAsBoolean()) return;
-        // A new opening decides afresh: no hysteresis or cooldown carried over from the last one.
-        // Clear the old palette while the panel is still closed; the fresh sample will repaint it.
+        if (adoptLive("gesture"))return;
+        // No current pixel sample: start the one-shot request. UNKNOWN optics are gain-capped.
         scene.reset(); header.reset(); sceneGate.reset(); headerGate.reset();
         publish(false);
         prefetch("top-edge-gesture");
@@ -203,21 +222,34 @@ final class QsBackdrop {
         if (v == null || !v.isAttachedToWindow() || !enabled.getAsBoolean() || pending) return;
         pending = true;
         int ticket = ++generation;
+        long requestedAt = SystemClock.uptimeMillis();
         trace("TONE_CAPTURE_REQUEST", "scene=qs source=" + source + " expansion=" + expansion.getAsDouble());
         cancel = ShadeTone.prefetch(v, ticket, grid -> {
             if (ticket != generation) return;
             trace("TONE_CAPTURE_DONE", "scene=qs source=" + source + " luma=" + (grid == null ? "unknown" : grid.whole()));
             pending = false; cancel = null;
             if (!enabled.getAsBoolean()) return;
-            if (grid == null) forget();
-            else {
+            if (BackdropEvents.lastChange() > requestedAt) {
+                trace("QS_TONE_STALE_CAPTURE", "source=" + source + " taskChanged=true");
+                if(adoptLive("stale-request"))return;
+                forget(); publish(false);
+                prefetch("task-change-retry");
+                return;
+            }
+            if (grid != null) {
                 long now = SystemClock.uptimeMillis();
+                // A preview may have arrived while this request was pending; its 500 ms
+                // initial classifier dwell must not mask a newer actual pixel sample.
+                scene.reset();header.reset();
                 scene.accept(grid.whole(), now);
                 header.accept(headerLuma(grid), now);
                 sceneGate.reset(); headerGate.reset();
                 if (scene.tone() != QsScene.Tone.UNKNOWN) sceneGate.offer(scene.tone() == QsScene.Tone.LIGHT_SCENE, now);
                 if (header.tone() != QsScene.Tone.UNKNOWN) headerGate.offer(header.tone() == QsScene.Tone.LIGHT_SCENE, now);
                 sampledAt = now;
+            } else {
+                if(adoptLive("capture-unavailable"))return;
+                forget();
             }
             publish(false);
             schedule(RESAMPLE_MS);
@@ -234,7 +266,9 @@ final class QsBackdrop {
 
     /** A task change (BackdropEvents): capture now instead of at the next periodic sample. */
     void event() {
-        if (!shown || pending || sampledAt == 0 || !enabled.getAsBoolean()) return;
+        if (!enabled.getAsBoolean()) return;
+        if (!shown) return; // The shared sampler already tracks the actual foreground pixels.
+        if (pending || sampledAt == 0) return;
         main.removeCallbacks(tick);
         resample();
     }
@@ -245,6 +279,11 @@ final class QsBackdrop {
         if (!enabled.getAsBoolean() || pending || v == null || !v.isAttachedToWindow() || sampledAt == 0) return;
         if (!shown) return; // Closed: the next opening captures afresh.
         if (!v.isShown()) { schedule(RESAMPLE_MS); return; }
+        ToneGrid shared=ShadeTone.live();
+        if(shared!=null && shared.takenAt>sampledAt) {
+            resampled(shared,shared.takenAt);
+            return;
+        }
         pending = true;
         int ticket = ++generation;
         long requested = SystemClock.uptimeMillis();
@@ -265,13 +304,14 @@ final class QsBackdrop {
         if (grid == null) { Probe.log("QS_RESAMPLE", "state=unavailable generation=" + generation); schedule(RESAMPLE_MS * 3); return; }
         boolean a = offer(scene, sceneGate, grid.whole(), now);
         boolean b = offer(header, headerGate, headerLuma(grid), now);
+        sampledAt=grid.takenAt;
         boolean pendingNow = sceneGate.pending() || headerGate.pending();
         if (a || b || pendingNow)
             Probe.log("QS_RESAMPLE", "scene=" + scene.tone() + " header=" + header.tone() + " sceneLuma="
                     + String.format(java.util.Locale.ROOT, "%.2f", grid.whole()) + " headerLuma="
                     + String.format(java.util.Locale.ROOT, "%.2f", headerLuma(grid)) + " commit=" + (a || b)
                     + " pending=" + pendingNow + " sampleAgeMs=" + (now - requested) + " generation=" + generation);
-        if (a || b) { sampledAt = now; publish(true); }
+        if (a || b) publish(true);
         // A candidate is confirmed by the next capture, taken as soon as its gate can accept it.
         long t = SystemClock.uptimeMillis();
         long idle = BackdropEvents.burst(t) ? BURST_RESAMPLE_MS

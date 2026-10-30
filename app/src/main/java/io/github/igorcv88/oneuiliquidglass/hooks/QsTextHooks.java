@@ -364,7 +364,8 @@ final class QsTextHooks {
     static boolean composeUnfilteredQuickTileEligible(QsScene.Tone tone,QuickSettingsGlass.Kind state,
             boolean lightPalette,String verifiedOwner,boolean nativeFilterMissing,boolean vectorPainter) {
         return composeTileEligible(tone,state,lightPalette,nativeFilterMissing)
-                && verifiedOwner!=null && verifiedOwner.startsWith("tiles.QuickTileKt")
+                && verifiedOwner!=null && (verifiedOwner.startsWith("tiles.QuickTileKt")
+                        || (verifiedOwner.equals("tiles.IconTextTile.deferred") && vectorPainter))
                 && (state==QuickSettingsGlass.Kind.ACTIVE || vectorPainter);
     }
 

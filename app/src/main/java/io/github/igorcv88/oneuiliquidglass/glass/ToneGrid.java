@@ -22,6 +22,11 @@ public final class ToneGrid {
     /** The same capture adopted by shade opening {@code g} (a pre-open capture). */
     public ToneGrid forGeneration(int g) { return new ToneGrid(top, band, mean, p90, g, takenAt); }
 
+    /** Reject a previously captured frame after its pixel evidence has aged out. */
+    public static boolean recent(ToneGrid grid,long now,long maxAge) {
+        return grid!=null && maxAge>=0 && now>=grid.takenAt && now-grid.takenAt<=maxAge;
+    }
+
     /** Mean luma under the screen rows [y0, y1), each band weighted by its overlap; -1 if none. */
     public float luma(int y0, int y1) { return over(mean, y0, y1); }
     /** Mean luma of the whole capture: the scene the shade's cards are in. */
