@@ -136,7 +136,8 @@ public final class QuickSettingsHooks {
                         && QuickSettingsHooks.this.backdrop.tone() == io.github.igorcv88.oneuiliquidglass.glass.QsScene.Tone.LIGHT_SCENE,
                 () -> QuickSettingsHooks.this.style.lightOptics);
         BackdropEvents.add(() -> QuickSettingsHooks.this.backdrop.event());
-        this.backdrop = new QsBackdrop(this::enabled, edge::expansion, () -> { clearRims(); invalidateAll("backdrop"); },
+        this.backdrop = new QsBackdrop(this::enabled, edge::expansion,
+                () -> { clearRims(); edge.backdropChanged(); invalidateAll("backdrop"); },
                 () -> { QsContentHooks c = QuickSettingsHooks.this.content; if (c != null) c.invalidateDraw(); });
         this.content = new QsContentHooks(loader, this::enabled, () -> style, backdrop::tone, backdrop::headerTone, this::ink,
                 this::capture, tileProbe);

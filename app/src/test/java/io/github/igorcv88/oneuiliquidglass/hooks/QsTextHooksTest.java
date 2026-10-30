@@ -1,6 +1,7 @@
 package io.github.igorcv88.oneuiliquidglass.hooks;
 
 import android.graphics.*;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import org.junit.*;
 import org.junit.runner.RunWith;
@@ -15,6 +16,36 @@ public class QsTextHooksTest {
     private static final class FakeBlendModeColorFilter {
         final long color;
         FakeBlendModeColorFilter(int tint){color=QuickSettingsGlass.color(tint);}
+    }
+    private static final class FakeBlendTintConstructor {
+        final long color;
+        final int blend;
+        FakeBlendTintConstructor(long color,int blend){this.color=color;this.blend=blend;}
+    }
+    private static final class FakeNativeTintConstructor {
+        final ColorFilter colorFilter;
+        FakeNativeTintConstructor(ColorFilter colorFilter){this.colorFilter=colorFilter;}
+    }
+    private static final class UnrelatedConstructor {
+        UnrelatedConstructor(String ignored){}
+    }
+    @Test public void composeTintConstructorSurvivesAbsentCompanionBridge() throws Exception {
+        Constructor<?> ctor=QsTextHooks.blendTintConstructor(FakeBlendTintConstructor.class);
+        assertNotNull(ctor);
+        FakeBlendTintConstructor blend=(FakeBlendTintConstructor)
+                QsTextHooks.constructComposeTint(ctor,false,0xffffffff);
+        assertEquals(QuickSettingsGlass.color(0xffffffff),blend.color);
+        assertEquals(5,blend.blend); // Compose BlendMode.SrcIn
+        assertNull(QsTextHooks.blendTintConstructor(UnrelatedConstructor.class));
+
+        Constructor<?> nativeCtor=QsTextHooks.nativeTintConstructor(FakeNativeTintConstructor.class);
+        assertNotNull(nativeCtor);
+        FakeNativeTintConstructor nativeTint=(FakeNativeTintConstructor)
+                QsTextHooks.constructComposeTint(nativeCtor,true,0xff112233);
+        assertTrue(nativeTint.colorFilter instanceof PorterDuffColorFilter);
+        assertEquals(Integer.valueOf(0xff112233),
+                Foreground.filterColor(nativeTint.colorFilter));
+        assertNull(QsTextHooks.nativeTintConstructor(UnrelatedConstructor.class));
     }
     @Test public void composeFilterGateInspectsNeutralTintAndLeavesColoredLogosUntouched(){
         QsTextHooks hooks=new QsTextHooks(getClass().getClassLoader(),()->null,()->true,

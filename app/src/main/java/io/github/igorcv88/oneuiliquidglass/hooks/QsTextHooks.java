@@ -48,6 +48,8 @@ final class QsTextHooks {
     // Resolve this from the ABI-independent value, not a potentially R8-renamed getter.
     private static final int COMPOSE_SRC_IN=5;
     private Field composeFilterField;
+    private Constructor<?> composeTintConstructor;
+    private boolean composeTintNative;
     private Method composeTintMethod;
     private Object composeTintCompanion;
     private String composeFilterUnavailableReason;
@@ -357,6 +359,44 @@ final class QsTextHooks {
         return neutral;
     }
 
+    /** Kotlin value classes can erase or R8-inline the Companion.tint(long,int) bridge.
+     * A BlendModeColorFilter constructor or the native ColorFilter wrapper is not tied to
+     * that synthetic method's survival in Samsung's optimized SystemUI. */
+    static Constructor<?> blendTintConstructor(Class<?> type) {
+        if(type==null)return null;
+        Constructor<?> synthetic=null;
+        for(Constructor<?> ctor:type.getDeclaredConstructors()) {
+            Class<?>[] a=ctor.getParameterTypes();
+            if(a.length==2 && a[0]==long.class && a[1]==int.class) {
+                ctor.setAccessible(true);return ctor;
+            }
+            if(a.length==3 && a[0]==long.class && a[1]==int.class
+                    && a[2].getName().equals("kotlin.jvm.internal.DefaultConstructorMarker"))
+                synthetic=ctor;
+        }
+        if(synthetic!=null)synthetic.setAccessible(true);
+        return synthetic;
+    }
+
+    static Constructor<?> nativeTintConstructor(Class<?> type) {
+        if(java.lang.reflect.Modifier.isAbstract(type.getModifiers()))return null;
+        for(Constructor<?> ctor:type.getDeclaredConstructors()) {
+            Class<?>[] a=ctor.getParameterTypes();
+            if(a.length==1 && a[0]==android.graphics.ColorFilter.class) {
+                ctor.setAccessible(true);return ctor;
+            }
+        }
+        return null;
+    }
+
+    static Object constructComposeTint(Constructor<?> ctor,boolean nativeWrapper,int argb)
+            throws ReflectiveOperationException {
+        if(nativeWrapper)return ctor.newInstance(new PorterDuffColorFilter(argb,PorterDuff.Mode.SRC_IN));
+        long packed=QuickSettingsGlass.color(argb);
+        return ctor.getParameterCount()==3
+                ?ctor.newInstance(packed,COMPOSE_SRC_IN,null):ctor.newInstance(packed,COMPOSE_SRC_IN);
+    }
+
     /** Resolve the installed Compose ABI once; an unknown firmware leaves the previous path intact. */
     private void resolveComposeFilter(Class<?> node) {
         try {
@@ -370,21 +410,35 @@ final class QsTextHooks {
                     }
             if(field==null)throw new NoSuchFieldException("PainterNode.colorFilter");
             field.setAccessible(true);
-            Object companion=filter.getField("Companion").get(null);
+            Class<?> blend=null;
+            try {blend=Class.forName("androidx.compose.ui.graphics.BlendModeColorFilter",false,loader);}
+            catch(ClassNotFoundException ignored) {}
+            Constructor<?> ctor=blendTintConstructor(blend);
+            boolean nativeWrapper=false;
+            if(ctor==null) {
+                ctor=nativeTintConstructor(filter);
+                nativeWrapper=ctor!=null;
+            }
+            Object companion=null;
             Method tint=null;
-            for(Method m:companion.getClass().getDeclaredMethods())
-                if(m.getParameterCount()==2
-                        && m.getParameterTypes()[0]==long.class && m.getParameterTypes()[1]==int.class
-                        && filter.isAssignableFrom(m.getReturnType())) {
-                    if(tint!=null)throw new NoSuchMethodException("ambiguous Compose ColorFilter(long,int)");
-                    tint=m;
-                }
-            if(tint==null)throw new NoSuchMethodException("ColorFilter.Companion.ColorFilter(long,int)");
-            tint.setAccessible(true);
-            composeFilterField=field;composeTintCompanion=companion;composeTintMethod=tint;
+            if(ctor==null) {
+                companion=filter.getField("Companion").get(null);
+                for(Method m:companion.getClass().getDeclaredMethods())
+                    if(m.getParameterCount()==2
+                            && m.getParameterTypes()[0]==long.class && m.getParameterTypes()[1]==int.class
+                            && filter.isAssignableFrom(m.getReturnType())) {
+                        if(tint!=null)throw new NoSuchMethodException("ambiguous Compose ColorFilter(long,int)");
+                        tint=m;
+                    }
+                if(tint==null)throw new NoSuchMethodException("no Compose filter factory (BlendModeColorFilter/native/Companion)");
+                tint.setAccessible(true);
+            }
+            composeFilterField=field;composeTintConstructor=ctor;composeTintNative=nativeWrapper;
+            composeTintCompanion=companion;composeTintMethod=tint;
             composeFilterUnavailableReason=null;
             Probe.log("QS_TILE_COMPOSE_FILTER_READY","owner="+node.getName()+" field="+field.getName()
-                    +" tint="+tint.getName()+" mode=SrcIn(5)");
+                    +" factory="+(ctor==null?"companion:"+tint.getName():nativeWrapper?"native-wrapper":"blend-constructor")
+                    +" mode=SrcIn(5)");
         }catch(ReflectiveOperationException | RuntimeException | LinkageError e){
             composeFilterField=null;
             composeFilterUnavailableReason=e.getClass().getSimpleName()+":"+e.getMessage();
@@ -420,7 +474,9 @@ final class QsTextHooks {
             int color=tile.palette.tileLightOnInk;
             Object replacement=composeFilters.get(color);
             if(replacement==null) {
-                replacement=composeTintMethod.invoke(composeTintCompanion,QuickSettingsGlass.color(color),COMPOSE_SRC_IN);
+                replacement=composeTintConstructor!=null
+                        ?constructComposeTint(composeTintConstructor,composeTintNative,color)
+                        :composeTintMethod.invoke(composeTintCompanion,QuickSettingsGlass.color(color),COMPOSE_SRC_IN);
                 if(composeFilters.size()>16)composeFilters.clear();
                 composeFilters.put(color,replacement);
             }
