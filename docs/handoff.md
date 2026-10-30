@@ -1,5 +1,24 @@
 # Handoff — OneUILiquidGlass (2026-10-16)
 
+**Pós-merge #109/#110 (30/10/2026; correção de compilação e review):**
+O CI de #110 falhou em `QuickSettingsHooks.java`: dois callbacks de
+`QsBackdrop` liam `discBackground`, campo `final` ainda não atribuído.
+`QsDiscBackgroundHooks` agora é criado antes de `QsBackdrop`, com fornecedores
+de tom/progresso vinculados ao campo do backdrop após a construção. O callback
+de alteração de cena não invalida duas vezes os discos; o de animação faz a
+invalidação apenas uma vez por passagem.
+
+Da revisão da #109, ambos os P2 seguem pertinentes após o merge: a rota
+`applyComposeTileFilter` substituía a tinta pela paleta clara de uma vez,
+fora da fase compartilhada, e `RoundIcon` podia receber uma segunda vez a
+tinta já interpolada por `iconColor.invoke`. O filtro Compose agora consome a
+fase nos dois sentidos para `QuickTile` verificado e filtro monocromático (ou
+vetor vinculado), preservando o filtro nativo após cada desenho. O hook
+`RoundIcon` recupera a entrada nativa registrada pelo mesmo modelo antes de
+calcular a tinta atual. A revisão de #110 não registrou novas observações.
+**Pendente:** execução do CI/build Android e teste físico no Galaxy DZIF;
+o vídeo anterior não confirma que o hook de disco funcione no aparelho.
+
 **QS109 revisão após vídeo `86061.mp4` (30/10/2026; PR #109 aberta):**
 O vídeo confirma o erro inverso à hipótese inicial: os pictogramas das três
 cápsulas únicas (Wi-Fi, Bluetooth e Quick Share) se adaptam ao novo fundo,

@@ -55,4 +55,15 @@ public class QsSurfaceInkTest {
         assertEquals(InkTransition.lerpPremultiplied(dark,light,.5f),
                 QsSurfaceInk.onVerifiedTile(0xff000000,0,1,QsScene.Tone.LIGHT_SCENE,style,.5f));
     }
+    @Test public void roundIconUsesOriginalInkInsteadOfInterpolatingDerivedInkAgain(){
+        QsStyle style=new QsStyle(k->k.equals("qs.tilelightoffink")?"000000ff":null);
+        int nativeInk=0xffffffff;
+        int first=QsSurfaceInk.onVerifiedTile(nativeInk,0,1,QsScene.Tone.LIGHT_SCENE,style,.5f);
+        int twice=QsSurfaceInk.onVerifiedTile(first,0,1,QsScene.Tone.LIGHT_SCENE,style,.5f);
+        assertNotEquals("the old pipeline blended the already tinted glyph twice",first,twice);
+        int original=QsSurfaceInk.originalForRound(first,nativeInk,first);
+        assertEquals(nativeInk,original);
+        assertEquals(first,QsSurfaceInk.onVerifiedTile(original,0,1,QsScene.Tone.LIGHT_SCENE,style,.5f));
+        assertEquals(0xff00aa00,QsSurfaceInk.originalForRound(0xff00aa00,nativeInk,first));
+    }
 }

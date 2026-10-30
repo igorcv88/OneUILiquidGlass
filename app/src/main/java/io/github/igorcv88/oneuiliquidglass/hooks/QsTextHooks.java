@@ -62,6 +62,7 @@ final class QsTextHooks {
     private boolean composeFilterMissingLogged;
     private final java.util.Map<Integer,Object> composeFilters=new java.util.HashMap<>();
     private final java.util.Map<Object,Boolean> composeNeutralFilters=new java.util.WeakHashMap<>();
+    private final java.util.Map<Object,Integer> composeNativeInks=new java.util.WeakHashMap<>();
     private final java.util.Map<Object,String> composeFilterLogged=new java.util.WeakHashMap<>();
     private final java.util.Map<Object,String> tileDrawLogged=new java.util.WeakHashMap<>();
     /** One binding diagnosis per painter/state/revision; never record tile names or app content. */
@@ -354,6 +355,25 @@ final class QsTextHooks {
                 && lightPalette && neutralNativeFilter;
     }
 
+    /** The draw-time filter must remain eligible during BOTH directions of a scene crossfade. */
+    static boolean composeTilePhaseEligible(QsScene.Tone tone, QuickSettingsGlass.Kind state,
+            boolean lightPalette, boolean darkPalette, boolean neutralNativeFilter) {
+        return tone!=QsScene.Tone.UNKNOWN
+                && (lightPalette||darkPalette)
+                && (state==QuickSettingsGlass.Kind.ACTIVE || state==QuickSettingsGlass.Kind.IDLE
+                        || state==QuickSettingsGlass.Kind.NONE)
+                && neutralNativeFilter;
+    }
+
+    static boolean composeUnfilteredQuickTilePhaseEligible(QsScene.Tone tone,
+            QuickSettingsGlass.Kind state,boolean lightPalette,boolean darkPalette,
+            String verifiedOwner,boolean nativeFilterMissing,boolean vectorPainter) {
+        return composeTilePhaseEligible(tone,state,lightPalette,darkPalette,nativeFilterMissing)
+                && verifiedOwner!=null && (verifiedOwner.startsWith("tiles.QuickTileKt")
+                        || (verifiedOwner.equals("tiles.IconTextTile.deferred")&&vectorPainter))
+                && (state==QuickSettingsGlass.Kind.ACTIVE||vectorPainter);
+    }
+
     /** A native untinted QuickTile painter is still a verified Samsung control icon.
      * Never use this fallback for arbitrary PainterNodes, media, headers or colour-filtered art. */
     static boolean composeUnfilteredQuickTileEligible(QsScene.Tone tone,QuickSettingsGlass.Kind state,
@@ -403,6 +423,35 @@ final class QsTextHooks {
         }catch(IllegalAccessException | RuntimeException ignored) {neutral=false;}
         composeNeutralFilters.put(filter,neutral);
         return neutral;
+    }
+
+    /** Read the native monochrome Compose tint once so dark/light endpoints share the SAME input. */
+    private Integer composeNativeInk(Object filter) {
+        if(filter==null||!neutralComposeFilter(filter))return null;
+        Integer cached=composeNativeInks.get(filter);
+        if(cached!=null)return cached;
+        Integer color=null;
+        String type=filter.getClass().getSimpleName();
+        try {
+            if(type.contains("BlendModeColorFilter")) {
+                for(Field field:filter.getClass().getDeclaredFields())
+                    if(field.getType()==long.class&&field.getName().toLowerCase(java.util.Locale.ROOT).contains("color")) {
+                        field.setAccessible(true);
+                        long packed=field.getLong(filter);
+                        if(QuickSettingsGlass.srgb(packed))color=QuickSettingsGlass.argb(packed);
+                        break;
+                    }
+            } else if(type.contains("NativeColorFilter")||type.contains("AndroidColorFilter")) {
+                for(Field field:filter.getClass().getDeclaredFields())
+                    if(android.graphics.ColorFilter.class.isAssignableFrom(field.getType())) {
+                        field.setAccessible(true);
+                        color=Foreground.filterColor((android.graphics.ColorFilter)field.get(filter));
+                        break;
+                    }
+            }
+        }catch(IllegalAccessException|RuntimeException ignored){return null;}
+        if(color!=null&&QuickSettingsGlass.neutral(color))composeNativeInks.put(filter,color);
+        return color;
     }
 
     /** Kotlin value classes can erase or R8-inline the Companion.tint(long,int) bridge.
@@ -574,7 +623,7 @@ final class QsTextHooks {
 
     /** This change lasts for one PainterNode.draw only; unrelated and coloured painters stay native. */
     private void applyComposeTileFilter(XC_MethodHook.MethodHookParam p,TileInk tile) {
-        if(tile.tone!=QsScene.Tone.LIGHT_SCENE || !tile.palette.tileLight)return;
+        if(tile.tone==QsScene.Tone.UNKNOWN || (!tile.palette.tileLight&&!tile.palette.tileDark))return;
         if(composeFilterField==null) {
             if(!composeFilterMissingLogged){
                 composeFilterMissingLogged=true;
@@ -587,10 +636,10 @@ final class QsTextHooks {
             Object nativeFilter=composeFilterField.get(p.thisObject);
             boolean neutral=neutralComposeFilter(nativeFilter);
             String painter=painterClass(p.thisObject);
-            boolean unfilteredQuickTile=composeUnfilteredQuickTileEligible(tile.tone,tile.state,
-                    tile.palette.tileLight,tilePainterNodes.get(p.thisObject),nativeFilter==null,
-                    isComposeVectorPainter(painter));
-            if(!composeTileEligible(tile.tone,tile.state,tile.palette.tileLight,neutral)
+            boolean unfilteredQuickTile=composeUnfilteredQuickTilePhaseEligible(tile.tone,tile.state,
+                    tile.palette.tileLight,tile.palette.tileDark,tilePainterNodes.get(p.thisObject),
+                    nativeFilter==null,isComposeVectorPainter(painter));
+            if(!composeTilePhaseEligible(tile.tone,tile.state,tile.palette.tileLight,tile.palette.tileDark,neutral)
                     && !unfilteredQuickTile) {
                 if(Probe.trace && !composeFilterLogged.containsKey(tile.node))
                     Probe.log("QS_TILE_COMPOSE_FILTER", "node="+Integer.toHexString(System.identityHashCode(tile.node))
@@ -598,8 +647,12 @@ final class QsTextHooks {
                             +" native="+(nativeFilter==null?"none":nativeFilter.getClass().getSimpleName()));
                 return;
             }
-            int color=tile.state==QuickSettingsGlass.Kind.ACTIVE
-                    ?tile.palette.tileLightOnInk:tile.palette.tileLightOffInk;
+            // Use one native ink for both endpoints; selecting light ink directly would snap
+            // on scene publication while the disc and Canvas painters are still interpolating.
+            Integer nativeInk=nativeFilter==null?0xffffffff:composeNativeInk(nativeFilter);
+            if(nativeInk==null)return;
+            int color=tile.palette.tileInk(tile.state,tile.tone,nativeInk,tile.lightFraction);
+            if(color==nativeInk)return;
             Object replacement=composeTint(color);
             if(replacement==null || replacement.equals(nativeFilter))return;
             composeFilterField.set(p.thisObject,replacement);
@@ -610,7 +663,7 @@ final class QsTextHooks {
                     nativeFilter==null?NULL_COMPOSE_FILTER:nativeFilter);
             if(Probe.trace && !composeFilterLogged.containsKey(tile.node))
                 Probe.log("QS_TILE_COMPOSE_FILTER", "node="+Integer.toHexString(System.identityHashCode(tile.node))
-                        +" applied=true state="+tile.state+" scene=LIGHT_SCENE color="+Integer.toHexString(color)
+                        +" applied=true state="+tile.state+" scene="+tile.tone+" color="+Integer.toHexString(color)
                         +" route="+(unfilteredQuickTile?"unfiltered-quicktile":"neutral-filter")
                         +" painter="+painter);
         }catch(ReflectiveOperationException | RuntimeException | LinkageError e){

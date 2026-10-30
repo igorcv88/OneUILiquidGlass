@@ -80,6 +80,26 @@ public class QsTextHooksTest {
         assertFalse("untinted or coloured icon",QsTextHooks.composeTileEligible(QsScene.Tone.LIGHT_SCENE,
                 QuickSettingsGlass.Kind.ACTIVE,true,false));
     }
+    @Test public void composeTileCrossfadeIsEligibleInBothDirectionsWithoutTintingArtwork(){
+        for(QsScene.Tone tone:new QsScene.Tone[]{QsScene.Tone.LIGHT_SCENE,QsScene.Tone.DARK_SCENE}) {
+            assertTrue(QsTextHooks.composeTilePhaseEligible(tone,QuickSettingsGlass.Kind.ACTIVE,
+                    true,false,true));
+            assertTrue(QsTextHooks.composeTilePhaseEligible(tone,QuickSettingsGlass.Kind.IDLE,
+                    false,true,true));
+            assertFalse(QsTextHooks.composeTilePhaseEligible(tone,QuickSettingsGlass.Kind.ACTIVE,
+                    true,false,false));
+            assertFalse(QsTextHooks.composeTilePhaseEligible(tone,QuickSettingsGlass.Kind.CONTAINER,
+                    true,true,true));
+            assertTrue(QsTextHooks.composeUnfilteredQuickTilePhaseEligible(tone,
+                    QuickSettingsGlass.Kind.ACTIVE,true,false,"tiles.QuickTileKt",true,false));
+            assertFalse(QsTextHooks.composeUnfilteredQuickTilePhaseEligible(tone,
+                    QuickSettingsGlass.Kind.IDLE,true,false,"tiles.QuickTileKt",true,false));
+            assertFalse(QsTextHooks.composeUnfilteredQuickTilePhaseEligible(tone,
+                    QuickSettingsGlass.Kind.ACTIVE,true,false,"media.ArtworkPainter",true,true));
+        }
+        assertFalse(QsTextHooks.composeTilePhaseEligible(QsScene.Tone.UNKNOWN,
+                QuickSettingsGlass.Kind.ACTIVE,true,true,true));
+    }
     @Test public void unfilteredComposeFallbackRequiresBoundQuickTileAndVectorForInactive(){
         String owner="tiles.QuickTileKt$$ExternalSyntheticLambda14";
         assertTrue(QsTextHooks.composeUnfilteredQuickTileEligible(QsScene.Tone.LIGHT_SCENE,

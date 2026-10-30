@@ -146,21 +146,23 @@ public final class QuickSettingsHooks {
                         && QuickSettingsHooks.this.backdrop.tone() != io.github.igorcv88.oneuiliquidglass.glass.QsScene.Tone.DARK_SCENE,
                 () -> QuickSettingsHooks.this.style.lightOptics);
         BackdropEvents.add(() -> QuickSettingsHooks.this.backdrop.event());
+        // The QsBackdrop callbacks use the disc hook. Assign this final field first so Java's
+        // definite-assignment check accepts the callbacks, even in an SDK-free CI build.
+        this.discBackground = new QsDiscBackgroundHooks(loader, this::enabled, () -> style,
+                () -> QuickSettingsHooks.this.backdrop.tone(),
+                () -> QuickSettingsHooks.this.backdrop.ink(false));
         this.backdrop = new QsBackdrop(this::enabled, edge::expansion,
-                () -> { clearRims(); edge.backdropChanged(); invalidateAll("backdrop"); if(discBackground!=null)discBackground.refresh(); },
+                () -> { clearRims(); edge.backdropChanged(); invalidateAll("backdrop"); },
                 () -> {
                     QsContentHooks c = QuickSettingsHooks.this.content;
                     if (c != null) c.invalidateDraw();
-                    if(discBackground!=null)discBackground.refresh();
                     long now = android.os.SystemClock.uptimeMillis();
                     if (now - lastPaletteFrameAt >= 34L) {
                         lastPaletteFrameAt = now;
                         clearRims();
                         invalidateAll("backdrop-crossfade");
-                    }
+                    } else discBackground.refresh();
                 });
-        this.discBackground=new QsDiscBackgroundHooks(loader,this::enabled,()->style,backdrop::tone,
-                ()->backdrop.ink(false));
         this.content = new QsContentHooks(loader, this::enabled, () -> style, backdrop::tone, backdrop::headerTone, this::ink,
                 this::capture, tileProbe);
     }
