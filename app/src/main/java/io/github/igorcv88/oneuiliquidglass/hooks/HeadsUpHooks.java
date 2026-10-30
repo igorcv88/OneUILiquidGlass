@@ -612,6 +612,10 @@ public final class HeadsUpHooks {
         float whole = grid.whole();
         Boolean previousScene = shadeScene;
         shadeScene = scene;
+        // The adjacent QS page shares this underlying app. It can use this freshly sampled scene
+        // during the lateral gesture instead of briefly drawing Samsung's native discs/ink.
+        if (quickSettings != null) quickSettings.shadeBackdrop(whole,
+                grid.luma(grid.top, grid.top + 4 * grid.band), grid.takenAt);
         Probe.log("SHADE_PREFETCH", "generation=" + grid.generation + " state=" + state + " tFromOpen=" + (now - shadeOpenAt)
                 + " age=" + (now - grid.takenAt) + " earlyDraws=" + shadeEarlyDraws + " top=" + grid.top + " band=" + grid.band
                 + " scene=" + (shadeScene ? "light" : "dark") + " sceneLuma=" + String.format(java.util.Locale.ROOT, "%.2f", whole)
@@ -724,6 +728,10 @@ public final class HeadsUpHooks {
         long now = android.os.SystemClock.uptimeMillis();
         float whole = grid.whole();
         if (!Float.isFinite(whole) || whole < 0f || whole > 1f) return;
+        // The shade may remain open for several seconds without changing its tone. Feed every
+        // fresh sample to QS; adoptGrid() only runs when the shade's classification changes.
+        if (quickSettings != null) quickSettings.shadeBackdrop(whole,
+                grid.luma(grid.top, grid.top + 4 * grid.band), grid.takenAt);
         boolean light = ShadeTone.lightBackdrop(whole, shadeScene);
         boolean pendingBefore = sceneGate.pending();
         Tuning t = Tuning.get();

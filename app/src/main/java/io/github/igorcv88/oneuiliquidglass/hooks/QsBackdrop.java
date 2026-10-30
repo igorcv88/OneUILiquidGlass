@@ -42,6 +42,9 @@ final class QsBackdrop {
     static final long INK_RAMP_MS = 180;
     /** A sample this young belongs to the opening that follows it. */
     static final long FRESH_MS = 600;
+    /** The shade's already measured backdrop can cover a lateral transition, not a later app. */
+    static final long SHADE_HANDOFF_MAX_MS = 2500;
+    static final double LATERAL_EXPANSION = .95;
     static final long RESAMPLE_MS = 900, ACTIVE_RESAMPLE_MS = 250, BURST_RESAMPLE_MS = 100, ACTIVE_WINDOW_MS = 1500, CONFIRM_MS = 150, DWELL_MS = 600;
     private final BooleanSupplier enabled;
     private final DoubleSupplier expansion;
@@ -67,6 +70,10 @@ final class QsBackdrop {
     private boolean shown, pending;
     /** When the current sample was taken (uptime), 0 for none. */
     private long sampledAt;
+    /** A separately measured shade scene, never the retired sample of a previous QS session. */
+    private QsScene.Tone shadeHint = QsScene.Tone.UNKNOWN;
+    private QsScene.Tone shadeHeaderHint = QsScene.Tone.UNKNOWN;
+    private long shadeHintAt;
     private int generation, session;
     private Runnable cancel;
     private android.content.Context application;
@@ -88,6 +95,15 @@ final class QsBackdrop {
     /** The panel is open (expanded at all): its own decision is the one on screen. */
     boolean open() { return shown; }
     QsScene.Tone headerTone() { return headerTone; }
+    /** The shade shares the underlying app with QS during its horizontal page transition. */
+    void shadeHint(float luma, float headerLuma, long capturedAt) {
+        if (capturedAt <= 0) return;
+        // Shade and QS use different light thresholds. Classify the shade's measured luminance
+        // with QS's own policy, rather than copying shade's light/dark label.
+        shadeHint = QsScene.classify(luma, QsScene.Tone.UNKNOWN);
+        shadeHeaderHint = QsScene.classify(headerLuma, QsScene.Tone.UNKNOWN);
+        shadeHintAt = capturedAt;
+    }
     /** Ink darkness for the panel's text (header: the header band's), or null for native ink. */
     Float ink(boolean headerBand) {
         float v = headerBand ? headerInk : sceneInk;
@@ -119,6 +135,12 @@ final class QsBackdrop {
         return shown && (expansion < 0 || expansion > 0);
     }
 
+    /** Handoff only for a fully expanded lateral entry, from a recent, unchanged shade backdrop. */
+    static boolean shadeHandoff(double expansion, boolean pending, long now, long shadeAt, long taskChangedAt) {
+        return !pending && expansion >= LATERAL_EXPANSION && shadeAt > 0 && now >= shadeAt
+                && now - shadeAt <= SHADE_HANDOFF_MAX_MS && taskChangedAt <= shadeAt;
+    }
+
     private boolean fresh() {
         return sampledAt != 0 && SystemClock.uptimeMillis() - sampledAt <= FRESH_MS;
     }
@@ -134,7 +156,8 @@ final class QsBackdrop {
 
     private void opened() {
         session++;
-        trace("QS_TONE_ENTRY", "expansion=" + expansion.getAsDouble()
+        double fraction = expansion.getAsDouble();
+        trace("QS_TONE_ENTRY", "expansion=" + fraction
                 + " prefetched=" + pending + " fresh=" + fresh() + " prior=" + tone);
         // The touch that opened the panel already asked for it; its loop starts with the panel.
         if (pending) {
@@ -144,7 +167,23 @@ final class QsBackdrop {
             return;
         }
         if (fresh()) { schedule(RESAMPLE_MS); return; }
-        forget(); publish(false);
+        long now = SystemClock.uptimeMillis();
+        boolean handoff = shadeHint != QsScene.Tone.UNKNOWN && shadeHeaderHint != QsScene.Tone.UNKNOWN
+                && shadeHandoff(fraction, pending, now, shadeHintAt, BackdropEvents.lastChange());
+        if (fraction >= LATERAL_EXPANSION && !handoff)
+            trace("QS_SHADE_HANDOFF_SKIP", "ageMs=" + (now - shadeHintAt)
+                    + " scene=" + shadeHint + " header=" + shadeHeaderHint
+                    + " taskAfterSample=" + (BackdropEvents.lastChange() > shadeHintAt));
+        forget();
+        if (handoff) {
+            // Repaint immediately from the shade's own fresh capture. Keep the new QS classifiers
+            // empty: its independent capture must replace this provisional state, even if opposite.
+            tone = shadeHint; headerTone = shadeHeaderHint;
+            sceneInk = level(tone); headerInk = level(headerTone);
+            changed.run();
+            trace("QS_SHADE_HANDOFF", "ageMs=" + (now - shadeHintAt) + " tone=" + tone + " header=" + headerTone
+                    + " expansion=" + fraction + " capture=opening");
+        } else publish(false);
         prefetch("opening");
     }
 
