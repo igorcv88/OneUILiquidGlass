@@ -5,8 +5,11 @@ que o build novo corrigiu a adaptação de discos/ícones pequenos e grandes,
 sliders, abertura e mudança de aplicativos com a QS aberta. Não persistem os
 erros funcionais descritos nas rodadas QS108–111 abaixo. Restam a ausência
 visual de crossfade, atraso de decisão, custo de CPU/memória/captura e o player
-vazio claro sobre fundo claro. Checklist consolidado, hipóteses comprovadas
-e protocolo A/B: [qs-performance-20261030.md](qs-performance-20261030.md).
+vazio claro sobre fundo claro. O [checklist oficial atualizado](qs-backlog-20261028.md)
+mantém **todas** as categorias históricas (notificações, Theme Park, live
+updates, toasts, Central, previews, favoritos, idiomas e desempenho) com
+status separados por prova física versus implementação. O protocolo A/B
+é entregue em bloco Termux diretamente na conversa, sem novo arquivo no repo.
 Instrumentação nova registra gate, latência de amostra, escala do animator,
 número de callbacks e duração efetiva; **não comprova** por si só quadros na
 tela nem impacto de bateria. Preservar comportamento estável durante a medição.
