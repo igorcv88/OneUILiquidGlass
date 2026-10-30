@@ -20,7 +20,8 @@ public class QsSurfaceInkTest {
     }
     @Test public void nativeSmallOffGlyphRespectsConfiguredOpacityInBothScenes(){
         QsStyle style=new QsStyle(k->k.equals("qs.tilelightoffink")?"1d202580":
-                k.equals("qs.tiledarkoffink")?"ffffff73":null);
+                k.equals("qs.tiledarkoffink")?"ffffff73":
+                k.equals("qs.tiledark")?"1":null);
         assertEquals(0x801d2025,QsSurfaceInk.onVerifiedTile(0xff000000,0,1,
                 QsScene.Tone.LIGHT_SCENE,style));
         assertEquals(0x73ffffff,QsSurfaceInk.onVerifiedTile(0xffffffff,0,1,
