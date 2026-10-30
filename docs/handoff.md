@@ -1,5 +1,20 @@
 # Handoff — OneUILiquidGlass (2026-10-16)
 
+**QS108 (30/10/2026, vídeo 86044.mp4, aparelho com PR #107 instalado):**
+os controles pequenos OFF continuam pretos/brancos com alpha pleno, enquanto SmartThings
+respeita `qs.tilelightoffink`/`qs.tiledarkoffink`. Causa no fonte: a rota nativa
+`QsTileBoxHooks.ink()` usava só `QsSurfaceInk.onSurface()`, ignorando a paleta de
+ícones configurada; `QsTextHooks` já lia `QsStyle.tileInk()`. A correção encaminha
+estados verificados para o mesmo `QsStyle`, preserva contraste automático para
+ícones sem disco e accent/logos e registra o alpha efetivo no `QS_PALETTE_EFFECTIVE`.
+**Pendente validação física:** alpha dos 15 OFF (claro/colorido), alteração ao vivo
+sem reinício, apps com transições em ambas as direções. A mudança de app com QS
+aberto ainda demora principalmente branco → colorido e pode dessincronizar discos
+grandes; **o PR #107 de cadência não resolveu isso**. Coletar logs novos com
+`BACKDROP_EVENT`, `TONE_CAPTURE_*`, `QS_BACKDROP`, `QS_COMPOSE_REFRESH`,
+`QS_TILE_COLOR`, `QS_TILEBOX_INK` antes de alterar o algoritmo de cena/animar
+ícones separadamente. Não mexer nos sliders de brilho/volume ou nas notificações.
+
 **Continuidade QS105 (30/10/2026):** ler primeiro
 [qs105-semantic-ink.md](qs105-semantic-ink.md). A nova rota do tile box, o coordenador
 compartilhado de cena e os hooks nativos de brilho/volume estão implementados;
