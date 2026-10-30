@@ -1,5 +1,36 @@
 # Pendências OneUILiquidGlass, a partir do main pós-PR #83
 
+## Rodada pós-PR #100 (29/10, 23:41–23:43, DZIF, Theme Park ON)
+
+- [x] **Sliders confirmados visualmente pelo usuário:** a correção de recorte arredondado
+  do PR #100 mantém brilho e volume dentro do trilho em 100%, com geometria contínua.
+  Preservar `QsSliderHooks` sem novas alterações nesta rodada.
+- [x] **Paleta branca ainda alterna em algumas aberturas:** às 23:41, abertura direta
+  mostra Wi-Fi claro com ícone branco e Bluetooth/Quick Share claros com ícones pretos;
+  às 23:43, a abertura lateral mostra os três discos pretos, só Wi-Fi com glifo branco.
+  O relato anterior de estabilidade total foi corrigido: há variação ocasional da paleta.
+- [x] **Log `OULG_QS100_ICONS_20261029_234107`:** entre 23:41:15–23:41:48
+  e 23:41:57–23:42:08 a tinta configurada `lightInk=ffffffff` é aplicada ao
+  único painter `ACTIVE` que atravessa Canvas (`canvasPaintCalls=1`,
+  `native=ff000000` -> `mapped=ffffffff`). Outros dois painters `ACTIVE`
+  identificados pelo `QuickTileKt` têm `canvasPaintCalls=0`. Os discos recebem
+  `QS_TILE_COLOR applied=ff000000`, mesmo sem ícone visível. O handoff lateral
+  continua presente; a captura de cena ocasionalmente começa `UNKNOWN`.
+- [x] **Rota de tint Compose do PR #100 não executou no log:** não houve eventos
+  `QS_TILE_COMPOSE_FILTER`, apesar de painters elegíveis. A ausência do evento
+  de inicialização (antes do log) impede afirmar qual etapa de reflexão falhou.
+  Revisão em código separa a escolha estável de `BlendMode.SrcIn=5` da busca
+  de getter R8, acha `ColorFilter(long,int)` por assinatura e permite filtro
+  temporário em `PainterNode` sem filtro nativo somente para `QuickTile` vinculado,
+  `ACTIVE` e `LIGHT_SCENE`. Restaura até o filtro `null` após desenhar.
+  Se incompatível, emite `QS_TILE_COMPOSE_FILTER_UNAVAILABLE_DRAW` e deixa nativo.
+- [ ] **Ainda requer APK/validação:** conferir `QS_TILE_COMPOSE_FILTER_READY`,
+  `applied=true route=unfiltered-quicktile` e ícones brancos visíveis no fundo
+  preto em ambas as entradas. Verificar paleta ao abrir direto repetidamente,
+  especialmente 100–300 ms de `UNKNOWN`. Fundo colorido, sliders,
+  notificações e pop-ups não podem regredir. Rota sem filtro não tem prova
+  de monocromia do conteúdo: preservar iconografia colorida caso apareça.
+
 ## Validação física PR #99 (29/10, 22:37–22:42, Theme Park ON)
 
 - [x] **Configuração verificada:** JSON `OneUILiquidGlass-ajustes (9)` informa

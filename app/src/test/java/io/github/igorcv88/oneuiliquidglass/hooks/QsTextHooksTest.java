@@ -41,6 +41,29 @@ public class QsTextHooksTest {
         assertFalse("untinted or coloured icon",QsTextHooks.composeTileEligible(QsScene.Tone.LIGHT_SCENE,
                 QuickSettingsGlass.Kind.ACTIVE,true,false));
     }
+    @Test public void unfilteredComposeFallbackRequiresBoundQuickTileActiveOnLight(){
+        String owner="tiles.QuickTileKt$$ExternalSyntheticLambda14";
+        assertTrue(QsTextHooks.composeUnfilteredQuickTileEligible(QsScene.Tone.LIGHT_SCENE,
+                QuickSettingsGlass.Kind.ACTIVE,true,owner,true));
+        assertFalse(QsTextHooks.composeUnfilteredQuickTileEligible(QsScene.Tone.LIGHT_SCENE,
+                QuickSettingsGlass.Kind.ACTIVE,true,owner,false)); // native filter isn't absent
+        assertFalse(QsTextHooks.composeUnfilteredQuickTileEligible(QsScene.Tone.LIGHT_SCENE,
+                QuickSettingsGlass.Kind.ACTIVE,true,null,true)); // unbound model/owner
+        assertFalse(QsTextHooks.composeUnfilteredQuickTileEligible(QsScene.Tone.LIGHT_SCENE,
+                QuickSettingsGlass.Kind.ACTIVE,true,"tiles.QuickTileBoxKt",true));
+        assertFalse(QsTextHooks.composeUnfilteredQuickTileEligible(QsScene.Tone.LIGHT_SCENE,
+                QuickSettingsGlass.Kind.ACTIVE,true,"tiles.BrightBarKt",true));
+        assertFalse(QsTextHooks.composeUnfilteredQuickTileEligible(QsScene.Tone.LIGHT_SCENE,
+                QuickSettingsGlass.Kind.ACTIVE,false,owner,true));
+        assertFalse(QsTextHooks.composeUnfilteredQuickTileEligible(QsScene.Tone.DARK_SCENE,
+                QuickSettingsGlass.Kind.ACTIVE,true,owner,true));
+        assertFalse(QsTextHooks.composeUnfilteredQuickTileEligible(QsScene.Tone.UNKNOWN,
+                QuickSettingsGlass.Kind.ACTIVE,true,owner,true));
+        assertFalse(QsTextHooks.composeUnfilteredQuickTileEligible(QsScene.Tone.LIGHT_SCENE,
+                QuickSettingsGlass.Kind.NONE,true,owner,true));
+        assertFalse(QsTextHooks.composeUnfilteredQuickTileEligible(QsScene.Tone.LIGHT_SCENE,
+                QuickSettingsGlass.Kind.IDLE,true,owner,true));
+    }
     @Test public void repeatedRenderTransitionsRestoreNativePaintAndNeverNeedTextStyle(){
         Paint paint=new Paint();paint.setColor(0xffffffff);
         for(int i=0;i<100;i++)for(Boolean tone:new Boolean[]{true,false,null}){
