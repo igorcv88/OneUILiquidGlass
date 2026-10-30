@@ -17,6 +17,7 @@ final class QsTileBoxHooks {
     private final BooleanSupplier enabled;
     private final Supplier<QsStyle> style;
     private final Supplier<QsScene.Tone> scene;
+    private final Supplier<Float> lightFraction;
     private final Consumer<Object> capture;
     private final ThreadLocal<Object> model=new ThreadLocal<>();
     private final WeakIdentityMap<Object,WeakReference<Object>> painters=new WeakIdentityMap<>();
@@ -33,8 +34,9 @@ final class QsTileBoxHooks {
     private Object paletteKey;
     private int coverageRevision;
     private int runtimeFailures;
-    QsTileBoxHooks(ClassLoader l,BooleanSupplier on,Supplier<QsStyle> s,Supplier<QsScene.Tone> tone,Consumer<Object> c) {
-        loader=l;enabled=on;style=s;scene=tone;capture=c;
+    QsTileBoxHooks(ClassLoader l,BooleanSupplier on,Supplier<QsStyle> s,Supplier<QsScene.Tone> tone,
+            Supplier<Float> lightFraction,Consumer<Object> c) {
+        loader=l;enabled=on;style=s;scene=tone;this.lightFraction=lightFraction;capture=c;
     }
     private Class<?> type(String n) throws ClassNotFoundException {return Class.forName(n,false,loader);}
     private static Field field(Class<?> c,String n) throws NoSuchFieldException {
@@ -150,19 +152,21 @@ final class QsTileBoxHooks {
         // A transparent native circle is intentional: don't invent an active disc.
         QuickSettingsGlass.Kind kind=(nativeBg>>>24)==0?QuickSettingsGlass.Kind.NONE:
                 state==2?QuickSettingsGlass.Kind.ACTIVE:QuickSettingsGlass.Kind.IDLE;
-        return style.get().tileBackground(kind,scene.get(),nativeBg);
+        return style.get().tileBackground(kind,scene.get(),nativeBg,lightFraction.get());
     }
     private int ink(int state,int nativeInk,int bg) {
         if(!ready||!enabled.getAsBoolean()||state<0||state>2||scene.get()==QsScene.Tone.UNKNOWN)return nativeInk;
         QsStyle s=style.get();
         QsScene.Tone tone=scene.get();
-        if(tone==QsScene.Tone.LIGHT_SCENE?!s.tileLight:!s.tileDark)return nativeInk;
-        return QsSurfaceInk.onVerifiedTile(nativeInk,bg,state,tone,s);
+        if(!s.tileLight&&!s.tileDark)return nativeInk;
+        return QsSurfaceInk.onVerifiedTile(nativeInk,bg,state,tone,s,lightFraction.get());
     }
     void refresh() {
         if(!ready)return;
         try {
-            Object next=Arrays.asList(enabled.getAsBoolean(),scene.get(),style.get());
+            Float f=lightFraction.get();
+            Object next=Arrays.asList(enabled.getAsBoolean(),scene.get(),style.get(),
+                    f==null?-1:Math.round(f*4f));
             if(!next.equals(paletteKey)){paletteKey=next;coverageRevision++;covered.clear();}
             signal.update(next);
         }

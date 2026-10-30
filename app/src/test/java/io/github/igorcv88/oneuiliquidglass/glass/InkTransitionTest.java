@@ -15,6 +15,14 @@ public final class InkTransitionTest {
         assertEquals(0x80, (mid >> 16) & 255);
         assertEquals(0x80, mid & 255);
     }
+    @Test public void transparentWhiteDoesNotWashOutDarkTintInTheMiddle(){
+        int middle=InkTransition.lerpPremultiplied(0x00ffffff,0x80000c21,.5f);
+        assertEquals(0x40000c21,middle);
+        assertEquals(0x00ffffff,InkTransition.lerpPremultiplied(0x00ffffff,0x80000c21,0f));
+        assertEquals(0x80000c21,InkTransition.lerpPremultiplied(0x00ffffff,0x80000c21,1f));
+        int twoOpaque=InkTransition.lerpPremultiplied(0xff000000,0xffffffff,.5f);
+        assertEquals(0xff808080,twoOpaque);
+    }
     @Test public void easeIsMonotonicSymmetricAndBounded() {
         assertEquals(0f, InkTransition.ease(-1f), 0f);
         assertEquals(1f, InkTransition.ease(5f), 0f);

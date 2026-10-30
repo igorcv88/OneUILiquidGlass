@@ -85,6 +85,8 @@ public final class QuickSettingsHooks {
     private Method recomposeScope, recordUsed, invalidate, valid;
     private Constructor<?> solidColor;
     private Object darkRim, lightRim, darkLitRim, lightLitRim;
+    /** Coalesce animation-driven Compose refreshes to ~30 fps; ink draws can update each frame. */
+    private long lastPaletteFrameAt;
     /** Boxes whose own optics drew: only their outline is attenuated (QsLitRims). */
     private final QsLitRims litRims = new QsLitRims();
     private boolean ready, broken, configStarted, applied;
@@ -140,7 +142,16 @@ public final class QuickSettingsHooks {
         BackdropEvents.add(() -> QuickSettingsHooks.this.backdrop.event());
         this.backdrop = new QsBackdrop(this::enabled, edge::expansion,
                 () -> { clearRims(); edge.backdropChanged(); invalidateAll("backdrop"); },
-                () -> { QsContentHooks c = QuickSettingsHooks.this.content; if (c != null) c.invalidateDraw(); });
+                () -> {
+                    QsContentHooks c = QuickSettingsHooks.this.content;
+                    if (c != null) c.invalidateDraw();
+                    long now = android.os.SystemClock.uptimeMillis();
+                    if (now - lastPaletteFrameAt >= 34L) {
+                        lastPaletteFrameAt = now;
+                        clearRims();
+                        invalidateAll("backdrop-crossfade");
+                    }
+                });
         this.content = new QsContentHooks(loader, this::enabled, () -> style, backdrop::tone, backdrop::headerTone, this::ink,
                 this::capture, tileProbe);
     }
@@ -211,7 +222,8 @@ public final class QuickSettingsHooks {
                         if (!QuickSettingsGlass.srgb(original)) return;
                         if ((QuickSettingsGlass.argb(original) >>> 24) == 0) return;
                         q = new Pending(f.composer, original, QuickSettingsGlass.color(QuickSettingsGlass.fill(
-                                Kind.CONTAINER, QuickSettingsGlass.argb(original), backdrop.tone(), style)), null, f.shape, 0);
+                                Kind.CONTAINER, QuickSettingsGlass.argb(original), backdrop.tone(), style,
+                                backdrop.ink(false))), null, f.shape, 0);
                     }
                     if (!(p.args[0] instanceof Long) || (Long) p.args[0] != q.background) return;
                     if (q.token == null && q.edgeShape != null) q.token = edge.selected("media-active");
@@ -399,7 +411,7 @@ public final class QuickSettingsHooks {
         }
         try {
             QsSliderHooks sliders = new QsSliderHooks(loader,this::enabled,()->style,()->pillShape!=null||style.outer>=1,
-                    this::capture,()->touching,()->edge.suppress(true),backdrop::tone);
+                    this::capture,()->touching,()->edge.suppress(true),backdrop::tone,()->backdrop.ink(false));
             sliders.onInteraction(edge::suppress);
             sliders.install(bar);
         }
@@ -490,7 +502,7 @@ public final class QuickSettingsHooks {
                     Object model = tileProbe.currentModel();
                     int nativeColor = QuickSettingsGlass.argb(background);
                     int mapped = model == null ? nativeColor
-                            : style.tileBackground(discKind, backdrop.tone(), nativeColor);
+                            : style.tileBackground(discKind, backdrop.tone(), nativeColor, backdrop.ink(false));
                     if (mapped != nativeColor) {
                         a[4] = QuickSettingsGlass.color(mapped);
                         // Theme Park off may give idle discs a separate outline; clearing only
@@ -519,7 +531,8 @@ public final class QuickSettingsHooks {
             }
             boolean dark = dark();
             // Containers: transparent, or the faint dark tint over a light backdrop. Discs: Samsung's.
-            long fill = QuickSettingsGlass.color(QuickSettingsGlass.fill(kind, QuickSettingsGlass.argb(background), backdrop.tone(), style));
+            long fill = QuickSettingsGlass.color(QuickSettingsGlass.fill(kind, QuickSettingsGlass.argb(background), backdrop.tone(), style,
+                    backdrop.ink(false)));
             boolean outlined = (outlinedDefault || Boolean.TRUE.equals(a[1]))
                     && a[2] instanceof Float && (Float) a[2] > 0f;
             boolean rimmed = outlined && QuickSettingsGlass.rimmed(kind);
@@ -615,6 +628,10 @@ public final class QuickSettingsHooks {
      * the outline to the background node that drew (QsLitRims), not the shader's availability.
      */
     private Object rim(boolean dark, boolean lit) throws ReflectiveOperationException {
+        Float phase=backdrop.ink(false);
+        if (phase!=null && phase>0f && phase<1f)
+            return solidColor.newInstance(QuickSettingsGlass.color(QuickSettingsGlass.basalRim(
+                    QuickSettingsGlass.rim(dark,backdrop.tone(),style,phase),lit)));
         Object cached = lit ? (dark ? darkLitRim : lightLitRim) : (dark ? darkRim : lightRim);
         if (cached != null) return cached;
         Object brush = solidColor.newInstance(QuickSettingsGlass.color(QuickSettingsGlass.basalRim(

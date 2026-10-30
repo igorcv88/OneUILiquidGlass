@@ -176,9 +176,10 @@ final class QsBackdrop {
         scene.force(snapshot.body,snapshot.grid.takenAt);
         header.force(snapshot.header,snapshot.grid.takenAt);
         sampledAt=snapshot.grid.takenAt;
-        // Glyphs, discs, optical nodes and header use one committed palette, without a
-        // text-only ramp that leaves white glyphs on a newly white surface.
-        publish(false);
+        // The panel's glyphs, discs, sliders and container tint now consume the same
+        // fractional ink phase. Only a known-to-known in-session change may crossfade;
+        // first opening and unknown scenes still apply immediately.
+        publish(shown);
     }
 
     private boolean fresh() {

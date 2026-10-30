@@ -82,6 +82,13 @@ public final class QsStyle {
                     : QuickSettingsGlass.withAlpha(tileDarkOff, QuickSettingsGlass.alpha(tileDarkOff)*tileDarkOffAlpha);
         return nativeColor;
     }
+    /** One palette phase for all QS glyphs and discs while a known scene crossfades. */
+    public int tileBackground(QuickSettingsGlass.Kind kind, QsScene.Tone tone, int nativeColor, Float lightFraction) {
+        if (lightFraction == null || tone == QsScene.Tone.UNKNOWN)
+            return tileBackground(kind,tone,nativeColor);
+        return InkTransition.lerpPremultiplied(tileBackground(kind,QsScene.Tone.DARK_SCENE,nativeColor),
+                tileBackground(kind,QsScene.Tone.LIGHT_SCENE,nativeColor),lightFraction);
+    }
     /** Tint only neutral monochrome ink; verified disc-less controls use off-ink on light glass. */
     public int tileInk(QuickSettingsGlass.Kind kind, QsScene.Tone tone, int nativeColor) {
         if (!QuickSettingsGlass.neutral(nativeColor)) return nativeColor;
@@ -96,6 +103,12 @@ public final class QsStyle {
         // White ARGB (0xffffffff) is -1 as a signed int, so it cannot be a sentinel.
         return QuickSettingsGlass.withAlpha(tint,
                 QuickSettingsGlass.alpha(tint) * QuickSettingsGlass.alpha(nativeColor));
+    }
+    public int tileInk(QuickSettingsGlass.Kind kind, QsScene.Tone tone, int nativeColor, Float lightFraction) {
+        if (lightFraction == null || tone == QsScene.Tone.UNKNOWN)
+            return tileInk(kind,tone,nativeColor);
+        return InkTransition.lerpPremultiplied(tileInk(kind,QsScene.Tone.DARK_SCENE,nativeColor),
+                tileInk(kind,QsScene.Tone.LIGHT_SCENE,nativeColor),lightFraction);
     }
     private String prop(String key) {
         String s = values.apply(key);

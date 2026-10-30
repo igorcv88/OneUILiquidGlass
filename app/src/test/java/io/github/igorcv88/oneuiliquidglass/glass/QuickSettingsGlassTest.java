@@ -28,6 +28,20 @@ public final class QuickSettingsGlassTest {
         for (int nativeFill : new int[] {0x66000000, 0x33ffffff, 0xffffffff, 0x0d141823})
             assertEquals(0, QuickSettingsGlass.fill(Kind.CONTAINER, nativeFill) >>> 24);
     }
+    @Test public void qsGlassAndDiscsInterpolateWithoutAWhiteVeil(){
+        QsStyle style=new QsStyle(k->k.equals("qs.tilelighton")?"000c21cc":
+                k.equals("qs.tiledarkon")?"ffffffdd":
+                k.equals("qs.tiledark")?"1":null);
+        int midway=QuickSettingsGlass.fill(Kind.CONTAINER,0x66000000,
+                QsScene.Tone.LIGHT_SCENE,style,.5f);
+        assertTrue(midway>>>24>0);
+        assertEquals(style.lightColor,midway&0xffffff);
+        int nativeDisc=0xffcccccc;
+        assertEquals(style.tileBackground(Kind.ACTIVE,QsScene.Tone.DARK_SCENE,nativeDisc),
+                style.tileBackground(Kind.ACTIVE,QsScene.Tone.LIGHT_SCENE,nativeDisc,0f));
+        assertEquals(style.tileBackground(Kind.ACTIVE,QsScene.Tone.LIGHT_SCENE,nativeDisc),
+                style.tileBackground(Kind.ACTIVE,QsScene.Tone.LIGHT_SCENE,nativeDisc,1f));
+    }
 
     @Test public void rimIsAUniformBasalWhite() {
         // No direction is baked in: the whole outline has the same basal light.

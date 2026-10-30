@@ -98,6 +98,13 @@ public final class QuickSettingsGlass {
         return over(withAlpha(s.lightGlassColor, alpha(s.lightGlassColor) * s.lightGlassOpacity), tone);
     }
 
+    /** Share the same 0=dark, 1=light transition phase with QS Compose icons and sliders. */
+    public static int fill(Kind kind,int nativeFill,QsScene.Tone scene,QsStyle s,Float lightFraction) {
+        if(lightFraction==null||scene==QsScene.Tone.UNKNOWN)return fill(kind,nativeFill,scene,s);
+        return InkTransition.lerpPremultiplied(fill(kind,nativeFill,QsScene.Tone.DARK_SCENE,s),
+                fill(kind,nativeFill,QsScene.Tone.LIGHT_SCENE,s),lightFraction);
+    }
+
     /** Non-premultiplied ARGB source-over; the bottom is the existing contrast tint. */
     public static int over(int top, int bottom) {
         float a = alpha(top), b = alpha(bottom), out = a + b * (1f - a);
@@ -117,6 +124,11 @@ public final class QuickSettingsGlass {
     public static int rim(boolean darkTheme, QsScene.Tone scene, QsStyle s) {
         if (scene == QsScene.Tone.UNKNOWN) return rim(darkTheme);
         return withAlpha(0xffffff, scene == QsScene.Tone.LIGHT_SCENE ? s.lightRim : s.darkRim);
+    }
+    public static int rim(boolean darkTheme,QsScene.Tone scene,QsStyle s,Float lightFraction) {
+        if(lightFraction==null||scene==QsScene.Tone.UNKNOWN)return rim(darkTheme,scene,s);
+        return InkTransition.lerp(rim(darkTheme,QsScene.Tone.DARK_SCENE,s),
+                rim(darkTheme,QsScene.Tone.LIGHT_SCENE,s),lightFraction);
     }
 
     /** Share of the rim kept under the glass optics, which draw the directional contour themselves. */

@@ -44,4 +44,15 @@ public class QsSurfaceInkTest {
         assertEquals(0xffffffff,QsSurfaceInk.onVerifiedTile(0xffffffff,0,0,
                 QsScene.Tone.DARK_SCENE,style));
     }
+    @Test public void crossfadeUsesOneProgressForBothSmallTileEndpoints(){
+        QsStyle style=new QsStyle(k->k.equals("qs.tilelightoffink")?"000c2180":
+                k.equals("qs.tiledarkoffink")?"ffffffa0":
+                k.equals("qs.tiledark")?"1":null);
+        int light=QsSurfaceInk.onVerifiedTile(0xff000000,0,1,QsScene.Tone.LIGHT_SCENE,style);
+        int dark=QsSurfaceInk.onVerifiedTile(0xff000000,0,1,QsScene.Tone.DARK_SCENE,style);
+        assertEquals(dark,QsSurfaceInk.onVerifiedTile(0xff000000,0,1,QsScene.Tone.LIGHT_SCENE,style,0f));
+        assertEquals(light,QsSurfaceInk.onVerifiedTile(0xff000000,0,1,QsScene.Tone.LIGHT_SCENE,style,1f));
+        assertEquals(InkTransition.lerpPremultiplied(dark,light,.5f),
+                QsSurfaceInk.onVerifiedTile(0xff000000,0,1,QsScene.Tone.LIGHT_SCENE,style,.5f));
+    }
 }

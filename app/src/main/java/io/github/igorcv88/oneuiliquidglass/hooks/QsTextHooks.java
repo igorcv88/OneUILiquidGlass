@@ -72,11 +72,12 @@ final class QsTextHooks {
     private static final class TileInk {
         final QsStyle palette;
         final QsScene.Tone tone;
+        final Float lightFraction;
         final QuickSettingsGlass.Kind state;
         final Object node;
         int canvasCalls;
-        TileInk(QsStyle palette, QsScene.Tone tone, QuickSettingsGlass.Kind state, Object node) {
-            this.palette=palette;this.tone=tone;this.state=state;this.node=node;
+        TileInk(QsStyle palette, QsScene.Tone tone, Float lightFraction, QuickSettingsGlass.Kind state, Object node) {
+            this.palette=palette;this.tone=tone;this.lightFraction=lightFraction;this.state=state;this.node=node;
         }
     }
     private final SparseArray<ColorFilter> iconFilters=new SparseArray<>();
@@ -306,7 +307,7 @@ final class QsTextHooks {
                                     +" reason="+(!ready?"hooks-unready":!on?"glass-off":model==null?"unbound-model":state==null?"unverified-state":sceneTone==QsScene.Tone.UNKNOWN?"tone-unknown":allowed?"awaiting-canvas":"not-a-disc"));
                     }
                     if(allowed)
-                        tileIconDrawing.set(new TileInk(style.get(),sceneTone,state,p.thisObject));
+                        tileIconDrawing.set(new TileInk(style.get(),sceneTone,level.apply(false),state,p.thisObject));
                     else tileIconDrawing.remove();
                     TileInk tile=tileIconDrawing.get();
                     if(tile!=null)applyComposeTileFilter(p,tile);
@@ -650,7 +651,7 @@ final class QsTextHooks {
         ColorFilter originalFilter = paint.getColorFilter();
         Integer nativeFilter = Foreground.filterColor(originalFilter);
         int nativeColor = nativeFilter != null ? nativeFilter : paint.getColor();
-        int mapped = tile.palette.tileInk(tile.state,tile.tone,nativeColor);
+        int mapped = tile.palette.tileInk(tile.state,tile.tone,nativeColor,tile.lightFraction);
         if (Probe.trace && !inkSignature(tile).equals(tileInkLogged.put(tile.node,inkSignature(tile))))
             Probe.log("QS_TILE_ICON_INK", "node=" + Integer.toHexString(System.identityHashCode(tile.node))
                     + " state=" + tile.state + " scene=" + tile.tone

@@ -25,6 +25,7 @@ final class QsSliderHooks {
     private final BooleanSupplier geometryAvailable;
     private final Supplier<QsStyle> style;
     private final Supplier<QsScene.Tone> tone;
+    private final Supplier<Float> lightFraction;
     private final Consumer<Object> capture;
     private Method drawContext, size, setSize, getCanvas;
     private Field nativeCanvas;
@@ -82,8 +83,14 @@ final class QsSliderHooks {
     }
     QsSliderHooks(ClassLoader loader,BooleanSupplier enabled,Supplier<QsStyle> style,BooleanSupplier geometryAvailable,
             Consumer<Object> capture,BooleanSupplier touching,Runnable dragged,Supplier<QsScene.Tone> tone){
+        this(loader,enabled,style,geometryAvailable,capture,touching,dragged,tone,()->null);
+    }
+    QsSliderHooks(ClassLoader loader,BooleanSupplier enabled,Supplier<QsStyle> style,BooleanSupplier geometryAvailable,
+            Consumer<Object> capture,BooleanSupplier touching,Runnable dragged,Supplier<QsScene.Tone> tone,
+            Supplier<Float> lightFraction){
         this.loader=loader;this.enabled=enabled;this.style=style;this.capture=capture;
-        this.geometryAvailable=geometryAvailable;this.touching=touching;this.dragged=dragged;this.tone=tone;
+        this.geometryAvailable=geometryAvailable;this.touching=touching;this.dragged=dragged;
+        this.tone=tone;this.lightFraction=lightFraction;
     }
     /** Whether a bar's value moved while a finger is down (the user is dragging it). */
     static boolean drag(Float previous,float length,boolean touching){
@@ -355,6 +362,9 @@ final class QsSliderHooks {
             p.args[4]=QuickSettingsGlass.sliderCorners(g[2],g[3],f.w<=f.h);
             int fillColor = tone.get()==QsScene.Tone.LIGHT_SCENE ? s.sliderLightColor
                     : tone.get()==QsScene.Tone.DARK_SCENE ? s.sliderDarkColor : 0xffffffff;
+            Float fraction=lightFraction.get();
+            if(fraction!=null&&tone.get()!=QsScene.Tone.UNKNOWN)
+                fillColor=InkTransition.lerpPremultiplied(s.sliderDarkColor,s.sliderLightColor,fraction);
             if(Probe.trace && stage==1 && barArguments.size()<96){
                 String key="slider-color:"+f.role+":"+tone.get()+":"+Integer.toHexString(fillColor);
                 if(barArguments.add(key)) Probe.log("QS_SLIDER_COLOR", "role="+f.role+" scene="+tone.get()

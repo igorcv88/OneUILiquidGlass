@@ -126,9 +126,9 @@ final class QsContentHooks {
             });
         text = new QsTextHooks(loader, this::current, enabled, scene, headerScene, level, style, tileProbe);
         text.install();
-        tileBox=new QsTileBoxHooks(loader,enabled,style,scene,capture);
+        tileBox=new QsTileBoxHooks(loader,enabled,style,scene,() -> level.apply(false),capture);
         tileBox.install();
-        sliderIcons=new QsSliderIconHooks(loader,enabled,style,scene,capture);
+        sliderIcons=new QsSliderIconHooks(loader,enabled,style,scene,() -> level.apply(false),capture);
         sliderIcons.install();
         // Tile ink is bound to the verified QuickTile model and its disc state.
         // Both active and empty players use the parent capsule drawContent boundary.
