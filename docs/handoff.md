@@ -1,5 +1,15 @@
 # Handoff — OneUILiquidGlass (2026-10-16)
 
+**Continuidade QS105 (30/10/2026):** ler primeiro
+[qs105-semantic-ink.md](qs105-semantic-ink.md). A nova rota do tile box, o coordenador
+compartilhado de cena e os hooks nativos de brilho/volume estão implementados;
+validação física, primeiro quadro sem captura e interseção glifo/fill em baixos
+percentuais continuam abertos. Não confundir pronto para revisão com aceitação
+visual no DZIF.
+Revisão adicional do #105: ownership de tiles por identidade fraca, falhas
+isoladas sem desligar todos os hooks, assinaturas de brilho conferidas no DEX
+e prevenção de preview atrasado. Detalhes e limites no mesmo documento.
+
 Documento para continuar o trabalho em outra conversa. Leia inteiro antes de mexer em qualquer coisa. O histórico técnico detalhado está em `docs/architecture.md`; as seções de 2026-10-16 cobrem a central de notificações.
 
 **Continuidade prioritária (28/10/2026, pós-PR #83):** o checklist atualizado e os critérios
@@ -961,3 +971,4 @@ O usuário achou esta combinação "mais ou menos melhor":
 
 - Dump de shaders do aparelho, com 147 shaders, enviado pelo usuário como `oulg_shaders_v3.txt`. Ele mostra o FillRRect com 26 programas de fragmento e os programas de recorte. Para regenerar, peça `cp /data/misc/surfaceflinger/oulg_shaders.txt /sdcard/Download/` depois de um reinício com o cache limpo.
 - `framework.jar` (Samsung) e `services.jar`: já analisados. `View.semSetBlurInfo` chama `invalidateBlurBackground` e `setBackground(BackgroundBlurDrawable)`.
+

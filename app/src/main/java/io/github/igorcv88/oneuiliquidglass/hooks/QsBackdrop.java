@@ -11,6 +11,7 @@ import java.util.function.BooleanSupplier;
 import java.util.function.DoubleSupplier;
 import io.github.igorcv88.oneuiliquidglass.diagnostics.Probe;
 import io.github.igorcv88.oneuiliquidglass.glass.QsScene;
+import io.github.igorcv88.oneuiliquidglass.glass.PanelScene;
 import io.github.igorcv88.oneuiliquidglass.glass.ShadeTone;
 import io.github.igorcv88.oneuiliquidglass.glass.ToneGate;
 import io.github.igorcv88.oneuiliquidglass.glass.ToneGrid;
@@ -43,7 +44,7 @@ final class QsBackdrop {
     /** A sample this young belongs to the opening that follows it. */
     static final long FRESH_MS = 600;
     /** The shade's already measured backdrop can cover a lateral transition, not a later app. */
-    static final long SHADE_HANDOFF_MAX_MS = 2500;
+    static final long SHADE_HANDOFF_MAX_MS = ShadeTone.LIVE_MAX_AGE_MS;
     static final double LATERAL_EXPANSION = .95;
     static final long RESAMPLE_MS = 900, ACTIVE_RESAMPLE_MS = 250, BURST_RESAMPLE_MS = 100, ACTIVE_WINDOW_MS = 1500, CONFIRM_MS = 150, DWELL_MS = 600;
     private final BooleanSupplier enabled;
@@ -89,6 +90,11 @@ final class QsBackdrop {
 
     QsBackdrop(BooleanSupplier enabled, DoubleSupplier expansion, Runnable changed, Runnable redraw) {
         this.enabled = enabled; this.expansion = expansion; this.changed = changed; this.redraw = redraw;
+        ShadeTone.listen(snapshot -> {
+            if(!shown || !enabled.getAsBoolean() || snapshot.grid.takenAt<=sampledAt
+                    || BackdropEvents.lastChange()>snapshot.grid.takenAt)return;
+            acceptShared(snapshot);
+        });
     }
 
     QsScene.Tone tone() { return tone; }
@@ -146,19 +152,21 @@ final class QsBackdrop {
     private boolean adoptLive(String source) {
         ToneGrid grid=ShadeTone.live();
         if(grid==null || BackdropEvents.lastChange()>grid.takenAt)return false;
-        long now=SystemClock.uptimeMillis();
-        scene.reset();header.reset();sceneGate.reset();headerGate.reset();
-        scene.accept(grid.whole(),now);
-        header.accept(headerLuma(grid),now);
-        if(scene.tone()==QsScene.Tone.UNKNOWN||header.tone()==QsScene.Tone.UNKNOWN)return false;
-        sceneGate.offer(scene.tone()==QsScene.Tone.LIGHT_SCENE,now);
-        headerGate.offer(header.tone()==QsScene.Tone.LIGHT_SCENE,now);
-        sampledAt=grid.takenAt;
-        trace("QS_TONE_LIVE", "source="+source+" ageMs="+(now-grid.takenAt)
+        acceptShared(ShadeTone.decision(grid));
+        trace("QS_TONE_LIVE", "source="+source+" ageMs="+(SystemClock.uptimeMillis()-grid.takenAt)
                 +" scene="+scene.tone()+" header="+header.tone());
-        publish(false);
         schedule(RESAMPLE_MS);
         return true;
+    }
+
+    private void acceptShared(PanelScene.Snapshot snapshot) {
+        if(snapshot==null||snapshot.grid.takenAt<sampledAt)return;
+        scene.force(snapshot.body,snapshot.grid.takenAt);
+        header.force(snapshot.header,snapshot.grid.takenAt);
+        sampledAt=snapshot.grid.takenAt;
+        // Glyphs, discs, optical nodes and header use one committed palette, without a
+        // text-only ramp that leaves white glyphs on a newly white surface.
+        publish(false);
     }
 
     private boolean fresh() {
@@ -208,7 +216,7 @@ final class QsBackdrop {
 
     /** The top-edge ACTION_DOWN, before Samsung shows the panel. Ignored while it is open. */
     void gesture() {
-        if (shown || pending || fresh() || !enabled.getAsBoolean()) return;
+        if (shown || pending || (fresh() && BackdropEvents.lastChange()<=sampledAt) || !enabled.getAsBoolean()) return;
         if (adoptLive("gesture"))return;
         // No current pixel sample: start the one-shot request. UNKNOWN optics are gain-capped.
         scene.reset(); header.reset(); sceneGate.reset(); headerGate.reset();
@@ -237,16 +245,7 @@ final class QsBackdrop {
                 return;
             }
             if (grid != null) {
-                long now = SystemClock.uptimeMillis();
-                // A preview may have arrived while this request was pending; its 500 ms
-                // initial classifier dwell must not mask a newer actual pixel sample.
-                scene.reset();header.reset();
-                scene.accept(grid.whole(), now);
-                header.accept(headerLuma(grid), now);
-                sceneGate.reset(); headerGate.reset();
-                if (scene.tone() != QsScene.Tone.UNKNOWN) sceneGate.offer(scene.tone() == QsScene.Tone.LIGHT_SCENE, now);
-                if (header.tone() != QsScene.Tone.UNKNOWN) headerGate.offer(header.tone() == QsScene.Tone.LIGHT_SCENE, now);
-                sampledAt = now;
+                acceptShared(ShadeTone.decision(grid));
             } else {
                 if(adoptLive("capture-unavailable"))return;
                 forget();
@@ -260,7 +259,7 @@ final class QsBackdrop {
 
     private void schedule(long delay) {
         main.removeCallbacks(tick);
-        if (sampledAt == 0) return;
+        if (!enabled.getAsBoolean()) return;
         main.postDelayed(tick, Math.max(16, delay));
     }
 
@@ -275,6 +274,7 @@ final class QsBackdrop {
 
     /** One in-session capture; a confirmed change of side moves the ink. */
     private void resample() {
+        if(shown && sampledAt==0 && !pending) {prefetch("unavailable-retry");return;}
         View v = host.get();
         if (!enabled.getAsBoolean() || pending || v == null || !v.isAttachedToWindow() || sampledAt == 0) return;
         if (!shown) return; // Closed: the next opening captures afresh.
@@ -302,24 +302,9 @@ final class QsBackdrop {
         long now = SystemClock.uptimeMillis();
         // No capture this time (secure content, a transient failure): try again later, slowly.
         if (grid == null) { Probe.log("QS_RESAMPLE", "state=unavailable generation=" + generation); schedule(RESAMPLE_MS * 3); return; }
-        boolean a = offer(scene, sceneGate, grid.whole(), now);
-        boolean b = offer(header, headerGate, headerLuma(grid), now);
-        sampledAt=grid.takenAt;
-        boolean pendingNow = sceneGate.pending() || headerGate.pending();
-        if (a || b || pendingNow)
-            Probe.log("QS_RESAMPLE", "scene=" + scene.tone() + " header=" + header.tone() + " sceneLuma="
-                    + String.format(java.util.Locale.ROOT, "%.2f", grid.whole()) + " headerLuma="
-                    + String.format(java.util.Locale.ROOT, "%.2f", headerLuma(grid)) + " commit=" + (a || b)
-                    + " pending=" + pendingNow + " sampleAgeMs=" + (now - requested) + " generation=" + generation);
-        if (a || b) publish(true);
-        // A candidate is confirmed by the next capture, taken as soon as its gate can accept it.
-        long t = SystemClock.uptimeMillis();
-        long idle = BackdropEvents.burst(t) ? BURST_RESAMPLE_MS
-                : t - io.github.igorcv88.oneuiliquidglass.glass.BackdropMotion.lastActive() < ACTIVE_WINDOW_MS ? ACTIVE_RESAMPLE_MS : RESAMPLE_MS;
-        long next = idle;
-        if (sceneGate.pending()) next = Math.min(next, sceneGate.confirmIn(now));
-        if (headerGate.pending()) next = Math.min(next, headerGate.confirmIn(now));
-        schedule(pendingNow ? Math.max(CONFIRM_MS, next) : idle);
+        if(BackdropEvents.lastChange()>grid.takenAt){schedule(ACTIVE_RESAMPLE_MS);return;}
+        acceptShared(ShadeTone.decision(grid));
+        schedule(ACTIVE_RESAMPLE_MS);
     }
 
     /** A gated reading for one classifier; true when its decided scene changed. */
@@ -420,3 +405,4 @@ final class QsBackdrop {
         forget(); publish(false);
     }
 }
+

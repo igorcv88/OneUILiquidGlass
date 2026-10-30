@@ -31,9 +31,26 @@ public final class ShadeTone implements CaptureHub.Client {
     /** One low-resolution pixel source shared by QS and the notification shade. */
     private static final Map<View,Preview> PREVIEWS=new WeakHashMap<>();
     private static volatile ToneGrid liveGrid;
+    private static final PanelScene PANELS=new PanelScene();
+    private static final java.util.List<java.util.function.Consumer<PanelScene.Snapshot>> listeners=new java.util.ArrayList<>();
+    private static int previewEpoch;
+    public static void listen(java.util.function.Consumer<PanelScene.Snapshot> listener) {listeners.add(listener);}
+    public static PanelScene.Snapshot decision(ToneGrid grid) {return PANELS.accept(grid);}
+    private static void publish(ToneGrid grid) {
+        if(grid==null || (liveGrid!=null&&grid.takenAt<=liveGrid.takenAt))return;
+        PanelScene.Snapshot snapshot=PANELS.accept(grid);
+        // A one-shot capture can have committed a newer snapshot while this preview was reduced.
+        // Never publish the older grid as "live" with the newer palette attached to it.
+        if(snapshot==null||snapshot.grid.takenAt!=grid.takenAt)return;
+        liveGrid=grid;
+        for(java.util.function.Consumer<PanelScene.Snapshot> listener:new java.util.ArrayList<>(listeners)) {
+            try {listener.accept(snapshot);}catch(RuntimeException|LinkageError e){Probe.error("PANEL_SCENE_LISTENER",e);}
+        }
+    }
     private static boolean previewWorking;
     private static long previewFrameAt;
     private static long previewAcceptedAt;
+    private static long previewReportAt;
     /** A preview older than this is not allowed to choose a first-frame palette. */
     public static final long LIVE_MAX_AGE_MS=250;
 
@@ -52,34 +69,47 @@ public final class ShadeTone implements CaptureHub.Client {
     /** Latest full-display capture, if still current enough for the panel's first frame. */
     public static ToneGrid live() {
         ToneGrid grid=liveGrid;
-        return ToneGrid.recent(grid,android.os.SystemClock.uptimeMillis(),LIVE_MAX_AGE_MS)?grid:null;
+        long now=android.os.SystemClock.uptimeMillis();
+        boolean fresh=ToneGrid.recent(grid,now,LIVE_MAX_AGE_MS);
+        if(Probe.trace && !fresh && now-previewReportAt>=1000) {
+            previewReportAt=now;
+            Probe.log("PANEL_PREVIEW_MISS","ageMs="+(grid==null?-1:now-grid.takenAt)
+                    +" reducing="+previewWorking+" registered="+PREVIEWS.size()+" captureAvailable="+CaptureHub.available());
+        }
+        return fresh?grid:null;
     }
 
     private static final class Preview implements CaptureHub.Client,View.OnAttachStateChangeListener {
         private final WeakReference<View> anchor;
         private final BooleanSupplier enabled;
-        Preview(View anchor,BooleanSupplier enabled) {this.anchor=new WeakReference<>(anchor);this.enabled=enabled;}
-        @Override public void onViewAttachedToWindow(View v) {CaptureHub.register(this);}
+        private long registeredAt;
+        Preview(View anchor,BooleanSupplier enabled) {this.anchor=new WeakReference<>(anchor);this.enabled=enabled;registeredAt=android.os.SystemClock.uptimeMillis();}
+        @Override public void onViewAttachedToWindow(View v) {registeredAt=android.os.SystemClock.uptimeMillis();CaptureHub.register(this);}
         @Override public void onViewDetachedFromWindow(View v) {CaptureHub.unregister(this);}
         @Override public View view() {return anchor.get();}
         @Override public int hz() {return enabled.getAsBoolean()?8:0;}
         @Override public boolean evenHidden() {return true;}
         @Override public boolean fullDisplayCapture() {return true;}
         @Override public float scale() {return PREFETCH_SCALE;}
-        @Override public void onUnavailable() {liveGrid=null;}
+        @Override public void onUnavailable() {liveGrid=null;previewEpoch++;PANELS.clear();}
         @Override public void onFrame(CaptureHub.Frame frame) {
             // QS and shade may both own a preview client. They receive one shared Frame;
             // convert it only once and keep only luminance bands, never the bitmap.
+            View v=anchor.get();
+            if(v==null||!v.isAttachedToWindow()||!enabled.getAsBoolean()||frame.capturedAt<=registeredAt)return;
+            android.view.WindowManager wm=v.getContext().getSystemService(android.view.WindowManager.class);
+            if(wm==null||!frame.crop.contains(wm.getMaximumWindowMetrics().getBounds()))return;
             if(previewWorking || previewFrameAt==frame.capturedAt
                     || frame.capturedAt-previewAcceptedAt<125)return;
             previewWorking=true;previewFrameAt=frame.capturedAt;
+            int epoch=previewEpoch;
             previewAcceptedAt=frame.capturedAt;
             frame.retain();
             worker().post(() -> {
                 ToneGrid grid=grid(frame,-1);
                 MAIN.post(() -> {
                     frame.release();previewWorking=false;
-                    if(grid!=null)liveGrid=grid;
+                    if(epoch==previewEpoch)publish(grid);
                 });
             });
         }
@@ -114,6 +144,7 @@ public final class ShadeTone implements CaptureHub.Client {
         final java.util.function.Consumer<ToneGrid> result;
         /** A capture already in flight covers only the earlier clients (a pop-up's band): skip it. */
         final long registeredAt = android.os.SystemClock.uptimeMillis();
+        final int epoch=previewEpoch;
         boolean done, cancelled;
         void cancel() { cancelled = true; done = true; CaptureHub.unregister(this); }
         Prefetch(View panel, int generation, java.util.function.Consumer<ToneGrid> result) {
@@ -129,6 +160,7 @@ public final class ShadeTone implements CaptureHub.Client {
          * 25/10). At 0.125 the copy is 16x smaller.
          */
         @Override public float scale() { return PREFETCH_SCALE; }
+        @Override public boolean fullDisplayCapture() { return true; }
         @Override public void onUnavailable() {
             if (done) return;
             done = true;
@@ -142,7 +174,7 @@ public final class ShadeTone implements CaptureHub.Client {
             frame.retain();
             worker().post(() -> {
                 ToneGrid grid = grid(frame, generation);
-                MAIN.post(() -> { frame.release(); if (!cancelled) result.accept(grid); scheduleDrop(); });
+                MAIN.post(() -> { frame.release(); if (!cancelled) { if(epoch==previewEpoch)publish(grid); result.accept(epoch==previewEpoch?grid:null); } scheduleDrop(); });
             });
         }
     }
@@ -295,3 +327,4 @@ public final class ShadeTone implements CaptureHub.Client {
     public static boolean lightText() { return SemBlurBridge.shadeStrength() < 0.65f; }
 
 }
+
