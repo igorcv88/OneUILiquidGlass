@@ -10,6 +10,7 @@ import java.lang.ref.WeakReference;
 import java.util.function.BooleanSupplier;
 import java.util.function.DoubleSupplier;
 import io.github.igorcv88.oneuiliquidglass.diagnostics.Probe;
+import io.github.igorcv88.oneuiliquidglass.glass.BackdropMotion;
 import io.github.igorcv88.oneuiliquidglass.glass.QsScene;
 import io.github.igorcv88.oneuiliquidglass.glass.PanelScene;
 import io.github.igorcv88.oneuiliquidglass.glass.ShadeTone;
@@ -47,6 +48,17 @@ final class QsBackdrop {
     static final long SHADE_HANDOFF_MAX_MS = ShadeTone.LIVE_MAX_AGE_MS;
     static final double LATERAL_EXPANSION = .95;
     static final long RESAMPLE_MS = 900, ACTIVE_RESAMPLE_MS = 250, BURST_RESAMPLE_MS = 100, ACTIVE_WINDOW_MS = 1500, CONFIRM_MS = 150, DWELL_MS = 600;
+
+    /** Prefer task-switch captures for 600 ms, then touch-active and finally idle cadence. */
+    static long resampleInterval(long now, long taskAt, long motionAt) {
+        if (now >= taskAt && now - taskAt < BackdropEvents.BURST_MS) return BURST_RESAMPLE_MS;
+        if (now >= motionAt && now - motionAt < ACTIVE_WINDOW_MS) return ACTIVE_RESAMPLE_MS;
+        return RESAMPLE_MS;
+    }
+
+    private static long resampleInterval() {
+        return resampleInterval(SystemClock.uptimeMillis(), BackdropEvents.lastChange(), BackdropMotion.lastActive());
+    }
     private final BooleanSupplier enabled;
     private final DoubleSupplier expansion;
     private final Runnable changed, redraw;
@@ -155,7 +167,7 @@ final class QsBackdrop {
         acceptShared(ShadeTone.decision(grid));
         trace("QS_TONE_LIVE", "source="+source+" ageMs="+(SystemClock.uptimeMillis()-grid.takenAt)
                 +" scene="+scene.tone()+" header="+header.tone());
-        schedule(RESAMPLE_MS);
+        schedule(resampleInterval());
         return true;
     }
 
@@ -192,7 +204,7 @@ final class QsBackdrop {
             if (tone==QsScene.Tone.UNKNOWN)adoptLive("pending-entry");
             return;
         }
-        if (fresh() && BackdropEvents.lastChange() <= sampledAt) { schedule(RESAMPLE_MS); return; }
+        if (fresh() && BackdropEvents.lastChange() <= sampledAt) { schedule(resampleInterval()); return; }
         if (adoptLive("entry"))return;
         long now = SystemClock.uptimeMillis();
         boolean handoff = shadeHint != QsScene.Tone.UNKNOWN && shadeHeaderHint != QsScene.Tone.UNKNOWN
@@ -251,7 +263,7 @@ final class QsBackdrop {
                 forget();
             }
             publish(false);
-            schedule(RESAMPLE_MS);
+            schedule(resampleInterval());
         });
     }
 
@@ -302,9 +314,9 @@ final class QsBackdrop {
         long now = SystemClock.uptimeMillis();
         // No capture this time (secure content, a transient failure): try again later, slowly.
         if (grid == null) { Probe.log("QS_RESAMPLE", "state=unavailable generation=" + generation); schedule(RESAMPLE_MS * 3); return; }
-        if(BackdropEvents.lastChange()>grid.takenAt){schedule(ACTIVE_RESAMPLE_MS);return;}
+        if(BackdropEvents.lastChange()>grid.takenAt){schedule(resampleInterval());return;}
         acceptShared(ShadeTone.decision(grid));
-        schedule(ACTIVE_RESAMPLE_MS);
+        schedule(resampleInterval());
     }
 
     /** A gated reading for one classifier; true when its decided scene changed. */
