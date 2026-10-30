@@ -29,10 +29,9 @@ import io.github.igorcv88.oneuiliquidglass.glass.ToneGrid;
  * <p>While open: the backdrop is captured again every {@link #RESAMPLE_MS} (never per frame,
  * never while the panel is hidden). A reading on the other side of the classifier changes the
  * decision only once the next capture, {@link #CONFIRM_MS} later, confirms it ({@link ToneGate});
- * noise and a single transient frame change nothing. A confirmed change moves the text and
- * header-icon ink over a short transition ({@link #ink}), recomposing the rims and tile icons once
- * at its midpoint; the capsules themselves are transparent in every scene, so no material
- * changes. A close cancels the capture in flight and retires its generation, so a late result
+ * a confidently bright reading can commit immediately after the dwell guard. A confirmed change
+ * moves ink, discs, sliders and glass tints through one short transition ({@link #ink}). A close
+ * cancels the capture in flight and retires its generation, so a late result
  * never lands on the next session.</p>
  *
  * <p>Opening and closing follow the panel's expansion (SecQSPanelComposeAdapter.expansionFraction,
@@ -40,8 +39,8 @@ import io.github.igorcv88.oneuiliquidglass.glass.ToneGrid;
  * panel is collapsed. Only when the expansion cannot be read does visibility stand in for it.</p>
  */
 final class QsBackdrop {
-    /** Same material transition duration as the notification cards. */
-    static final long INK_RAMP_MS = 180;
+    /** Faster than notification cards: QS captures a task change before its palette can move. */
+    static final long INK_RAMP_MS = 120;
     /** A sample this young belongs to the opening that follows it. */
     static final long FRESH_MS = 600;
     /** The shade's already measured backdrop can cover a lateral transition, not a later app. */
@@ -375,7 +374,7 @@ final class QsBackdrop {
         boolean ramp = animate && shown && motionAllowed && (rampScene || rampHeader);
         float fromScene = sceneInk, fromHeader = headerInk;
         Probe.log("QS_BACKDROP", "state=" + next + " header=" + nextHeader + " previous=" + before + "/" + beforeHeader
-                + " generation=" + generation + " transition=" + (ramp ? "ramp180" : "immediate"));
+                + " generation=" + generation + " transition=" + (ramp ? "ramp"+INK_RAMP_MS : "immediate"));
         if (inkAnimator != null) { inkAnimator.cancel(); inkAnimator = null; }
         if (ramp) {
             inkAnimator = ValueAnimator.ofFloat(0f,1f);
