@@ -1,5 +1,11 @@
 # Pendências OneUILiquidGlass, a partir do main pós-PR #83
 
+> Atualização de 30/10/2026, pós-merge #111: o relato do usuário confirma as
+> correções funcionais de cores, discos, sliders e estabilidade. O checklist
+> consolidado de pendências reais e o plano de A/B estão em
+> [qs-performance-20261030.md](qs-performance-20261030.md). Os itens históricos
+> abaixo permanecem como registro temporal, não como lista atual de bugs.
+
 ## QS105 — nova implementação, validação física pendente
 
 - [x] Rota específica de `QuickTileBoxItemLayout`, tinta derivada observável e
