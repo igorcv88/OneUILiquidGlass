@@ -26,6 +26,7 @@ final class QsSliderIconHooks {
     private Method updateVolume;
     private QsComposeSignal signal;
     private Object lastKey;
+    private int brightFailures;
     QsSliderIconHooks(ClassLoader l,BooleanSupplier on,Supplier<QsStyle> s,Supplier<QsScene.Tone> t,Consumer<Object> c) {
         loader=l;enabled=on;style=s;scene=t;capture=c;
     }
@@ -34,34 +35,50 @@ final class QsSliderIconHooks {
         try {
             signal=new QsComposeSignal(loader);
             for(String owner:new String[]{"BrightBar","BrightBarWithTile"}) {
-            Class<?> bright=type(UI+owner+"Kt");
-            for(Method m:bright.getDeclaredMethods()) {
-                if(m.getName().equals(owner)) hook(m,new XC_MethodHook(){
-                    @Override protected void beforeHookedMethod(MethodHookParam p) {
-                        p.setObjectExtra("qsBrightLevel",brightness.get());brightness.set(Float.NaN);
-                        p.args[4]=((Integer)p.args[4])|1;
-                        try{signal.read();capture.accept(p.args[3]);}catch(ReflectiveOperationException e){Probe.error("QS_BRIGHT_ICON_FAILED",e);}
+                Class<?> bright=type(UI+owner+"Kt");
+                int entries=0,levels=0;
+                for(Method m:bright.getDeclaredMethods()) {
+                    if(m.getName().equals(owner)&&brightEntry(m)) {
+                        entries++;
+                        hook(m,new XC_MethodHook(){
+                            @Override protected void beforeHookedMethod(MethodHookParam p) {
+                                p.setObjectExtra("qsBrightLevel",brightness.get());brightness.set(Float.NaN);
+                                p.args[4]=((Integer)p.args[4])|1;
+                                try{signal.read();capture.accept(p.args[3]);}
+                                catch(ReflectiveOperationException|RuntimeException e){brightFailure(e);}
+                            }
+                            @Override protected void afterHookedMethod(MethodHookParam p) {
+                                Float old=(Float)p.getObjectExtra("qsBrightLevel");
+                                if(old==null)brightness.remove();else brightness.set(old);
+                            }
+                        });
                     }
-                    @Override protected void afterHookedMethod(MethodHookParam p) {
-                        Float old=(Float)p.getObjectExtra("qsBrightLevel");if(old==null)brightness.remove();else brightness.set(old);
+                    if(m.getName().equals(owner+"$lambda$1")&&m.getReturnType()==float.class
+                            &&m.getParameterCount()==1&&m.getParameterTypes()[0].getName().equals("androidx.compose.runtime.State")) {
+                        levels++;
+                        hook(m,new XC_MethodHook(){
+                            @Override protected void afterHookedMethod(MethodHookParam p){
+                                if(brightness.get()!=null&&!p.hasThrowable())brightness.set((Float)p.getResult());
+                            }
+                        });
                     }
-                });
-                if(m.getName().equals(owner+"$lambda$1")&&m.getReturnType()==float.class)hook(m,new XC_MethodHook(){
-                    @Override protected void afterHookedMethod(MethodHookParam p){
-                        if(brightness.get()!=null&&!p.hasThrowable())brightness.set((Float)p.getResult());
+                    if(m.getName().equals("rememberColorFilterProperty-RPmYEkk")&&m.getParameterCount()==2
+                            &&m.getParameterTypes()[0]==long.class
+                            &&m.getParameterTypes()[1].getName().equals("androidx.compose.runtime.Composer")) {
+                        hook(m,new XC_MethodHook(){
+                            @Override protected void beforeHookedMethod(MethodHookParam p) {
+                                Float progress=brightness.get();long raw=(Long)p.args[0];
+                                if(progress==null||!Float.isFinite(progress)||!QuickSettingsGlass.srgb(raw))return;
+                                int mapped=map(QuickSettingsGlass.argb(raw),progress<=0);
+                                p.args[0]=QuickSettingsGlass.color(mapped);
+                                trace("brightness",progress<=0,mapped);
+                            }
+                        });
                     }
-                });
-                if(m.getName().equals("rememberColorFilterProperty-RPmYEkk")&&m.getParameterCount()==2)hook(m,new XC_MethodHook(){
-                    @Override protected void beforeHookedMethod(MethodHookParam p) {
-                        Float progress=brightness.get();long raw=(Long)p.args[0];
-                        if(progress==null||!Float.isFinite(progress)||!QuickSettingsGlass.srgb(raw))return;
-                        int mapped=map(QuickSettingsGlass.argb(raw),progress<=0);
-                        p.args[0]=QuickSettingsGlass.color(mapped);
-                        trace("brightness",progress<=0,mapped);
-                    }
-                });
+                }
+                if(entries!=1||levels!=1)
+                    throw new NoSuchMethodException(owner+" DZIF entry="+entries+" level="+levels);
             }
-        }
         }catch(ReflectiveOperationException|RuntimeException|LinkageError e){Probe.error("QS_BRIGHT_ICON_INCOMPATIBLE",e);}
         try {
             Class<?> icon=type("com.android.systemui.volume.view.icon.QPVolumeIcon");
@@ -115,10 +132,20 @@ final class QsSliderIconHooks {
         if(key.equals(lastKey))return;lastKey=key;
         try {if(signal!=null)signal.update(key);}catch(ReflectiveOperationException e){Probe.error("QS_BRIGHT_ICON_FAILED",e);}
         if(updateVolume!=null)for(Map.Entry<Object,Integer> entry:new ArrayList<>(volumes.entrySet())) {
-            if(!((View)entry.getKey()).isAttachedToWindow())continue;
+            if(!(entry.getKey() instanceof View)||!((View)entry.getKey()).isAttachedToWindow())continue;
             try{updateVolume.invoke(entry.getKey(),entry.getValue());}
             catch(ReflectiveOperationException|RuntimeException e){Probe.error("QS_VOLUME_ICON_FAILED",e);}
         }
+    }
+    private static boolean brightEntry(Method m) {
+        if(m.getReturnType()!=void.class||m.getParameterCount()!=5)return false;
+        Class<?>[] args=m.getParameterTypes();
+        return args[0].getName().equals("com.android.systemui.samsung.quicksetting.ui.base.spannablegrid.SpannableGridTileScope")
+                &&args[1].getName().equals("androidx.compose.ui.Modifier")
+                &&args[3].getName().equals("androidx.compose.runtime.Composer")&&args[4]==int.class;
+    }
+    private void brightFailure(Throwable e) {
+        if(brightFailures++<3)Probe.error("QS_BRIGHT_ICON_FAILED",e);
     }
     private void trace(String role,boolean empty,int ink) {
         if(!Probe.trace)return;

@@ -38,8 +38,11 @@ public final class ShadeTone implements CaptureHub.Client {
     public static PanelScene.Snapshot decision(ToneGrid grid) {return PANELS.accept(grid);}
     private static void publish(ToneGrid grid) {
         if(grid==null || (liveGrid!=null&&grid.takenAt<=liveGrid.takenAt))return;
-        liveGrid=grid;
         PanelScene.Snapshot snapshot=PANELS.accept(grid);
+        // A one-shot capture can have committed a newer snapshot while this preview was reduced.
+        // Never publish the older grid as "live" with the newer palette attached to it.
+        if(snapshot==null||snapshot.grid.takenAt!=grid.takenAt)return;
+        liveGrid=grid;
         for(java.util.function.Consumer<PanelScene.Snapshot> listener:new java.util.ArrayList<>(listeners)) {
             try {listener.accept(snapshot);}catch(RuntimeException|LinkageError e){Probe.error("PANEL_SCENE_LISTENER",e);}
         }

@@ -88,6 +88,40 @@ pendente; nenhum resultado de host comprova contraste em cada pixel de 1–5%.
 Não foram feitas alterações especulativas nos demais itens históricos
 (toasts, live updates e interface) sem evidência adicional nesta coleta.
 
+## Revisão posterior do PR #105
+
+A consulta às revisões e aos comentários inline do GitHub não encontrou threads
+ou solicitações de alteração. A revisão independente confrontou novamente as
+assinaturas do DEX DZIF: `SnapshotStateKt.mutableStateOf$default(Object)`,
+`QuickTileBoxItemLayout`, `RoundIcon-It-hVyY`, ambas as entradas `BrightBar`,
+as lambdas `BrightBar$lambda$1` e `BrightBarWithTile$lambda$1`,
+`VolumeBarKt$$ExternalSyntheticLambda4.invoke(Object)` e
+`QPVolumeIcon.updateLayout(int)` estão presentes com os tipos esperados.
+
+Correções desta revisão:
+
+- Chaves de ownership, estado e diagnóstico do tile agora usam identidade de
+  objeto com referências fracas. `WeakHashMap` comparava por `equals()`, que pode
+  juntar modelos/painters distintos com conteúdo igual, suprimir cobertura ou
+  marcar falsamente um painter como ambíguo. Há teste para duas instâncias
+  diferentes com `equals()` igual e `hashCode()` igual.
+- Uma exceção em um tile específico não desativa permanentemente a adaptação
+  dos demais. Falhas de instalação/ABI continuam bloqueando a rota; as falhas
+  durante uma invocação têm registro limitado a três ocorrências.
+- Os hooks de brilho só usam os índices fixos 3 (Composer) e 4 (flags) após
+  conferir o formato DZIF do método. As lambdas de nível e de propriedade
+  Lottie também são validadas pelo tipo de parâmetro.
+- A publicação de preview rejeita o resultado se um capture one-shot mais
+  recente já comprometeu outra decisão. O `liveGrid` e o snapshot não podem
+  divergir por essa inversão de ordem.
+
+Validação adicional nesta sessão: o mapa fraco de identidade compilou e passou
+um harness executável (`WeakIdentityMap: PASS`); os cinco arquivos Java alterados
+e o teste novo passaram pelo parser do compilador Java. Build Gradle Android,
+lint e testes Android não foram executados: o SDK Android e a distribuição
+Gradle não estão disponíveis no ambiente. A correção geométrica da tinta nos
+sliders a 1–5% e a validação visual no S25 Ultra continuam pendentes.
+
 ## Coleta
 
 Com `debug.oulg.trace=1`, conferir:

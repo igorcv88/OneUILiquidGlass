@@ -19,12 +19,12 @@ final class QsTileBoxHooks {
     private final Supplier<QsScene.Tone> scene;
     private final Consumer<Object> capture;
     private final ThreadLocal<Object> model=new ThreadLocal<>();
-    private final Map<Object,WeakReference<Object>> painters=Collections.synchronizedMap(new WeakHashMap<>());
-    private final Map<Object,Integer> states=Collections.synchronizedMap(new WeakHashMap<>());
-    private final Map<Object,String> roundLogged=Collections.synchronizedMap(new WeakHashMap<>());
-    private final Map<Object,String> logged=Collections.synchronizedMap(new WeakHashMap<>());
-    private final Set<Object> ambiguous=Collections.newSetFromMap(new WeakHashMap<>());
-    private final Set<Object> covered=Collections.newSetFromMap(new WeakHashMap<>());
+    private final WeakIdentityMap<Object,WeakReference<Object>> painters=new WeakIdentityMap<>();
+    private final WeakIdentityMap<Object,Integer> states=new WeakIdentityMap<>();
+    private final WeakIdentityMap<Object,String> roundLogged=new WeakIdentityMap<>();
+    private final WeakIdentityMap<Object,String> logged=new WeakIdentityMap<>();
+    private final WeakIdentityMap<Object,Boolean> ambiguous=new WeakIdentityMap<>();
+    private final WeakIdentityMap<Object,Boolean> covered=new WeakIdentityMap<>();
     private QsComposeSignal signal;
     private Method box;
     private Field value, item, delegate, picker, available, tileState, painter;
@@ -32,6 +32,7 @@ final class QsTileBoxHooks {
     private boolean ready;
     private Object paletteKey;
     private int coverageRevision;
+    private int runtimeFailures;
     QsTileBoxHooks(ClassLoader l,BooleanSupplier on,Supplier<QsStyle> s,Supplier<QsScene.Tone> tone,Consumer<Object> c) {
         loader=l;enabled=on;style=s;scene=tone;capture=c;
     }
@@ -84,7 +85,7 @@ final class QsTileBoxHooks {
                         int ink=ink(state,QuickSettingsGlass.argb(nativeInk),bg);
                         if(ink!=QuickSettingsGlass.argb(nativeInk))p.setResult(box.invoke(null,QuickSettingsGlass.color(ink)));
                         trace(tile,state,nativeInk,ink,bg,"derived");
-                    }catch(ReflectiveOperationException|RuntimeException e){fail(e);}
+                    }catch(ReflectiveOperationException|RuntimeException e){runtimeFailure(e);}
                 }
             });
             Class<?> result=type(UI+"tiles.QsTileIconPainterState");
@@ -99,13 +100,13 @@ final class QsTileBoxHooks {
                         Object icon=painter.get(p.getResult());
                         synchronized(painters) {
                             WeakReference<Object> prior=painters.get(icon);
-                            if(prior!=null&&prior.get()!=null&&prior.get()!=model.get()) {ambiguous.add(icon);painters.remove(icon);}
-                            else if(!ambiguous.contains(icon))painters.put(icon,new WeakReference<>(model.get()));
+                            if(prior!=null&&prior.get()!=null&&prior.get()!=model.get()) {ambiguous.put(icon,true);painters.remove(icon);}
+                            else if(!ambiguous.containsKey(icon))painters.put(icon,new WeakReference<>(model.get()));
                         }
-                        if(Probe.trace&&covered.add(model.get()))Probe.log("QS_TILEBOX_COVERAGE",
+                        if(Probe.trace&&covered.put(model.get(),true)==null)Probe.log("QS_TILEBOX_COVERAGE",
                                 "revision="+coverageRevision+" captured="+covered.size()+" model="+id(model.get())+" painter="+id(icon)
                                 +" iconClass="+p.args[0].getClass().getName()+" imageLayerFilter="+layer.getBoolean(p.getResult()));
-                    }catch(ReflectiveOperationException|RuntimeException e){fail(e);}
+                    }catch(ReflectiveOperationException|RuntimeException e){runtimeFailure(e);}
                 }
             });
             // The native pure background lambda carries $bgColor. Replace its value through a
@@ -135,7 +136,7 @@ final class QsTileBoxHooks {
                             // child observes the new argument even when its caller marked it same.
                             p.args[13]=((Integer)p.args[13])&~(7<<15);
                             trace(tile,state,rawInk,ink,bg,"round");
-                        }catch(ReflectiveOperationException|RuntimeException e){fail(e);}
+                        }catch(ReflectiveOperationException|RuntimeException e){runtimeFailure(e);}
                     }
                 });
             }
@@ -164,7 +165,7 @@ final class QsTileBoxHooks {
             if(!next.equals(paletteKey)){paletteKey=next;coverageRevision++;covered.clear();}
             signal.update(next);
         }
-        catch(ReflectiveOperationException|RuntimeException e){fail(e);}
+        catch(ReflectiveOperationException|RuntimeException e){runtimeFailure(e);}
     }
     private void trace(Object tile,int state,long before,int after,int bg,String stage) {
         if(!Probe.trace)return;
@@ -176,6 +177,10 @@ final class QsTileBoxHooks {
     }
     private static String id(Object o){return Integer.toHexString(System.identityHashCode(o));}
     private void fail(Throwable e){ready=false;Probe.error("QS_TILEBOX_INCOMPATIBLE",e);}
+    /** One unusual tile or recomposition must not disable every other tile for the process. */
+    private void runtimeFailure(Throwable e) {
+        if(runtimeFailures++<3)Probe.error("QS_TILEBOX_ITEM_FAILED",e);
+    }
     private static void hook(Method m,XC_MethodHook callback) {
         XposedBridge.hookMethod(m,callback);
         try{XposedBridge.class.getMethod("deoptimizeMethod",Member.class).invoke(null,m);}
