@@ -18,4 +18,30 @@ public class QsSurfaceInkTest {
         assertEquals(0x00ffffff,QsSurfaceInk.onSurface(0x00ffffff,0,true));
         assertEquals(0xff1d1d1d,QsSurfaceInk.onSurface(0xffffffff,0x20000000,true));
     }
+    @Test public void nativeSmallOffGlyphRespectsConfiguredOpacityInBothScenes(){
+        QsStyle style=new QsStyle(k->k.equals("qs.tilelightoffink")?"1d202580":
+                k.equals("qs.tiledarkoffink")?"ffffff73":
+                k.equals("qs.tiledark")?"1":null);
+        assertEquals(0x801d2025,QsSurfaceInk.onVerifiedTile(0xff000000,0,1,
+                QsScene.Tone.LIGHT_SCENE,style));
+        assertEquals(0x73ffffff,QsSurfaceInk.onVerifiedTile(0xffffffff,0,1,
+                QsScene.Tone.DARK_SCENE,style));
+        assertEquals(0x801d2025,QsSurfaceInk.onVerifiedTile(0x80000000,0,1,
+                QsScene.Tone.LIGHT_SCENE,style));
+        assertEquals("RoundIcon must not square the configured alpha",0x801d2025,
+                QsSurfaceInk.onVerifiedTile(0x801d2025,0,1,QsScene.Tone.LIGHT_SCENE,style));
+        assertEquals(0xff343a46,QsSurfaceInk.onVerifiedTile(0xff000000,0,1,
+                QsScene.Tone.LIGHT_SCENE,new QsStyle(k->null)));
+    }
+    @Test public void nativeActiveDiscUsesConfiguredAlphaButDisclessRemainsLegible(){
+        QsStyle style=new QsStyle(k->k.equals("qs.tilelightonink")?"ffffffb0":null);
+        assertEquals(0xb0ffffff,QsSurfaceInk.onVerifiedTile(0xff000000,0xe017191c,2,
+                QsScene.Tone.LIGHT_SCENE,style));
+        assertEquals(0xb01d1d1d,QsSurfaceInk.onVerifiedTile(0xff000000,0,2,
+                QsScene.Tone.LIGHT_SCENE,style));
+        assertEquals(0xff12a0ef,QsSurfaceInk.onVerifiedTile(0xff12a0ef,0,1,
+                QsScene.Tone.LIGHT_SCENE,style));
+        assertEquals(0xffffffff,QsSurfaceInk.onVerifiedTile(0xffffffff,0,0,
+                QsScene.Tone.DARK_SCENE,style));
+    }
 }

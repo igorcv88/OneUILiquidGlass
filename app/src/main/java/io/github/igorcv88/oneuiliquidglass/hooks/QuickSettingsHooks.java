@@ -563,7 +563,10 @@ public final class QuickSettingsHooks {
                 + " lightOnRaw=" + (raw == null ? "default" : raw)
                 + " lightOff=" + Integer.toHexString(s.tileLightOff)
                 + " lightInk=" + Integer.toHexString(s.tileLightOnInk)
+                + " lightOffInk=" + Integer.toHexString(s.tileLightOffInk)
                 + " darkOn=" + Integer.toHexString(s.tileDarkOn)
+                + " darkInk=" + Integer.toHexString(s.tileDarkOnInk)
+                + " darkOffInk=" + Integer.toHexString(s.tileDarkOffInk)
                 + " sliderLight=" + Integer.toHexString(s.sliderLightColor)
                 + " glassOpacity=" + s.lightGlassOpacity
                 + " glassColor=" + Integer.toHexString(s.lightGlassColor)

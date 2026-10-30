@@ -155,8 +155,9 @@ final class QsTileBoxHooks {
     private int ink(int state,int nativeInk,int bg) {
         if(!ready||!enabled.getAsBoolean()||state<0||state>2||scene.get()==QsScene.Tone.UNKNOWN)return nativeInk;
         QsStyle s=style.get();
-        if(scene.get()==QsScene.Tone.LIGHT_SCENE?!s.tileLight:!s.tileDark)return nativeInk;
-        return QsSurfaceInk.onSurface(nativeInk,bg,scene.get()==QsScene.Tone.LIGHT_SCENE);
+        QsScene.Tone tone=scene.get();
+        if(tone==QsScene.Tone.LIGHT_SCENE?!s.tileLight:!s.tileDark)return nativeInk;
+        return QsSurfaceInk.onVerifiedTile(nativeInk,bg,state,tone,s);
     }
     void refresh() {
         if(!ready)return;
