@@ -1,5 +1,27 @@
 # Handoff — OneUILiquidGlass (2026-10-16)
 
+**QS109 revisão após vídeo `86061.mp4` (30/10/2026; PR #109 aberta):**
+O vídeo confirma o erro inverso à hipótese inicial: os pictogramas das três
+cápsulas únicas (Wi-Fi, Bluetooth e Quick Share) se adaptam ao novo fundo,
+mas os **discos grandes retêm a cor antiga**. Sobre branco, o disco ainda
+branco apaga o pictograma que ficou branco; a grade de 15 pequenos muda
+corretamente. Logs QS108 mostram `QS_TILE_COLOR` dos três modelos grandes
+~500 ms após `QS_BACKDROP`, porque o fundo do disco depende da recomposição
+de `BoxWithOutline` enquanto o glifo é atualizado durante o desenho.
+
+Correção incremental: `QsDiscBackgroundHooks` registra exclusivamente o
+`BackgroundElement` construído pela chamada `BoxWithOutline` de círculo
+associada a um `QuickTile` verificado (`tileProbe.currentModel`). No nó
+`androidx.compose.foundation.BackgroundNode`, o campo `color` (DEX DZIF
+verificado: tipo `J`, `brush` separada) é aplicado durante `draw` e restaurado
+ao sair. A invalidação de desenho do nó ocorre em cada quadro da rampa, sem
+esperar recomposição de Samsung; nós não vinculados, mídia e notificações
+ficam intocados. A rampa QS cai de 180 para 120 ms (notificações inalteradas).
+`QS_DISC_DRAW_READY`, `QS_DISC_DRAW` e `QS_DISC_DRAW_UNAVAILABLE` permitem
+verificar a rota e as falhas em runtime. **Ainda requer build Android e
+validação visual/física no S25U DZIF**, sobretudo mudanças de app sem fechar
+QS, ícones coincidentes com o disco e transição dos sliders.
+
 **QS108 continuação (30/10/2026, vídeo 86054.mp4, log `OULG_QS_TRANS_20261030_172138`):**
 o log confirma 145 escopos Compose invalidados em cada mudança e nenhuma rampa
 (`QS_BACKDROP transition=immediate`). Num ciclo, troca de app às 17:21:55.423,
