@@ -31,6 +31,8 @@ final class QsContentHooks {
     private final QsTileProbe tileProbe;
     private final java.util.function.Function<Boolean,Float> level;
     private QsTextHooks text;
+    private QsTileBoxHooks tileBox;
+    private QsSliderIconHooks sliderIcons;
     QsContentHooks(ClassLoader loader, BooleanSupplier enabled, Supplier<QsStyle> style,
             Supplier<QsScene.Tone> scene, Supplier<QsScene.Tone> headerScene,
             java.util.function.Function<Boolean,Float> level, Consumer<Object> capture, QsTileProbe tileProbe) {
@@ -124,6 +126,10 @@ final class QsContentHooks {
             });
         text = new QsTextHooks(loader, this::current, enabled, scene, headerScene, level, style, tileProbe);
         text.install();
+        tileBox=new QsTileBoxHooks(loader,enabled,style,scene,capture);
+        tileBox.install();
+        sliderIcons=new QsSliderIconHooks(loader,enabled,style,scene,capture);
+        sliderIcons.install();
         // Tile ink is bound to the verified QuickTile model and its disc state.
         // Both active and empty players use the parent capsule drawContent boundary.
         // No artwork-only transform or second solid stroke.
@@ -135,6 +141,9 @@ final class QsContentHooks {
     }
     /** Text and header icons re-read the ink at draw time: dirty their draw, no recomposition. */
     void invalidateDraw() {
+        if(tileBox!=null)tileBox.refresh();
+        if(sliderIcons!=null)sliderIcons.refresh();
         if(text!=null)text.invalidate();
     }
 }
+

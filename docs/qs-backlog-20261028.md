@@ -1,5 +1,19 @@
 # Pendências OneUILiquidGlass, a partir do main pós-PR #83
 
+## QS105 — nova implementação, validação física pendente
+
+- [x] Rota específica de `QuickTileBoxItemLayout`, tinta derivada observável e
+  fundo/ícone de `RoundIcon` vinculados por painter e modelo.
+- [x] Estado de cena compartilhado QS/shade; atualização por captura aceita e
+  recuperação após captura indisponível.
+- [x] Rotas nativas de brilho Lottie e volume AndroidView, incluindo contraste em zero.
+- [ ] Cobertura visual de 15/15, ausência de flash no primeiro quadro e todos os
+  percentuais dos sliders **não comprovadas**. Em 1–5%, a interseção glifo/fill
+  continua pendente de implementação geométrica.
+- [ ] Demais itens históricos não são encerrados por esta rodada.
+
+Detalhes, ABI verificada, testes e limites: [qs105-semantic-ink.md](qs105-semantic-ink.md).
+
 ## PR #103 — ícones da grade e cabeçalho (30/10, pós-merge #102)
 
 - [x] **Evidência do pacote QS #101:** `QS_TILE_ICON_ROUTE_SUMMARY` reconhece
@@ -611,3 +625,4 @@ no mesmo Chrome e vídeos claros/escuros no mesmo aplicativo, abertura direta e 
 (notificações → QS). Se a origem diferida não aparecer em `QS_TILE_DEFERRED_ROUTE`, os
 15 ícones continuam não comprovados, mesmo com testes JVM verdes. Captura protegida ou
 falta do `CaptureHub` ainda pode exibir a tinta nativa no primeiro frame.
+

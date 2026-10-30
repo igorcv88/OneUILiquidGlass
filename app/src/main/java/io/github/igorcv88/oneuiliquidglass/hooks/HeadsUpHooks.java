@@ -120,6 +120,16 @@ public final class HeadsUpHooks {
     /** enabled == null: preferences unreadable, resolve through the module's ConfigProvider. */
     public HeadsUpHooks(ClassLoader loader, Boolean enabled) {
         this.loader = loader; this.enabled = Boolean.TRUE.equals(enabled); this.configPending = enabled == null;
+        ShadeTone.listen(snapshot -> {
+            if(!Boolean.TRUE.equals(shadeExpanded)||!shadeConfigEnabled()||!Tuning.get().shadeAdaptive
+                    || barState==null||barState!=Eligibility.BAR_SHADE
+                    || BackdropEvents.lastChange()>snapshot.grid.takenAt)return;
+            ToneGrid grid=snapshot.grid.forGeneration(shadeOpens);
+            if(shadeGrid!=null&&grid.takenAt<=shadeGrid.takenAt)return;
+            boolean light=snapshot.body==io.github.igorcv88.oneuiliquidglass.glass.QsScene.Tone.LIGHT_SCENE;
+            if(shadeScene==null||shadeScene!=light)adoptGrid(grid,"shared-commit",light);
+            else {shadeGrid=grid;headerTone(grid);}
+        });
     }
     private void resolveConfig(android.content.Context context) {
         io.github.igorcv88.oneuiliquidglass.config.ConfigClient.start(context, value -> {
@@ -602,11 +612,14 @@ public final class HeadsUpHooks {
         float whole = grid.whole();
         long now = android.os.SystemClock.uptimeMillis();
         // A new opening decides from its midpoint; a resample keeps the decided scene's hysteresis.
-        boolean scene = whole >= (t.styleLo + t.styleHi) * 0.5f;
+        boolean scene = ShadeTone.decision(grid).body == io.github.igorcv88.oneuiliquidglass.glass.QsScene.Tone.LIGHT_SCENE;
         sceneGate.reset(); sceneGate.offer(scene, now);
         adoptGrid(grid, state, scene);
     }
     private void adoptGrid(ToneGrid grid, String state, boolean scene) {
+        io.github.igorcv88.oneuiliquidglass.glass.PanelScene.Snapshot snapshot=ShadeTone.decision(grid);
+        grid=snapshot.grid.forGeneration(shadeOpens);
+        scene=snapshot.body==io.github.igorcv88.oneuiliquidglass.glass.QsScene.Tone.LIGHT_SCENE;
         shadeGrid = grid;
         long now = android.os.SystemClock.uptimeMillis();
         // One decision for the whole stack (the scene); a card only departs from it where its own
@@ -744,18 +757,10 @@ public final class HeadsUpHooks {
         // fresh sample to QS; adoptGrid() only runs when the shade's classification changes.
         if (quickSettings != null) quickSettings.shadeBackdrop(whole,
                 grid.luma(grid.top, grid.top + 4 * grid.band), grid.takenAt);
-        boolean light = ShadeTone.lightBackdrop(whole, shadeScene);
-        boolean pendingBefore = sceneGate.pending();
-        Tuning t = Tuning.get();
-        boolean strong = io.github.igorcv88.oneuiliquidglass.glass.ToneGate.strong(whole, (t.styleLo + t.styleHi) * 0.5f);
-        boolean commit = sceneGate.offer(light, now, strong) && shadeScene != null && light != shadeScene;
-        if (commit || sceneGate.pending() != pendingBefore)
-            Probe.log("SHADE_RESAMPLE", "generation=" + shadeOpens + " luma=" + String.format(java.util.Locale.ROOT, "%.2f", whole)
-                    + " reading=" + (light ? "light" : "dark") + " decided=" + (shadeScene == null ? "none" : shadeScene ? "light" : "dark")
-                    + " commit=" + commit + " strong=" + strong + " pending=" + sceneGate.pending() + " sampleAgeMs=" + age);
-        // The header decides its own band with its own gate; the same capture serves both.
-        headerTone(grid);
-        if (commit) adoptGrid(grid, "resample", light);
+        boolean light=ShadeTone.decision(grid).body==io.github.igorcv88.oneuiliquidglass.glass.QsScene.Tone.LIGHT_SCENE;
+        if(shadeScene==null||shadeScene!=light)adoptGrid(grid,"shared-resample",light);
+        else {shadeGrid=grid;headerTone(grid);}
+
     }
     /** Rows given the scene's text tone by orphanTone, restored when the shade closes. */
     private final java.util.Set<State> orphans = Collections.newSetFromMap(new WeakHashMap<>());
@@ -878,14 +883,9 @@ public final class HeadsUpHooks {
         if (quickSettings == null) return;
         float luma = grid.luma(grid.top, grid.top + 4 * grid.band);
         if (!Float.isFinite(luma) || luma < 0f || luma > 1f) return;
-        Tuning t = Tuning.get();
-        boolean light = ShadeTone.lightBackdrop(luma, shadeHeaderLight);
-        boolean strong = io.github.igorcv88.oneuiliquidglass.glass.ToneGate.strong(luma, (t.styleLo + t.styleHi) * 0.5f);
-        if (!shadeHeaderGate.offer(light, android.os.SystemClock.uptimeMillis(), strong)) return;
-        if (shadeHeaderLight != null && shadeHeaderLight == light) return;
-        shadeHeaderLight = light;
-        Probe.log("SHADE_HEADER_TONE", "generation=" + shadeOpens + " luma=" + String.format(java.util.Locale.ROOT, "%.2f", luma)
-                + " tone=" + (light ? "dark" : "light") + " strong=" + strong);
+        boolean light=ShadeTone.decision(grid).header==io.github.igorcv88.oneuiliquidglass.glass.QsScene.Tone.LIGHT_SCENE;
+        if(shadeHeaderLight!=null&&shadeHeaderLight==light)return;
+        shadeHeaderLight=light;
         quickSettings.shadeHeader(light);
     }
     /**
@@ -2670,3 +2670,4 @@ public final class HeadsUpHooks {
         canvas.clipRect(0, top, v.getWidth(), Math.max(top, bottom));
     }
 }
+
