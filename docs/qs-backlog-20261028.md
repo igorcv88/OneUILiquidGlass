@@ -1,5 +1,41 @@
 # Pendências OneUILiquidGlass, a partir do main pós-PR #83
 
+## Rodada pós-PR #101 (30/10, 00:18–00:22, DZIF, Theme Park ON)
+
+- [x] **Falha de reflexão confirmada, sem filtro efetivo:** `OULG_QS101_20261030_001851`
+  registra `QS_TILE_COMPOSE_FILTER_UNAVAILABLE error=NoSuchMethodException`
+  em `ColorFilter.Companion.ColorFilter(long,int)` às 00:18:30; o primeiro draw
+  elegível registra `QS_TILE_COMPOSE_FILTER_UNAVAILABLE_DRAW` às 00:19:15.
+  Essa ABI não existe no Compose otimizado da SystemUI testada. Nenhuma tinta
+  foi aplicada pelo caminho Compose do PR #101. Wi-Fi continua branco no disco
+  preto pela rota Canvas; Bluetooth e Quick Share continuam sem glifo visível.
+- [x] **Duas aparências na mesma entrada direta branca:** 00:21, capturas
+  `85596.png` e `85598.png`. Os contornos e a área clara do vidro variam, bem
+  como a tinta do cabeçalho (preto numa, branco na outra), sem alteração do
+  perfil pelo usuário. A variação da lente não decorre só da falta dos glifos.
+- [x] **Transição relevante para o contorno:** a entrada direta publicada no
+  log costuma ir de `UNKNOWN/UNKNOWN` para `LIGHT_SCENE/DARK_SCENE` após
+  ~170 ms e só depois para `LIGHT_SCENE/LIGHT_SCENE` (p.ex. 00:21:05–06).
+  A borda enviada ao compositor é `92/255` em LIGHT_SCENE (`qs.lightoptics=.36`)
+  e `255/255` quando a abertura ainda está UNKNOWN ou foi classificada DARK.
+  `QS_OPTICS_DRAWN` confirma desenho AGSL; **não prova que o display list foi
+  atualizado após uma mudança da cena**. O código só recompunha os scopes e
+  invalidava o texto, sem invalidar diretamente cada BackgroundNode óptico.
+- [x] **Correção seguinte em código, pendente aparelho:** usar construtor
+  `BlendModeColorFilter(long,int[,DefaultConstructorMarker])` via reflexão;
+  fallback com `ColorFilter(android.graphics.ColorFilter)` e, por último, a
+  Companion. O filtro continua restrito aos painters vinculados a QuickTile
+  ACTIVE no LIGHT_SCENE e restaurado após cada draw. Ao mudar a cena, pedir
+  redesenho dos BackgroundNodes da lente também, sem alterar as intensidades
+  configuradas, nem o recorte dos sliders aprovado no PR #100.
+- [ ] **Teste necessário:** verificar `QS_TILE_COMPOSE_FILTER_READY factory=...`,
+  `QS_TILE_COMPOSE_FILTER applied=true` nos modelos vinculados, e
+  `QS_EDGE_SCENE_REDRAW invalidated>0` após mudança de fundo. Confirmar em
+  vídeo/prints se ambas as entradas diretas convergem para o mesmo vidro e
+  se cabeçalho/ícones permanecem legíveis no branco. Verificar transição
+  lateral, fundo colorido e escuro, notificações, pop-ups e slider 0–100%.
+
+
 ## Rodada pós-PR #100 (29/10, 23:41–23:43, DZIF, Theme Park ON)
 
 - [x] **Sliders confirmados visualmente pelo usuário:** a correção de recorte arredondado

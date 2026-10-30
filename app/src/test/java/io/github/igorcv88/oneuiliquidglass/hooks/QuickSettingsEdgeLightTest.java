@@ -97,6 +97,30 @@ public final class QuickSettingsEdgeLightTest {
         assertEquals("idempotent", 1, restored[0]);
     }
 
+    public static final class DrawInvalidation {
+        static int count;
+        public static void invalidate(Object node){count++;}
+    }
+    @Test public void changingBackdropRedrawsCachedOpticalNodesOnlyWhileOpen() throws Exception {
+        QuickSettingsEdgeLight edge=edge(true,true,true);
+        Object first=bind(edge),second=bind(edge);
+        assertNotSame(first,second);
+        DrawInvalidation.count=0;
+        set(edge,"invalidateDraw",DrawInvalidation.class.getMethod("invalidate",Object.class));
+        set(edge,"visible",true);
+        boolean[] light={false};
+        edge.optics(null,()->light[0],()->.36d);
+        light[0]=true;
+        edge.backdropChanged();
+        assertEquals(2,DrawInvalidation.count);
+        assertTrue(ShadowLog.getLogsForTag("OULG").stream().anyMatch(log->
+                log.msg.contains("QS_EDGE_SCENE_REDRAW") && log.msg.contains("light=true")
+                        && log.msg.contains("invalidated=2")));
+        set(edge,"visible",false);
+        edge.backdropChanged();
+        assertEquals("closed panel has no optical redraw",2,DrawInvalidation.count);
+    }
+
     @Test public void everyInactiveGateReleasesAnExistingDrawable() throws Exception {
         for (String gate : new String[]{"option-off", "master-off", "sfrefract-off", "optics-version", "missing-host", "not-ready"}) {
             set(tuning, "sfRefract", true); set(tuning, "sfOptics", 11);

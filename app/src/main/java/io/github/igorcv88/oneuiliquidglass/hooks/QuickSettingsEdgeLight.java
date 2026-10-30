@@ -722,6 +722,17 @@ final class QuickSettingsEdgeLight {
         return n;
     }
 
+    /** A backdrop reclassification changes both the AGSL uniforms and the region alpha.
+     * Updating the region alpha alone cannot update a cached Compose display list drawn
+     * under UNKNOWN/DARK_SCENE. Redraw only the QS background nodes while the panel is open. */
+    synchronized void backdropChanged() {
+        if(!visible || !ready || !enabled.getAsBoolean())return;
+        int n=invalidateNodes();
+        Probe.log("QS_EDGE_SCENE_REDRAW", "light="+lightScene.getAsBoolean()
+                +" gain="+sceneGain()+" nodes="+nodes.size()+" invalidated="+n
+                +" fallbackRecompose="+(invalidateDraw==null));
+    }
+
     /** DrawModifierNodeKt.invalidateDraw: the background nodes' own draw runs again (null: unavailable). */
     private Method invalidateDraw;
 
