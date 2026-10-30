@@ -69,6 +69,7 @@ public final class QuickSettingsHooks {
     private boolean paletteTraceActive;
     private final QsTileProbe tileProbe = new QsTileProbe();
     private final QuickSettingsEdgeLight edge;
+    private final QsDiscBackgroundHooks discBackground;
     private final QsBackdrop backdrop;
     private final QsContentHooks content;
     private volatile QsStyle style = QsStyle.read();
@@ -113,6 +114,11 @@ public final class QuickSettingsHooks {
         Object sliderShape;
         float outer = 1f;
         boolean rimDone, fillDone;
+        /** Verified QuickTile circle, whose retained background node gets a draw-time palette. */
+        Kind discKind;
+        int nativeDiscFill;
+        long discPacked;
+        boolean discRegistered;
         Pending(Object composer, long background, long fill, Object rim, Object edgeShape, float edgeBorder) {
             this.composer = composer; this.background = background; this.fill = fill; this.rim = rim;
             this.edgeShape = edgeShape; this.edgeBorder = edgeBorder;
@@ -141,10 +147,11 @@ public final class QuickSettingsHooks {
                 () -> QuickSettingsHooks.this.style.lightOptics);
         BackdropEvents.add(() -> QuickSettingsHooks.this.backdrop.event());
         this.backdrop = new QsBackdrop(this::enabled, edge::expansion,
-                () -> { clearRims(); edge.backdropChanged(); invalidateAll("backdrop"); },
+                () -> { clearRims(); edge.backdropChanged(); invalidateAll("backdrop"); if(discBackground!=null)discBackground.refresh(); },
                 () -> {
                     QsContentHooks c = QuickSettingsHooks.this.content;
                     if (c != null) c.invalidateDraw();
+                    if(discBackground!=null)discBackground.refresh();
                     long now = android.os.SystemClock.uptimeMillis();
                     if (now - lastPaletteFrameAt >= 34L) {
                         lastPaletteFrameAt = now;
@@ -152,6 +159,8 @@ public final class QuickSettingsHooks {
                         invalidateAll("backdrop-crossfade");
                     }
                 });
+        this.discBackground=new QsDiscBackgroundHooks(loader,this::enabled,()->style,backdrop::tone,
+                ()->backdrop.ink(false));
         this.content = new QsContentHooks(loader, this::enabled, () -> style, backdrop::tone, backdrop::headerTone, this::ink,
                 this::capture, tileProbe);
     }
@@ -213,6 +222,9 @@ public final class QuickSettingsHooks {
             XposedBridge.hookMethod(backgroundInit, new XC_MethodHook() {
                 @Override protected void beforeHookedMethod(MethodHookParam p) {
                     Pending q = pending.get();
+                    if(q!=null && q.discKind!=null && !q.discRegistered && p.args[0] instanceof Long
+                            && ((Long)p.args[0]).longValue()==q.discPacked)
+                        p.setObjectExtra("qsDiscPending",q);
                     if (q == null || q.fillDone) {
                         QsContentHooks.Frame f = content.current();
                         if (f == null || !f.media || f.background || f.shape == null || !enabled()) return;
@@ -233,11 +245,18 @@ public final class QuickSettingsHooks {
                     if (q.edgeShape != null) p.setObjectExtra("oulgEdge", q);
                 }
                 @Override protected void afterHookedMethod(MethodHookParam p) {
+                    Object tracked=p.getObjectExtra("qsDiscPending");
+                    if(tracked instanceof Pending) {
+                        Pending q=(Pending)tracked;
+                        q.discRegistered=true;
+                        discBackground.element(p.thisObject,q.discKind,q.nativeDiscFill);
+                    }
                     Object q = p.getObjectExtra("oulgEdge");
                     if (q instanceof Pending) edge.element(p.thisObject, ((Pending) q).edgeShape, ((Pending) q).edgeBorder, ((Pending) q).outer, ((Pending) q).token);
                 }
             });
             edge.install(background);
+            discBackground.install(background);
             // ART may have inlined the small element constructors into these callers (AOT/JIT), which
             // would bypass the constructor hooks; run them interpreted instead.
             deoptimize(boxMethod, named(resolve("androidx.compose.foundation.BorderKt"), "border-xT4_qwU"),
@@ -503,6 +522,14 @@ public final class QuickSettingsHooks {
                     int nativeColor = QuickSettingsGlass.argb(background);
                     int mapped = model == null ? nativeColor
                             : style.tileBackground(discKind, backdrop.tone(), nativeColor, backdrop.ink(false));
+                    if(model!=null && (discKind==Kind.ACTIVE||discKind==Kind.IDLE)) {
+                        Pending q=pending.get();
+                        if(q!=null) {
+                            q.discKind=discKind;
+                            q.nativeDiscFill=nativeColor;
+                            q.discPacked=QuickSettingsGlass.color(mapped);
+                        }
+                    }
                     if (mapped != nativeColor) {
                         a[4] = QuickSettingsGlass.color(mapped);
                         // Theme Park off may give idle discs a separate outline; clearing only
@@ -752,6 +779,7 @@ public final class QuickSettingsHooks {
 
     private void invalidateAll(String reason) {
         content.invalidateDraw();
+        discBackground.refresh();
         if (invalidate == null) {
             Probe.log("QS_COMPOSE_REFRESH", "reason=" + reason + " live=false (applies on the next composition)");
             return;
