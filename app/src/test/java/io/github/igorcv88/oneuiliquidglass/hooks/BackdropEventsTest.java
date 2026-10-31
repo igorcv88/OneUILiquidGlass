@@ -56,4 +56,14 @@ public class BackdropEventsTest {
         try { BackdropEvents.register(NoRegistry.class, TaskStackChangeListener.class); fail(); }
         catch (NoSuchMethodException e) { assertTrue(e.getMessage(), e.getMessage().contains("candidates=")); }
     }
+    @Test public void onlyForegroundEventsMakeTheSceneGateEligible() {
+        assertTrue(BackdropEvents.foregroundEvent("onTaskMovedToFront", new Object[]{7}));
+        assertTrue(BackdropEvents.foregroundEvent("onTaskFocusChanged", new Object[]{7, true}));
+        assertFalse(BackdropEvents.foregroundEvent("onTaskFocusChanged", new Object[]{7, false}));
+        assertFalse(BackdropEvents.foregroundEvent("onTaskFocusChanged", null));
+        assertFalse(BackdropEvents.foregroundEvent("onTaskStackChanged", null));
+        assertFalse(BackdropEvents.foregroundEvent("onTaskCreated", new Object[]{8}));
+        assertFalse(BackdropEvents.foregroundEvent("onTaskRemoved", new Object[]{8}));
+    }
+
 }

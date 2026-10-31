@@ -32,10 +32,22 @@ final class BackdropEvents {
     private static final List<Runnable> listeners = new CopyOnWriteArrayList<>();
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
     private static volatile long lastChange = Long.MIN_VALUE / 2;
+    /** Last event credibly indicating a new foreground task (not every task-stack mutation). */
+    private static volatile long lastForegroundChange = Long.MIN_VALUE / 2;
     private static boolean installed;
 
     /** Uptime of the last backdrop-changing event. */
     static long lastChange() { return lastChange; }
+
+    static long foregroundChangedAt() { return lastForegroundChange; }
+
+    /** Background task creation/removal and generic stack updates must not enable the fast gate. */
+    static boolean foregroundEvent(String reason, Object[] args) {
+        if ("onTaskMovedToFront".equals(reason)) return true;
+        // A focus-lost callback describes the outgoing task; only focus gained is useful.
+        return "onTaskFocusChanged".equals(reason) && args != null && args.length >= 2
+                && Boolean.TRUE.equals(args[1]);
+    }
 
     /** Whether {@code now} falls in the fast-sampling window after an event. */
     static boolean burst(long now) { return now - lastChange < BURST_MS; }
@@ -62,7 +74,7 @@ final class BackdropEvents {
                     case "hashCode": return System.identityHashCode(proxy);
                     case "toString": return "OulgBackdropEvents";
                     default:
-                        if (change(method.getName())) fire(method.getName());
+                        if (change(method.getName())) fire(method.getName(), args);
                         return defaultValue(method);
                 }
             };
@@ -125,15 +137,21 @@ final class BackdropEvents {
         return null;
     }
 
-    static void fire(String reason) {
+    static void fire(String reason) { fire(reason, null); }
+
+    static void fire(String reason, Object[] args) {
         lastChange = SystemClock.uptimeMillis();
-        io.github.igorcv88.oneuiliquidglass.glass.ShadeTone.taskChanged(lastChange);
+        boolean foreground = foregroundEvent(reason, args);
+        if (foreground) {
+            lastForegroundChange = lastChange;
+            io.github.igorcv88.oneuiliquidglass.glass.ShadeTone.taskChanged(lastChange);
+        }
         MAIN.post(() -> {
             for (Runnable r : listeners) {
                 try { r.run(); }
                 catch (RuntimeException | LinkageError e) { Probe.error("BACKDROP_EVENT_FAILED", e); }
             }
         });
-        if (Probe.trace) Probe.log("BACKDROP_EVENT", "reason=" + reason);
+        if (Probe.trace) Probe.log("BACKDROP_EVENT", "reason=" + reason + " foreground=" + foreground);
     }
 }

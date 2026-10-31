@@ -71,6 +71,11 @@ notificações personalizadas, live updates ou traduções.
   compensado pela escala (~165 ms visíveis em 0,35× e 1×), interpolador linear
   sob o smoothstep e retarget sem salto; ☐ vídeo 1×/0,35× e trace no Galaxy
   (ver seção QS113 abaixo).
+  **QS114 (31/10, revisão pós-merge):** 🔧 exigir duas amostras espacialmente
+  consistentes para o caminho rápido, restringir prioridade aos eventos de
+  foreground e fallback controlado após falhas repetidas de captura na QS aberta;
+  ☐ CI e validação no Galaxy (cenas mistas, eventos duplicados, apps seguros).
+  Crossfade aprovado em código, ainda sem prova física de 165 ms.
 - ☐ Revalidar brilho/reflexo do canto superior esquerdo em fundo claro e
   padrões estéticos, preservando o aspecto aprovado no colorido.
 - ☐ Experimento Quick Share grande versus pequeno (owner, modelo e estado):

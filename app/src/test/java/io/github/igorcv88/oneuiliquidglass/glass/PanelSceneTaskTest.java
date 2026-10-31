@@ -94,4 +94,38 @@ public class PanelSceneTaskTest {
         assertEquals("candidate", reseeded.bodyReason);
         assertEquals(QsScene.Tone.LIGHT_SCENE, scene.accept(uniform(.77f, 2225)).body);
     }
+    /** The first candidate must also be spatially consistent after the same task event. */
+    @Test public void inconsistentCandidateCannotCompleteQuickConfirmation() {
+        PanelScene scene = new PanelScene();
+        scene.accept(uniform(.412f, 1000));
+        scene.task(1100);
+        // 20/32 on the light side: .759 average, yet only 62.5% of bands qualify.
+        ToneGrid mixedFirst = weakBands(20, .89f, .54f, 1150);
+        assertEquals(QsScene.Tone.DARK_SCENE, scene.accept(mixedFirst).body);
+        // 22/32: ~.756 average, 68.75% of bands qualify; this is the FIRST valid candidate.
+        assertEquals(QsScene.Tone.DARK_SCENE,
+                scene.accept(weakBands(22, .85f, .55f, 1275)).body);
+        PanelScene.Snapshot confirmed = scene.accept(weakBands(22, .85f, .55f, 1400));
+        assertEquals(QsScene.Tone.LIGHT_SCENE, confirmed.body);
+        assertEquals("task-confirmed", confirmed.bodyReason);
+    }
+
+    @Test public void inconsistentMiddleFrameBreaksQuickStreak() {
+        PanelScene scene = new PanelScene();
+        scene.accept(uniform(.412f, 1000));
+        scene.task(1100);
+        scene.accept(weakBands(22, .85f, .55f, 1150));
+        scene.accept(weakBands(20, .89f, .54f, 1220));
+        assertEquals(QsScene.Tone.DARK_SCENE,
+                scene.accept(weakBands(22, .85f, .55f, 1275)).body);
+        assertEquals(QsScene.Tone.LIGHT_SCENE,
+                scene.accept(weakBands(22, .85f, .55f, 1400)).body);
+    }
+
+    private static ToneGrid weakBands(int bright, float brightValue, float darkValue, long at) {
+        float[] bands = new float[32];
+        for (int i = 0; i < bands.length; i++) bands[i] = i < bright ? brightValue : darkValue;
+        return new ToneGrid(0, 10, bands, bands, -1, at);
+    }
+
 }
