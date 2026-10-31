@@ -152,7 +152,12 @@ public final class QuickSettingsHooks {
                 () -> QuickSettingsHooks.this.backdrop.tone(),
                 () -> QuickSettingsHooks.this.backdrop.ink(false));
         this.backdrop = new QsBackdrop(this::enabled, edge::expansion,
-                () -> { clearRims(); edge.backdropChanged(); invalidateAll("backdrop"); },
+                () -> {
+                    // A full refresh also covers the crossfade's first frame: without this the
+                    // ramp's first callback recomposed every scope again within one frame (QS113).
+                    lastPaletteFrameAt = android.os.SystemClock.uptimeMillis();
+                    clearRims(); edge.backdropChanged(); invalidateAll("backdrop");
+                },
                 () -> {
                     long now = android.os.SystemClock.uptimeMillis();
                     if (now - lastPaletteFrameAt >= 34L) {
@@ -801,7 +806,8 @@ public final class QuickSettingsHooks {
                 synchronized (scopes) { scopes.remove(scope); }
             }
         }
-        Probe.log("QS_COMPOSE_REFRESH", "reason=" + reason + " scopes=" + count);
+        // Every crossfade frame passes here: the always-on log was itself part of the A/B cost.
+        if (Probe.trace) Probe.log("QS_COMPOSE_REFRESH", "reason=" + reason + " scopes=" + count);
     }
 
     /** Fail closed: stop recolouring and let every captured box recompose with Samsung's values. */

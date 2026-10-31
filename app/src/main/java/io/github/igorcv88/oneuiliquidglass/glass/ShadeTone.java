@@ -37,6 +37,8 @@ public final class ShadeTone implements CaptureHub.Client {
     private static int previewEpoch;
     public static void listen(java.util.function.Consumer<PanelScene.Snapshot> listener) {listeners.add(listener);}
     public static PanelScene.Snapshot decision(ToneGrid grid) {return PANELS.accept(grid);}
+    /** A task event (any thread): the shared scene may confirm the next consistent samples quickly. */
+    public static void taskChanged(long at) {PANELS.task(at);}
     private static void publish(ToneGrid grid) {
         if(grid==null || (liveGrid!=null&&grid.takenAt<=liveGrid.takenAt))return;
         PanelScene.Snapshot previous=lastPublished;

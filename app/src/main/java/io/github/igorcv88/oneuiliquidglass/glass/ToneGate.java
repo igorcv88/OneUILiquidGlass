@@ -13,11 +13,12 @@ public final class ToneGate {
     private final long confirmMs, dwellMs;
     private Boolean stable, candidate;
     private long candidateAt, committedAt;
+    private String reason = "none";
 
     public ToneGate(long confirmMs, long dwellMs) { this.confirmMs = confirmMs; this.dwellMs = dwellMs; }
 
     /** Forgets the decision: the next sample is a first decision again (a new opening). */
-    public void reset() { stable = null; candidate = null; }
+    public void reset() { stable = null; candidate = null; reason = "reset"; }
 
     /** The decided tone (true: light backdrop), or null before the first sample. */
     public Boolean tone() { return stable; }
@@ -49,16 +50,50 @@ public final class ToneGate {
      * one), so it applies at once instead of waiting for a confirming sample; only readings near the
      * boundary, where noise and moving content flip the class, wait for confirmation.
      */
-    public boolean offer(boolean light, long now, boolean strong) {
-        if (stable == null) { stable = light; candidate = null; committedAt = now; return true; }
-        if (light == stable) { candidate = null; return false; }
-        if (strong && now - committedAt >= Math.min(dwellMs, STRONG_DWELL_MS)) {
-            stable = light; candidate = null; committedAt = now;
+    public boolean offer(boolean light, long now, boolean strong) { return offer(light, now, strong, false); }
+
+    /**
+     * {@code quick}: the sample follows a task switch and is spatially consistent (PanelScene). A
+     * different candidate is then confirmed by the very next later sample on the same side, with
+     * only {@link #STRONG_DWELL_MS} since the last change, instead of {@code confirmMs} after the
+     * candidate and {@code dwellMs} after the change. Two samples are still required: one
+     * transition frame never flips the tone, and an agreeing sample still drops the candidate.
+     */
+    public boolean offer(boolean light, long now, boolean strong, boolean quick) {
+        return offer(light, now, strong, quick ? Long.MIN_VALUE : Long.MAX_VALUE);
+    }
+
+    /**
+     * Quick path for samples at or after {@code quickSince} (the task event): both the candidate
+     * and its confirmation must be taken after it. A candidate seen before the event is re-seeded
+     * by the first post-event sample. {@link Long#MAX_VALUE}: no quick path.
+     */
+    public boolean offer(boolean light, long now, boolean strong, long quickSince) {
+        boolean quick = now >= quickSince;
+        if (stable == null) { stable = light; candidate = null; committedAt = now; reason = "first"; return true; }
+        if (light == stable) { candidate = null; reason = "agree"; return false; }
+        long shortDwell = Math.min(dwellMs, STRONG_DWELL_MS);
+        if (strong && now - committedAt >= shortDwell) {
+            stable = light; candidate = null; committedAt = now; reason = "strong";
             return true;
         }
-        if (candidate == null || candidate != light) { candidate = light; candidateAt = now; return false; }
-        if (now - candidateAt < confirmMs || now - committedAt < dwellMs) return false;
-        stable = light; candidate = null; committedAt = now;
+        if (candidate == null || candidate != light) { candidate = light; candidateAt = now; reason = "candidate"; return false; }
+        if (quick) {
+            if (candidateAt < quickSince) { candidateAt = now; reason = "candidate"; return false; }
+            if (now <= candidateAt) { reason = "hold-same-sample"; return false; }
+            if (now - committedAt < shortDwell) { reason = "hold-dwell"; return false; }
+            stable = light; candidate = null; committedAt = now; reason = "task-confirmed";
+            return true;
+        }
+        if (now - candidateAt < confirmMs) { reason = "hold-confirm"; return false; }
+        if (now - committedAt < dwellMs) { reason = "hold-dwell"; return false; }
+        stable = light; candidate = null; committedAt = now; reason = "confirmed";
         return true;
     }
+
+    /**
+     * Why the last {@link #offer} decided as it did (a constant, no allocation): first, agree,
+     * strong, candidate, hold-confirm, hold-dwell, hold-same-sample, confirmed, task-confirmed.
+     */
+    public String lastReason() { return reason; }
 }

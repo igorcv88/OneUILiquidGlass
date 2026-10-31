@@ -61,4 +61,24 @@ public final class ToneGateTest {
         assertFalse(ToneGate.strong(.8f, .7f));
         assertFalse(ToneGate.strong(Float.NaN, .7f));
     }
+    @Test public void quickConfirmationSkipsConfirmIntervalButKeepsShortDwell() {
+        ToneGate g = new ToneGate(150, 600);
+        g.offer(false, 0);
+        assertFalse(g.offer(true, 1000, false, true));
+        assertEquals("candidate", g.lastReason());
+        assertTrue(g.offer(true, 1100, false, true));
+        assertEquals("task-confirmed", g.lastReason());
+        // A commit 50 ms ago: even the quick path waits for STRONG_DWELL_MS.
+        assertFalse(g.offer(false, 1120, false, true));
+        assertFalse(g.offer(false, 1150, false, true));
+        assertEquals("hold-dwell", g.lastReason());
+        assertTrue(g.offer(false, 1200, false, true));
+    }
+    @Test public void quickConfirmationNeedsALaterSample() {
+        ToneGate g = new ToneGate(150, 600);
+        g.offer(false, 0);
+        g.offer(true, 1000, false, true);
+        assertFalse(g.offer(true, 1000, false, true));
+        assertEquals(Boolean.FALSE, g.tone());
+    }
 }

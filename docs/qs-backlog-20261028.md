@@ -67,6 +67,10 @@ notificações personalizadas, live updates ou traduções.
   fundo branco. Preservar player ativo, capa e comandos já aprovados.
 - 🔧 Fase de transição QS de 120 ms implementada; ☐ crossfade real em
   disco/cápsula/ícone/slider e redução do atraso de captura→quadro visível.
+  **QS113 (31/10):** 🔧 confirmação rápida após troca de tarefa, fade
+  compensado pela escala (~165 ms visíveis em 0,35× e 1×), interpolador linear
+  sob o smoothstep e retarget sem salto; ☐ vídeo 1×/0,35× e trace no Galaxy
+  (ver seção QS113 abaixo).
 - ☐ Revalidar brilho/reflexo do canto superior esquerdo em fundo claro e
   padrões estéticos, preservando o aspecto aprovado no colorido.
 - ☐ Experimento Quick Share grande versus pequeno (owner, modelo e estado):
@@ -733,3 +737,53 @@ no mesmo Chrome e vídeos claros/escuros no mesmo aplicativo, abertura direta e 
 15 ícones continuam não comprovados, mesmo com testes JVM verdes. Captura protegida ou
 falta do `CaptureHub` ainda pode exibir a tinta nativa no primeiro frame.
 
+# QS113 — gate pós-troca de tarefa, crossfade e custo (31/10/2026)
+
+Base: laudo de 31/10 (pacote `OULG_AB_20261031_172851`, vídeo em 1×). Nenhum
+item abaixo foi validado no Galaxy; apenas testes JVM e build local.
+
+- 🔧 **Espera de ~370–392 ms escuro→claro, causa no código:** `PanelScene`
+  considera "forte" a luz só a partir de 0,80 (`FAST_LIGHT_LUMA`) ou 0,90
+  (`MID` 0,70 + `STRONG` 0,20); 0,754/0,780 eram leituras fracas e esperavam
+  `confirmMs=150` após o candidato **e** `dwellMs=600` após o último commit
+  (`ToneGate`). A direção escura é forte já em ≤0,50, daí a assimetria.
+  Correção: `BackdropEvents.fire` marca a tarefa em `PanelScene.task`; por
+  600 ms, uma amostra **posterior** ao evento e espacialmente consistente
+  (≥2/3 das 32 faixas do lado novo de `MID`) confirma o candidato na amostra
+  seguinte (candidato e confirmação ambos posteriores ao evento), com dwell mínimo de 100 ms. Duas amostras continuam necessárias;
+  sem evento de tarefa (vídeo, flash, scroll) a histerese é a original.
+- 🔧 **Decisão compartilhada:** a shade usa a mesma `PanelScene`; após troca de
+  tarefa ela também confirma mais cedo. ☐ Confirmar sem regressão em cartões,
+  heads-up e blur.
+- 🔧 **Commits escuros antes do fim da captura:** vêm do amostrador passivo de
+  8 Hz (`ShadeTone.listen` → `acceptShared`), não da captura da QS; leitura
+  ≤0,50 é forte e passa de imediato.
+- 🔧 **Fade imperceptível:** a rampa de 120 ms nominais durava ~42 ms em 0,35×
+  (4 callbacks), e o interpolador padrão AccelerateDecelerate somava-se ao
+  smoothstep. Agora `InkTransition.compensated` (165 ms visíveis, compensação
+  limitada a 4×, sem divisão por zero, escala >1× preservada, 0×/animações
+  desligadas = imediato) e interpolador linear. Notificações inalteradas.
+- 🔧 **Retarget:** o animador cancelado é desanexado antes do `cancel()`; antes
+  o `onAnimationEnd` do cancelado aplicava o alvo antigo e recompunha tudo. A
+  nova rampa parte do valor apresentado; fechar o painel fixa o valor final.
+- 🔧 **UNKNOWN com painel aberto:** captura obsoleta não zera mais a paleta
+  visível (antes voltava à tinta nativa e a troca seguinte era `immediate`);
+  captura indisponível só a mantém se não houve troca de tarefa desde a
+  amostra visível (app seguro volta à tinta nativa). Abertura sem amostra
+  continua começando de UNKNOWN.
+- 🔧 **Custo:** `QS_COMPOSE_REFRESH` só com `trace`; a atualização completa do
+  início da rampa conta como primeiro quadro (sem segunda invalidação dos ~147
+  escopos no mesmo quadro); `lerpPremultiplied` sem alocação; assinatura de
+  log do disco só com `trace`; `getDurationScale` resolvido uma vez.
+- 🔧 **Instrumentação (`trace`):** `QS_TONE_SAMPLE` registra luma, `takenAt` e
+  motivo do gate (`candidate`, `hold-confirm`, `hold-dwell`, `strong`,
+  `confirmed`, `task-confirmed`...); `QS_INK_TRANSITION` e `QS_BACKDROP`
+  registram duração nominal, visível e retarget.
+- ☐ **Medir no Galaxy:** primeira amostra clara → `task-confirmed` (<150 ms
+  esperado com amostras de 8 Hz), vídeo 1× e 0,35×, A–B–A com `trace`/`perf`
+  desligados (propriedades **e** app), Perfetto/FrameTimeline para quadros
+  apresentados. Jank/P95/CPU continuam sem nova medição.
+- ☐ Não feito nesta rodada: tornar `INK_VISIBLE_MS` configurável (exige
+  catálogo/gerador/matriz); reduzir a recomposição dos ~147 escopos para só os
+  nós de cor de composição (sem prova no DZIF de quais dependem dela); vidro
+  restrito às bordas (registrado, sem reprodução — não mexer em óptica).
