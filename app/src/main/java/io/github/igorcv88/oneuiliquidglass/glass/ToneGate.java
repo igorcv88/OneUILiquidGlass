@@ -14,11 +14,13 @@ public final class ToneGate {
     private Boolean stable, candidate;
     private long candidateAt, committedAt;
     private String reason = "none";
+    /** Task event whose spatially consistent sample seeded the quick candidate. */
+    private long qualifyingTaskAt = Long.MAX_VALUE;
 
     public ToneGate(long confirmMs, long dwellMs) { this.confirmMs = confirmMs; this.dwellMs = dwellMs; }
 
     /** Forgets the decision: the next sample is a first decision again (a new opening). */
-    public void reset() { stable = null; candidate = null; reason = "reset"; }
+    public void reset() { stable = null; candidate = null; qualifyingTaskAt = Long.MAX_VALUE; reason = "reset"; }
 
     /** The decided tone (true: light backdrop), or null before the first sample. */
     public Boolean tone() { return stable; }
@@ -70,24 +72,34 @@ public final class ToneGate {
      */
     public boolean offer(boolean light, long now, boolean strong, long quickSince) {
         boolean quick = now >= quickSince;
-        if (stable == null) { stable = light; candidate = null; committedAt = now; reason = "first"; return true; }
-        if (light == stable) { candidate = null; reason = "agree"; return false; }
+        if (stable == null) { stable = light; candidate = null; qualifyingTaskAt = Long.MAX_VALUE; committedAt = now; reason = "first"; return true; }
+        if (light == stable) { candidate = null; qualifyingTaskAt = Long.MAX_VALUE; reason = "agree"; return false; }
         long shortDwell = Math.min(dwellMs, STRONG_DWELL_MS);
         if (strong && now - committedAt >= shortDwell) {
-            stable = light; candidate = null; committedAt = now; reason = "strong";
+            stable = light; candidate = null; qualifyingTaskAt = Long.MAX_VALUE; committedAt = now; reason = "strong";
             return true;
         }
-        if (candidate == null || candidate != light) { candidate = light; candidateAt = now; reason = "candidate"; return false; }
+        if (candidate == null || candidate != light) {
+            candidate = light; candidateAt = now;
+            qualifyingTaskAt = quick ? quickSince : Long.MAX_VALUE;
+            reason = "candidate"; return false;
+        }
         if (quick) {
-            if (candidateAt < quickSince) { candidateAt = now; reason = "candidate"; return false; }
+            // Both samples must qualify. A prior weak candidate from an inconsistent frame, or
+            // from an older task event, cannot count as the first quick sample.
+            if (candidateAt < quickSince || qualifyingTaskAt != quickSince) {
+                candidateAt = now; qualifyingTaskAt = quickSince; reason = "candidate"; return false;
+            }
             if (now <= candidateAt) { reason = "hold-same-sample"; return false; }
             if (now - committedAt < shortDwell) { reason = "hold-dwell"; return false; }
-            stable = light; candidate = null; committedAt = now; reason = "task-confirmed";
+            stable = light; candidate = null; qualifyingTaskAt = Long.MAX_VALUE; committedAt = now; reason = "task-confirmed";
             return true;
         }
+        // An ineligible sample breaks the streak of spatially consistent quick samples.
+        qualifyingTaskAt = Long.MAX_VALUE;
         if (now - candidateAt < confirmMs) { reason = "hold-confirm"; return false; }
         if (now - committedAt < dwellMs) { reason = "hold-dwell"; return false; }
-        stable = light; candidate = null; committedAt = now; reason = "confirmed";
+        stable = light; candidate = null; qualifyingTaskAt = Long.MAX_VALUE; committedAt = now; reason = "confirmed";
         return true;
     }
 

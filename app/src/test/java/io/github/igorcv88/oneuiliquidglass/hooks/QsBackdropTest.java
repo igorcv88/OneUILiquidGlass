@@ -58,5 +58,13 @@ public final class QsBackdropTest {
         assertFalse("invalid sample", QsBackdrop.offer(scene, gate, Float.NaN, 5000));
         assertEquals(io.github.igorcv88.oneuiliquidglass.glass.QsScene.Tone.LIGHT_SCENE, scene.tone());
     }
+    @Test public void secureCaptureFallbackNeedsRepeatedFailuresAfterForegroundSwitch() {
+        assertFalse(QsBackdrop.fallbackOnUnavailable(1200, 1100, 1000, 1));
+        assertFalse(QsBackdrop.fallbackOnUnavailable(1300, 1100, 1000, 2));
+        assertTrue(QsBackdrop.fallbackOnUnavailable(1350, 1100, 1000, 2));
+        assertFalse("no foreground switch", QsBackdrop.fallbackOnUnavailable(1400, 900, 1000, 4));
+        assertFalse("unknown palette", QsBackdrop.fallbackOnUnavailable(1400, 1100, 0, 4));
+    }
+
 }
 

@@ -88,6 +88,9 @@ final class QsBackdrop {
     private boolean shown, pending;
     /** When the current sample was taken (uptime), 0 for none. */
     private long sampledAt;
+    /** Consecutive failed captures after one confirmed foreground task change. */
+    private long unavailableTaskAt = Long.MIN_VALUE;
+    private int unavailableTaskFailures;
     /** A separately measured shade scene, never the retired sample of a previous QS session. */
     private QsScene.Tone shadeHint = QsScene.Tone.UNKNOWN;
     private QsScene.Tone shadeHeaderHint = QsScene.Tone.UNKNOWN;
@@ -181,6 +184,8 @@ final class QsBackdrop {
         scene.force(snapshot.body,snapshot.grid.takenAt);
         header.force(snapshot.header,snapshot.grid.takenAt);
         sampledAt=snapshot.grid.takenAt;
+        unavailableTaskAt = Long.MIN_VALUE;
+        unavailableTaskFailures = 0;
         if (Probe.trace) trace("QS_TONE_SAMPLE", "sampleAgeMs=" + Math.max(0L,SystemClock.uptimeMillis()-sampledAt)
                 + " body=" + snapshot.body + " header=" + snapshot.header
                 + " luma=" + snapshot.bodyLuma + "/" + snapshot.headerLuma
@@ -330,10 +335,36 @@ final class QsBackdrop {
         });
     }
 
+    /** At least two failed captures and 250 ms after the task switch before leaving the old palette. */
+    static boolean fallbackOnUnavailable(long now, long taskAt, long lastSampleAt, int failures) {
+        return lastSampleAt > 0 && taskAt > lastSampleAt && now >= taskAt
+                && now - taskAt >= 250 && failures >= 2;
+    }
+
     private void resampled(ToneGrid grid, long requested) {
         long now = SystemClock.uptimeMillis();
-        // No capture this time (secure content, a transient failure): try again later, slowly.
-        if (grid == null) { Probe.log("QS_RESAMPLE", "state=unavailable generation=" + generation); schedule(RESAMPLE_MS * 3); return; }
+        if (grid == null) {
+            // A transient readback error must not flash UNKNOWN. An app that forbids capture
+            // after a foreground switch must not retain the previous app's ink indefinitely.
+            long taskAt = BackdropEvents.foregroundChangedAt();
+            if (shown && sampledAt > 0 && taskAt > sampledAt) {
+                if (unavailableTaskAt != taskAt) {
+                    unavailableTaskAt = taskAt;
+                    unavailableTaskFailures = 0;
+                }
+                unavailableTaskFailures++;
+                if (fallbackOnUnavailable(now, taskAt, sampledAt, unavailableTaskFailures)) {
+                    trace("QS_TONE_UNAVAILABLE_FALLBACK", "failures=" + unavailableTaskFailures
+                            + " taskAgeMs=" + (now - taskAt));
+                    forget(); publish(false);
+                    schedule(RESAMPLE_MS);
+                } else schedule(BURST_RESAMPLE_MS);
+                return;
+            }
+            Probe.log("QS_RESAMPLE", "state=unavailable generation=" + generation);
+            schedule(RESAMPLE_MS * 3);
+            return;
+        }
         if(BackdropEvents.lastChange()>grid.takenAt){schedule(resampleInterval());return;}
         acceptShared(ShadeTone.decision(grid));
         schedule(resampleInterval());
@@ -365,6 +396,7 @@ final class QsBackdrop {
 
     private void forget() {
         scene.reset(); header.reset(); sceneGate.reset(); headerGate.reset(); sampledAt = 0;
+        unavailableTaskAt = Long.MIN_VALUE; unavailableTaskFailures = 0;
     }
 
     void configuration() {
@@ -462,19 +494,10 @@ final class QsBackdrop {
         return true;
     }
 
-    private static java.lang.reflect.Method scaleGetter;
-    private static boolean scaleGetterMissing;
-
-    /** ValueAnimator.getDurationScale() (hidden API, read once by reflection); NaN when unreadable. */
+    /** Public API since level 33; avoid reflective invocation on each transition. */
     private static float durationScale() {
-        if (scaleGetterMissing) return Float.NaN;
-        try {
-            if (scaleGetter == null) scaleGetter = ValueAnimator.class.getMethod("getDurationScale");
-            return (Float) scaleGetter.invoke(null);
-        } catch (ReflectiveOperationException | RuntimeException | LinkageError ex) {
-            scaleGetterMissing = true;
-            return Float.NaN;
-        }
+        try { return ValueAnimator.getDurationScale(); }
+        catch (RuntimeException | LinkageError ex) { return Float.NaN; }
     }
 
     private static float level(QsScene.Tone t) {
