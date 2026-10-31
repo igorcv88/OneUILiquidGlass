@@ -44,4 +44,17 @@ public final class InkTransitionTest {
         assertEquals(0, InkTransition.duration(Float.NaN));
         assertEquals(1800, InkTransition.duration(50f));
     }
+    @Test public void compensatedDurationKeepsTheVisibleFadeAcrossUserScales() {
+        // Visible length = nominal * scale: ~165 ms at 1x and at the user's 0.35x.
+        assertEquals(165, InkTransition.compensated(165, 1f));
+        assertEquals(471, InkTransition.compensated(165, .35f));
+        // Compensation is bounded (very low scales stay shorter than 4x nominal).
+        assertEquals(660, InkTransition.compensated(165, .05f));
+        // A user slowing animations down (>1x) keeps the slower result: no compensation.
+        assertEquals(165, InkTransition.compensated(165, 2f));
+        // Animations off or unreadable scale: no fade at all.
+        assertEquals(0, InkTransition.compensated(165, 0f));
+        assertEquals(0, InkTransition.compensated(165, Float.NaN));
+        assertEquals(0, InkTransition.compensated(165, -1f));
+    }
 }

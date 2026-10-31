@@ -127,6 +127,7 @@ final class BackdropEvents {
 
     static void fire(String reason) {
         lastChange = SystemClock.uptimeMillis();
+        io.github.igorcv88.oneuiliquidglass.glass.ShadeTone.taskChanged(lastChange);
         MAIN.post(() -> {
             for (Runnable r : listeners) {
                 try { r.run(); }

@@ -39,8 +39,14 @@ import io.github.igorcv88.oneuiliquidglass.glass.ToneGrid;
  * panel is collapsed. Only when the expansion cannot be read does visibility stand in for it.</p>
  */
 final class QsBackdrop {
-    /** Faster than notification cards: QS captures a task change before its palette can move. */
-    static final long INK_RAMP_MS = 120;
+    /**
+     * Visible length of a QS palette crossfade, whatever the user's animator scale (QS113: the
+     * former 120 ms nominal ramp lasted ~42 ms at the Galaxy's 0.35x, four callbacks, and was not
+     * perceived). See InkTransition.compensated; notifications keep their own timing.
+     */
+    static final long INK_VISIBLE_MS = 165;
+    /** Created on first use, never during class init (JVM unit tests load this class). */
+    private static android.animation.TimeInterpolator linear;
     /** A sample this young belongs to the opening that follows it. */
     static final long FRESH_MS = 600;
     /** The shade's already measured backdrop can cover a lateral transition, not a later app. */
@@ -177,6 +183,9 @@ final class QsBackdrop {
         sampledAt=snapshot.grid.takenAt;
         if (Probe.trace) trace("QS_TONE_SAMPLE", "sampleAgeMs=" + Math.max(0L,SystemClock.uptimeMillis()-sampledAt)
                 + " body=" + snapshot.body + " header=" + snapshot.header
+                + " luma=" + snapshot.bodyLuma + "/" + snapshot.headerLuma
+                + " gate=" + snapshot.bodyReason + "/" + snapshot.headerReason
+                + " takenAt=" + snapshot.grid.takenAt
                 + " taskAgeMs=" + Math.max(0L,SystemClock.uptimeMillis()-BackdropEvents.lastChange()));
         // The panel's glyphs, discs, sliders and container tint now consume the same
         // fractional ink phase. Only a known-to-known in-session change may crossfade;
@@ -253,9 +262,12 @@ final class QsBackdrop {
             pending = false; cancel = null;
             if (!enabled.getAsBoolean()) return;
             if (BackdropEvents.lastChange() > requestedAt) {
-                trace("QS_TONE_STALE_CAPTURE", "source=" + source + " taskChanged=true");
+                trace("QS_TONE_STALE_CAPTURE", "source=" + source + " taskChanged=true keep=" + keepVisible());
                 if(adoptLive("stale-request"))return;
-                forget(); publish(false);
+                // QS113: on the open panel a stale capture used to reset to UNKNOWN (native ink)
+                // until the retry landed, so the next change could not crossfade. The palette on
+                // screen stays until a new sample decides; a closed panel still starts clean.
+                if (!keepVisible()) { forget(); publish(false); }
                 prefetch("task-change-retry");
                 return;
             }
@@ -263,14 +275,19 @@ final class QsBackdrop {
                 acceptShared(ShadeTone.decision(grid));
             } else {
                 if(adoptLive("capture-unavailable"))return;
-                forget();
+                // Keep the palette only while it still describes the same task: after a switch
+                // to unreadable (secure) content, fall back to native ink as before.
+                if (!keepVisible() || BackdropEvents.lastChange() > sampledAt) forget();
             }
             publish(false);
             schedule(resampleInterval());
         });
     }
 
-    private static float headerLuma(ToneGrid grid) { return grid.luma(grid.top, grid.top + 4 * grid.band); }
+    /** The open panel shows a decided palette: a failed or stale capture must not drop it to UNKNOWN. */
+    private boolean keepVisible() {
+        return shown && tone != QsScene.Tone.UNKNOWN && sampledAt != 0;
+    }
 
     private void schedule(long delay) {
         main.removeCallbacks(tick);
@@ -335,7 +352,7 @@ final class QsBackdrop {
 
     /** Ends this generation: a capture still in flight is cancelled and its result dropped. */
     private void retire() {
-        if (inkAnimator != null) { inkAnimator.cancel(); inkAnimator = null; }
+        if (stopInk()) { sceneInk = level(tone); headerInk = level(headerTone); }
         generation++;
         pending = false;
         if (cancel != null) cancel.run();
@@ -374,27 +391,37 @@ final class QsBackdrop {
         boolean motionAllowed;
         try { motionAllowed=ValueAnimator.areAnimatorsEnabled(); }
         catch(RuntimeException | LinkageError ex) { motionAllowed=false; }
-        float durationScale;
-        try { durationScale=(Float)ValueAnimator.class.getMethod("getDurationScale").invoke(null); }
-        catch(ReflectiveOperationException | RuntimeException | LinkageError ex) { durationScale=Float.NaN; }
-        boolean ramp = animate && shown && motionAllowed && (rampScene || rampHeader);
+        float durationScale = durationScale();
+        // An unreadable scale (hidden API refused) keeps the nominal visible length rather than
+        // silently disabling the fade; scale 0 is already excluded by areAnimatorsEnabled().
+        long rampMs = Float.isNaN(durationScale) ? INK_VISIBLE_MS
+                : io.github.igorcv88.oneuiliquidglass.glass.InkTransition.compensated(INK_VISIBLE_MS, durationScale);
+        boolean ramp = animate && shown && motionAllowed && rampMs > 0 && (rampScene || rampHeader);
         float fromScene = sceneInk, fromHeader = headerInk;
         Probe.log("QS_BACKDROP", "state=" + next + " header=" + nextHeader + " previous=" + before + "/" + beforeHeader
-                + " generation=" + generation + " transition=" + (ramp ? "ramp"+INK_RAMP_MS : "immediate")
+                + " generation=" + generation + " transition=" + (ramp ? "ramp"+rampMs : "immediate")
+                + " visibleMs=" + (ramp ? INK_VISIBLE_MS : 0)
                 + " animatedRequested=" + animate + " panelShown=" + shown
                 + " animatorsEnabled=" + motionAllowed + " durationScale=" + durationScale
                 + " sampleAgeMs=" + (sampledAt==0?-1:SystemClock.uptimeMillis()-sampledAt));
-        if (inkAnimator != null) { inkAnimator.cancel(); inkAnimator = null; }
+        // Retarget: from the value presented now (fromScene/fromHeader, read above), never from a
+        // target that did not appear. stopInk() detaches first, so the cancelled animator's end
+        // callback neither snaps to its old target nor recomposes the whole panel.
+        boolean interrupted = stopInk();
         if (ramp) {
             final long startedAt=SystemClock.uptimeMillis();
             final int[] callbacks={0};
             final long[] firstFrameAt={-1};
             inkAnimator = ValueAnimator.ofFloat(0f,1f);
-            inkAnimator.setDuration(INK_RAMP_MS);
+            inkAnimator.setDuration(rampMs);
+            // Linear clock + InkTransition.ease only. The default AccelerateDecelerate
+            // interpolator stacked on smoothstep kept the first and last thirds nearly static.
+            if (linear == null) linear = new android.view.animation.LinearInterpolator();
+            inkAnimator.setInterpolator(linear);
             inkAnimator.addUpdateListener(a -> {
                 callbacks[0]++;
                 if(firstFrameAt[0]<0)firstFrameAt[0]=SystemClock.uptimeMillis()-startedAt;
-                float t=io.github.igorcv88.oneuiliquidglass.glass.InkTransition.ease((Float)a.getAnimatedValue());
+                float t=io.github.igorcv88.oneuiliquidglass.glass.InkTransition.ease(a.getAnimatedFraction());
                 sceneInk=rampScene ? fromScene+(toScene-fromScene)*t : toScene;
                 headerInk=rampHeader ? fromHeader+(toHeader-fromHeader)*t : toHeader;
                 redraw.run();
@@ -413,8 +440,9 @@ final class QsBackdrop {
                 }
             });
             trace("QS_INK_TRANSITION", "phase=start from=" + fromScene + "/" + fromHeader
-                    + " to=" + toScene + "/" + toHeader + " duration=" + INK_RAMP_MS
-                    + " durationScale=" + durationScale);
+                    + " to=" + toScene + "/" + toHeader + " duration=" + rampMs
+                    + " visibleMs=" + INK_VISIBLE_MS + " durationScale=" + durationScale
+                    + " retarget=" + interrupted);
             inkAnimator.start();
         } else { sceneInk = toScene; headerInk = toHeader; }
         trace("TONE_COMMIT", "scene=" + next + " tone=" + nextHeader);
@@ -423,6 +451,30 @@ final class QsBackdrop {
 
     private void trace(String event, String detail) {
         if (Probe.trace) Probe.log(event, "session=" + session + " generation=" + generation + " " + detail);
+    }
+
+    /** Cancels the running crossfade, if any, detached first; true when one was running. */
+    private boolean stopInk() {
+        ValueAnimator running = inkAnimator;
+        if (running == null) return false;
+        inkAnimator = null;
+        running.cancel();
+        return true;
+    }
+
+    private static java.lang.reflect.Method scaleGetter;
+    private static boolean scaleGetterMissing;
+
+    /** ValueAnimator.getDurationScale() (hidden API, read once by reflection); NaN when unreadable. */
+    private static float durationScale() {
+        if (scaleGetterMissing) return Float.NaN;
+        try {
+            if (scaleGetter == null) scaleGetter = ValueAnimator.class.getMethod("getDurationScale");
+            return (Float) scaleGetter.invoke(null);
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError ex) {
+            scaleGetterMissing = true;
+            return Float.NaN;
+        }
     }
 
     private static float level(QsScene.Tone t) {

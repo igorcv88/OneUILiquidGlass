@@ -80,8 +80,9 @@ final class QsDiscBackgroundHooks {
                         if(current==original)return;
                         p.setObjectExtra("qsDiscRestore",original);
                         nodeColor.setLong(p.thisObject,current);
-                        String signature=scene.get()+":"+Integer.toHexString(mapped);
-                        if(Probe.trace&&!signature.equals(lastDrawn.put(p.thisObject,signature)))
+                        // Per-frame during a crossfade: build the signature only when tracing.
+                        String signature=Probe.trace?scene.get()+":"+Integer.toHexString(mapped):null;
+                        if(signature!=null&&!signature.equals(lastDrawn.put(p.thisObject,signature)))
                             Probe.log("QS_DISC_DRAW", "node="+Integer.toHexString(System.identityHashCode(p.thisObject))
                                     +" scene="+scene.get()+" original="+Integer.toHexString(spec.original)
                                     +" applied="+Integer.toHexString(mapped)+" phase="+phase.get());

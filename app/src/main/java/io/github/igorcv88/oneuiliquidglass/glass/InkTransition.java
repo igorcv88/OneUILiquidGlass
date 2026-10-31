@@ -34,13 +34,17 @@ public final class InkTransition {
         float a=(from>>>24)/255f,b=(to>>>24)/255f;
         float outA=a+(b-a)*t;
         if(outA<=0f)return from&0xffffff;
-        int rgb=0;
-        for(int shift:new int[]{16,8,0}){
-            int left=(from>>>shift)&255,right=(to>>>shift)&255;
-            int channel=Math.round(((1f-t)*a*left+t*b*right)/outA);
-            rgb|=Math.max(0,Math.min(255,channel))<<shift;
-        }
+        // Per-frame path for every QS colour: unrolled, no array allocation per call.
+        int rgb=premultipliedChannel(from,to,16,a,b,outA,t)
+                |premultipliedChannel(from,to,8,a,b,outA,t)
+                |premultipliedChannel(from,to,0,a,b,outA,t);
         return ((Math.round(outA*255f)&255)<<24)|rgb;
+    }
+
+    private static int premultipliedChannel(int from,int to,int shift,float a,float b,float outA,float t){
+        int left=(from>>>shift)&255,right=(to>>>shift)&255;
+        int channel=Math.round(((1f-t)*a*left+t*b*right)/outA);
+        return Math.max(0,Math.min(255,channel))<<shift;
     }
 
     /** Symmetric smoothstep: slow at both ends, fastest across the low-contrast middle. */
@@ -48,6 +52,23 @@ public final class InkTransition {
         if (!(t > 0f)) return 0f;
         if (t >= 1f) return 1f;
         return t * t * (3f - 2f * t);
+    }
+
+    /** Longest stretch {@link #compensated} applies to a user's faster animator scale. */
+    public static final float MAX_COMPENSATION = 4f;
+
+    /**
+     * Nominal ValueAnimator duration so that the fade is about {@code visibleMs} on screen at the
+     * system animator {@code scale} (visible = nominal * scale). A faster user scale (0.35x) is
+     * compensated, bounded by {@link #MAX_COMPENSATION}; a slower one (>1x, e.g. accessibility)
+     * is kept, never shortened. 0 when animations are off (scale 0, reduced motion) or the scale
+     * cannot be read, so the final colour applies at once. Never divides by a zero scale.
+     */
+    public static long compensated(long visibleMs, float scale) {
+        if (visibleMs <= 0 || !Float.isFinite(scale) || scale <= 0f) return 0L;
+        if (scale >= 1f) return visibleMs;
+        float stretch = Math.min(MAX_COMPENSATION, 1f / scale);
+        return Math.round(visibleMs * stretch);
     }
 
     /**
