@@ -147,6 +147,14 @@ final class LensSheet extends Sheet {
                 text = "O auxiliar não respondeu. Confira o acesso root e tente de novo.";
                 action = "Verificar acesso root";
         }
+        // Keep the actual failed operation visible instead of replacing it with "Sem resposta".
+        // In particular, a rejected property value must not look like a root permission failure.
+        if (!model.busy && model.message != null
+                && model.message.startsWith("Operação interrompida:")) {
+            title = "Operação interrompida";
+            text = model.message;
+            action = "Verificar estado";
+        }
         CompositorValues.Outcome last = m.lastApply();
         if (last != CompositorValues.Outcome.NONE && last != CompositorValues.Outcome.UNVERIFIED) {
             String when = DateFormat.getTimeFormat(activity).format(new Date(m.lastApplyAt()));

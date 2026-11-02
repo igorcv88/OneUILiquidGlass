@@ -155,7 +155,7 @@ public final class SettingsRegistry {
         add(new SettingSpec("qs.track","Central de controle","shade","Trilho antigo (descontinuado)","Legado sem efeito visual; preservado para importar e exportar perfis",SettingSpec.Type.FLOAT,".88",0.1,1.0,.01,"","","",false,"DIAGRAM"));
         add(new SettingSpec("qs.fill","Central de controle","shade","Espessura do preenchimento","Espessura do preenchimento branco dentro da cápsula; a mesma margem vale nas pontas",SettingSpec.Type.FLOAT,".85",0.1,1.0,.01,"","","",false,"DIAGRAM"));
         add(new SettingSpec("qs.lightstyle","Central de controle","shade","Estilo antigo (descontinuado)","Legado sem efeito visual; ambos usam vidro translúcido e tinta adaptativa",SettingSpec.Type.ENUM,"light",0,1,.01,"","obsidian,light","",false,"DIAGRAM"));
-        add(new SettingSpec("sf.qslight","Compositor","shade","Luz pela borda da Central de controle","Quick Settings: luz que entra pelo contorno conforme o fundo ali (0 desliga)",SettingSpec.Type.FLOAT,".90",0,2,.01,"","","sfrefract=1",true,"DIAGRAM"));
+        add(new SettingSpec("sf.qslight","Compositor","shade","Luz pela borda da Central de controle","Quick Settings: luz que entra pelo contorno conforme o fundo ali (0 desliga)",SettingSpec.Type.FLOAT,"0.90",0,2,.01,"","","sfrefract=1",true,"DIAGRAM"));
     }
     private static void add(SettingSpec spec) { if (SPECS.put(spec.key, spec) != null) throw new IllegalStateException(spec.key); }
     public static SettingSpec get(String key) { return SPECS.get(key); }

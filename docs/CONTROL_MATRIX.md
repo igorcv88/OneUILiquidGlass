@@ -161,7 +161,7 @@ Gerada por `ControlMatrixTest` a partir de `SettingsRegistry`, `Controls`, `Appl
 | `qs.track` | Trilho antigo (descontinuado) | Central | Central de controle · internal | float · 0.1–1 · .88 | glass/QsStyle, glass/QuickSettingsGlass, hooks/QuickSettingsHooks, hooks/QsSliderHooks | leitura | leitura | leitura | leitura |  | none | CM, SC |
 | `qs.fill` | Espessura do preenchimento | Central | Central de controle · standard | float · 0.1–1 · .85 | glass/QsStyle, glass/QuickSettingsGlass, hooks/QuickSettingsHooks, hooks/QsSliderHooks | ao vivo | ativo | ativo | ativo |  | behavior | CM, SC |
 | `qs.lightstyle` | Estilo antigo (descontinuado) | Central | Central de controle · internal | enum · obsidian/light · light | glass/QsStyle, glass/QuickSettingsGlass, hooks/QuickSettingsHooks, hooks/QsSliderHooks | leitura | leitura | leitura | leitura |  | none | CM |
-| `sf.qslight` | Luz pela borda | Central | Central de controle · advanced | float · 0–2 · .90 | sfhook/oulg_sf.c | reinício | inativo: Usado com a lente dinâmica | ao reiniciar | inativo: Usado com a lente dinâmica |  | behavior | CM, CV, LH, SC |
+| `sf.qslight` | Luz pela borda | Central | Central de controle · advanced | float · 0–2 · 0.90 | sfhook/oulg_sf.c | reinício | inativo: Usado com a lente dinâmica | ao reiniciar | inativo: Usado com a lente dinâmica |  | behavior | CM, CV, LH, SC |
 
 ## Interruptores de produto (fora de `debug.oulg.*`)
 

@@ -246,7 +246,7 @@ public final class SfLiveController {
                                             + " estado abaixo.";
                                 break;
                             case RESTART:
-                                Map<String, String> values = restartValues;
+                                Map<String, String> values = SfLive.normalizeValues(restartValues);
                                 Map<String, String> freshStatus = flow.status();
                                 io.github.igorcv88.oneuiliquidglass.config.SystemPropertyReader.refresh();
                                 if (!io.github.igorcv88.oneuiliquidglass.config.SystemPropertyReader.available())

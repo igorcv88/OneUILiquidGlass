@@ -30,4 +30,17 @@ class DistributionTests(unittest.TestCase):
         readers=set(re.findall(r'(?:number|prop|color)\("([a-z0-9.]+)"',java))|set(re.findall(r'debug\.oulg\.([a-z0-9.]+)',c))
         specs=set(re.findall(r'add\(new SettingSpec\("([a-z0-9.]+)"',registry))
         self.assertEqual(len(specs),len(readers));self.assertEqual(readers,specs)
+    def test_compositor_defaults_are_valid_helper_decimals(self):
+        catalogue=(ROOT/'docs/PROPERTY_CATALOG_2026-10-26.md').read_text()
+        registry=(ROOT/'app/src/main/java/io/github/igorcv88/oneuiliquidglass/config/SettingsRegistry.java').read_text()
+        defaults={key:default.strip('`').split(' ')[0]
+            for key,default in re.findall(r'^\| `(sf\.[a-z]+)` \| ([^|]+) \|',catalogue,re.M)
+            if key!='sf.optics'}
+        self.assertIn('sf.qslight',defaults)
+        self.assertEqual('0.90',defaults['sf.qslight'])
+        for key,default in defaults.items():
+            self.assertRegex(default,r'^-?[0-9]+(?:\.[0-9]+)?$',key)
+            match=re.search(r'add\(new SettingSpec\("'+re.escape(key)+r'"[^\n]*?SettingSpec.Type\.\w+,"([^"]+)"',registry)
+            self.assertIsNotNone(match,key)
+            self.assertEqual(default,match.group(1),key)
 if __name__=='__main__':unittest.main()

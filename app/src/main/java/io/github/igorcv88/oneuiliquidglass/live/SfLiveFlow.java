@@ -116,22 +116,23 @@ public final class SfLiveFlow {
     /** {@code confirmed} runs after every value read back and before the restart. */
     public Reply applyAndRestart(Map<String, String> values, java.util.function.Consumer<Map<String, String>> confirmed)
             throws Exception {
-        if (!values.isEmpty()) {
+        Map<String, String> normalized = SfLive.normalizeValues(values);
+        if (!normalized.isEmpty()) {
             Map<String, String> status = status();
             supported(status);
             ready(status);
-            Reply set = runner.setprops(values);
+            Reply set = runner.setprops(normalized);
             Map<String, String> echo = set.values();
             if (set.exit != SfLive.OK || !"ok".equals(echo.get("setprops")))
                 throw new Failure("Valores recusados; nada foi reiniciado.\n" + set.output, false);
-            for (Map.Entry<String, String> e : values.entrySet()) {
+            for (Map.Entry<String, String> e : normalized.entrySet()) {
                 String name = "set_" + e.getKey().substring(3);
                 if (!e.getValue().equals(echo.get(name)))
                     throw new Failure(
                             "O valor de " + e.getKey() + " não foi confirmado; nada foi reiniciado.",
                             false);
             }
-            if (confirmed != null) confirmed.accept(values);
+            if (confirmed != null) confirmed.accept(normalized);
         }
         return restartConfirmed();
     }
