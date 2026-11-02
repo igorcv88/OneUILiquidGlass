@@ -33,6 +33,10 @@ for key,(default,domain,desc) in rows.items():
  sf=key.startswith('sf.') and key!='sf.optics'
  typ='READONLY' if key=='sf.optics' else 'BOOLEAN' if key in bools else 'ENUM' if key in enums else 'RGB' if key in ('lighttone','qs.darkcolor','qs.lightcolor','qs.lightglasscolor','qs.tilelighton','qs.tilelightoff','qs.tilelightonink','qs.tilelightoffink','qs.tiledarkon','qs.tiledarkoff','qs.tiledarkonink','qs.tiledarkoffink','panelcolor','qs.sliderlightcolor','qs.sliderdarkcolor') else 'INT' if key in ints else 'FLOAT'
  default=default.replace('`','').split(' ')[0]
+ # Live compositor inputs must be accepted by the app's fixed numeric helper protocol.
+ # Validate at the catalogue boundary so regenerated Java cannot reintroduce ".90".
+ if sf and typ in ('FLOAT','INT') and not re.fullmatch(r'-?[0-9]+(?:\.[0-9]+)?',default):
+  raise ValueError(f'{key}: noncanonical compositor default {default!r}')
  lo,hi=0,1
  if typ in ('FLOAT','INT'):
   if sf: lo,hi=native[key[3:]]

@@ -223,4 +223,4 @@ Controles `qs.*` são lidos pelo snapshot `QsStyle` em callbacks de configuraç�
 | `qs.track` | .88 | 0.10–1 | Legado sem efeito visual; preservado para importar e exportar perfis |
 | `qs.fill` | .85 | 0.10–1 | Espessura do preenchimento branco dentro da cápsula; a mesma margem vale nas pontas |
 | `qs.lightstyle` | light | enum obsidian/light | Legado sem efeito visual; ambos usam vidro translúcido e tinta adaptativa |
-| `sf.qslight` | .90 | 0–2 | Quick Settings: luz que entra pelo contorno conforme o fundo ali (0 desliga) |
+| `sf.qslight` | 0.90 | 0–2 | Quick Settings: luz que entra pelo contorno conforme o fundo ali (0 desliga) |

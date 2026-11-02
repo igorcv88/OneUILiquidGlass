@@ -85,6 +85,15 @@ notificações personalizadas, live updates ou traduções.
 
 ### Aplicativo, diagnósticos e validação
 
+- 🔧 **Lente após reboot físico (02/11, correção de código):** catálogo de
+  `sf.qslight` usava `.90`, formato incompatível com a validação de `setprops`;
+  agora usa `0.90`. A rota de escrita normaliza decimais legados antes do
+  helper, do readback e da adoção, e a interface expõe a falha real em vez de
+  apresentar apenas “Sem resposta”. Testes unitários cobrem o catálogo inteiro,
+  `.90` e rejeição de entradas inseguras. **☐** validar o novo APK após reboot
+  físico + root managerless + ativação. A correlação observada no aparelho com
+  `setprop debug.oulg.sf.qslight 0.90` é forte, mas o log anterior não registra
+  diretamente o argumento que foi rejeitado pelo app.
 - ✅ Color picker HSV/RGBA (matiz, área SV, alpha, hexadecimal) disponível e
   usado pelo usuário; a mistura com o branco abaixo de um alfa baixo é esperada.
 - 🔧 Instrumentação `QS_PALETTE_EFFECTIVE`, `QS_TILE_ICON_ROUTE`,

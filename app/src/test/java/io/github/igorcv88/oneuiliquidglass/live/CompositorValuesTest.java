@@ -83,6 +83,16 @@ public final class CompositorValuesTest {
         assertTrue(inputs.size() >= SfLive.WRITABLE.size());
     }
 
+    @Test public void freshRestartDefaultsCanAllPassTheRootHelperValidator() {
+        Map<String, String> defaults = CompositorValues.restartInputs(
+                Collections.emptyMap(), Collections.emptyMap());
+        assertEquals("0.90", defaults.get("sf.qslight"));
+        Map<String, String> normalized = SfLive.normalizeValues(defaults);
+        assertEquals(defaults.size(), normalized.size());
+        assertEquals("0.9", normalized.get("sf.qslight"));
+        assertTrue(SfLive.setprops("/d", defaults).get(2).contains(" qslight=0.9"));
+    }
+
     @Test public void verificationNeedsALoadedLibraryAndMatchingValues() {
         Map<String, String> written = Collections.singletonMap("sf.kgsat", "1.4");
         Map<String, String> loaded = new HashMap<>();
@@ -145,6 +155,26 @@ public final class CompositorValuesTest {
                     () -> SfLive.setprops("/d", Collections.singletonMap(bad[0], bad[1])));
         assertThrows(IllegalArgumentException.class, () -> SfLive.setprops("/d", Collections.emptyMap()));
         assertThrows(IllegalArgumentException.class, () -> SfLive.command("/d", SfLive.Command.SETPROPS, null));
+    }
+
+    @Test public void oldDecimalFormsNormalizeBeforeReachingTheHelper() {
+        for (String value : new String[]{".90", "0.90", "0.9", "00.900"}) {
+            assertEquals("sh '/d/oulg-live.sh' setprops qslight=0.9",
+                    SfLive.setprops("/d", Collections.singletonMap("sf.qslight", value)).get(2));
+        }
+        assertEquals("sh '/d/oulg-live.sh' setprops shadelift=-0.5",
+                SfLive.setprops("/d", Collections.singletonMap("sf.shadelift", "-.50")).get(2));
+        assertEquals("sh '/d/oulg-live.sh' setprops qslight=",
+                SfLive.setprops("/d", Collections.singletonMap("sf.qslight", "")).get(2));
+        assertEquals("0", SfLive.normalizeValues(
+                Collections.singletonMap("sf.qslight", "-0.000")).get("sf.qslight"));
+        for (String invalid : new String[]{".", "-.", "1.", "--1", "1e-3", "NaN",
+                "0; reboot", "$(id)", " 0.9", "0.9 ", "1234567890123"})
+            assertThrows(invalid, IllegalArgumentException.class,
+                    () -> SfLive.normalizeValues(Collections.singletonMap("sf.qslight", invalid)));
+        assertThrows(IllegalArgumentException.class,
+                () -> SfLive.normalizeValues(Collections.singletonMap("sf.qslight", null)));
+        assertThrows(IllegalArgumentException.class, () -> SfLive.normalizeValues(null));
     }
 
     @Test public void writableListMatchesTheLibraryReaderMinusOwnedMarkers() throws Exception {

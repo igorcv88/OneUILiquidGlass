@@ -1,5 +1,159 @@
 # Handoff — OneUILiquidGlass (2026-10-16)
 
+## Continuidade prioritária — 02/11/2026: lente pós-root, live updates e toasts
+
+Este bloco é o **handoff mais recente**. As seções antigas abaixo registram a
+evolução e podem conter pendências já resolvidas. Para o estado de cada item,
+consultar também `docs/qs-backlog-20261028.md` e conferir a branch/PR atual
+antes de qualquer alteração. As marcas têm significado estrito: ✅ confirmado
+no Galaxy, 🔧 implementado/testado localmente, ☐ sem comprovação física.
+
+### Identidade e rotina
+
+- Repositório: `https://github.com/igorcv88/OneUILiquidGlass`. Alvo físico:
+  Galaxy S25 Ultra `SM-S938B` (`pa3q`), One UI 9 Stable / Android 17,
+  firmware `S938BXXUCDZIF` (DZIF), root efêmero **managerless** via RMG Labs/
+  `ksud` + LSPosed. A configuração preferida é APK-only sempre que possível;
+  o bundle opcional do SurfaceFlinger exige instalação, selftest e ativação
+  explícita após reboot físico. Não presumir que `ksud soft-reboot` aplica a
+  biblioteca SF: o aplicativo usa o helper live e sua própria reinjeção.
+- **Divisão de trabalho obrigatória:** na conversa com ChatGPT fazer *toda*
+  investigação, interpretação dos logs, DEX/ABI/estrutura de Views, telemetria,
+  medições e fechamento causal. Enviar ao Work/Cloud Code laudo já concluído
+  para **somente implementar código funcional, adicionar testes e fazer
+  validação estática/local**. Não encarregar o Work de novo diagnóstico no
+  aparelho nem de solicitar logs que podiam ser colhidos antes.
+- Para o telefone, fornecer **preferencialmente um único bloco copiável de
+  Termux**, idempotente, com marcadores por fase, estado anterior salvo e
+  restaurado quando aplicável, coleta mínima e respostas claras. Saída sempre
+  em `/sdcard/Download/` (log `.txt`/`.log` e, se útil, pacote `.tar.gz`).
+  Não espalhar dados em várias pastas nem exigir comandos separados sem motivo.
+  Pedir ao usuário gestos de reprodução bem definidos, marcar timestamp e
+  combinar vídeo/prints com `logcat`, `dumpsys`, árvore, layout e owners reais.
+  Não executar reinício/injeção sem confirmação do usuário.
+- **Antes de cada implementação:** reproduzir → formular hipóteses
+  falsificáveis → reunir evidência suficiente para diferenciar causas →
+  identificar classe/método/ciclo de vida e o caminho correto no firmware DZIF
+  → escrever laudo com invariantes, alterações mínimas, regressões e critérios
+  de aceitação. Se a hipótese não estiver fechada, continuar diagnóstico
+  nesta conversa. Evitar hooks amplos, mutações globais e correções estéticas
+  especulativas. Código pronto em PR **não equivale** a aprovação no aparelho.
+- CI e GitHub Actions: não disparar manualmente; o usuário quer economizar
+  minutos. Preferir testes locais e um único build final quando viável. Abrir
+  PR *review ready*, sem merge automático. Manter backlog oficial atualizado,
+  sem criar um arquivo de protocolo Termux no repositório.
+
+### Contexto visual e o que preservar
+
+- ✅ Central de Controle no fundo colorido e pop-ups comuns tiveram aparência
+  aprovada; notificações normais sobre fundo claro também. O usuário gosta
+  de **vidro transparente**, refração/contorno com luz delicada e blur real,
+  sem véu cinza/escurecimento nos cartões. Evitar leite, escurecimento extra,
+  borda dupla, troca de cor em um único frame e halos. Alpha reduzido não deve
+  implicar dessaturar RGB. Preservar o contraste do texto e controles.
+- ✅ No relato após PR #111, os 15 tiles pequenos e as cápsulas grandes
+  (Wi-Fi, Bluetooth, Quick Share), sliders e adaptação de cena tinham sido
+  aprovados no DZIF. Sliders estão especialmente aprovados; não alterar sua
+  geometria/material sem nova evidência. Player de mídia **ativo** deve manter
+  capa, comandos e aparência nativos/aprovados. O player vazio claro e alguns
+  testes Theme Park continuam no backlog, mas não entram na próxima rodada.
+- 🔧 PR #113 introduziu confirmação de duas amostras após troca de app e fade
+  visível de ~165 ms compensado pela escala de animação, com retarget sem salto;
+  PR #114 reviu a consistência espacial/foreground e falhas de captura.
+  O `main` clonado neste atendimento estava em `d213538` (merge #114).
+  **Não tratar o comportamento de transição como aprovado fisicamente só por
+  testes unitários**. Verificar futuras branches antes de afirmar o estado.
+- A lente SurfaceFlinger altera iluminação/refração em perfis de lockscreen,
+  pop-up e shade; APK/LSPosed cobre outras superfícies. Preservar as opções do
+  usuário (ex.: `backdrop=auto`, `liveblur=1`, `liveradius=80`,
+  `liveshaderadius=120`, `liveoptics≈0,5`, `sflens≈0,45`,
+  `hubloom≈1,5`, `sfrefract=0` no modo APK-only, sem impor valores por código).
+
+### Incidente de 02/11/2026: botão “Ativar lente” retornava sem reiniciar
+
+1. Após reboot completo + novo root pelo RMG Labs + `su -c 'ksud soft-reboot'`,
+   a interface repetia “Ativar lente” → “Salvei o que estava fazendo” →
+   “Reiniciar userspace”, mas voltava ao estado inicial sem o reinício.
+2. Diagnósticos `OULG_LensDiag_20261102_032824.txt` e
+   `OULG_LensAttempt_20261102_033133.txt`: `su` concedido, firmware/bundle/
+   binários/selftest válidos (`fingerprint_ok=1`, `bundled_ok=1`,
+   `installed_ok=1`, `update_needed=0`, `selftest_ok=1`), porém
+   `sf_loaded=0`; não havia nova injeção. O soft reboot do KernelSU não
+   equivale à injeção live. O diagnóstico do helper isolado estava saudável.
+3. A intervenção manual **confirmada pelo usuário**:
+   `su -c 'setprop debug.oulg.sf.qslight 0.90'`. Depois, a ativação pelo app
+   iniciou o reinício e a lente voltou a funcionar normalmente. É forte
+   associação com a formatação de `sf.qslight`, porém **o log não guardou o
+   argumento exato que o aplicativo recusou**, logo não chamar de prova
+   direta da exceção ou do estado prévio da fila.
+4. **Causa de código encontrada:** `docs/PROPERTY_CATALOG_2026-10-26.md`
+   trazia `sf.qslight` com default `.90`, enquanto `SfLive.setprops()` aceitava
+   somente `0.90` (parte inteira obrigatória). Valor legado pendente podia ser
+   rejeitado *antes* de chamar o helper; falha ficava disfarçada de “Sem
+   resposta” porque `SfLiveController` publicava status vazio no erro e
+   `LensSheet` perdia a mensagem detalhada. Atenção: `applyAndRestart()` escreve
+   os valores **pendentes**, não todos os defaults do `restartInputs`.
+5. **Correção 🔧 nesta branch:** default normalizado no catálogo/matriz/
+   `SettingsRegistry` regenerado; `SfLive.normalizeValues()` converte
+   `.90`/`0.90`/`00.900` para `0.9` e `-.50` para `-0.5`, preserva limpeza
+   explícita `""` e recusa sintaxe insegura, entradas nulas, valores excessivos
+   e chaves fora da allowlist. O fluxo aplica, confere o echo e adota **a
+   mesma representação**; o controlador normaliza antes de gravar a tentativa.
+   O gerador passa a barrar defaults SF sem parte inteira. `LensSheet` mostra
+   “Operação interrompida” com a causa e botão “Verificar estado”. Regressões
+   em `CompositorValuesTest`/`SfLiveFlowTest` cobrem defaults, legados, echo,
+   cancelamento antes do root e ausência de reinício em caso de erro.
+6. **Status de validação:** `sfhook/tools/live_check.sh` passou; o gerador
+   Python e os 5 testes `tools/test-distribution.py` passaram. A execução
+   `./gradlew testDebugUnitTest` chegou a resolver dependências, mas **parou
+   antes dos JUnit por ausência de Android SDK neste ambiente**. Os testes
+   unitários foram escritos, ainda não executados; verificar em ambiente com
+   SDK, sem acionar manualmente GitHub Actions. ☐ Instalar APK novo no
+   Galaxy e repetir reboot físico → root managerless → helper/status →
+   “Ativar lente” sem `setprop` manual → confirmar `sf_loaded=1`, geração
+   nova e estabilidade após ~2 min. Não mexer no instalador nativo, no shader
+   nem no modo de root para esse bug.
+
+### Próxima rodada — alvo exclusivo: notificações ao vivo (sem mídia) e toasts
+
+- **Live update na tela bloqueada:** diagnosticar separadamente a cápsula
+  associada à notificação ao vivo e a pílula **inferior entre os dois atalhos**
+  da lockscreen. Não supor que compartilham drawable, owner ou rebind.
+- **Live update desbloqueada:** pílula compacta **no canto superior esquerdo**
+  (comportamento semelhante a Dynamic Island) e o **cartão expandido ao
+  tocar**, com suas transições de abertura, atualização, recolhimento e saída.
+  Garantir vidro desde o primeiro frame e depois de cada rebind, sem tapar
+  texto/ações. Testar múltiplos aplicativos/fontes de live update não-mídia.
+- **Toast:** vidro aparece brevemente e depois a Samsung pode reconstruir
+  a superfície opaca/cinza. Identificar criação, substituição de View/
+  Drawable, owner e política de restauração; capturar antes/depois com eventos
+  precisos. Não generalizar a causa a partir da falha das live updates.
+- **EXCLUSÃO expressa:** **NÃO modificar mídia**, inclusive live update/media
+  player na lockscreen, controles de reprodução, capa, notificações de música
+  ou o cartão/pílula do media session. O usuário considera o risco de regressão
+  estética desnecessário. Impor filtro estrutural para não atingir mídia.
+- ☐ **Diagnóstico pendente, nesta conversa:** reproduzir cada estado em vídeo
+  com tempos marcados e logs focados; obter árvore/DEX DZIF e mapear caminhos
+  de criação, substituição, animação e invalidação antes de atribuir a classe
+  correta. Separar primeiro desenho versus rebind e estado parado versus
+  expandido. Incluir Theme Park ON/OFF e tela bloqueada/desbloqueada. Depois
+  publicar laudo com matriz de cenários, assinatura dos métodos, ownership,
+  controles de fallback e testes específicos. Não pedir ao Work que descubra
+  a causa; só implementar quando a rota estiver demonstrada.
+
+### Critérios de saída das próximas correções
+
+1. Cada superfície não-mídia mantém o vidro e o texto legível desde a criação
+   até atualização, troca de app, repouso e rebind, sem flashes opacos, fundo
+   cinza da Samsung ressurgindo, perda de área ou bolhas duplicadas.
+2. Comparar abertura, atualização, expansão, recolhimento, lockscreen e
+   transferência para shade; nenhum hook afeta media, notificação comum,
+   player, ícones QS, sliders ou input. Capturar fallback em falhas.
+3. Testes locais e regressões específicos por owner/rota, logs com trace ligado
+   só durante diagnóstico. Medição A/B limpa deve deixar `trace` e `perf`
+   desligados **no app e nas system properties**; não inferir FPS/bateria
+   a partir de logs com instrumentação ativa.
+
 **Estado vigente (30/10/2026, pós-merge #111):** o usuário confirmou no Galaxy
 que o build novo corrigiu a adaptação de discos/ícones pequenos e grandes,
 sliders, abertura e mudança de aplicativos com a QS aberta. Não persistem os

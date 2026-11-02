@@ -7,11 +7,13 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 /**
  * The SurfaceFlinger live bundle shipped in this APK (assets/sfhook/, built by sfhook/build.sh) and
@@ -97,17 +99,41 @@ public final class SfLive {
      */
     public static List<String> setprops(String bundleDir, Map<String, String> values) {
         List<String> base = command(bundleDir, Command.STATUS, null);
-        if (values.isEmpty()) throw new IllegalArgumentException("empty");
+        Map<String, String> normalized = normalizeValues(values);
+        if (normalized.isEmpty()) throw new IllegalArgumentException("empty");
         StringBuilder line = new StringBuilder(base.get(2).replaceFirst(" status$", " setprops"));
-        for (Map.Entry<String, String> e : values.entrySet()) {
-            String key = e.getKey(), value = e.getValue();
-            if (!key.startsWith("sf.") || !WRITABLE.contains(key.substring(3)))
-                throw new IllegalArgumentException("key " + key);
-            if (!value.matches("(-?[0-9]+(\\.[0-9]+)?)?") || value.length() > 12)
-                throw new IllegalArgumentException("value " + key);
-            line.append(' ').append(key.substring(3)).append('=').append(value);
+        for (Map.Entry<String, String> e : normalized.entrySet()) {
+            line.append(' ').append(e.getKey().substring(3)).append('=').append(e.getValue());
         }
         return Arrays.asList("su", "-c", line.toString());
+    }
+
+    // Accept historical Android property values such as ".90", but never forward shell syntax.
+    // The helper accepts only decimals with an integer part, so canonicalize before writing,
+    // comparing the echoed getprop value, and recording the next compositor baseline.
+    private static final Pattern DECIMAL = Pattern.compile("-?(?:[0-9]+(?:\\.[0-9]+)?|\\.[0-9]+)");
+
+    public static Map<String, String> normalizeValues(Map<String, String> values) {
+        if (values == null) throw new IllegalArgumentException("values");
+        Map<String, String> result = new LinkedHashMap<>();
+        for (Map.Entry<String, String> e : values.entrySet()) {
+            String key = e.getKey(), value = e.getValue();
+            if (key == null || !key.startsWith("sf.") || !WRITABLE.contains(key.substring(3)))
+                throw new IllegalArgumentException("key " + key);
+            if (value == null || value.length() > 12)
+                throw new IllegalArgumentException("value " + key);
+            if (value.isEmpty()) {
+                result.put(key, value); // Empty is an explicit property reset.
+            } else {
+                if (!DECIMAL.matcher(value).matches())
+                    throw new IllegalArgumentException("value " + key);
+                String canonical = new BigDecimal(value).stripTrailingZeros().toPlainString();
+                if (canonical.length() > 12)
+                    throw new IllegalArgumentException("value " + key);
+                result.put(key, canonical);
+            }
+        }
+        return Collections.unmodifiableMap(result);
     }
 
     /** Mirrors the helper's allowlist: the library's reader minus the version marker and the
