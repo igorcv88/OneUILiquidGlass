@@ -45,6 +45,11 @@ public final class NativeShape {
 
     /** Eight radii (px) or null. */
     static float[] radii(Drawable background, View host) {
+        // A CardView clips its children using its own radius. Samsung may replace its
+        // background with a GradientDrawable whose radius no longer matches that clip.
+        // Follow the actual container outline before inspecting the drawable beneath it.
+        Float card = floatCall(host, "getRadius");
+        if (card != null && card >= 0f) return uniform(card);
         Drawable d = unwrap(background);
         if (d instanceof GradientDrawable) {
             GradientDrawable g = (GradientDrawable) d;
@@ -56,8 +61,6 @@ public final class NativeShape {
             // A plain rectangle: square corners are still a known shape.
             if (g.getShape() == GradientDrawable.RECTANGLE) return uniform(0f);
         }
-        Float card = floatCall(host, "getRadius");
-        if (card != null && card >= 0f) return uniform(card);
         if (host != null && host.getWidth() > 0 && host.getHeight() > 0) {
             Outline o = new Outline();
             if (background != null) {
