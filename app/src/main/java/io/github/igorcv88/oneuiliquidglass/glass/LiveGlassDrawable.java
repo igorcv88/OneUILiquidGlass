@@ -13,6 +13,8 @@ import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Shader;
 import android.graphics.drawable.Drawable;
+import io.github.igorcv88.oneuiliquidglass.diagnostics.LiveRenderProbe;
+import io.github.igorcv88.oneuiliquidglass.diagnostics.Probe;
 
 /**
  * Background of a live update chip/card, a Now Bar card or a toast (hooks/ongoing). It wraps the
@@ -68,7 +70,11 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
     private int lastTint, lastPx = -1;
     /** Told when the region fails mid-draw, so the owner restores layers it changed for the glass. */
     private Runnable onRegionFailed;
+    private LiveRenderProbe renderProbe;
+    private String renderSurface;
     public void setOnRegionFailed(Runnable r) { onRegionFailed = r; }
+    /** Temporary telemetry attached by the controller; no change to how the drawable renders. */
+    public void setRenderProbe(String surface) { renderSurface = surface; renderProbe = new LiveRenderProbe(); }
     private final float[] lastRadii = new float[8];
 
     public LiveGlassDrawable(Drawable nativeDrawable, float[] radii, Integer nativeColor, Spec spec, float density) {
@@ -177,10 +183,12 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
         if (showsGlass() && !canvas.isHardwareAccelerated()) {
             setBlur(null);
             setGlass(false);
+            drawReport("SOFTWARE_FALLBACK", canvas, b, "noHardwareCanvas");
             if (onRegionFailed != null) onRegionFailed.run();
         }
         if (!showsGlass() || b.isEmpty()
                 || (regionless && !nativeRegionActive.getAsBoolean())) {
+            drawReport(b.isEmpty() ? "EMPTY" : regionless && showsGlass() ? "ANCESTOR_MISSING" : "NATIVE", canvas, b, "fallback");
             if (nativeDrawable != null) { nativeDrawable.setBounds(b); nativeDrawable.draw(canvas); }
             return;
         }
@@ -188,6 +196,7 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
         if (regionless) {
             drawTranslucentNative(canvas, b);
             drawRim(canvas, b);
+            drawReport("REGIONLESS", canvas, b, "nativeBlurAncestor");
             return;
         }
         int tint = currentTint();
@@ -200,6 +209,7 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
                 setBlur(null);
                 Runnable r = onRegionFailed;
                 if (r != null) r.run();
+                drawReport("REGION_UPDATE_FAILED", canvas, b, e.getClass().getSimpleName());
                 if (nativeDrawable != null) { nativeDrawable.setBounds(b); nativeDrawable.draw(canvas); }
                 return;
             }
@@ -208,10 +218,24 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
         catch (RuntimeException | LinkageError e) {
             setBlur(null);
             if (onRegionFailed != null) onRegionFailed.run();
+            drawReport("REGION_DRAW_FAILED", canvas, b, e.getClass().getSimpleName());
             if (nativeDrawable != null) { nativeDrawable.setBounds(b); nativeDrawable.draw(canvas); }
             return;
         }
         drawRim(canvas, b);
+        drawReport("OWN_REGION", canvas, b, "blurDrawReturned");
+    }
+    private void drawReport(String mode, Canvas canvas, Rect b, String reason) {
+        if (renderProbe == null || !renderProbe.changed(mode)) return;
+        try {
+            Probe.log("LIVE_RENDER_DRAW", "surface=" + renderSurface + " mode=" + mode + " reason=" + reason
+                    + " hwCanvas=" + canvas.isHardwareAccelerated() + " bounds=" + b.width() + "x" + b.height()
+                    + " native=" + (nativeDrawable == null ? "none" : nativeDrawable.getClass().getSimpleName())
+                    + " nativeAlpha=" + (nativeDrawable == null ? -1 : nativeDrawable.getAlpha())
+                    + " ownRegion=" + (blur != null) + " regionless=" + regionless);
+        } catch (RuntimeException | LinkageError ignored) {
+            // Telemetry must never turn a working live surface into a SystemUI draw crash.
+        }
     }
     /**
      * The native drawable at the glass alpha over the native blur layer. Its alpha is changed only

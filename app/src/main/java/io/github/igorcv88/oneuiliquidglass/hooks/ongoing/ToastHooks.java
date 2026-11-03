@@ -6,6 +6,7 @@ import android.widget.TextView;
 import android.view.WindowManager;
 import java.lang.reflect.Method;
 import java.util.WeakHashMap;
+import io.github.igorcv88.oneuiliquidglass.diagnostics.Probe;
 
 /**
  * T1: SystemUI text toasts (ClipboardListener's "Copied", any app's Toast.makeText). The view
@@ -63,12 +64,19 @@ final class ToastHooks {
     void prepareWindow(View root, WindowManager.LayoutParams params) {
         if (params.type != WindowManager.LayoutParams.TYPE_TOAST) return;
         boolean eligible = glass.allows(LiveSurface.TOAST) && hasGlass(root);
-        if (!eligible) { restoreWindow(params); return; }
+        if (!eligible) {
+            Probe.log("LIVE_RENDER_TOAST_WINDOW", "eligible=false windowType=" + params.type
+                    + " hwFlag=" + ((params.flags & WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED) != 0));
+            restoreWindow(params); return;
+        }
         int bit = WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED;
         if ((params.flags & bit) == 0) {
             accelerated.put(params, Boolean.TRUE);
             params.flags |= bit;
         }
+        Probe.log("LIVE_RENDER_TOAST_WINDOW", "eligible=true windowType=" + params.type
+                + " hwFlag=" + ((params.flags & bit) != 0)
+                + " addedByModule=" + accelerated.containsKey(params));
     }
     void restoreWindow(WindowManager.LayoutParams params) {
         if (params != null && accelerated.remove(params) != null)

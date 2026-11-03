@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.WeakHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import io.github.igorcv88.oneuiliquidglass.diagnostics.Probe;
+import io.github.igorcv88.oneuiliquidglass.diagnostics.LiveRenderProbe;
 
 /**
  * L3: Now Bar card at the bottom of the lockscreen, drawn by the AODService plugin
@@ -238,6 +239,8 @@ final class NowBarHooks {
         try {
             if (shown) site.invokeOriginal(setter, gradient, false);
             else if (asked != null) site.invokeOriginal(setter, gradient, asked);
+            Probe.log("LIVE_RENDER_NOWBAR_GRADIENT", "shown=" + shown + " requested=" + asked
+                    + " observed=" + gradientState(gradient) + " " + LiveRenderProbe.view(gradient));
         } catch (ReflectiveOperationException | RuntimeException e) { Probe.error("NOWBAR_GRADIENT_FAILED", e); }
     }
 
@@ -253,6 +256,7 @@ final class NowBarHooks {
     /** CardView colour and elevation through its own setters; natives recorded once, restored exactly. */
     private void cardTransparent(View container, Card c, boolean on) {
         try {
+            boolean changed = false;
             if (on) {
                 // Written only when Samsung put a value back: the Now Bar rebinds dozens of times per
                 // second, and a setter per call would invalidate the CardView on every one.
@@ -260,17 +264,30 @@ final class NowBarHooks {
                 if (color instanceof ColorStateList && ((ColorStateList) color).getDefaultColor() != 0) {
                     c.nativeCardColor = (ColorStateList) color;
                     container.getClass().getMethod("setCardBackgroundColor", ColorStateList.class).invoke(container, ColorStateList.valueOf(0));
+                    changed = true;
                 }
                 Object elevation = NativeShape.call(container, "getCardElevation");
                 if (elevation instanceof Float && (Float) elevation != 0f) {
                     c.nativeElevation = (Float) elevation;
                     container.getClass().getMethod("setCardElevation", float.class).invoke(container, 0f);
+                    changed = true;
                 }
             } else {
+                changed = c.nativeCardColor != null || c.nativeElevation != null;
                 if (c.nativeCardColor != null) container.getClass().getMethod("setCardBackgroundColor", ColorStateList.class).invoke(container, c.nativeCardColor);
                 if (c.nativeElevation != null) container.getClass().getMethod("setCardElevation", float.class).invoke(container, c.nativeElevation);
                 c.nativeCardColor = null;
                 c.nativeElevation = null;
+            }
+            if (changed) {
+                Object actual = NativeShape.call(container, "getCardBackgroundColor");
+                Object elevation = NativeShape.call(container, "getCardElevation");
+                Probe.log("LIVE_RENDER_NOWBAR_CARD", "glass=" + on
+                        + " actualColor=" + (actual instanceof ColorStateList
+                                ? Integer.toHexString(((ColorStateList) actual).getDefaultColor()) : "?")
+                        + " elevation=" + (elevation instanceof Number ? elevation : "?")
+                        + " " + LiveRenderProbe.view(container)
+                        + " ancestors=" + LiveRenderProbe.ancestors(container));
             }
         } catch (ReflectiveOperationException | RuntimeException e) { Probe.error("NOWBAR_CARD_COLOR_FAILED", e); }
     }
@@ -293,6 +310,8 @@ final class NowBarHooks {
         if (layer.getParent() != container) {
             if (layer.getParent() instanceof ViewGroup) ((ViewGroup) layer.getParent()).removeView(layer);
             container.addView(layer, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            Probe.log("LIVE_RENDER_NOWBAR_LAYER", "attachedToCard=true " + LiveRenderProbe.view(layer)
+                    + " container=" + LiveRenderProbe.view(container));
         }
         return layer;
     }

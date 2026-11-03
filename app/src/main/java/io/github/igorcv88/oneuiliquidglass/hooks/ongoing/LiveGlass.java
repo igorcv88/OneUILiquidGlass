@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.WeakHashMap;
 import java.util.function.Predicate;
 import io.github.igorcv88.oneuiliquidglass.diagnostics.Probe;
+import io.github.igorcv88.oneuiliquidglass.diagnostics.LiveRenderProbe;
 import io.github.igorcv88.oneuiliquidglass.glass.BackgroundBlurBridge;
 import io.github.igorcv88.oneuiliquidglass.glass.LiveGlassDrawable;
 import io.github.igorcv88.oneuiliquidglass.glass.SemBlurBridge;
@@ -100,6 +101,8 @@ public final class LiveGlass {
         boolean lastShown;
         /** Policy/capability sampled by lifecycle events, never queried through Binder per frame. */
         boolean available;
+        /** Per-host state-change telemetry; never holds the host or its notification data. */
+        final LiveRenderProbe render = new LiveRenderProbe();
         View.OnAttachStateChangeListener attach;
         ViewTreeObserver.OnPreDrawListener preDraw;
         ViewTreeObserver observer;
@@ -168,6 +171,7 @@ public final class LiveGlass {
         s.onSync = options.onSync;
         if (!gate.allows(surface)) {
             if (s.glass != null) { restore(s, "gate"); return Outcome.RESTORED; }
+            render(s, "GATED", "offer");
             return Outcome.CANDIDATE;
         }
         return s.glass == null ? apply(s) : reassert(s);
@@ -244,16 +248,18 @@ public final class LiveGlass {
             // host is wrapped on attach or when blur/display allow it (sync).
             s.waiting = true;
             listen(s, v);
-            if (!canShow(s, v)) return Outcome.NATIVE;
+            if (!canShow(s, v)) { render(s, "WAITING_SAMSUNG", "canShow=false"); return Outcome.NATIVE; }
             try { region = neutral(blur.create(v)); }
             catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
                 s.regionBroken = true;
                 logOnce(s.surface, "LIVE_GLASS_NO_REGION", "surface=" + s.surface + " stage=create keep=samsungBlur");
+                render(s, "WAITING_SAMSUNG", "createFailed=" + e.getClass().getSimpleName());
                 return Outcome.NATIVE;
             }
         }
         s.waiting = false;
         LiveGlassDrawable glass = new LiveGlassDrawable(bg, radii, color, s.surface.spec, v.getResources().getDisplayMetrics().density);
+        glass.setRenderProbe(s.surface.name());
         if (sem != null) nativeBlur.clear(v);
         writing = true;
         try {
@@ -280,6 +286,7 @@ public final class LiveGlass {
     }
     private Outcome nativeOutcome(State s, String reason) {
         logOnce(s.surface, "LIVE_GLASS_NATIVE", "surface=" + s.surface + " reason=" + reason);
+        render(s, "NATIVE", reason);
         return Outcome.NATIVE;
     }
 
@@ -357,6 +364,7 @@ public final class LiveGlass {
             if (v.getBackground() == g) v.setBackground(nativeBg);
         } finally { writing = false; }
         if (s.semInfo != null) { if (nativeBlur.held(v) == null) nativeBlur.set(v, s.semInfo); s.semInfo = null; }
+        render(s, "RESTORED", reason);
         Probe.log("LIVE_GLASS_RESTORE", "surface=" + s.surface + " reason=" + reason + " host=" + v.getClass().getSimpleName());
     }
 
@@ -371,6 +379,7 @@ public final class LiveGlass {
                     s.glass.setGlass(false);
                     shown(s, view, false);
                 }
+                render(s, "DETACHED", "windowLost");
                 removePreDraw(s);
                 // A toast view is never shown again: put its background back and drop it.
                 if (s.surface == LiveSurface.TOAST) forget(view, "detached");
@@ -401,7 +410,7 @@ public final class LiveGlass {
         s.available = want;
         if (s.glass == null) {
             // A host left on Samsung's blur is wrapped as soon as the region can exist.
-            if (!s.waiting || !want) return;
+            if (!s.waiting || !want) { if (s.waiting) render(s, "WAITING_SAMSUNG", "sync"); return; }
             Object owner = s.owner.get();
             if (owner == null || s.recheck == null || !s.recheck.test(owner)) return;
             apply(s);
@@ -427,6 +436,7 @@ public final class LiveGlass {
             shown(s, v, g.showsGlass());
             if (s.onSync != null) s.onSync.accept(v, g.showsGlass());
             fade(s);
+            render(s, "REGIONLESS", "samsungAncestor");
             if (before != g.showsGlass()) v.invalidate();
             return;
         }
@@ -445,6 +455,7 @@ public final class LiveGlass {
         shown(s, v, g.showsGlass());
         if (s.onSync != null) s.onSync.accept(v, g.showsGlass());
         fade(s);
+        render(s, g.showsGlass() ? "OWN_REGION" : "NATIVE", want ? "sync" : "unavailable");
         if (before != g.showsGlass()) v.invalidate();
     }
     private boolean regionless(State s, View v) {
@@ -479,6 +490,7 @@ public final class LiveGlass {
         try { if (v.getBackground() == g) v.setBackground(nativeBg); }
         finally { writing = false; }
         if (s.semInfo != null && nativeBlur.held(v) == null) nativeBlur.set(v, s.semInfo);
+        render(s, "WAITING_SAMSUNG", reason);
         logOnce(s.surface, "LIVE_GLASS_SAMSUNG_BLUR", "surface=" + s.surface + " reason=" + reason);
     }
     /** Mid-draw failure of the region: native at once, companions (CardView, gradient) restored. */
@@ -488,6 +500,7 @@ public final class LiveGlass {
         if (v == null || s.glass == null) return;
         s.glass.setGlass(false);
         shown(s, v, false);
+        render(s, "DRAW_FAILURE", "regionBroken");
         logOnce(s.surface, "LIVE_GLASS_NO_REGION", "surface=" + s.surface + " stage=draw");
         // Not from inside the draw: the background is replaced right after it.
         LiveGlassDrawable g = s.glass;
@@ -514,6 +527,18 @@ public final class LiveGlass {
             p = x.getParent();
         }
         return a;
+    }
+    /** Logs only transitions; the expensive hierarchy snapshot is never taken on steady frames. */
+    private void render(State s, String mode, String reason) {
+        if (!s.render.changed(mode, reason)) return;
+        View v = s.host.get();
+        LiveGlassDrawable g = s.glass;
+        Probe.log("LIVE_RENDER_STATE", "surface=" + s.surface + " mode=" + mode + " reason=" + reason
+                + " ownRegion=" + (g != null && g.blur() != null)
+                + " regionless=" + (g != null && g.regionless())
+                + " shown=" + (g != null && g.showsGlass()) + " semSaved=" + (s.semInfo != null)
+                + " faded=" + (v == null ? "?" : accumulatedAlpha(v))
+                + " " + LiveRenderProbe.view(v) + " ancestors=" + LiveRenderProbe.ancestors(v));
     }
     /**
      * Logs a state when it differs from the last one of the same surface and event: repeated
