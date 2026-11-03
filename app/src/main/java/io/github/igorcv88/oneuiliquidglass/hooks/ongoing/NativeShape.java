@@ -78,6 +78,10 @@ public final class NativeShape {
 
     /** The native fill colour, or null: background tint, shape colour, card colour, plain colour. */
     static Integer color(Drawable background, View host) {
+        // CardView's own background may be a ColorDrawable/RoundRectDrawable that does not reflect
+        // setCardBackgroundColor(). Use the public CardView colour as the authoritative source.
+        Object card = call(host, "getCardBackgroundColor");
+        if (card instanceof ColorStateList) return state((ColorStateList) card, host);
         if (host != null && host.getBackgroundTintList() != null) return state(host.getBackgroundTintList(), host);
         Drawable d = unwrap(background);
         if (d instanceof GradientDrawable) {
@@ -85,8 +89,6 @@ public final class NativeShape {
             if (c != null) return state(c, host);
         }
         if (d instanceof ColorDrawable) return ((ColorDrawable) d).getColor();
-        Object card = call(host, "getCardBackgroundColor");
-        if (card instanceof ColorStateList) return state((ColorStateList) card, host);
         return null;
     }
 

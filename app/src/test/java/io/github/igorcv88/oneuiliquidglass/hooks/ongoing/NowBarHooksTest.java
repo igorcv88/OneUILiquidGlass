@@ -214,10 +214,16 @@ public class NowBarHooksTest {
         assertFalse("gradient hidden through its own setter", gradient(card).gradientVisible);
         // Rebinds and Samsung's own card writer: one layer, colour put back to transparent.
         container.setCardBackgroundColor(0xff2266ee);
+        container.setRadius(24f);
         card.d0(new NowBarItem("com.example.timer", null));
         hooks.cardBound(abi, card, null);
         assertSame(layer, layerOf(container));
         assertEquals(0, container.getCardBackgroundColor().getDefaultColor());
+        assertEquals("rebind recolours the already-installed glass", 0x002266ee, g.currentTint() & 0x00ffffff);
+        g.setBounds(0, 0, 300, 120);
+        android.graphics.Outline newOutline = new android.graphics.Outline();
+        g.getOutline(newOutline);
+        assertEquals("rebind refreshes the source CardView radius", 24f, newOutline.getRadius(), 0f);
         int layers = 0;
         for (int i = 0; i < container.getChildCount(); i++) if (container.getChildAt(i) instanceof GlassLayer) layers++;
         assertEquals(1, layers);

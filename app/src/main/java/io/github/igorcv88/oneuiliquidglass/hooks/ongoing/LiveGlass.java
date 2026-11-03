@@ -288,7 +288,11 @@ public final class LiveGlass {
             if (bg == s.glass) return Outcome.REASSERTED;
             if (bg == null || blurDrawable(bg)) bg = s.glass.nativeDrawable();
         } else if (bg == s.glass) {
-            // The background is ours, but the layer behind may have changed (setBlurBG on an ancestor).
+            // The background is ours, but Samsung can recolour or resize the source CardView
+            // without replacing the child-layer wrapper. Refresh before companions() makes the
+            // source CardView transparent again; these setters are no-ops if values are unchanged.
+            refreshShape(s, v, s.glass.nativeDrawable());
+            // The layer behind may also have changed (setBlurBG on an ancestor).
             if (regionless(s, v) != s.glass.regionless()) sync(s);
             return Outcome.INTACT;
         } else if (blurDrawable(bg)) {
@@ -306,10 +310,7 @@ public final class LiveGlass {
             bg = ((LiveGlassDrawable) bg).nativeDrawable();
         }
         if (bg != null && (NativeShape.interactive(bg) || NativeShape.cardLike(v))) { forget(v, "nativeChanged"); return Outcome.RESTORED; }
-        View source = s.shapeSource.get();
-        float[] radii = source != null ? NativeShape.radii(source.getBackground(), source) : bg == null ? null : NativeShape.radii(bg, v);
-        if (radii != null) s.glass.setRadii(radii);
-        s.glass.setNativeColor(source != null ? NativeShape.color(source.getBackground(), source) : bg == null ? null : NativeShape.color(bg, v));
+        refreshShape(s, v, bg);
         writing = true;
         try {
             v.setBackground(s.glass);
@@ -318,6 +319,16 @@ public final class LiveGlass {
         if (bg != null) s.lastNative = bg;
         if (regionless(s, v) != s.glass.regionless()) sync(s);
         return Outcome.REASSERTED;
+    }
+
+    /** Samsung may mutate a shape source in place while the drawable wrapper stays installed. */
+    private void refreshShape(State s, View host, Drawable nativeBackground) {
+        View source = s.shapeSource.get();
+        Drawable shape = source != null ? source.getBackground() : nativeBackground;
+        View shapeHost = source != null ? source : host;
+        float[] radii = NativeShape.radii(shape, shapeHost);
+        if (radii != null) s.glass.setRadii(radii);
+        s.glass.setNativeColor(NativeShape.color(shape, shapeHost));
     }
 
     private void restore(State s, String reason) {

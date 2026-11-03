@@ -107,7 +107,12 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
         // A fully transparent value is what the glass itself left on a CardView, not a native colour.
         if (c != null && (c >>> 24) != 0 && !c.equals(nativeColor)) { nativeColor = c; invalidateSelf(); }
     }
-    public void setRadii(float[] r) { System.arraycopy(r, 0, radii, 0, 8); lastRimBounds.setEmpty(); invalidateSelf(); }
+    public void setRadii(float[] r) {
+        if (java.util.Arrays.equals(r, radii)) return;
+        System.arraycopy(r, 0, radii, 0, 8);
+        lastRimBounds.setEmpty();
+        invalidateSelf();
+    }
     /** The blur region, or null: without one the native drawable is drawn. */
     public void setBlur(BackgroundBlurBridge b) {
         if (blur == b) return;
