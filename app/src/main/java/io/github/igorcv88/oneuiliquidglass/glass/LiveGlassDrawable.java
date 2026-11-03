@@ -130,6 +130,8 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
      * an ancestor, L2): no region of ours, the native fill is drawn translucent over it, RGB intact.
      */
     private boolean regionless;
+    private java.util.function.BooleanSupplier nativeRegionActive = () -> true;
+    public void setNativeRegionActive(java.util.function.BooleanSupplier active) { nativeRegionActive = active; }
     public void setRegionless(boolean on) { if (regionless != on) { regionless = on; if (on) setBlur(null); invalidateSelf(); } }
     public boolean regionless() { return regionless; }
     /** Whether the glass is what would be drawn now. */
@@ -170,7 +172,15 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
 
     @Override public void draw(Canvas canvas) {
         Rect b = getBounds();
-        if (!showsGlass() || b.isEmpty()) {
+        // BackgroundBlurDrawable needs drawRenderNode. A software layer/capture cannot submit a
+        // region; drawing only its transparent colour and the rim would look like missing glass.
+        if (showsGlass() && !canvas.isHardwareAccelerated()) {
+            setBlur(null);
+            setGlass(false);
+            if (onRegionFailed != null) onRegionFailed.run();
+        }
+        if (!showsGlass() || b.isEmpty()
+                || (regionless && !nativeRegionActive.getAsBoolean())) {
             if (nativeDrawable != null) { nativeDrawable.setBounds(b); nativeDrawable.draw(canvas); }
             return;
         }
@@ -185,7 +195,7 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
             try {
                 blur.update(spec.blurPx, tint, clamped);
                 lastTint = tint; lastPx = spec.blurPx; System.arraycopy(clamped, 0, lastRadii, 0, 8);
-            } catch (ReflectiveOperationException | RuntimeException e) {
+            } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
                 // The region cannot be built on this firmware: native from now on, never a bare pane.
                 setBlur(null);
                 Runnable r = onRegionFailed;
@@ -194,7 +204,13 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
                 return;
             }
         }
-        blur.draw(canvas, b);
+        try { blur.draw(canvas, b); }
+        catch (RuntimeException | LinkageError e) {
+            setBlur(null);
+            if (onRegionFailed != null) onRegionFailed.run();
+            if (nativeDrawable != null) { nativeDrawable.setBounds(b); nativeDrawable.draw(canvas); }
+            return;
+        }
         drawRim(canvas, b);
     }
     /**

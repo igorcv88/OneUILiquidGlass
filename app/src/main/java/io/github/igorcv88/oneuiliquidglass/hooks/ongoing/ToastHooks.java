@@ -3,7 +3,9 @@ package io.github.igorcv88.oneuiliquidglass.hooks.ongoing;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
+import android.view.WindowManager;
 import java.lang.reflect.Method;
+import java.util.WeakHashMap;
 
 /**
  * T1: SystemUI text toasts (ClipboardListener's "Copied", any app's Toast.makeText). The view
@@ -17,12 +19,70 @@ import java.lang.reflect.Method;
 final class ToastHooks {
     static final String FACTORY = "com.android.systemui.toast.ToastFactory";
     static final String TOAST = "com.android.systemui.toast.SystemUIToast";
+    static final String PRESENTER = "android.widget.ToastPresenter";
 
     private final LiveGlass glass;
     private Method getView;
 
     ToastHooks(LiveGlass glass) { this.glass = glass; }
     void setGetView(Method m) { getView = m; }
+
+    /** Only the framework presenter for an already classified SystemUI text toast is changed. */
+    boolean installPresenter(HookSite site, Class<?> presenter) {
+        Method params = HookSite.exact(presenter, "getLayoutParams", WindowManager.LayoutParams.class);
+        if (params == null) return false;
+        boolean installed = false;
+        for (Method m : presenter.getDeclaredMethods()) {
+            Class<?>[] args = m.getParameterTypes();
+            if (m.getName().equals("show") && m.getReturnType() == void.class
+                    && (args.length == 10 || args.length == 11) && args[0] == View.class
+                    && args[1] == android.os.IBinder.class && args[2] == android.os.IBinder.class) {
+                installed |= site.hook(m, new HookSite.Callback() {
+                    @Override public void before(HookSite.Param p) {
+                        WindowManager.LayoutParams lp = layoutParams(params, p.thisObject);
+                        if (lp != null) prepareWindow((View) p.args[0], lp);
+                    }
+                    @Override public void after(HookSite.Param p) {
+                        if (p.threw) restoreWindow(layoutParams(params, p.thisObject));
+                    }
+                });
+            } else if (m.getName().equals("hide") && m.getReturnType() == void.class && args.length == 1) {
+                site.hook(m, new HookSite.Callback() {
+                    @Override public void after(HookSite.Param p) { restoreWindow(layoutParams(params, p.thisObject)); }
+                });
+            }
+        }
+        return installed;
+    }
+    private static WindowManager.LayoutParams layoutParams(Method getter, Object presenter) {
+        try { return (WindowManager.LayoutParams) getter.invoke(presenter); }
+        catch (ReflectiveOperationException | RuntimeException e) { return null; }
+    }
+    private final WeakHashMap<WindowManager.LayoutParams, Boolean> accelerated = new WeakHashMap<>();
+    /** Before ToastPresenter.show/addView: drawRenderNode cannot work on a software toast window. */
+    void prepareWindow(View root, WindowManager.LayoutParams params) {
+        if (params.type != WindowManager.LayoutParams.TYPE_TOAST) return;
+        boolean eligible = glass.allows(LiveSurface.TOAST) && hasGlass(root);
+        if (!eligible) { restoreWindow(params); return; }
+        int bit = WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED;
+        if ((params.flags & bit) == 0) {
+            accelerated.put(params, Boolean.TRUE);
+            params.flags |= bit;
+        }
+    }
+    void restoreWindow(WindowManager.LayoutParams params) {
+        if (params != null && accelerated.remove(params) != null)
+            params.flags &= ~WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED;
+    }
+    private boolean hasGlass(View view) {
+        if (view == null) return false;
+        if (glass.surfaceOf(view) == LiveSurface.TOAST && glass.applied(view)) return true;
+        if (view instanceof ViewGroup) {
+            ViewGroup g = (ViewGroup) view;
+            for (int i = 0; i < g.getChildCount(); i++) if (hasGlass(g.getChildAt(i))) return true;
+        }
+        return false;
+    }
 
     /** After ToastFactory.createToast(...) with its SystemUIToast result. */
     View created(Object toast) {

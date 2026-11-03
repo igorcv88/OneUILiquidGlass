@@ -73,8 +73,11 @@ public class LiveSurfaceHooksTest {
         assertFalse("the native verdict is called, not hooked", site.hooked(OngoingCardAdapter.class, "isMediaView"));
         assertTrue(site.hooked(ToastFactory.class, "createToast"));
         assertTrue(site.hooked(PluginInstance.class, "loadPlugin"));
-        for (java.lang.reflect.Method m : site.hooks.keySet())
-            assertFalse("no framework class is hooked: " + m, DataLocator.framework(m.getDeclaringClass()));
+        for (java.lang.reflect.Method m : site.hooks.keySet()) {
+            if (ToastHooks.PRESENTER.equals(m.getDeclaringClass().getName()))
+                assertTrue("only scoped presenter lifecycle", m.getName().equals("show") || m.getName().equals("hide"));
+            else assertFalse("no generic framework hook: " + m, DataLocator.framework(m.getDeclaringClass()));
+        }
         for (LiveSurface s : LiveSurface.values()) assertTrue(s.name(), hooks.available(s));
     }
 

@@ -311,7 +311,7 @@ public class NowBarHooksTest {
         LiveGlassDrawable g = (LiveGlassDrawable) layerOf(container).getBackground();
         assertEquals(0, container.getCardBackgroundColor().getDefaultColor());
         g.setBounds(0, 0, 600, 120);
-        g.draw(new android.graphics.Canvas(android.graphics.Bitmap.createBitmap(600, 120, android.graphics.Bitmap.Config.ARGB_8888)));
+        g.draw(new TestCanvas(600, 120));
         assertFalse(g.showsGlass());
         assertEquals(nativeColor, container.getCardBackgroundColor().getDefaultColor());
         glass.syncAll();

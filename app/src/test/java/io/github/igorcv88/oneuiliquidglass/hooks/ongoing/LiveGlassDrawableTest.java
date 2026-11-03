@@ -26,6 +26,54 @@ import org.robolectric.annotation.Config;
 /** Material and geometry fidelity of the wrapper, and the classification rules. */
 @RunWith(RobolectricTestRunner.class) @Config(sdk = 34)
 public class LiveGlassDrawableTest {
+    @Test public void softwareCanvasRestoresNativeInsteadOfDrawingATransparentRegion() throws Exception {
+        int[] draws = {0}, failures = {0};
+        ColorDrawable nativeBg = new ColorDrawable(0xff123456) {
+            @Override public void draw(Canvas canvas) { draws[0]++; }
+        };
+        LiveGlassDrawable d = new LiveGlassDrawable(nativeBg, NativeShape.uniform(20f), 0xff123456, LiveSurface.TOAST.spec, 1f);
+        FakeBlurDrawable region = new FakeBlurDrawable();
+        d.setBlur(BackgroundBlurBridge.of(region));
+        d.setOnRegionFailed(() -> failures[0]++);
+        d.setBounds(0, 0, 200, 60);
+        d.draw(new Canvas());
+        assertEquals(1, draws[0]);
+        assertEquals(0, region.draws);
+        assertEquals(1, failures[0]);
+        assertFalse(d.showsGlass());
+        assertEquals(0, region.radius);
+    }
+
+    @Test public void lostAncestorBetweenPreDrawAndDrawUsesFullNativeAlpha() {
+        int[] alphaAtDraw = {-1};
+        ColorDrawable nativeBg = new ColorDrawable(0xff123456) {
+            @Override public void draw(Canvas canvas) { alphaAtDraw[0] = getAlpha(); }
+        };
+        LiveGlassDrawable d = new LiveGlassDrawable(nativeBg, NativeShape.uniform(20f), 0xff123456, LiveSurface.CARD.spec, 1f);
+        d.setRegionless(true);
+        d.setNativeRegionActive(() -> false);
+        d.setBounds(0, 0, 200, 60);
+        d.draw(new TestCanvas(200, 60));
+        assertEquals("never translucent over a missing blur", 255, alphaAtDraw[0]);
+    }
+
+    @Test public void drawFailureRestoresNativeAndReleasesRegion() throws Exception {
+        int[] nativeDraws = {0}, failures = {0};
+        ColorDrawable nativeBg = new ColorDrawable(0xff123456) {
+            @Override public void draw(Canvas canvas) { nativeDraws[0]++; }
+        };
+        LiveGlassDrawable d = new LiveGlassDrawable(nativeBg, NativeShape.uniform(20f), 0xff123456, LiveSurface.CARD.spec, 1f);
+        FakeBlurDrawable region = new FakeBlurDrawable() {
+            @Override public void draw(Canvas canvas) { throw new IllegalStateException("RenderNode unavailable"); }
+        };
+        d.setBlur(BackgroundBlurBridge.of(region));
+        d.setOnRegionFailed(() -> failures[0]++);
+        d.setBounds(0, 0, 200, 60);
+        d.draw(new TestCanvas(200, 60));
+        assertEquals(1, failures[0]);
+        assertEquals(1, nativeDraws[0]);
+        assertEquals(0, region.radius);
+    }
     @Test public void tintKeepsRgbAndOnlyScalesAlpha() {
         assertEquals(0x851e6bff, LiveGlassDrawable.glassTint(0xff1e6bff, 0.52f, 0));
         assertEquals(0x401e6bff, LiveGlassDrawable.glassTint(0x801e6bff, 0.5f, 0));
@@ -79,7 +127,7 @@ public class LiveGlassDrawableTest {
         LiveGlassDrawable d = new LiveGlassDrawable(nativeBg, NativeShape.uniform(20f), 0xff123456, LiveSurface.TOAST.spec, 2f);
         d.setNative(nativeBg);
         d.setBounds(0, 0, 200, 60);
-        Canvas c = new Canvas(android.graphics.Bitmap.createBitmap(200, 60, android.graphics.Bitmap.Config.ARGB_8888));
+        Canvas c = new TestCanvas(200, 60);
         d.draw(c);
         assertEquals("no region: native", 1, nativeDraws[0]);
         FakeBlurDrawable region = new FakeBlurDrawable();
