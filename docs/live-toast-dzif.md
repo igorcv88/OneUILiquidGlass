@@ -1,8 +1,18 @@
 # Live updates não-mídia, Now Bar e toasts — implementação (DZIF, 02–03/11/2026)
 
 Fonte: laudo técnico fechado de 02/11/2026 (pílula L1, cartão L2, Now Bar L3,
-toast T1). Este documento descreve **o que foi implementado** e como validar no
-Galaxy. Estado: 🔧 implementado e testado localmente (JVM/Robolectric); ☐ sem
+toast T1) e o diagnóstico físico pós-PR #116 (02/11, 22:07–22:45, SystemUI PID
+20335), que mostrou as quatro superfícies sem vidro no aparelho. Este documento
+descreve **o que está implementado depois da correção** e como validar no
+Galaxy.
+
+## Correção pós-PR #116 (causas comprovadas)
+
+| ID | Evidência física | Causa no código | Correção |
+|---|---|---|---|
+| L1, T1 | `LIVE_GLASS_APPLY` com wrapper instalado; `LIVE_BLUR_CAPABILITY enabled=false`; visual nativo | A região só era criada com `isCrossWindowBlurEnabled()`. No DZIF esse sinal é `false` (`ro.surface_flinger.supports_background_blur` vazio), mas os cartões **aprovados** do pop-up/central registram `crossBlur=false` e mesmo assim desenham vidro com o mesmo `BackgroundBlurDrawable` (`HeadsUpHooks.drawablePath()` no modo APK-only); a própria Samsung usa essa classe no cartão expandido | A capacidade passa a ser a do caminho aprovado; o vidro só fica nativo (opaco) com Battery Saver ou `disable_window_blurs=1`, com receptor de Battery Saver para voltar sem polling |
+| L2 | Árvore real: `FrameLayout(BackgroundBlurDrawable)` → `CardItemView(bg=null)` → `FrameLayout(GradientDrawable)`, todos 1340×288 | O hook oferecia só o root sem fundo (`noBackground`) | O preenchimento `GradientDrawable` que cobre o root (ou o alvo de `changeCardBg`) é envolvido; com o blur Samsung atrás, **nenhuma região nova**: o preenchimento é desenhado translúcido sobre o blur nativo (`regionless`) |
+| L3 | `NOWBAR_NATIVE reason=cardviewWithoutLayer` dezenas de vezes/s; DEX: `getBlurContainer()` lê o campo `a.J` (CardView) | O código recusava CardView sem uma segunda camada simples | Camada `GlassLayer` dentro do CardView, atrás do conteúdo; log deduplicado por estado e setters do CardView só quando o valor difere | Estado: 🔧 implementado e testado localmente (JVM/Robolectric); ☐ sem
 prova física no S25 Ultra DZIF. Nada aqui é aprovação visual.
 
 ## Escopo e exclusões
@@ -41,12 +51,19 @@ notificações comuns. `WindowSurvey` continua log-only.
 `glass/LiveGlassDrawable` envolve o drawable que a Samsung acabou de escrever:
 
 - **vidro**: `BackgroundBlurDrawable` do `ViewRootImpl` (via `BackgroundBlurBridge`,
-  sem lente/tag SF) com a cor nativa em RGB intacto e alpha reduzido (fração
-  por superfície em `LiveSurface`), mais um contorno fino iluminado do canto
-  superior esquerdo. Sem captura, sem RenderNode em loop, sem véu adicional.
+  sem lente/tag SF), a mesma região do vidro aprovado no modo APK-only, com a
+  cor nativa em RGB intacto e alpha reduzido (fração por superfície em
+  `LiveSurface`), mais um contorno fino iluminado do canto superior esquerdo.
+  Sem captura, sem RenderNode em loop, sem véu adicional.
+- **vidro sobre blur nativo** (`regionless`, L2): quando a Samsung já tem um
+  `*BlurDrawable`/`SemBlurInfo` num ancestral (até o `CardStackView`), nenhuma
+  região é criada; o preenchimento nativo é desenhado com o alpha do vidro
+  (alterado só durante o desenho, sem callback, portanto sem loop de
+  invalidação) e o contorno. Reavaliado em cada writer e sync: se o blur
+  Samsung aparecer depois, a região própria é descartada (sem blur duplo).
 - **nativo**: desenha exatamente o drawable original. É o que aparece sem
-  `ViewRootImpl` (antes do attach), com blur entre janelas desligado (economia
-  de energia), se a API faltar, e na Now Bar em doze/AOD/tela apagada.
+  `ViewRootImpl` (antes do attach), com Battery Saver ou `disable_window_blurs`,
+  se a API faltar, e na Now Bar em doze/AOD/tela apagada.
 
 Geometria preservada: padding, tamanhos mínimo/intrínseco e estado delegados
 ao nativo; raios lidos do `GradientDrawable`/CardView/outline e limitados aos
@@ -59,8 +76,7 @@ recolore o vidro (recoloração do `setChipBg` sem hook extra). Fundos com
 
 1. **Primeiro frame**: o fundo é envolvido no próprio bind/factory/writer; a
    região é criada em `onViewAttachedToWindow`, antes do primeiro desenho. Sem
-   `postDelayed`, sem polling. Única espera: Now Bar com CardView ainda sem
-   layout decide no `OnPreDraw` seguinte (antes do desenho, nativo até lá).
+   `postDelayed`, sem polling.
 2. **Rebind**: cada writer nativo substitui o fundo; o owner oferece a View de
    novo, o drawable novo vira o nativo envolvido e o mesmo wrapper volta
    (`INTACT`/`REASSERTED`, nunca dois wrappers).
@@ -83,6 +99,16 @@ recolore o vidro (recoloração do `setChipBg` sem hook extra). Fundos com
    só ela volta ao nativo (`LIVE_SURFACE_DISABLED`).
 7. **Estado**: `WeakHashMap<View, State>` na main thread; dono e chave nunca
    referenciados fortemente pelo valor.
+
+L3, CardView (DZIF): `getCardViewContainer()` e `getBlurContainer()` devolvem o
+mesmo CardView. O vidro vai numa `GlassLayer` adicionada dentro dele só para
+cartão elegível com a superfície ligada: cobre o frame inteiro do CardView
+(ignora o padding de conteúdo), fica atrás do conteúdo (Z negativo, de modo
+que `getChildAt(0)` continua sendo a View da Samsung), não recebe toque nem
+acessibilidade e só desenha o fundo. Enquanto o vidro aparece, cor e elevação
+do CardView ficam transparentes pelos setters dele e o gradiente fica oculto;
+sem vidro (doze, Battery Saver, falha), voltam no mesmo passo. Desligar ou
+cartão inelegível remove a camada.
 
 L3: o plugin é aceito só com `getPackageName()==com.samsung.android.app.aodservice`,
 componente `PluginAODImpl` e classloader próprio; instalação **uma vez por
@@ -107,11 +133,13 @@ Nenhum parâmetro existente de pop-up, central, QS ou SF foi alterado.
 `LIVE_HOOK`, `LIVE_READY available=[…]`, `LIVE_CHIP_DATA source=…#static|#instance|list-fallback`,
 `LIVE_GLASS_SAMSUNG_BLUR reason=…`, `LIVE_UNAVAILABLE surface=… fallback=native`,
 `LIVE_CARD_WRITERS`, `NOWBAR_PLUGIN`, `NOWBAR_UNAVAILABLE missing=…`,
-`LIVE_GLASS_APPLY` (até 12 por superfície), `LIVE_GLASS_NATIVE reason=…`
-(`noBackground`, `ripple`, `cardview`, `noRadius`), `NOWBAR_NATIVE reason=…`
-(`cardviewWithoutLayer`, `frameMismatch`, `noContainer`), `LIVE_GLASS_RESTORE`,
+`LIVE_GLASS_APPLY`, `LIVE_GLASS_NATIVE reason=…` (`noBackground`, `ripple`,
+`cardview`, `noRadius`), `NOWBAR_NATIVE reason=…` (`verdict=…`, `gate`,
+`containerNotGroup`, `noContainer`), `LIVE_GLASS_RESTORE`,
 `LIVE_GLASS_NO_REGION`, `LIVE_BLUR_CAPABILITY`, `LIVE_CALLBACK_FAILED`,
-`LIVE_SURFACE_DISABLED`. Nenhum texto de notificação/toast é registrado.
+`LIVE_SURFACE_DISABLED`. Os eventos `LIVE_GLASS_*` e `NOWBAR_NATIVE` são
+registrados quando o estado muda (não há mais teto de 12 por processo nem
+repetição a cada callback). Nenhum texto de notificação/toast é registrado.
 
 ## Incompatibilidades/limitações registradas
 
@@ -124,9 +152,14 @@ Nenhum parâmetro existente de pop-up, central, QS ou SF foi alterado.
 - L2: o `OngoingCardAdapter` não foi coberto pela revisão; usa lista/`getItem`
   inequívoca e, se não houver, o helper. A mídia continua vetada pelo
   `isMediaView(View)` nativo, que não depende do dado.
-- Now Bar: se `getCardViewContainer()` for CardView, o vidro depende de
-  `getBlurContainer()` cobrir o mesmo retângulo (±2 px); caso contrário
-  `NOWBAR_NATIVE reason=frameMismatch`/`cardviewWithoutLayer` e nada muda.
+- Não está provado no aparelho que a região `BackgroundBlurDrawable` renderiza
+  numa janela `TYPE_TOAST` e na barra de status como renderiza nos cartões
+  aprovados; se não renderizar, o resultado é o fundo translúcido sem blur, e
+  a correção seria trocar para o caminho Samsung (`SemBlurInfo`) nesses hosts.
+- L2: o blur Samsung atrás do preenchimento não foi alterado; se a cor da
+  região Samsung for quase opaca, o efeito do vidro fica limitado por ela.
+- L3: a `GlassLayer` dentro do CardView é uma proposta de implementação; a
+  compatibilidade com a animação/clip da Now Bar só o aparelho confirma.
 - Exclusão de Now Brief por classe exata e por pacote (heurística conservadora,
   só nega). Theme Park e wallpaper claro/escuro não foram testados.
 - O APK de `assembleDebug` local não contém o bundle SF (exige NDK); usar o

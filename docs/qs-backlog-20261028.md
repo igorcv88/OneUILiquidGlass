@@ -46,6 +46,9 @@ notificações personalizadas, live updates ou traduções.
   limitações e roteiro físico: [live-toast-dzif.md](live-toast-dzif.md).
   ☐ validar no Galaxy, inclusive mídia simultânea como testemunha de regressão,
   Now Bar com container CardView (`NOWBAR_NATIVE reason=…`) e AOD/doze.
+- ☐ Pós-PR #116 (02/11, físico): nenhuma das quatro superfícies mostrou vidro.
+  🔧 corrigido em seguida (capability de blur, fill real do L2, camada no
+  CardView do L3); ☐ repetir `docs/live-toast-dzif.md` no Galaxy.
 - ☐ Mídia nas live updates/lockscreen: continua fora de escopo.
 
 ### Central de Controle / Quick Settings

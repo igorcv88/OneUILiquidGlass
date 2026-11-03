@@ -72,6 +72,8 @@ public final class LiveSurfaceHooks {
     /** Config changed (master or one of the opt-ins): every surface applies or restores. */
     public void refresh() {
         for (LiveSurface s : LiveSurface.values()) guard(s, () -> glass.refresh(s));
+        // Now Bar cards on a CardView get (or lose) their glass layer here, not only on a writer.
+        guard(LiveSurface.NOWBAR, nowBar::refreshAll);
     }
 
     public void install() {
@@ -140,9 +142,10 @@ public final class LiveSurfaceHooks {
         if (bindView != null) ok &= site.hook(bindView, after(LiveSurface.CARD, p -> {
             if (p.args[0] instanceof View) { ensure((View) p.args[0]); cards.cardBound(p.thisObject, (View) p.args[0], (Integer) p.args[1]); }
         }));
-        HookSite.Callback writer = after(LiveSurface.CARD, p -> { if (p.args[0] instanceof View) cards.cardWriter((View) p.args[0]); });
+        HookSite.Callback writer = after(LiveSurface.CARD, p -> { if (p.args[0] instanceof View) cards.cardWriter((View) p.args[0], false); });
+        HookSite.Callback fillWriter = after(LiveSurface.CARD, p -> { if (p.args[0] instanceof View) cards.cardWriter((View) p.args[0], true); });
         if (initNormal != null) site.hook(initNormal, writer);
-        if (changeBg != null) site.hook(changeBg, writer);
+        if (changeBg != null) site.hook(changeBg, fillWriter);
         if (blurBg != null) site.hook(blurBg, writer);
         if (itemBg != null) site.hook(itemBg, after(LiveSurface.CARD, p -> { if (p.thisObject instanceof View) cards.stackUpdated((View) p.thisObject); }));
         Probe.log("LIVE_CARD_WRITERS", "changeCardBg=" + (changeBg != null) + " setBlurBG=" + (blurBg != null)
@@ -234,10 +237,20 @@ public final class LiveSurfaceHooks {
         try {
             WindowManager wm = c.getSystemService(WindowManager.class);
             if (wm != null) wm.addCrossWindowBlurEnabledListener(main::post, on -> {
-                Probe.log("LIVE_BLUR_CAPABILITY", "enabled=" + on);
+                Probe.log("LIVE_BLUR_CAPABILITY", "crossWindow=" + on + " used=false");
                 glass.syncAll();
             });
         } catch (RuntimeException | LinkageError e) { Probe.error("LIVE_BLUR_LISTENER_FAILED", e); }
+        try {
+            // Battery Saver drops the glass (opaque native) and brings it back, without polling.
+            c.registerReceiver(new android.content.BroadcastReceiver() {
+                @Override public void onReceive(Context context, android.content.Intent intent) {
+                    Probe.log("LIVE_BLUR_CAPABILITY", "powerSaveChanged=true");
+                    glass.syncAll();
+                }
+            }, new android.content.IntentFilter(android.os.PowerManager.ACTION_POWER_SAVE_MODE_CHANGED), null, main,
+                    Context.RECEIVER_NOT_EXPORTED);
+        } catch (RuntimeException | LinkageError e) { Probe.error("LIVE_POWER_LISTENER_FAILED", e); }
         try {
             DisplayManager dm = c.getSystemService(DisplayManager.class);
             if (dm != null) dm.registerDisplayListener(new DisplayManager.DisplayListener() {
@@ -257,12 +270,33 @@ public final class LiveSurfaceHooks {
         return state == Display.STATE_ON || state == Display.STATE_VR;
     }
 
-    /** Production region: ViewRootImpl's BackgroundBlurDrawable, only with cross-window blur on. */
+    /**
+     * Production region: ViewRootImpl's BackgroundBlurDrawable, the region the approved pop-up and
+     * shade glass use in APK-only mode (HeadsUpHooks.drawablePath) and the one Samsung's own
+     * CardStackView installs. DZIF reports isCrossWindowBlurEnabled()=false
+     * (ro.surface_flinger.supports_background_blur is empty: every approved card logs
+     * crossBlur=false) while Samsung's compositor still renders these regions, so that flag is not
+     * the capability. The glass stands down only where the system itself drops window blurs:
+     * Battery Saver and the "disable window blurs" setting. Then the host draws its opaque native
+     * background, never a translucent pane without blur.
+     */
     static final class CompositorBlur implements LiveGlass.Blur {
         @Override public BackgroundBlurBridge create(View host) throws ReflectiveOperationException { return BackgroundBlurBridge.create(host); }
         @Override public boolean enabled(View host) {
-            WindowManager wm = host.getContext().getSystemService(WindowManager.class);
-            return wm != null && wm.isCrossWindowBlurEnabled();
+            Context c = host.getContext();
+            boolean saver = false;
+            try {
+                android.os.PowerManager pm = c.getSystemService(android.os.PowerManager.class);
+                saver = pm != null && pm.isPowerSaveMode();
+            } catch (RuntimeException ignored) { }
+            String disabled = null;
+            try { disabled = android.provider.Settings.Global.getString(c.getContentResolver(), "disable_window_blurs"); }
+            catch (RuntimeException ignored) { }
+            return allowed(saver, disabled);
         }
+    }
+    /** Pure policy of {@link CompositorBlur#enabled}, for tests. */
+    static boolean allowed(boolean powerSave, String disableWindowBlurs) {
+        return !powerSave && !"1".equals(disableWindowBlurs);
     }
 }

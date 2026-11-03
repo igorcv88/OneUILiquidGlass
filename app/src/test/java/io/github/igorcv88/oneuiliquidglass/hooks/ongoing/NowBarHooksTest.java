@@ -180,50 +180,107 @@ public class NowBarHooksTest {
         root.addView(card, new FrameLayout.LayoutParams(600, 120));
         activity.setContentView(root);
         Shadows.shadowOf(Looper.getMainLooper()).idle();
-        card.measure(View.MeasureSpec.makeMeasureSpec(600, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(120, View.MeasureSpec.EXACTLY));
-        card.layout(0, 0, 600, 120);
         return card;
     }
+    private static GlassLayer layerOf(View container) {
+        android.view.ViewGroup g = (android.view.ViewGroup) container;
+        for (int i = 0; i < g.getChildCount(); i++) if (g.getChildAt(i) instanceof GlassLayer) return (GlassLayer) g.getChildAt(i);
+        return null;
+    }
+    private static com.samsung.android.app.facewidget.presentation.NowBarCardGradientView gradient(NowBarOngoingCardView card) {
+        return (com.samsung.android.app.facewidget.presentation.NowBarCardGradientView) card.getGradientBgView();
+    }
 
-    @Test public void cardViewContainerUsesTheBlurLayerAndRestoresCardColour() throws Exception {
+    /** DZIF: container and blur container are the same CardView; the glass goes on a layer inside it. */
+    @Test public void cardViewContainerGetsAGlassLayerAndRestoresCardColour() {
         NowBarOngoingCardView card = layeredCard();
         FakeCardView container = (FakeCardView) card.getCardViewContainer();
+        assertSame(container, card.getBlurContainer());
         int nativeColor = container.getCardBackgroundColor().getDefaultColor();
-        NowBarItem item = new NowBarItem("com.example.timer", null);
-        hooks.cardBound(abi, card, item);
-        View layer = card.getBlurContainer();
+        View content = container.getChildAt(0);
+        hooks.cardBound(abi, card, new NowBarItem("com.example.timer", null));
+        GlassLayer layer = layerOf(container);
+        assertNotNull(layer);
+        assertSame("Samsung's content stays the first child", content, container.getChildAt(0));
+        assertTrue("drawn behind the content", layer.getTranslationZ() < 0f);
+        assertFalse(layer.isClickable());
+        assertEquals(View.IMPORTANT_FOR_ACCESSIBILITY_NO, layer.getImportantForAccessibility());
         LiveGlassDrawable g = (LiveGlassDrawable) layer.getBackground();
         assertTrue(g.showsGlass());
+        assertEquals(1, env.regions.size());
         assertEquals("CardView transparent while the glass is drawn", 0, container.getCardBackgroundColor().getDefaultColor());
         assertEquals(0f, container.getCardElevation(), 0f);
         assertEquals(nativeColor & 0x00ffffff, g.currentTint() & 0x00ffffff);
-        assertFalse("gradient hidden through its own setter", ((com.samsung.android.app.facewidget.presentation.NowBarCardGradientView) card.getGradientBgView()).gradientVisible);
-        // Blur goes away (battery saver): the CardView takes its colour back in the same pass.
-        env.blurEnabled = false;
+        assertFalse("gradient hidden through its own setter", gradient(card).gradientVisible);
+        // Rebinds and Samsung's own card writer: one layer, colour put back to transparent.
+        container.setCardBackgroundColor(0xff2266ee);
+        card.d0(new NowBarItem("com.example.timer", null));
+        hooks.cardBound(abi, card, null);
+        assertSame(layer, layerOf(container));
+        assertEquals(0, container.getCardBackgroundColor().getDefaultColor());
+        int layers = 0;
+        for (int i = 0; i < container.getChildCount(); i++) if (container.getChildAt(i) instanceof GlassLayer) layers++;
+        assertEquals(1, layers);
+        // Off: layer removed, CardView colour/elevation and gradient as Samsung left them.
+        env.on.remove(LiveSurface.NOWBAR);
+        glass.refresh(LiveSurface.NOWBAR);
+        hooks.refreshAll();
+        assertNull(layerOf(container));
+        assertEquals(0xff2266ee, container.getCardBackgroundColor().getDefaultColor());
+        assertEquals(6f, container.getCardElevation(), 0f);
+        assertTrue(gradient(card).gradientVisible);
+    }
+
+    /** The Now Bar rebinds dozens of times per second: the CardView is written once, not per call. */
+    @Test public void repeatedBindsDoNotRewriteTheCardView() {
+        NowBarOngoingCardView card = layeredCard();
+        FakeCardView container = (FakeCardView) card.getCardViewContainer();
+        NowBarItem item = new NowBarItem("com.example.timer", null);
+        hooks.cardBound(abi, card, item);
+        int colors = container.colorWrites, elevations = container.elevationWrites;
+        for (int i = 0; i < 60; i++) hooks.cardBound(abi, card, item);
+        assertEquals(colors, container.colorWrites);
+        assertEquals(elevations, container.elevationWrites);
+        assertEquals(1, env.regions.size());
+    }
+
+    @Test public void layerCoversTheWholeCardViewFrame() {
+        NowBarOngoingCardView card = layeredCard();
+        FakeCardView container = (FakeCardView) card.getCardViewContainer();
+        container.setPadding(12, 8, 12, 8);
+        hooks.cardBound(abi, card, new NowBarItem("com.example.timer", null));
+        card.measure(View.MeasureSpec.makeMeasureSpec(600, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(120, View.MeasureSpec.EXACTLY));
+        card.layout(0, 0, 600, 120);
+        GlassLayer layer = layerOf(container);
+        assertEquals(0, layer.getLeft());
+        assertEquals(container.getWidth(), layer.getWidth());
+        assertEquals(container.getHeight(), layer.getHeight());
+    }
+
+    @Test public void blurUnavailableGivesTheCardViewItsColourBack() {
+        NowBarOngoingCardView card = layeredCard();
+        FakeCardView container = (FakeCardView) card.getCardViewContainer();
+        int nativeColor = container.getCardBackgroundColor().getDefaultColor();
+        hooks.cardBound(abi, card, new NowBarItem("com.example.timer", null));
+        LiveGlassDrawable g = (LiveGlassDrawable) layerOf(container).getBackground();
+        env.blurEnabled = false; // battery saver
         glass.syncAll();
         assertFalse(g.showsGlass());
         assertEquals(nativeColor, container.getCardBackgroundColor().getDefaultColor());
-        assertEquals(6f, container.getCardElevation(), 0f);
+        assertTrue(gradient(card).gradientVisible);
         env.blurEnabled = true;
         glass.syncAll();
+        assertTrue(g.showsGlass());
         assertEquals(0, container.getCardBackgroundColor().getDefaultColor());
-        // A native gradient request while the glass is drawn stays hidden; restoring replays it.
-        assertFalse(hooks.gradientVisible(card.getGradientBgView(), true));
-        env.on.remove(LiveSurface.NOWBAR);
-        glass.refresh(LiveSurface.NOWBAR);
-        assertEquals(nativeColor, container.getCardBackgroundColor().getDefaultColor());
-        assertTrue(((com.samsung.android.app.facewidget.presentation.NowBarCardGradientView) card.getGradientBgView()).gradientVisible);
-        assertNull(layer.getBackground());
     }
 
-    /** A region failing in draw puts the CardView colour back at once (no card without background). */
     @Test public void regionFailureInDrawRestoresTheCardView() {
         env.failUpdate = true;
         NowBarOngoingCardView card = layeredCard();
         FakeCardView container = (FakeCardView) card.getCardViewContainer();
         int nativeColor = container.getCardBackgroundColor().getDefaultColor();
         hooks.cardBound(abi, card, new NowBarItem("com.example.timer", null));
-        LiveGlassDrawable g = (LiveGlassDrawable) card.getBlurContainer().getBackground();
+        LiveGlassDrawable g = (LiveGlassDrawable) layerOf(container).getBackground();
         assertEquals(0, container.getCardBackgroundColor().getDefaultColor());
         g.setBounds(0, 0, 600, 120);
         g.draw(new android.graphics.Canvas(android.graphics.Bitmap.createBitmap(600, 120, android.graphics.Bitmap.Config.ARGB_8888)));
@@ -234,35 +291,35 @@ public class NowBarHooksTest {
         assertEquals(1, env.regions.size());
     }
 
-    /** A gradient never seen through its setter is read before hiding and restored exactly. */
     @Test public void unseenGradientIsRestoredToItsOwnState() {
         NowBarOngoingCardView card = layeredCard();
-        com.samsung.android.app.facewidget.presentation.NowBarCardGradientView gradient =
-                (com.samsung.android.app.facewidget.presentation.NowBarCardGradientView) card.getGradientBgView();
         hooks.cardBound(abi, card, new NowBarItem("com.example.timer", null));
-        assertFalse(gradient.gradientVisible);
+        assertFalse(gradient(card).gradientVisible);
         env.on.remove(LiveSurface.NOWBAR);
         glass.refresh(LiveSurface.NOWBAR);
-        assertTrue(gradient.gradientVisible);
+        assertTrue(gradient(card).gradientVisible);
     }
 
     @Test public void dozeKeepsTheNowBarNative() {
         NowBarOngoingCardView card = layeredCard();
         env.glassAllowed = false;
-        NowBarItem item = new NowBarItem("com.example.timer", null);
-        hooks.cardBound(abi, card, item);
-        LiveGlassDrawable g = (LiveGlassDrawable) card.getBlurContainer().getBackground();
+        hooks.cardBound(abi, card, new NowBarItem("com.example.timer", null));
+        LiveGlassDrawable g = (LiveGlassDrawable) layerOf(card.getCardViewContainer()).getBackground();
         assertFalse(g.showsGlass());
         assertTrue(env.regions.isEmpty());
         assertNotEquals(0, ((FakeCardView) card.getCardViewContainer()).getCardBackgroundColor().getDefaultColor());
     }
 
-    @Test public void layerWithAnotherFrameStaysNative() {
+    /** Ineligible or surface off: no layer is ever added to Samsung's CardView. */
+    @Test public void noLayerForMediaOrWithTheSurfaceOff() {
         NowBarOngoingCardView card = layeredCard();
-        View layer = card.getBlurContainer();
-        layer.layout(0, 0, 300, 120);
+        hooks.cardBound(abi, card, new NowBarItem("com.example", new Object()));
+        assertNull(layerOf(card.getCardViewContainer()));
+        env.on.remove(LiveSurface.NOWBAR);
         hooks.cardBound(abi, card, new NowBarItem("com.example.timer", null));
-        assertNull(layer.getBackground());
-        assertNotEquals(0, ((FakeCardView) card.getCardViewContainer()).getCardBackgroundColor().getDefaultColor());
+        assertNull(layerOf(card.getCardViewContainer()));
+        env.on.add(LiveSurface.NOWBAR);
+        hooks.refreshAll();
+        assertNotNull("config on: the known card gets its layer without waiting for a writer", layerOf(card.getCardViewContainer()));
     }
 }

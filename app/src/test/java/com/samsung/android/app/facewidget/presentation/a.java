@@ -23,7 +23,8 @@ public class a extends FrameLayout {
     }
     public View getCardViewContainer() { return container; }
     public View getGradientBgView() { return gradient; }
-    public View getBlurContainer() { return blurLayer; }
+    /** DZIF: with a CardView container the "blur container" is that same CardView (field J). */
+    public View getBlurContainer() { return containerFactory != null ? container : blurLayer; }
     public void N(NowBarItem item, View target, float depth, int color) {
         GradientDrawable d = new GradientDrawable();
         d.setCornerRadius(64f);

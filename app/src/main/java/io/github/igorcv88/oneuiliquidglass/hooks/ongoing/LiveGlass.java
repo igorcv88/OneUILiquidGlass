@@ -5,7 +5,6 @@ import android.view.View;
 import android.view.ViewTreeObserver;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
-import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
@@ -61,6 +60,12 @@ public final class LiveGlass {
         public java.util.function.BiConsumer<View, Boolean> onShown;
         /** Radii and colour come from this view (the CardView above a blur layer) instead of the host. */
         public View shapeSource;
+        /**
+         * True while a native blur layer already sits behind the host (L2: Samsung's
+         * BackgroundBlurDrawable on an ancestor of the card fill). The glass then adds no region of
+         * its own, only makes the native fill translucent; re-evaluated on every offer and sync.
+         */
+        public Predicate<View> nativeRegion;
     }
     private static final Options PLAIN = new Options();
 
@@ -79,6 +84,7 @@ public final class LiveGlass {
         /** Called when the drawn layer flips between glass and native (Now Bar companions). */
         java.util.function.BiConsumer<View, Boolean> onShown;
         WeakReference<View> shapeSource = new WeakReference<>(null);
+        Predicate<View> nativeRegion;
         /** The region failed while drawing: no new one for this wrapper (no rebuild loop). */
         boolean regionBroken;
         /**
@@ -99,7 +105,6 @@ public final class LiveGlass {
     private final Blur blur;
     private final Gate gate;
     private final Policy policy;
-    private final Map<LiveSurface, Integer> logged = new EnumMap<>(LiveSurface.class);
     /** True while this controller itself writes a background (no owner hook may react to it). */
     private boolean writing;
 
@@ -110,6 +115,8 @@ public final class LiveGlass {
     }
 
     public boolean writing() { return writing; }
+    /** The surface's gate now (master switch, its opt-in, failure budget). */
+    public boolean allows(LiveSurface surface) { return gate.allows(surface); }
     public boolean tracked(View v) { return states.containsKey(v); }
     public boolean applied(View v) { State s = states.get(v); return s != null && s.glass != null; }
     public LiveGlassDrawable glassOf(View v) { State s = states.get(v); return s == null ? null : s.glass; }
@@ -152,6 +159,7 @@ public final class LiveGlass {
         s.allowEmptyNative = options.allowEmptyNative;
         s.onShown = options.onShown;
         s.shapeSource = new WeakReference<>(options.shapeSource);
+        s.nativeRegion = options.nativeRegion;
         if (!gate.allows(surface)) {
             if (s.glass != null) { restore(s, "gate"); return Outcome.RESTORED; }
             return Outcome.CANDIDATE;
@@ -254,7 +262,7 @@ public final class LiveGlass {
         s.regionBroken = false;
         glass.setOnRegionFailed(() -> regionFailed(s));
         listen(s, v);
-        if (v.isAttachedToWindow()) sync(s);
+        if (v.isAttachedToWindow() || regionless(s, v)) sync(s);
         logOnce(s.surface, "LIVE_GLASS_APPLY", "surface=" + s.surface + " host=" + v.getClass().getName()
                 + " native=" + (bg == null ? "none" : NativeShape.unwrap(bg).getClass().getSimpleName()) + " sem=" + (sem != null)
                 + " radius=" + radii[0] + " attached=" + v.isAttachedToWindow());
@@ -280,6 +288,8 @@ public final class LiveGlass {
             if (bg == s.glass) return Outcome.REASSERTED;
             if (bg == null || blurDrawable(bg)) bg = s.glass.nativeDrawable();
         } else if (bg == s.glass) {
+            // The background is ours, but the layer behind may have changed (setBlurBG on an ancestor).
+            if (regionless(s, v) != s.glass.regionless()) sync(s);
             return Outcome.INTACT;
         } else if (blurDrawable(bg)) {
             bg = s.glass.nativeDrawable();
@@ -306,6 +316,7 @@ public final class LiveGlass {
             s.glass.setNative(bg);
         } finally { writing = false; }
         if (bg != null) s.lastNative = bg;
+        if (regionless(s, v) != s.glass.regionless()) sync(s);
         return Outcome.REASSERTED;
     }
 
@@ -366,8 +377,18 @@ public final class LiveGlass {
             return;
         }
         LiveGlassDrawable g = s.glass;
-        boolean want = canShow(s, v);
         boolean before = g.showsGlass();
+        if (regionless(s, v)) {
+            // The native layer behind blurs already: no region of ours, ever (no double blur).
+            g.setRegionless(true);
+            boolean want = blur.enabled(v) && policy.glassAllowed(s.surface, v);
+            g.setGlass(want);
+            shown(s, v, g.showsGlass());
+            if (before != g.showsGlass()) v.invalidate();
+            return;
+        }
+        g.setRegionless(false);
+        boolean want = canShow(s, v);
         if (want && g.blur() == null) {
             try { g.setBlur(blur.create(v)); }
             catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
@@ -387,6 +408,10 @@ public final class LiveGlass {
         }
         fade(s);
         if (before != g.showsGlass()) v.invalidate();
+    }
+    private boolean regionless(State s, View v) {
+        try { return s.nativeRegion != null && s.nativeRegion.test(v); }
+        catch (RuntimeException e) { return false; }
     }
     private boolean canShow(State s, View v) {
         return !s.regionBroken && v.isAttachedToWindow() && blur.enabled(v) && policy.glassAllowed(s.surface, v);
@@ -446,10 +471,17 @@ public final class LiveGlass {
         }
         return a;
     }
+    /**
+     * Logs a state when it differs from the last one of the same surface and event: repeated
+     * callbacks in the same state (dozens per second on the Now Bar) write nothing, while every new
+     * state stays visible for the whole process (no fixed budget hiding later events).
+     */
+    private final Map<String, String> lastLogged = new java.util.HashMap<>();
     private void logOnce(LiveSurface surface, String event, String detail) {
-        int n = logged.getOrDefault(surface, 0);
-        if (n >= 12) return;
-        logged.put(surface, n + 1);
+        String key = surface + "/" + event;
+        String state = detail.replaceAll(" radius=[^ ]*| attached=[^ ]*", "");
+        if (state.equals(lastLogged.get(key))) return;
+        lastLogged.put(key, state);
         Probe.log(event, detail);
     }
 }

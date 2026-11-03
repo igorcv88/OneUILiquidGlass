@@ -103,7 +103,10 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
         invalidateSelf();
     }
     /** The colour of the native drawable Samsung just wrote (a recolour without a tint list). */
-    public void setNativeColor(Integer c) { if (c != null && !c.equals(nativeColor)) { nativeColor = c; invalidateSelf(); } }
+    public void setNativeColor(Integer c) {
+        // A fully transparent value is what the glass itself left on a CardView, not a native colour.
+        if (c != null && (c >>> 24) != 0 && !c.equals(nativeColor)) { nativeColor = c; invalidateSelf(); }
+    }
     public void setRadii(float[] r) { System.arraycopy(r, 0, radii, 0, 8); lastRimBounds.setEmpty(); invalidateSelf(); }
     /** The blur region, or null: without one the native drawable is drawn. */
     public void setBlur(BackgroundBlurBridge b) {
@@ -117,8 +120,15 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
     public BackgroundBlurBridge blur() { return blur; }
     /** false: draw the native drawable even with a blur (policy gate, e.g. doze). */
     public void setGlass(boolean on) { if (glass != on) { glass = on; invalidateSelf(); } }
+    /**
+     * The blur comes from a native layer behind this host (Samsung's own BackgroundBlurDrawable on
+     * an ancestor, L2): no region of ours, the native fill is drawn translucent over it, RGB intact.
+     */
+    private boolean regionless;
+    public void setRegionless(boolean on) { if (regionless != on) { regionless = on; if (on) setBlur(null); invalidateSelf(); } }
+    public boolean regionless() { return regionless; }
     /** Whether the glass is what would be drawn now. */
-    public boolean showsGlass() { return glass && blur != null; }
+    public boolean showsGlass() { return glass && (blur != null || regionless); }
     /** Ancestor alpha, which fades the view but not the compositor region. True if it changed. */
     public boolean setRegionFade(float f) {
         f = Math.max(0f, Math.min(1f, f));
@@ -160,6 +170,11 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
             return;
         }
         clampRadii(radii, b.width(), b.height(), clamped);
+        if (regionless) {
+            drawTranslucentNative(canvas, b);
+            drawRim(canvas, b);
+            return;
+        }
         int tint = currentTint();
         if (tint != lastTint || spec.blurPx != lastPx || !java.util.Arrays.equals(clamped, lastRadii)) {
             try {
@@ -176,6 +191,25 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
         }
         blur.draw(canvas, b);
         drawRim(canvas, b);
+    }
+    /**
+     * The native drawable at the glass alpha over the native blur layer. Its alpha is changed only
+     * for this draw with its callback detached, so the change cannot invalidate (no redraw loop).
+     */
+    private void drawTranslucentNative(Canvas canvas, Rect b) {
+        Drawable d = nativeDrawable;
+        if (d == null) return;
+        Callback cb = d.getCallback();
+        int before = d.getAlpha();
+        d.setCallback(null);
+        try {
+            d.setAlpha(Math.round(before * Math.max(0f, Math.min(1f, spec.tintAlpha))));
+            d.setBounds(b);
+            d.draw(canvas);
+        } finally {
+            d.setAlpha(before);
+            d.setCallback(cb);
+        }
     }
     private void drawRim(Canvas canvas, Rect b) {
         float w = GlassSpec.hairPx(spec.rimDp, density);
