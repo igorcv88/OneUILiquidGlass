@@ -6,6 +6,61 @@ toast T1) e o diagnóstico físico pós-PR #116 (02/11, 22:07–22:45, SystemUI 
 descreve **o que está implementado depois da correção** e como validar no
 Galaxy.
 
+## Correção após o teste físico do #119 (03/11/2026)
+
+O aparelho confirmou `setBlurColorCurve(SemBlurInfo.ColorCurve)` com `applied=true`,
+sem `LIVE_GLASS_NO_REGION`. A assinatura da curva está validada e não foi alterada.
+O cartão continuou escuro/com borda e os toasts ficaram transparentes. As seções
+anteriores abaixo registram o histórico; a composição atual substitui estas premissas:
+
+- L2 não considera mais uma classe `*BlurDrawable` ou um `SemBlurInfo` guardado
+  como prova de blur ativo. Exige drawable visível, raio positivo legível,
+  alpha positivo, posição não vazia registrada pelo RenderThread (`mRect`),
+  bounds cobrindo o preenchimento e ausência de camada de software no caminho.
+  Estado desconhecido usa região própria. Essas verificações comprovam o estado
+  local do drawable, não a imagem final produzida pelo compositor.
+- `regionless` também participa de pre-draw: a expansão pode zerar raio/alpha
+  ou perder a posição sem chamar um writer. O mesmo wrapper troca entre blur
+  Samsung ativo e região própria. O listener observa frames existentes; não
+  agenda frames nem consulta Settings/PowerManager por frame. Capacidade e
+  política continuam atualizadas pelos eventos de ciclo de vida.
+- Existe só um host de material por cartão. Outros fundos simples de containers
+  no caminho até o `CardStackView` têm apenas o desenho suspenso; padding/estado
+  e conteúdo permanecem. Ripples, CardViews, mídia e fundos dos descendentes de
+  conteúdo não são substituídos. Cores de todas as regiões Samsung desse caminho
+  são restauradas, inclusive drawables que um writer já substituiu.
+- O toast classificado solicita `FLAG_HARDWARE_ACCELERATED` no
+  `ToastPresenter.show`, antes de `addView`. Esse é o único hook novo em classe
+  do framework: nenhum hook genérico em View/WindowManager. `hide` remove somente
+  o bit acrescentado pelo módulo. Toast customizado/inelegível e outras janelas
+  não são modificados. No AOSP os flags padrão do toast não pedem aceleração;
+  ainda falta confirmar a configuração e o resultado visual no DZIF.
+- Canvas de software ou falha em `drawRenderNode` restaura o fundo nativo e
+  os companions em vez de desenhar uma superfície transparente com borda.
+  A guarda de região nativa é repetida no draw para uma perda após pre-draw.
+  Falha de criação não gera tentativa a cada frame.
+
+Regressões adicionadas: raio zero, alpha zero, região pequena, posição perdida,
+transições só por pre-draw, falha de criação, detach, preenchimento ancestral
+reescrito, restauração de região substituída, software canvas, falha no draw e
+flags do presenter antes de show/depois de hide. `TestCanvas` simula apenas o
+contrato de canvas acelerado para o drawable falso; não valida GPU/SF.
+
+Referências de implementação: [BackgroundBlurDrawable no AOSP](https://android.googlesource.com/platform/frameworks/base/+/refs/heads/main/core/java/com/android/internal/graphics/drawable/BackgroundBlurDrawable.java)
+e [ToastPresenter no AOSP](https://android.googlesource.com/platform/frameworks/base/+/master/core/java/android/widget/ToastPresenter.java).
+
+Validação local deste patch: recursos compilados/linkados com aapt2 e todos os
+fontes principais compilados com javac (Java 17 / SDK 36); cinco testes de
+distribuição passaram. Fontes da suíte ongoing conferidos pelo compilador com
+stubs temporários das interfaces Robolectric, sem execução. A tentativa de
+`testDebugUnitTest lintDebug assembleDebug` parou na resolução do plugin Android
+8.10.1, ausente do cache; rede indisponível para obter as dependências. Isso não
+equivale a uma suíte Robolectric aprovada nem a um APK validado pelo Gradle.
+
+Validação física pendente: comparar expandir/recolher na tela desbloqueada e na
+bloqueada, toasts sucessivos, Battery Saver, opt-ins desligados e mídia simultânea.
+Não aumentar a opacidade para encobrir falta de blur. Não fazer merge sem teste.
+
 ## Correção pós-PR #116 (causas comprovadas)
 
 | ID | Evidência física | Causa no código | Correção |

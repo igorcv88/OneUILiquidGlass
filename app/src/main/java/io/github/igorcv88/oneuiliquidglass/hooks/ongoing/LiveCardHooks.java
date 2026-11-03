@@ -2,6 +2,9 @@ package io.github.igorcv88.oneuiliquidglass.hooks.ongoing;
 
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.DrawableWrapper;
+import android.graphics.Rect;
 import android.view.View;
 import android.view.ViewGroup;
 import java.lang.ref.WeakReference;
@@ -56,6 +59,14 @@ final class LiveCardHooks {
     private final WeakHashMap<View, WeakReference<View>> fillOf = new WeakHashMap<>();
     /** Colour of each native blur region before the glass cleared it, for an exact restore. */
     private final WeakHashMap<Drawable, Integer> regionColors = new WeakHashMap<>();
+    /** Only background layers on this fill's ancestor path; never RemoteViews or controls. */
+    private final WeakHashMap<View, List<WeakReference<View>>> covered = new WeakHashMap<>();
+    private static final class TintedRegion {
+        final WeakReference<View> layer;
+        final WeakReference<Drawable> drawable;
+        TintedRegion(View v, Drawable d) { layer = new WeakReference<>(v); drawable = new WeakReference<>(d); }
+    }
+    private final WeakHashMap<View, List<TintedRegion>> tinted = new WeakHashMap<>();
     private final LiveGlass glass;
     private final LiveGlass.NativeBlur nativeBlur;
     private final DataLocator locator = new DataLocator(LiveEligibility.DATA);
@@ -119,6 +130,7 @@ final class LiveCardHooks {
         LiveGlass.Options options = new LiveGlass.Options();
         options.nativeRegion = nativeBlurBehind;
         options.onShown = this::regionTint;
+        options.onSync = this::regionTint;
         List<View> targets = fills(root);
         for (View t : targets) {
             glass.offer(t, LiveSurface.CARD, data, verdict, LiveChipHooks.RECHECK, options);
@@ -138,7 +150,6 @@ final class LiveCardHooks {
      */
     List<View> fills(View root) {
         List<View> out = new ArrayList<>();
-        if (fillCandidate(root)) out.add(root);
         // Samsung's own writer names the fill; otherwise the fill already chosen stays while it is
         // valid; only then is the tree searched. The choice is stable across writers and animations.
         View chosen = null;
@@ -158,7 +169,7 @@ final class LiveCardHooks {
         if (chosen != null) {
             fillOf.put(root, new WeakReference<>(chosen));
             if (!out.contains(chosen)) out.add(chosen);
-        }
+        } else if (fillCandidate(root)) out.add(root);
         return out;
     }
     private boolean validFill(View v, View root) {
@@ -196,17 +207,6 @@ final class LiveCardHooks {
                 && Math.abs(v.getWidth() - root.getWidth()) <= 2 && Math.abs(v.getHeight() - root.getHeight()) <= 2;
     }
 
-    /** The view carrying the native blur behind a host, up to the CardStackView. */
-    private View blurAncestor(View host) {
-        Object p = host.getParent();
-        for (int i = 0; i < 16 && p instanceof View; i++) {
-            View x = (View) p;
-            if (STACK.equals(x.getClass().getName())) return null;
-            if (blurLayer(x)) return x;
-            p = x.getParent();
-        }
-        return null;
-    }
     /**
      * While the glass is drawn over Samsung's blur, that region's own colour overlay (dark and
      * almost opaque on DZIF: the expanded card stayed navy over a colourful wallpaper) is made
@@ -214,22 +214,104 @@ final class LiveCardHooks {
      * back exactly when the glass is not drawn. A region whose colour cannot be read is left alone.
      */
     void regionTint(View host, boolean shown) {
-        View layer = host == null ? null : blurAncestor(host);
-        Drawable d = layer == null ? null : layer.getBackground();
-        if (d == null || !d.getClass().getName().contains("BlurDrawable")) return;
+        if (host == null) return;
+        // Restore companions even after a fill was reparented or recycled.
+        if (!shown) {
+            restoreCompanions(host);
+            return;
+        }
+        List<TintedRegion> prior = tinted.get(host);
+        if (prior != null) prior.removeIf(r -> {
+            View layer = r.layer.get();
+            Drawable d = r.drawable.get();
+            boolean stale = layer == null || d == null || layer.getBackground() != d || !LiveChipHooks.within(host, layer);
+            if (stale && layer != null && d != null) tintRegion(layer, d, false);
+            return stale;
+        });
+        List<WeakReference<View>> oldFills = covered.get(host);
+        if (oldFills != null) oldFills.removeIf(ref -> {
+            View layer = ref.get();
+            boolean stale = layer == null || !LiveChipHooks.within(host, layer);
+            if (stale && layer != null) restoreCovered(layer);
+            return stale;
+        });
+        Object p = host.getParent();
+        for (int i = 0; i < 16 && p instanceof View; i++) {
+            View layer = (View) p;
+            if (STACK.equals(layer.getClass().getName())) break;
+            Drawable d = layer.getBackground();
+            if (d != null && d.getClass().getName().contains("BlurDrawable")) {
+                tintRegion(layer, d, true);
+                List<TintedRegion> list = tinted.computeIfAbsent(host, k -> new ArrayList<>());
+                boolean known = false;
+                for (TintedRegion r : list) if (r.drawable.get() == d) { known = true; break; }
+                if (!known) list.add(new TintedRegion(layer, d));
+            } else if (d != null && layer instanceof ViewGroup && !(d instanceof CoveredFill)
+                    && (NativeShape.unwrap(d) instanceof GradientDrawable || NativeShape.unwrap(d) instanceof ColorDrawable)
+                    && !NativeShape.interactive(d) && !NativeShape.cardLike(layer)) {
+                // Samsung can put another opaque fill above the classified card. Keep its
+                // geometry/state via DrawableWrapper, suppress only its draw, and restore exactly.
+                CoveredFill wrapper = new CoveredFill(d);
+                layer.setBackground(wrapper);
+                // View.setBackground detached and hid the old background after the wrapper's
+                // constructor linked it. Reconnect it so native state/tint changes still propagate.
+                d.setCallback(wrapper);
+                d.setVisible(wrapper.isVisible(), false);
+                remember(covered, host, layer);
+            }
+            p = layer.getParent();
+        }
+    }
+    private static void remember(WeakHashMap<View, List<WeakReference<View>>> map, View host, View layer) {
+        List<WeakReference<View>> list = map.computeIfAbsent(host, k -> new ArrayList<>());
+        for (WeakReference<View> ref : list) if (ref.get() == layer) return;
+        list.add(new WeakReference<>(layer));
+    }
+    private void restoreCompanions(View host) {
+        List<WeakReference<View>> fills = covered.remove(host);
+        if (fills != null) for (WeakReference<View> ref : fills) {
+            View layer = ref.get();
+            if (layer != null) restoreCovered(layer);
+        }
+        List<TintedRegion> regions = tinted.remove(host);
+        if (regions != null) for (TintedRegion ref : regions) {
+            View layer = ref.layer.get();
+            Drawable d = ref.drawable.get();
+            if (layer != null && d != null) tintRegion(layer, d, false);
+        }
+    }
+    private static void restoreCovered(View layer) {
+        if (layer.getBackground() instanceof CoveredFill)
+            layer.setBackground(((CoveredFill) layer.getBackground()).getDrawable());
+    }
+    private void tintRegion(View layer, Drawable d, boolean shown) {
         Integer now = regionColor(d);
         if (now == null) return;
         if (shown) {
-            // A visible colour is Samsung's latest native one (first time, or rewritten since).
-            if ((now >>> 24) != 0) regionColors.put(d, now);
             Integer orig = regionColors.get(d);
-            if (orig == null) return;
+            // The only value we wrote is orig with alpha cleared. Anything else is Samsung's
+            // latest value, including an intentionally transparent recolour.
+            if (orig == null || now != (orig & 0x00ffffff)) {
+                orig = now;
+                regionColors.put(d, orig);
+            }
             int clear = orig & 0x00ffffff;
             if (now != clear) setRegionColor(layer, d, clear);
         } else {
             Integer orig = regionColors.remove(d);
             if (orig != null && !orig.equals(now)) setRegionColor(layer, d, orig);
         }
+    }
+    private static final class CoveredFill extends DrawableWrapper {
+        CoveredFill(Drawable nativeFill) { super(nativeFill); }
+        @Override public void draw(android.graphics.Canvas canvas) { }
+        @Override public int getOpacity() { return android.graphics.PixelFormat.TRANSLUCENT; }
+        @Override public void getOutline(android.graphics.Outline outline) {
+            super.getOutline(outline);
+            outline.setAlpha(0f);
+        }
+        @Override public Drawable mutate() { return this; }
+        @Override public ConstantState getConstantState() { return null; }
     }
     /** BackgroundBlurDrawable keeps its colour in a Paint (AOSP mPaint); getColor() where it exists. */
     static Integer regionColor(Drawable d) {
@@ -265,11 +347,37 @@ final class LiveCardHooks {
         for (int i = 0; i < 16 && p instanceof View; i++) {
             View x = (View) p;
             if (STACK.equals(x.getClass().getName())) return false;
-            if (blurLayer(x)) return true;
+            if (blurLayer(x)) return activeRegion(x, host);
             p = x.getParent();
         }
         return false;
     };
+
+    /** A SemBlurInfo or a drawable's class name proves structure, not a submitted blur region. */
+    static boolean activeRegion(View layer, View host) {
+        Drawable d = layer.getBackground();
+        if (d == null || !d.getClass().getName().contains("BlurDrawable")
+                || !layer.isAttachedToWindow() || !host.isAttachedToWindow()
+                || !d.isVisible() || LiveGlass.accumulatedAlpha(layer) <= 0f) return false;
+        Object radius = NativeShape.call(d, "getBlurRadius");
+        if (!(radius instanceof Number)) radius = io.github.igorcv88.oneuiliquidglass.hooks.Reflect.read(d, "mBlurRadius");
+        if (!(radius instanceof Number) || ((Number) radius).floatValue() <= 0f) return false;
+        Object a = io.github.igorcv88.oneuiliquidglass.hooks.Reflect.read(d, "mAlpha");
+        if ((a instanceof Number && ((Number) a).floatValue() <= 0f) || d.getAlpha() == 0) return false;
+        // Bounds alone can exist before RenderThread has recorded any position. An absent/lost
+        // position is not proof of blur; use our region until Samsung's drawable is positioned.
+        Object position = io.github.igorcv88.oneuiliquidglass.hooks.Reflect.read(d, "mRect");
+        if (!(position instanceof Rect) || ((Rect) position).isEmpty()) return false;
+        if (!(layer instanceof ViewGroup) || host.getWidth() <= 0 || host.getHeight() <= 0) return false;
+        for (Object v = host; v instanceof View; v = ((View) v).getParent()) {
+            if (((View) v).getLayerType() == View.LAYER_TYPE_SOFTWARE) return false;
+            if (v == layer) break;
+        }
+        Rect area = new Rect(0, 0, host.getWidth(), host.getHeight());
+        try { ((ViewGroup) layer).offsetDescendantRectToMyCoords(host, area); }
+        catch (IllegalArgumentException e) { return false; }
+        return d.getBounds().contains(area);
+    }
 
     Boolean nativeMedia(Object adapter, View root) {
         if (isMediaView == null || adapter == null) return null;

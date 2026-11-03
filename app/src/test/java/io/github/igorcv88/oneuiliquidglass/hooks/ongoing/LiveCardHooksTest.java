@@ -59,10 +59,132 @@ public class LiveCardHooksTest {
         hooks.cardBound(adapter, root, position);
         FrameLayout blur = stack.addCard(root);
         stack.setBlurBG(blur, position);
+        root.layout(0, 0, 1340, 288);
+        root.fill().layout(0, 0, 1340, 288);
+        blur.layout(0, 0, 1340, 288);
+        blur.getBackground().setBounds(0, 0, 1340, 288);
         hooks.cardWriter(blur, false);
         return root;
     }
     private static boolean nativeBlur(Drawable d) { return d instanceof CardStackView.NativeBackgroundBlurDrawable; }
+
+    @Test public void inactiveNativeRegionTakesAnOwnRegionAndSwitchesOnPreDraw() {
+        adapter.mList.add(new OngoingActivityData("com.samsung.android.health", false));
+        CardItemView root = card(0);
+        View fill = root.fill();
+        LiveGlassDrawable g = (LiveGlassDrawable) fill.getBackground();
+        CardStackView.NativeBackgroundBlurDrawable nativeRegion =
+                (CardStackView.NativeBackgroundBlurDrawable) ((View) root.getParent()).getBackground();
+        assertTrue(g.regionless());
+        nativeRegion.setBlurRadius(0); // no adapter writer: Samsung's expansion animation
+        fill.getViewTreeObserver().dispatchOnPreDraw();
+        assertFalse("class exists, but its blur is inactive", g.regionless());
+        assertNotNull(g.blur());
+        assertTrue(g.showsGlass());
+        FakeBlurDrawable own = env.regions.get(env.regions.size() - 1);
+        g.setBounds(0, 0, 1340, 288);
+        g.draw(new TestCanvas(1340, 288));
+        assertEquals(LiveSurface.CARD.spec.blurPx, own.radius);
+        nativeRegion.setBlurRadius(80);
+        fill.getViewTreeObserver().dispatchOnPreDraw();
+        assertTrue(g.regionless());
+        assertNull(g.blur());
+        assertEquals("own region released at the mode switch", 0, own.radius);
+        nativeRegion.setAlpha(0);
+        fill.getViewTreeObserver().dispatchOnPreDraw();
+        assertFalse(g.regionless());
+        assertNotNull(g.blur());
+        nativeRegion.setAlpha(255);
+        nativeRegion.setBounds(0, 0, 20, 20);
+        fill.getViewTreeObserver().dispatchOnPreDraw();
+        assertFalse("region must cover the fill during expansion", g.regionless());
+        nativeRegion.setBounds(0, 0, 1340, 288);
+        fill.getViewTreeObserver().dispatchOnPreDraw();
+        assertTrue(g.regionless());
+        nativeRegion.mRect.setEmpty();
+        fill.getViewTreeObserver().dispatchOnPreDraw();
+        assertFalse("position lost on RenderThread", g.regionless());
+        nativeRegion.mRect.set(0, 0, 1340, 288);
+        fill.getViewTreeObserver().dispatchOnPreDraw();
+        assertTrue(g.regionless());
+    }
+
+    @Test public void heldSemInfoWithoutAnActiveDrawableDoesNotProveBlur() {
+        adapter.mList.add(new OngoingActivityData("com.samsung.android.health", false));
+        CardItemView root = card(0);
+        View layer = (View) root.getParent();
+        env.samsungBlur(layer); // held info + a class name, no measurable active radius
+        hooks.cardWriter(layer, false);
+        LiveGlassDrawable g = (LiveGlassDrawable) root.fill().getBackground();
+        assertFalse(g.regionless());
+        assertNotNull(g.blur());
+    }
+
+    @Test public void detachAndFailedOwnRegionNeverLeaveARegionlessPane() {
+        adapter.mList.add(new OngoingActivityData("com.samsung.android.health", false));
+        CardItemView root = card(0);
+        View fill = root.fill();
+        LiveGlassDrawable g = (LiveGlassDrawable) fill.getBackground();
+        CardStackView.NativeBackgroundBlurDrawable nativeRegion =
+                (CardStackView.NativeBackgroundBlurDrawable) ((View) root.getParent()).getBackground();
+        nativeRegion.setBlurRadius(0);
+        env.failCreate = true;
+        fill.getViewTreeObserver().dispatchOnPreDraw();
+        assertFalse(g.regionless());
+        assertFalse(g.showsGlass());
+        assertEquals("native overlay restored with fallback", 0xe6141428, nativeRegion.color());
+        int count = env.regions.size();
+        env.failCreate = false;
+        for (int i = 0; i < 10; i++) fill.getViewTreeObserver().dispatchOnPreDraw();
+        assertEquals("no create retry loop", count, env.regions.size());
+        root.removeView(fill);
+        assertFalse(g.regionless());
+        assertFalse(g.showsGlass());
+    }
+
+    @Test public void additionalAncestorFillIsSuppressedAndRestoredWithoutTouchingContent() {
+        adapter.mList.add(new OngoingActivityData("com.samsung.android.health", false));
+        CardItemView root = card(0);
+        GradientDrawable extra = new GradientDrawable();
+        extra.setColor(0xff112233);
+        extra.setCornerRadius(56f);
+        extra.setPadding(7, 3, 9, 5);
+        root.setBackground(extra);
+        View content = new View(root.getContext());
+        GradientDrawable contentBg = new GradientDrawable();
+        contentBg.setColor(0xffaabbcc);
+        content.setBackground(contentBg);
+        root.fill().addView(content);
+        hooks.cardWriter(root, false);
+        assertEquals("only one material region per card", 1, glass.hosts(LiveSurface.CARD).size());
+        assertNotSame(extra, root.getBackground());
+        android.graphics.Rect padding = new android.graphics.Rect();
+        root.getBackground().getPadding(padding);
+        assertEquals(new android.graphics.Rect(7, 3, 9, 5), padding);
+        assertSame(contentBg, content.getBackground());
+        GradientDrawable rewritten = new GradientDrawable();
+        rewritten.setColor(0xff445566);
+        root.setBackground(rewritten);
+        root.fill().getViewTreeObserver().dispatchOnPreDraw();
+        assertNotSame("a later Samsung fill is suppressed too", rewritten, root.getBackground());
+        env.on.remove(LiveSurface.CARD);
+        glass.refresh(LiveSurface.CARD);
+        assertSame("restore the latest native write", rewritten, root.getBackground());
+        assertEquals(255, rewritten.getAlpha());
+        assertSame(contentBg, content.getBackground());
+    }
+
+    @Test public void replacedNativeRegionGetsItsExactColourBack() {
+        adapter.mList.add(new OngoingActivityData("com.samsung.android.health", false));
+        CardItemView root = card(0);
+        View layer = (View) root.getParent();
+        CardStackView.NativeBackgroundBlurDrawable old = (CardStackView.NativeBackgroundBlurDrawable) layer.getBackground();
+        assertEquals(0x00141428, old.color());
+        stack.setBlurBG(layer, 0);
+        hooks.cardWriter(layer, false);
+        assertEquals("detached drawable may be reused by Samsung", 0xe6141428, old.color());
+        assertEquals(0x00141428, ((CardStackView.NativeBackgroundBlurDrawable) layer.getBackground()).color());
+    }
 
     @Test public void fillOverSamsungsBlurBecomesTranslucentWithoutASecondRegion() {
         adapter.mList.add(new OngoingActivityData("com.samsung.android.health", false));

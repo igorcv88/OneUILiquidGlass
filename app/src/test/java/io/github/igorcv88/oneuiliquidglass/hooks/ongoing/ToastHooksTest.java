@@ -25,6 +25,21 @@ import org.robolectric.annotation.Config;
 /** T1: glass from the factory on, region follows the native fade, native back when the window goes. */
 @RunWith(RobolectricTestRunner.class) @Config(sdk = 34)
 public class ToastHooksTest {
+    public static class Presenter {
+        final android.view.WindowManager.LayoutParams params = new android.view.WindowManager.LayoutParams();
+        int flagsAtShow;
+        Presenter() {
+            params.type = android.view.WindowManager.LayoutParams.TYPE_TOAST;
+            params.flags = android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                    | android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+        }
+        public android.view.WindowManager.LayoutParams getLayoutParams() { return params; }
+        public void show(View view, android.os.IBinder token, android.os.IBinder windowToken,
+                         int duration, int gravity, int x, int y, float hm, float vm, Object callback, boolean removeAnimations) {
+            flagsAtShow = params.flags;
+        }
+        public void hide(Object callback) { }
+    }
     private Env env;
     private LiveGlass glass;
     private ToastHooks hooks;
@@ -43,6 +58,42 @@ public class ToastHooksTest {
         activity.setContentView(w);
         Shadows.shadowOf(Looper.getMainLooper()).idle();
         return w;
+    }
+
+    @Test public void presenterEnablesHardwareBeforeShowAndRestoresOnlyItsOwnBit() throws Exception {
+        RecordingSite site = new RecordingSite();
+        assertTrue(hooks.installPresenter(site, Presenter.class));
+        Presenter presenter = new Presenter();
+        int nativeFlags = presenter.params.flags;
+        int hw = android.view.WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED;
+        View root = hooks.created(toast("Copied"));
+        site.call(presenter, "show", root, null, null, 0, 0, 0, 0, 0f, 0f, null, false);
+        assertEquals(nativeFlags | hw, presenter.flagsAtShow);
+        presenter.params.flags |= android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON;
+        site.call(presenter, "hide", new Object());
+        assertEquals(nativeFlags | android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON, presenter.params.flags);
+        // The same presenter can subsequently show an unclassified/custom toast.
+        site.call(presenter, "show", new View(activity), null, null, 0, 0, 0, 0, 0f, 0f, null, false);
+        assertEquals(0, presenter.flagsAtShow & hw);
+    }
+
+    @Test public void windowFlagsAreScopedToEligibleToastsAndPreserveNativeHardware() {
+        View root = hooks.created(toast("Copied"));
+        Presenter presenter = new Presenter();
+        int flags = presenter.params.flags;
+        presenter.params.type = android.view.WindowManager.LayoutParams.TYPE_APPLICATION;
+        hooks.prepareWindow(root, presenter.params);
+        assertEquals(flags, presenter.params.flags);
+        presenter.params.type = android.view.WindowManager.LayoutParams.TYPE_TOAST;
+        env.on.remove(LiveSurface.TOAST);
+        hooks.prepareWindow(root, presenter.params);
+        assertEquals(flags, presenter.params.flags);
+        env.on.add(LiveSurface.TOAST);
+        int hw = android.view.WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED;
+        presenter.params.flags |= hw;
+        hooks.prepareWindow(root, presenter.params);
+        hooks.restoreWindow(presenter.params);
+        assertEquals("native hardware request is never removed", flags | hw, presenter.params.flags);
     }
 
     @Test public void copiedToastIsBornWithGlassAndRestoredOnHide() {
@@ -78,7 +129,7 @@ public class ToastHooksTest {
         assertTrue(g.blur().neutralCurve());
         assertFalse(g.blur().curveApplied());
         root.layout(0, 0, 400, 120);
-        root.draw(new android.graphics.Canvas(android.graphics.Bitmap.createBitmap(400, 120, android.graphics.Bitmap.Config.ARGB_8888)));
+        root.draw(new TestCanvas(400, 120));
         assertArrayEquals(new float[]{0, 0, 0, 255, 0, 255}, env.regions.get(0).curve, 0f);
         assertTrue(g.blur().curveApplied());
         w.removeView(root);

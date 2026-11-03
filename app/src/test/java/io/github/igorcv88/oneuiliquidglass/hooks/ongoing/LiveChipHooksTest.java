@@ -258,7 +258,7 @@ public class LiveChipHooksTest {
         assertTrue("requested", g.blur().neutralCurve());
         assertFalse("not applied before a draw sends it", g.blur().curveApplied());
         h.itemView.layout(0, 0, 300, 80);
-        h.itemView.draw(new android.graphics.Canvas(android.graphics.Bitmap.createBitmap(300, 80, android.graphics.Bitmap.Config.ARGB_8888)));
+        h.itemView.draw(new TestCanvas(300, 80));
         FakeBlurDrawable region = env.regions.get(0);
         assertEquals(1, region.draws);
         assertArrayEquals("neutral curve through DZIF's setBlurColorCurve/1", new float[]{0, 0, 0, 255, 0, 255}, region.curve, 0f);

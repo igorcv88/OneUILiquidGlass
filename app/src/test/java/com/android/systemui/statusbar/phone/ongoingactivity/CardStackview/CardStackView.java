@@ -20,14 +20,19 @@ public class CardStackView extends FrameLayout {
      */
     public static class NativeBackgroundBlurDrawable extends android.graphics.drawable.Drawable {
         private final android.graphics.Paint mPaint = new android.graphics.Paint();
+        private int mBlurRadius = 80;
+        private float mAlpha = 1f;
+        public final android.graphics.Rect mRect = new android.graphics.Rect(0, 0, 1340, 288);
         public int invalidations;
         public NativeBackgroundBlurDrawable() { mPaint.setColor(0xe6141428); }
         public void setColor(int c) { mPaint.setColor(c); }
         /** Test accessor only (not getColor: the real class has none). */
         public int color() { return mPaint.getColor(); }
+        public void setBlurRadius(int r) { mBlurRadius = r; }
         @Override public void invalidateSelf() { invalidations++; super.invalidateSelf(); }
         @Override public void draw(android.graphics.Canvas c) { }
-        @Override public void setAlpha(int a) { }
+        @Override public void setAlpha(int a) { mAlpha = a / 255f; }
+        @Override public int getAlpha() { return Math.round(mAlpha * 255f); }
         @Override public void setColorFilter(android.graphics.ColorFilter f) { }
         @Override public int getOpacity() { return android.graphics.PixelFormat.TRANSLUCENT; }
     }

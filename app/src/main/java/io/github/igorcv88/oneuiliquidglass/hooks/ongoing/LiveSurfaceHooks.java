@@ -24,7 +24,7 @@ import io.github.igorcv88.oneuiliquidglass.glass.BackgroundBlurBridge;
  * Installs the four ongoing surfaces (laudo 02/11/2026) from HeadsUpHooks, which already owns the
  * SystemUI entry and the config client; no second registration. Each surface resolves its own
  * exact members and installs independently: a missing member or a failing callback keeps that
- * surface native without touching the others. Nothing here hooks a framework class.
+ * surface native without touching the others. ToastPresenter is scoped to classified text toasts.
  */
 public final class LiveSurfaceHooks {
     /** Failures of one surface's callbacks before it is put back to native for the process. */
@@ -162,6 +162,7 @@ public final class LiveSurfaceHooks {
         Method getView = HookSite.exact(toast, "getView", View.class);
         if (create == null || getView == null) { unavailable(LiveSurface.TOAST, "createToast=" + (create != null) + " getView=" + (getView != null)); return; }
         toasts.setGetView(getView);
+        toasts.installPresenter(site, HookSite.type(ToastHooks.PRESENTER, loader));
         if (site.hook(create, after(LiveSurface.TOAST, p -> { View v = toasts.created(p.result); if (v != null) ensure(v); })))
             available.add(LiveSurface.TOAST);
     }
