@@ -13,7 +13,20 @@ android {
         versionName releaseVersionName
     }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
-    testOptions { unitTests.includeAndroidResources = true }
+    testOptions {
+        unitTests.includeAndroidResources = true
+        unitTests.all {
+            // Keep the failed assertion's message and cause in the Actions console as well as
+            // the HTML report (the runner's local report is unavailable after a failed release).
+            testLogging {
+                events 'failed'
+                exceptionFormat 'full'
+                showExceptions true
+                showCauses true
+                showStackTraces true
+            }
+        }
+    }
     buildTypes { release { minifyEnabled false } }
     // SurfaceFlinger live bundle (sfhook/build.sh writes assets/sfhook/ there). A build without
     // the NDK step has no bundle, and the app shows the feature as unavailable (SfLive.bundled).

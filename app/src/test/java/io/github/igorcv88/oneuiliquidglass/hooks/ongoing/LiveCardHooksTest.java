@@ -72,6 +72,45 @@ public class LiveCardHooksTest {
     }
     private static boolean nativeBlur(Drawable d) { return d instanceof CardStackView.NativeBackgroundBlurDrawable; }
 
+    /** Test failure context only: never logged by SystemUI or included in the APK. */
+    private String nativeRegionState(CardItemView root) {
+        View host = root.fill();
+        View layer = (View) root.getParent();
+        Drawable d = layer.getBackground();
+        StringBuilder state = new StringBuilder("nativeRegion=")
+                .append(LiveCardHooks.activeRegion(layer, host))
+                .append(" modeRegionless=").append(glass.glassOf(host).regionless())
+                .append(" attached(layer/host)=").append(layer.isAttachedToWindow()).append('/').append(host.isAttachedToWindow())
+                .append(" visible=").append(d != null && d.isVisible())
+                .append(" radiusField=").append(io.github.igorcv88.oneuiliquidglass.hooks.Reflect.read(d, "mBlurRadius"))
+                .append(" radiusGetter=").append(NativeShape.call(d, "getBlurRadius"))
+                .append(" alphaField=").append(io.github.igorcv88.oneuiliquidglass.hooks.Reflect.read(d, "mAlpha"))
+                .append(" drawableAlpha=").append(d == null ? null : d.getAlpha())
+                .append(" position=").append(io.github.igorcv88.oneuiliquidglass.hooks.Reflect.read(d, "mRect"))
+                .append(" bounds=").append(d == null ? null : d.getBounds())
+                .append(" hostSize=").append(host.getWidth()).append('x').append(host.getHeight());
+        android.graphics.Rect mapped = new android.graphics.Rect(0, 0, host.getWidth(), host.getHeight());
+        if (layer instanceof android.view.ViewGroup) {
+            ((android.view.ViewGroup) layer).offsetDescendantRectToMyCoords(host, mapped);
+            state.append(" mappedHost=").append(mapped);
+        }
+        Object states = io.github.igorcv88.oneuiliquidglass.hooks.Reflect.read(glass, "states");
+        if (states instanceof java.util.Map) {
+            Object tracked = ((java.util.Map<?, ?>) states).get(host);
+            state.append(" available=").append(io.github.igorcv88.oneuiliquidglass.hooks.Reflect.read(tracked, "available"))
+                    .append(" broken=").append(io.github.igorcv88.oneuiliquidglass.hooks.Reflect.read(tracked, "regionBroken"));
+        }
+        Object p = host;
+        for (int i = 0; i < 32 && p instanceof View; i++) {
+            View v = (View) p;
+            state.append(" ancestor[").append(v.getClass().getSimpleName()).append("]=")
+                    .append("visibility:").append(v.getVisibility()).append(",alpha:").append(v.getAlpha())
+                    .append(",layer:").append(v.getLayerType());
+            p = v.getParent();
+        }
+        return state.toString();
+    }
+
     @Test public void inactiveNativeRegionTakesAnOwnRegionAndSwitchesOnPreDraw() {
         adapter.mList.add(new OngoingActivityData("com.samsung.android.health", false));
         CardItemView root = card(0);
@@ -79,7 +118,7 @@ public class LiveCardHooksTest {
         LiveGlassDrawable g = (LiveGlassDrawable) fill.getBackground();
         CardStackView.NativeBackgroundBlurDrawable nativeRegion =
                 (CardStackView.NativeBackgroundBlurDrawable) ((View) root.getParent()).getBackground();
-        assertTrue(g.regionless());
+        assertTrue(nativeRegionState(root), g.regionless());
         nativeRegion.setBlurRadius(0); // no adapter writer: Samsung's expansion animation
         fill.getViewTreeObserver().dispatchOnPreDraw();
         assertFalse("class exists, but its blur is inactive", g.regionless());
@@ -129,6 +168,7 @@ public class LiveCardHooksTest {
         CardItemView root = card(0);
         View fill = root.fill();
         LiveGlassDrawable g = (LiveGlassDrawable) fill.getBackground();
+        assertTrue("requires active native region before testing its loss: " + nativeRegionState(root), g.regionless());
         CardStackView.NativeBackgroundBlurDrawable nativeRegion =
                 (CardStackView.NativeBackgroundBlurDrawable) ((View) root.getParent()).getBackground();
         nativeRegion.setBlurRadius(0);
@@ -195,7 +235,7 @@ public class LiveCardHooksTest {
         CardItemView root = card(0);
         assertNull("the root keeps no background", root.getBackground());
         LiveGlassDrawable g = (LiveGlassDrawable) root.fill().getBackground();
-        assertTrue(g.regionless());
+        assertTrue(nativeRegionState(root), g.regionless());
         assertTrue(g.showsGlass());
         assertNull("no region of ours: Samsung's blur is the region", g.blur());
         for (FakeBlurDrawable r : env.regions) assertEquals("any earlier region released", 0, r.radius);
@@ -348,7 +388,7 @@ public class LiveCardHooksTest {
         stack.setBlurBG(blur, 0);
         layoutNativeRegion(blur);
         hooks.cardWriter(blur, false);
-        assertTrue(g.regionless());
+        assertTrue(nativeRegionState(root), g.regionless());
         assertNull(g.blur());
     }
 
