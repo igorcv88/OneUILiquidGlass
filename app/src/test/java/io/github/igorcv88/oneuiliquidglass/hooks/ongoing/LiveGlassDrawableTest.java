@@ -142,6 +142,12 @@ public class LiveGlassDrawableTest {
         card.setCardBackgroundColor(0xff2266ee);
         assertEquals("CardView's own colour outranks its old ColorDrawable background",
                 Integer.valueOf(0xff2266ee), NativeShape.color(card.getBackground(), card));
+        GradientDrawable staleShape = new GradientDrawable();
+        staleShape.setCornerRadius(64f);
+        card.setBackground(staleShape);
+        card.setRadius(24f);
+        assertEquals("CardView clip radius outranks the replaced background radius",
+                24f, NativeShape.radii(card.getBackground(), card)[0], 0f);
     }
 
     @Test public void rippleAndCardViewBackgroundsAreNeverReplaced() {
