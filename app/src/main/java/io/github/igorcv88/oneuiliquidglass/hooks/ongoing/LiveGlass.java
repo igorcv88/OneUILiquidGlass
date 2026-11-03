@@ -68,6 +68,8 @@ public final class LiveGlass {
         /** Called when the drawn layer flips between glass and native (Now Bar companions). */
         java.util.function.BiConsumer<View, Boolean> onShown;
         WeakReference<View> shapeSource = new WeakReference<>(null);
+        /** The region failed while drawing: no new one for this wrapper (no rebuild loop). */
+        boolean regionBroken;
         boolean lastShown;
         View.OnAttachStateChangeListener attach;
         ViewTreeObserver.OnPreDrawListener preDraw;
@@ -210,6 +212,8 @@ public final class LiveGlass {
         s.glass = glass;
         s.semInfo = sem;
         s.lastShown = false;
+        s.regionBroken = false;
+        glass.setOnRegionFailed(() -> regionFailed(s));
         listen(s, v);
         if (v.isAttachedToWindow()) sync(s);
         logOnce(s.surface, "LIVE_GLASS_APPLY", "surface=" + s.surface + " host=" + v.getClass().getName()
@@ -312,7 +316,7 @@ public final class LiveGlass {
         View v = s.host.get();
         LiveGlassDrawable g = s.glass;
         if (v == null || g == null) return;
-        boolean want = v.isAttachedToWindow() && blur.enabled(v) && policy.glassAllowed(s.surface, v);
+        boolean want = !s.regionBroken && v.isAttachedToWindow() && blur.enabled(v) && policy.glassAllowed(s.surface, v);
         if (want && g.blur() == null) {
             try { g.setBlur(blur.create(v)); }
             catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
@@ -330,6 +334,15 @@ public final class LiveGlass {
         }
         fade(s);
         v.invalidate();
+    }
+    /** Mid-draw failure of the region: native at once, companions (CardView, gradient) restored. */
+    private void regionFailed(State s) {
+        s.regionBroken = true;
+        View v = s.host.get();
+        if (v == null || s.glass == null) return;
+        s.glass.setGlass(false);
+        shown(s, v, false);
+        logOnce(s.surface, "LIVE_GLASS_NO_REGION", "surface=" + s.surface + " stage=draw");
     }
     private void shown(State s, View v, boolean on) {
         if (s.lastShown == on) return;

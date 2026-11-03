@@ -216,6 +216,36 @@ public class NowBarHooksTest {
         assertNull(layer.getBackground());
     }
 
+    /** A region failing in draw puts the CardView colour back at once (no card without background). */
+    @Test public void regionFailureInDrawRestoresTheCardView() {
+        env.failUpdate = true;
+        NowBarOngoingCardView card = layeredCard();
+        FakeCardView container = (FakeCardView) card.getCardViewContainer();
+        int nativeColor = container.getCardBackgroundColor().getDefaultColor();
+        hooks.cardBound(abi, card, new NowBarItem("com.example.timer", null));
+        LiveGlassDrawable g = (LiveGlassDrawable) card.getBlurContainer().getBackground();
+        assertEquals(0, container.getCardBackgroundColor().getDefaultColor());
+        g.setBounds(0, 0, 600, 120);
+        g.draw(new android.graphics.Canvas(android.graphics.Bitmap.createBitmap(600, 120, android.graphics.Bitmap.Config.ARGB_8888)));
+        assertFalse(g.showsGlass());
+        assertEquals(nativeColor, container.getCardBackgroundColor().getDefaultColor());
+        glass.syncAll();
+        assertFalse("no rebuild loop after a draw failure", g.showsGlass());
+        assertEquals(1, env.regions.size());
+    }
+
+    /** A gradient never seen through its setter is read before hiding and restored exactly. */
+    @Test public void unseenGradientIsRestoredToItsOwnState() {
+        NowBarOngoingCardView card = layeredCard();
+        com.samsung.android.app.facewidget.presentation.NowBarCardGradientView gradient =
+                (com.samsung.android.app.facewidget.presentation.NowBarCardGradientView) card.getGradientBgView();
+        hooks.cardBound(abi, card, new NowBarItem("com.example.timer", null));
+        assertFalse(gradient.gradientVisible);
+        env.on.remove(LiveSurface.NOWBAR);
+        glass.refresh(LiveSurface.NOWBAR);
+        assertTrue(gradient.gradientVisible);
+    }
+
     @Test public void dozeKeepsTheNowBarNative() {
         NowBarOngoingCardView card = layeredCard();
         env.glassAllowed = false;

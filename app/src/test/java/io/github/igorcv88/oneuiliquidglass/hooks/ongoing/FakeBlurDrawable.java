@@ -9,7 +9,8 @@ import android.graphics.drawable.Drawable;
 public class FakeBlurDrawable extends Drawable {
     public int radius = -1, color, draws, alpha = 255;
     public float[] corners = new float[4];
-    public void setBlurRadius(int r) { radius = r; }
+    public boolean fail;
+    public void setBlurRadius(int r) { if (fail) throw new IllegalStateException("region"); radius = r; }
     public void setColor(int c) { color = c; }
     public void setCornerRadius(float tl, float tr, float bl, float br) { corners = new float[]{tl, tr, bl, br}; }
     @Override public void draw(Canvas canvas) { draws++; }

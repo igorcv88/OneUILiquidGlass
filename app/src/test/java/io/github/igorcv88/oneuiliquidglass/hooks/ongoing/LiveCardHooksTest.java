@@ -72,6 +72,19 @@ public class LiveCardHooksTest {
         assertFalse(glass.tracked(media));
     }
 
+    /** Data flipped to media in place, then a writer before the next bind: re-read, restored. */
+    @Test public void writerRereadsTheDataFlags() {
+        OngoingActivityData d = new OngoingActivityData("com.samsung.android.health", false);
+        adapter.mList.add(d);
+        View v = card(0);
+        assertTrue(v.getBackground() instanceof LiveGlassDrawable);
+        d.mIsMediaOngoingData = true;
+        stack.changeCardBg(v, 0xff0055ff);
+        hooks.cardWriter(v);
+        assertTrue(v.getBackground() instanceof GradientDrawable);
+        assertFalse(glass.tracked(v));
+    }
+
     @Test public void mediaDataFlagAloneExcludes() {
         adapter.mList.add(new OngoingActivityData("com.example.player", true));
         View v = card(0);

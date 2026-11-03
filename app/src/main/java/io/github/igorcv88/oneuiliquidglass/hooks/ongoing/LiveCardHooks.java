@@ -48,7 +48,11 @@ final class LiveCardHooks {
         Classification c = classify(target);
         if (c == null) { if (glass.tracked(target)) glass.forget(target, "unclassified"); return; }
         Object data = c.data.get();
-        glass.offer(target, LiveSurface.CARD, data, data == null ? LiveEligibility.Verdict.NO_DATA : c.verdict, LiveChipHooks.RECHECK);
+        // The native media verdict is the bind's; the data's own flags are read again now (they can
+        // flip to media or automation in place before the next bind).
+        LiveEligibility.Verdict verdict = data == null ? LiveEligibility.Verdict.NO_DATA
+                : c.verdict.ok() ? LiveEligibility.ongoing(data) : c.verdict;
+        glass.offer(target, LiveSurface.CARD, data, verdict, LiveChipHooks.RECHECK);
     }
 
     /** After CardStackView.updateItemBg(): every classified card of that stack, nothing else. */

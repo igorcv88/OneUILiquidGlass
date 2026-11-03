@@ -66,6 +66,9 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
     private final RectF rimRect = new RectF();
     private final Rect lastRimBounds = new Rect();
     private int lastTint, lastPx = -1;
+    /** Told when the region fails mid-draw, so the owner restores layers it changed for the glass. */
+    private Runnable onRegionFailed;
+    public void setOnRegionFailed(Runnable r) { onRegionFailed = r; }
     private final float[] lastRadii = new float[8];
 
     public LiveGlassDrawable(Drawable nativeDrawable, float[] radii, Integer nativeColor, Spec spec, float density) {
@@ -165,6 +168,8 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
             } catch (ReflectiveOperationException | RuntimeException e) {
                 // The region cannot be built on this firmware: native from now on, never a bare pane.
                 setBlur(null);
+                Runnable r = onRegionFailed;
+                if (r != null) r.run();
                 if (nativeDrawable != null) { nativeDrawable.setBounds(b); nativeDrawable.draw(canvas); }
                 return;
             }

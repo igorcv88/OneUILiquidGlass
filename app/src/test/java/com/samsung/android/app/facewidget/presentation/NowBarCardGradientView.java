@@ -9,4 +9,5 @@ public class NowBarCardGradientView extends View {
     public NowBarCardGradientView(Context c) { super(c); }
     public void setGradientBackgroundVisible(boolean visible) { gradientVisible = visible; }
     public void setGradientColor(int color) { }
+    public boolean isGradientBackgroundVisible() { return gradientVisible; }
 }

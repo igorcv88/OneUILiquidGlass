@@ -222,10 +222,26 @@ final class NowBarHooks {
         if (shown == c.gradientHidden) return;
         c.gradientHidden = shown;
         Boolean asked = gradientRequested.get(gradient);
+        if (shown && asked == null) {
+            // Never seen through the setter: read its current state, or leave it untouched when
+            // it cannot be recovered (hiding it then could never be undone exactly).
+            asked = gradientState(gradient);
+            if (asked == null) { c.gradientHidden = false; return; }
+            gradientRequested.put(gradient, asked);
+        }
         try {
             if (shown) site.invokeOriginal(setter, gradient, false);
             else if (asked != null) site.invokeOriginal(setter, gradient, asked);
         } catch (ReflectiveOperationException | RuntimeException e) { Probe.error("NOWBAR_GRADIENT_FAILED", e); }
+    }
+
+    /** The gradient view's own visibility getter, if the plugin has one; null otherwise. */
+    static Boolean gradientState(View gradient) {
+        for (String name : new String[]{"isGradientBackgroundVisible", "getGradientBackgroundVisible"}) {
+            Object v = NativeShape.call(gradient, name);
+            if (v instanceof Boolean) return (Boolean) v;
+        }
+        return null;
     }
 
     /** CardView colour and elevation through its own setters; natives recorded once, restored exactly. */
