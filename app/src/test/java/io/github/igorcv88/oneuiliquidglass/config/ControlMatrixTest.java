@@ -139,7 +139,7 @@ public class ControlMatrixTest {
         }
         b.append("\n## Interruptores de produto (fora de `debug.oulg.*`)\n\n")
                 .append("Guardados em `glass` SharedPreferences, entregues ao SystemUI pelo `ConfigProvider` (`/v1/snapshot`)")
-                .append(" e lidos por `ConfigClient.flag`; ausentes = ligado.\n\n")
+                .append(" e lidos por `ConfigClient.flag`; ausentes = ligado, exceto as superfícies opt-in (`ProductFlags.OPT_IN`), ausentes = desligado.\n\n")
                 .append("| Chave | Lido por | Efeito ao desligar | Padrão | Lente | Captura |\n| --- | --- | --- | --- | --- | --- |\n");
         b.append("| `enabled` | SystemUIEntry, hooks/HeadsUpHooks (`enabled`) | todos os ambientes voltam ao fundo nativo | ativo | ativo | ativo |\n");
         String hooks = new String(Files.readAllBytes(SRC.resolve("hooks/HeadsUpHooks.java")), StandardCharsets.UTF_8);
@@ -154,6 +154,20 @@ public class ControlMatrixTest {
                 for (Applicability a : modes.values()) b.append(" | ").append(cell(a.layer(s, layer.getKey())));
                 b.append(" |\n");
             }
+        }
+        // Opt-in surfaces outside the notification lanes: default off, each with its own reader.
+        String live = new String(Files.readAllBytes(SRC.resolve("hooks/ongoing/LiveSurfaceHooks.java")), StandardCharsets.UTF_8);
+        String qs = new String(Files.readAllBytes(SRC.resolve("hooks/QuickSettingsHooks.java")), StandardCharsets.UTF_8);
+        for (String k : ProductFlags.OPT_IN) {
+            assertFalse(k, ProductFlags.defaultEnabled(k));
+            boolean quick = k.equals(ProductFlags.QUICK_SETTINGS);
+            assertTrue(k, quick ? qs.contains("ProductFlags.QUICK_SETTINGS") : live.contains("ConfigClient.flag(s.flag)"));
+            String effect = quick ? "Central de controle volta ao visual nativo"
+                    : k.equals(ProductFlags.LIVE_ACTIVITY) ? "pílula e cartão da atividade ao vivo (sem mídia) voltam ao fundo nativo"
+                    : k.equals(ProductFlags.NOW_BAR) ? "cartão da Now Bar (sem mídia) volta ao fundo nativo"
+                    : "toasts voltam ao fundo nativo";
+            b.append("| `").append(k).append("` | ").append(quick ? "hooks/QuickSettingsHooks (`enabled`)" : "hooks/ongoing/LiveSurfaceHooks (`allows`)")
+                    .append(" | ").append(effect).append(" | inativo (opt-in) | ativo | ativo |\n");
         }
         b.append("\n## Funções sem propriedade\n\n")
                 .append("| Função | Onde | Verificação |\n| --- | --- | --- |\n")

@@ -62,6 +62,8 @@ public final class BackgroundBlurBridge implements Backdrop {
         if (!(d instanceof Drawable)) throw new IllegalStateException("No background blur drawable");
         return new BackgroundBlurBridge((Drawable) d, lensMode);
     }
+    /** A bridge over an existing blur drawable (one ViewRootImpl made, or a test double). */
+    public static BackgroundBlurBridge of(Drawable d) throws ReflectiveOperationException { return new BackgroundBlurBridge(d, false); }
     @Override public String name() { return "compositor"; }
     public boolean lens() { return lens; }
     /**

@@ -1,0 +1,156 @@
+# Live updates não-mídia, Now Bar e toasts — implementação (DZIF, 02–03/11/2026)
+
+Fonte: laudo técnico fechado de 02/11/2026 (pílula L1, cartão L2, Now Bar L3,
+toast T1). Este documento descreve **o que foi implementado** e como validar no
+Galaxy. Estado: 🔧 implementado e testado localmente (JVM/Robolectric); ☐ sem
+prova física no S25 Ultra DZIF. Nada aqui é aprovação visual.
+
+## Escopo e exclusões
+
+| ID | Owner (DZIF) | Hooks instalados | Host do vidro |
+|---|---|---|---|
+| L1 | `OngoingChipAdapter` | `onBindViewHolder(ViewHolder,int)` before/after, `setChipBg(ViewGroup,ColorStateList)` after | o `ViewGroup` passado a `setChipBg` |
+| L2 | `OngoingCardAdapter` + `CardStackView` | `getView`, `bindView`, `initNormalNotificationView`, `changeCardBg`, `setBlurBG`, `updateItemBg` (todos after) | raiz do cartão ou alvo dos writers, nunca o conteúdo `RemoteViews` |
+| L3 | plugin AODService (`PluginAODImpl`) | bootstrap `PluginInstance.loadPlugin()` after; no classloader do plugin: `NowBarOngoingCardView.d0/e0/setViewMode/setExpandedViewColor`, `a.N/a.U` (filtrados por classe exata), `NowBarCardStackView.q/setExpandedCardState`, `NowBarCardGradientView.setGradientBackgroundVisible` (before) | container do cartão (view simples) ou camada de blur do plugin quando o container é CardView |
+| T1 | `ToastFactory` | `createToast(Context,Context,CharSequence,String,int,int)` after | raiz do toast (ou primeiro filho com o shape e o texto) |
+
+Exclusão estrutural de mídia (negação na dúvida):
+
+- Dado da posição: no L1, `OngoingActivityDataHelper.getDataByIndex(int)`, a mesma
+  fonte que o `OngoingChipAdapter` do DZIF usa (ele não tem `getItem(int)` nem
+  lista de dados). Método resolvido estritamente (estático, ou no helper que o
+  adapter guarda, ou no singleton do helper). O índice tem de estar dentro de
+  `getItemCount()`, e o dado é lido de novo no fim do bind: se mudou, fica nativo.
+  No L2, uma lista/`getItem` inequívoca e, na falta dela, o mesmo helper.
+- L1/L2: `OngoingActivityData.mIsMediaOngoingData` do **dado ligado àquela
+  posição** (lido por campo `boolean` exato), `mIsAutomation` também nega
+  (sem suporte comprovado), pacote obrigatório. Campo ausente/ilegível = nativo.
+- L2: `OngoingCardAdapter.isMediaView(View)` é **chamado** (não hookado); sem o
+  método no firmware a superfície inteira fica nativa.
+- L3: somente `getClass() == NowBarOngoingCardView` (nunca a base `a`, nunca
+  subclasse; `NowBarMediaCardView` nega), `NowBarItem.getFaceWidgetMediaData()`
+  precisa existir e ser `null`, pacote obrigatório, pacotes de briefing negados.
+- T1: só raiz `ViewGroup` com `TextView` e sem descendente clicável.
+
+Não há hook em `View.setBackground`, `WindowManagerGlobal.addView`,
+`LinearLayout`, `WindowSurvey`, SurfaceFlinger, QS, sliders, heads-up, shade ou
+notificações comuns. `WindowSurvey` continua log-only.
+
+## Material
+
+`glass/LiveGlassDrawable` envolve o drawable que a Samsung acabou de escrever:
+
+- **vidro**: `BackgroundBlurDrawable` do `ViewRootImpl` (via `BackgroundBlurBridge`,
+  sem lente/tag SF) com a cor nativa em RGB intacto e alpha reduzido (fração
+  por superfície em `LiveSurface`), mais um contorno fino iluminado do canto
+  superior esquerdo. Sem captura, sem RenderNode em loop, sem véu adicional.
+- **nativo**: desenha exatamente o drawable original. É o que aparece sem
+  `ViewRootImpl` (antes do attach), com blur entre janelas desligado (economia
+  de energia), se a API faltar, e na Now Bar em doze/AOD/tela apagada.
+
+Geometria preservada: padding, tamanhos mínimo/intrínseco e estado delegados
+ao nativo; raios lidos do `GradientDrawable`/CardView/outline e limitados aos
+bounds; o outline do vidro tem alpha 0 (sombra de elevação vista através do
+painel seria halo cinza). O `setBackgroundTintList` nativo continua na View e
+recolore o vidro (recoloração do `setChipBg` sem hook extra). Fundos com
+`RippleDrawable` e Views CardView nunca têm o fundo substituído.
+
+## Ciclo de vida (`hooks/ongoing/LiveGlass`)
+
+1. **Primeiro frame**: o fundo é envolvido no próprio bind/factory/writer; a
+   região é criada em `onViewAttachedToWindow`, antes do primeiro desenho. Sem
+   `postDelayed`, sem polling. Única espera: Now Bar com CardView ainda sem
+   layout decide no `OnPreDraw` seguinte (antes do desenho, nativo até lá).
+2. **Rebind**: cada writer nativo substitui o fundo; o owner oferece a View de
+   novo, o drawable novo vira o nativo envolvido e o mesmo wrapper volta
+   (`INTACT`/`REASSERTED`, nunca dois wrappers).
+   **Blur Samsung** (`SemBlurInfo` de `setBlurBG`/`a.N`): só é removido quando a
+   região do compositor já existe e o vidro vai ser desenhado (anexado, blur
+   entre janelas ligado, fora de doze). Antes do attach, sem blur, em doze, se a
+   criação da região falha, ou se ela falha durante o desenho, o host fica (ou
+   volta) com o fundo nativo **e** o blur Samsung, e é reenvolvido quando a
+   região puder existir. Nunca fica sem os dois.
+3. **Reciclagem**: no fim de cada bind, toda View do holder é reclassificada
+   contra o dado **deste** bind; holder reaproveitado para mídia volta ao
+   último fundo nativo exato.
+4. **Restauração**: gate desligado, dado inelegível, falha persistente ou
+   detach do toast devolvem o drawable nativo, o tint e o `SemBlurInfo`
+   original; listeners removidos. CardView da Now Bar recebe de volta cor e
+   elevação pelos próprios setters; gradiente volta ao último valor pedido.
+5. **Fade**: `OnPreDraw` só enquanto anexado; a região segue o alpha acumulado
+   dos ancestrais (fade nativo do toast/cartão) sem `invalidate()`.
+6. **Falhas**: cada superfície tem orçamento próprio (3 exceções); ao estourar,
+   só ela volta ao nativo (`LIVE_SURFACE_DISABLED`).
+7. **Estado**: `WeakHashMap<View, State>` na main thread; dono e chave nunca
+   referenciados fortemente pelo valor.
+
+L3: o plugin é aceito só com `getPackageName()==com.samsung.android.app.aodservice`,
+componente `PluginAODImpl` e classloader próprio; instalação **uma vez por
+classloader** (plugin reiniciado = novo loader = nova instalação). Plugin já
+carregado antes do módulo: não há caminho seguro de inspeção (o módulo entra
+no início do processo SystemUI, antes do carregamento de plugins); fica nativo
+até o próximo `loadPlugin`.
+
+## Configuração
+
+Três interruptores aditivos em `ProductFlags.OPT_IN`, **desligados por padrão**
+e subordinados ao mestre `enabled`, na página Início:
+
+- `surface.liveactivity.enabled` — L1 + L2 (“Atividade ao vivo”)
+- `surface.nowbar.enabled` — L3 (“Now Bar”)
+- `surface.toast.enabled` — T1 (“Avisos rápidos”)
+
+Nenhum parâmetro existente de pop-up, central, QS ou SF foi alterado.
+
+## Logs (`adb logcat -s OULG`)
+
+`LIVE_HOOK`, `LIVE_READY available=[…]`, `LIVE_CHIP_DATA source=…#static|#instance|list-fallback`,
+`LIVE_GLASS_SAMSUNG_BLUR reason=…`, `LIVE_UNAVAILABLE surface=… fallback=native`,
+`LIVE_CARD_WRITERS`, `NOWBAR_PLUGIN`, `NOWBAR_UNAVAILABLE missing=…`,
+`LIVE_GLASS_APPLY` (até 12 por superfície), `LIVE_GLASS_NATIVE reason=…`
+(`noBackground`, `ripple`, `cardview`, `noRadius`), `NOWBAR_NATIVE reason=…`
+(`cardviewWithoutLayer`, `frameMismatch`, `noContainer`), `LIVE_GLASS_RESTORE`,
+`LIVE_GLASS_NO_REGION`, `LIVE_BLUR_CAPABILITY`, `LIVE_CALLBACK_FAILED`,
+`LIVE_SURFACE_DISABLED`. Nenhum texto de notificação/toast é registrado.
+
+## Incompatibilidades/limitações registradas
+
+- Assinaturas aplicadas exatamente como no laudo; qualquer diferença de
+  nome/parâmetro/retorno mantém a superfície nativa e aparece em
+  `LIVE_UNAVAILABLE`/`NOWBAR_UNAVAILABLE`.
+- O pacote do `OngoingActivityDataHelper` não consta no laudo: procura-se em
+  `…ongoingactivity` e `…ongoingactivity.ongoingchip`. Sem o helper, `LIVE_CHIP_DATA
+  source=list-fallback` aparece no log e a pílula fica nativa.
+- L2: o `OngoingCardAdapter` não foi coberto pela revisão; usa lista/`getItem`
+  inequívoca e, se não houver, o helper. A mídia continua vetada pelo
+  `isMediaView(View)` nativo, que não depende do dado.
+- Now Bar: se `getCardViewContainer()` for CardView, o vidro depende de
+  `getBlurContainer()` cobrir o mesmo retângulo (±2 px); caso contrário
+  `NOWBAR_NATIVE reason=frameMismatch`/`cardviewWithoutLayer` e nada muda.
+- Exclusão de Now Brief por classe exata e por pacote (heurística conservadora,
+  só nega). Theme Park e wallpaper claro/escuro não foram testados.
+- O APK de `assembleDebug` local não contém o bundle SF (exige NDK); usar o
+  artefato do CI do PR para o teste físico.
+
+## Teste físico final (Galaxy S25 Ultra DZIF)
+
+Pré-requisito: APK do PR instalado, LSPosed ativo, reinício do SystemUI.
+Ligar um interruptor por vez na página Início.
+
+1. **L1/L2 (Atividade ao vivo)**: cronômetro/timer do Relógio e descanso de
+   treino do Samsung Health. Verificar pílula desde a primeira aparição,
+   atualização do contador, toque → cartão expandido, recolher, reabrir, trocar
+   de app, remover a atividade (sem cápsula fantasma), girar a tela.
+2. **Mídia como testemunha**: tocar música (ex.: Bose/Spotify) ao mesmo tempo;
+   pílula, cartão e player de mídia **idênticos ao nativo**.
+3. **L3 (Now Bar)**: timer ativo com tela bloqueada acesa, compacta/expandida,
+   reordenação com mídia e Now Brief simultâneos; apagar/acender tela e AOD
+   (nativo no AOD, sem wakeups). Conferir `NOWBAR_PLUGIN`/`NOWBAR_NATIVE` no log.
+4. **T1 (Avisos rápidos)**: copiar texto 4× seguidas, toast de outro app,
+   cancelar/esperar o fim; vidro desde o primeiro quadro, duração/animação
+   nativas, sem fundo cinza estável nem fantasma.
+5. **Desligar cada interruptor** com a superfície visível: volta ao fundo
+   nativo exato. Economia de energia ligada: fundo nativo.
+6. **Regressão**: QS, sliders, mini-tiles, heads-up, shade e notificações
+   comuns sem diferença.
+7. Theme Park ON/OFF, modo claro/escuro e wallpaper claro/escuro.

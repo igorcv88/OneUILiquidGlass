@@ -141,6 +141,14 @@ no Galaxy, 🔧 implementado/testado localmente, ☐ sem comprovação física.
   controles de fallback e testes específicos. Não pedir ao Work que descubra
   a causa; só implementar quando a rota estiver demonstrada.
 
+**Atualização 03/11/2026 — implementação do laudo de live updates/toasts (🔧):**
+o diagnóstico de 02/11 foi implementado em `hooks/ongoing/` (L1 pílula, L2
+cartão, L3 Now Bar via plugin AOD, T1 toast), com `glass/LiveGlassDrawable` e
+três interruptores opt-in desligados por padrão. Build local e 493 testes
+JVM/Robolectric passaram neste ambiente (SDK instalado na sessão). **Nada foi
+testado no Galaxy**; mídia continua excluída. Estratégia, logs, limitações e
+roteiro físico em [`live-toast-dzif.md`](live-toast-dzif.md).
+
 ### Critérios de saída das próximas correções
 
 1. Cada superfície não-mídia mantém o vidro e o texto legível desde a criação

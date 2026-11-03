@@ -165,7 +165,7 @@ Gerada por `ControlMatrixTest` a partir de `SettingsRegistry`, `Controls`, `Appl
 
 ## Interruptores de produto (fora de `debug.oulg.*`)
 
-Guardados em `glass` SharedPreferences, entregues ao SystemUI pelo `ConfigProvider` (`/v1/snapshot`) e lidos por `ConfigClient.flag`; ausentes = ligado.
+Guardados em `glass` SharedPreferences, entregues ao SystemUI pelo `ConfigProvider` (`/v1/snapshot`) e lidos por `ConfigClient.flag`; ausentes = ligado, exceto as superfícies opt-in (`ProductFlags.OPT_IN`), ausentes = desligado.
 
 | Chave | Lido por | Efeito ao desligar | Padrão | Lente | Captura |
 | --- | --- | --- | --- | --- | --- |
@@ -185,6 +185,10 @@ Guardados em `glass` SharedPreferences, entregues ao SystemUI pelo `ConfigProvid
 | `surface.shade.feature.glint.enabled` | hooks/HeadsUpHooks (`feature("glint")`) | Central: camada Reflexo desligada | ativo | inativo: Usado no vidro padrão | inativo: Usado no vidro padrão |
 | `surface.shade.feature.tonemap.enabled` | hooks/HeadsUpHooks (`feature("tonemap")`) | Central: camada Proteção de contraste desligada | ativo | ativo | ativo |
 | `surface.shade.feature.per_card_blur.enabled` | hooks/HeadsUpHooks (`feature("per_card_blur")`) | Central: camada Desfoque por cartão desligada | ativo | ativo | ativo |
+| `surface.quicksettings.enabled` | hooks/QuickSettingsHooks (`enabled`) | Central de controle volta ao visual nativo | inativo (opt-in) | ativo | ativo |
+| `surface.liveactivity.enabled` | hooks/ongoing/LiveSurfaceHooks (`allows`) | pílula e cartão da atividade ao vivo (sem mídia) voltam ao fundo nativo | inativo (opt-in) | ativo | ativo |
+| `surface.nowbar.enabled` | hooks/ongoing/LiveSurfaceHooks (`allows`) | cartão da Now Bar (sem mídia) volta ao fundo nativo | inativo (opt-in) | ativo | ativo |
+| `surface.toast.enabled` | hooks/ongoing/LiveSurfaceHooks (`allows`) | toasts voltam ao fundo nativo | inativo (opt-in) | ativo | ativo |
 
 ## Funções sem propriedade
 
