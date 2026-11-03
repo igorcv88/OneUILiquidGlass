@@ -129,7 +129,8 @@ public class ToastHooksTest {
         assertTrue(g.blur().neutralCurve());
         assertFalse(g.blur().curveApplied());
         root.layout(0, 0, 400, 120);
-        root.draw(new TestCanvas(400, 120));
+        g.setBounds(0, 0, root.getWidth(), root.getHeight());
+        g.draw(new TestCanvas(400, 120));
         assertArrayEquals(new float[]{0, 0, 0, 255, 0, 255}, env.regions.get(0).curve, 0f);
         assertTrue(g.blur().curveApplied());
         w.removeView(root);
