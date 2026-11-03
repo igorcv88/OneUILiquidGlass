@@ -16,6 +16,12 @@ prova física no S25 Ultra DZIF. Nada aqui é aprovação visual.
 
 Exclusão estrutural de mídia (negação na dúvida):
 
+- Dado da posição: no L1, `OngoingActivityDataHelper.getDataByIndex(int)`, a mesma
+  fonte que o `OngoingChipAdapter` do DZIF usa (ele não tem `getItem(int)` nem
+  lista de dados). Método resolvido estritamente (estático, ou no helper que o
+  adapter guarda, ou no singleton do helper). O índice tem de estar dentro de
+  `getItemCount()`, e o dado é lido de novo no fim do bind: se mudou, fica nativo.
+  No L2, uma lista/`getItem` inequívoca e, na falta dela, o mesmo helper.
 - L1/L2: `OngoingActivityData.mIsMediaOngoingData` do **dado ligado àquela
   posição** (lido por campo `boolean` exato), `mIsAutomation` também nega
   (sem suporte comprovado), pacote obrigatório. Campo ausente/ilegível = nativo.
@@ -57,8 +63,13 @@ recolore o vidro (recoloração do `setChipBg` sem hook extra). Fundos com
    layout decide no `OnPreDraw` seguinte (antes do desenho, nativo até lá).
 2. **Rebind**: cada writer nativo substitui o fundo; o owner oferece a View de
    novo, o drawable novo vira o nativo envolvido e o mesmo wrapper volta
-   (`INTACT`/`REASSERTED`, nunca dois wrappers). Blur Samsung reinstalado
-   (`setBlurBG`, `a.N`) é guardado e removido enquanto o vidro existe.
+   (`INTACT`/`REASSERTED`, nunca dois wrappers).
+   **Blur Samsung** (`SemBlurInfo` de `setBlurBG`/`a.N`): só é removido quando a
+   região do compositor já existe e o vidro vai ser desenhado (anexado, blur
+   entre janelas ligado, fora de doze). Antes do attach, sem blur, em doze, se a
+   criação da região falha, ou se ela falha durante o desenho, o host fica (ou
+   volta) com o fundo nativo **e** o blur Samsung, e é reenvolvido quando a
+   região puder existir. Nunca fica sem os dois.
 3. **Reciclagem**: no fim de cada bind, toda View do holder é reclassificada
    contra o dado **deste** bind; holder reaproveitado para mídia volta ao
    último fundo nativo exato.
@@ -93,7 +104,8 @@ Nenhum parâmetro existente de pop-up, central, QS ou SF foi alterado.
 
 ## Logs (`adb logcat -s OULG`)
 
-`LIVE_HOOK`, `LIVE_READY available=[…]`, `LIVE_UNAVAILABLE surface=… fallback=native`,
+`LIVE_HOOK`, `LIVE_READY available=[…]`, `LIVE_CHIP_DATA source=…#static|#instance|list-fallback`,
+`LIVE_GLASS_SAMSUNG_BLUR reason=…`, `LIVE_UNAVAILABLE surface=… fallback=native`,
 `LIVE_CARD_WRITERS`, `NOWBAR_PLUGIN`, `NOWBAR_UNAVAILABLE missing=…`,
 `LIVE_GLASS_APPLY` (até 12 por superfície), `LIVE_GLASS_NATIVE reason=…`
 (`noBackground`, `ripple`, `cardview`, `noRadius`), `NOWBAR_NATIVE reason=…`
@@ -106,9 +118,12 @@ Nenhum parâmetro existente de pop-up, central, QS ou SF foi alterado.
 - Assinaturas aplicadas exatamente como no laudo; qualquer diferença de
   nome/parâmetro/retorno mantém a superfície nativa e aparece em
   `LIVE_UNAVAILABLE`/`NOWBAR_UNAVAILABLE`.
-- O campo da lista do `OngoingChipAdapter`/`OngoingCardAdapter` não consta no
-  laudo: o dado é localizado por `getItem(int)` ou pela **única** `List` do
-  adapter cujo elemento na posição é `OngoingActivityData` (ambíguo = nativo).
+- O pacote do `OngoingActivityDataHelper` não consta no laudo: procura-se em
+  `…ongoingactivity` e `…ongoingactivity.ongoingchip`. Sem o helper, `LIVE_CHIP_DATA
+  source=list-fallback` aparece no log e a pílula fica nativa.
+- L2: o `OngoingCardAdapter` não foi coberto pela revisão; usa lista/`getItem`
+  inequívoca e, se não houver, o helper. A mídia continua vetada pelo
+  `isMediaView(View)` nativo, que não depende do dado.
 - Now Bar: se `getCardViewContainer()` for CardView, o vidro depende de
   `getBlurContainer()` cobrir o mesmo retângulo (±2 px); caso contrário
   `NOWBAR_NATIVE reason=frameMismatch`/`cardviewWithoutLayer` e nada muda.

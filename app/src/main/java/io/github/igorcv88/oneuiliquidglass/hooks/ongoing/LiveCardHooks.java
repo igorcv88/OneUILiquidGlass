@@ -27,6 +27,9 @@ final class LiveCardHooks {
     private final DataLocator locator = new DataLocator(LiveEligibility.DATA);
     /** OngoingCardAdapter.isMediaView(View), resolved at install; null: no native verdict, all native. */
     private Method isMediaView;
+    /** DZIF's data helper, used when the adapter exposes no getItem(int) nor data list. */
+    private OngoingDataSource helper;
+    void setHelper(OngoingDataSource h) { helper = h; }
 
     LiveCardHooks(LiveGlass glass) { this.glass = glass; }
     void setIsMediaView(Method m) { isMediaView = m; }
@@ -35,6 +38,7 @@ final class LiveCardHooks {
     void cardBound(Object adapter, View root, int position) {
         if (root == null) return;
         Object data = locator.at(adapter, position);
+        if (data == null && helper != null) data = helper.at(adapter, position);
         LiveEligibility.Verdict verdict = LiveEligibility.card(data, nativeMedia(adapter, root));
         roots.put(root, new Classification(data, verdict));
         if (root.getBackground() != null || glass.tracked(root)) glass.offer(root, LiveSurface.CARD, data, verdict, LiveChipHooks.RECHECK);

@@ -23,22 +23,34 @@ final class LiveChipHooks {
     static final String ADAPTER = "com.android.systemui.statusbar.phone.ongoingactivity.ongoingchip.OngoingChipAdapter";
     static final Predicate<Object> RECHECK = d -> LiveEligibility.ongoing(d).ok();
 
+    /** The data bound at a position (DZIF: OngoingActivityDataHelper.getDataByIndex). */
+    interface Locator { Object at(Object adapter, int position); }
+
     private static final class Frame {
         final Object adapter, holder, data;
+        final int position;
         final List<View> written = new ArrayList<>();
-        Frame(Object adapter, Object holder, Object data) { this.adapter = adapter; this.holder = holder; this.data = data; }
+        Frame(Object adapter, Object holder, int position, Object data) {
+            this.adapter = adapter; this.holder = holder; this.position = position; this.data = data;
+        }
     }
     private final ArrayDeque<Frame> frames = new ArrayDeque<>();
     private final LiveGlass glass;
-    private final DataLocator locator = new DataLocator(LiveEligibility.DATA);
+    private Locator locator;
 
-    LiveChipHooks(LiveGlass glass) { this.glass = glass; }
+    LiveChipHooks(LiveGlass glass) {
+        this.glass = glass;
+        DataLocator lists = new DataLocator(LiveEligibility.DATA);
+        locator = lists::at;
+    }
+    /** The helper Samsung's adapter itself uses; without it only an unambiguous data list is accepted. */
+    void setLocator(Locator l) { locator = l; }
 
     /** Before OngoingChipAdapter.onBindViewHolder(holder, position). */
     void bindStart(Object adapter, Object holder, int position) {
         // A bind whose end was never seen (it threw before our after callback) is dropped.
         while (frames.size() >= 4) frames.removeLast();
-        frames.push(new Frame(adapter, holder, locator.at(adapter, position)));
+        frames.push(new Frame(adapter, holder, position, locator.at(adapter, position)));
     }
 
     /** After OngoingChipAdapter.setChipBg(ViewGroup, ColorStateList). */
@@ -58,7 +70,9 @@ final class LiveChipHooks {
         }
         if (f == null) return;
         LiveEligibility.Verdict verdict = LiveEligibility.ongoing(f.data);
-        if (threw) verdict = LiveEligibility.Verdict.NO_DATA;
+        // The data must still be the one at the bound position when the bind ends: a list that
+        // changed during the bind gives no trustworthy owner.
+        if (threw || locator.at(adapter, f.position) != f.data) verdict = LiveEligibility.Verdict.NO_DATA;
         Set<View> hosts = new LinkedHashSet<>(f.written);
         View item = itemView(holder);
         if (item != null) for (View h : glass.hosts(LiveSurface.CHIP)) if (within(h, item)) hosts.add(h);

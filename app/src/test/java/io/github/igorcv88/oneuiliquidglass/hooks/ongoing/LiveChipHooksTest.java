@@ -10,6 +10,7 @@ import android.os.Looper;
 import android.widget.FrameLayout;
 import androidx.recyclerview.widget.RecyclerView;
 import com.android.systemui.statusbar.phone.ongoingactivity.OngoingActivityData;
+import com.android.systemui.statusbar.phone.ongoingactivity.OngoingActivityDataHelper;
 import com.android.systemui.statusbar.phone.ongoingactivity.ongoingchip.OngoingChipAdapter;
 import io.github.igorcv88.oneuiliquidglass.glass.LiveGlassDrawable;
 import org.junit.Before;
@@ -33,6 +34,8 @@ public class LiveChipHooksTest {
         env = new Env();
         glass = env.glass();
         hooks = new LiveChipHooks(glass);
+        hooks.setLocator(OngoingDataSource.of(OngoingActivityDataHelper.class)::at);
+        OngoingActivityDataHelper.reset();
         adapter = new OngoingChipAdapter();
         activity = Robolectric.buildActivity(Activity.class).setup().get();
     }
@@ -47,7 +50,7 @@ public class LiveChipHooksTest {
     private RecyclerView.ViewHolder holder() { return new RecyclerView.ViewHolder(new FrameLayout(activity)); }
 
     @Test public void firstBindWrapsTheNativeChipBeforeAnyFrame() {
-        adapter.mItems.add(new OngoingActivityData("com.sec.android.app.clockpackage", false));
+        OngoingActivityDataHelper.add(new OngoingActivityData("com.sec.android.app.clockpackage", false));
         RecyclerView.ViewHolder h = holder();
         bind(h, 0);
         Drawable bg = h.itemView.getBackground();
@@ -64,7 +67,7 @@ public class LiveChipHooksTest {
     }
 
     @Test public void regionIsBuiltOnAttachAndDroppedOnDetach() {
-        adapter.mItems.add(new OngoingActivityData("com.example.timer", false));
+        OngoingActivityDataHelper.add(new OngoingActivityData("com.example.timer", false));
         RecyclerView.ViewHolder h = holder();
         bind(h, 0);
         activity.setContentView(h.itemView);
@@ -78,7 +81,7 @@ public class LiveChipHooksTest {
     }
 
     @Test public void rebindWriterIsFollowedAndNeverWrapsTwice() {
-        adapter.mItems.add(new OngoingActivityData("com.example.timer", false));
+        OngoingActivityDataHelper.add(new OngoingActivityData("com.example.timer", false));
         RecyclerView.ViewHolder h = holder();
         bind(h, 0);
         LiveGlassDrawable first = (LiveGlassDrawable) h.itemView.getBackground();
@@ -97,8 +100,8 @@ public class LiveChipHooksTest {
     }
 
     @Test public void holderRecycledForMediaGoesBackToTheNativeBackground() {
-        adapter.mItems.add(new OngoingActivityData("com.example.timer", false));
-        adapter.mItems.add(new OngoingActivityData("com.spotify.music", true));
+        OngoingActivityDataHelper.add(new OngoingActivityData("com.example.timer", false));
+        OngoingActivityDataHelper.add(new OngoingActivityData("com.spotify.music", true));
         RecyclerView.ViewHolder h = holder();
         bind(h, 0);
         assertTrue(h.itemView.getBackground() instanceof LiveGlassDrawable);
@@ -108,8 +111,8 @@ public class LiveChipHooksTest {
     }
 
     @Test public void recycledHolderWithoutWriterIsClassifiedAgainstTheNewData() {
-        adapter.mItems.add(new OngoingActivityData("com.example.timer", false));
-        adapter.mItems.add(new OngoingActivityData("com.spotify.music", true));
+        OngoingActivityDataHelper.add(new OngoingActivityData("com.example.timer", false));
+        OngoingActivityDataHelper.add(new OngoingActivityData("com.spotify.music", true));
         RecyclerView.ViewHolder h = holder();
         bind(h, 0);
         Drawable nativeBg = ((LiveGlassDrawable) h.itemView.getBackground()).nativeDrawable();
@@ -120,7 +123,7 @@ public class LiveChipHooksTest {
 
     @Test public void mediaFlagFlippedInPlaceRestoresOnTheNextWriter() {
         OngoingActivityData d = new OngoingActivityData("com.example.timer", false);
-        adapter.mItems.add(d);
+        OngoingActivityDataHelper.add(d);
         RecyclerView.ViewHolder h = holder();
         bind(h, 0);
         d.mIsMediaOngoingData = true;
@@ -133,7 +136,7 @@ public class LiveChipHooksTest {
     @Test public void automationAndUnknownDataStayNative() {
         OngoingActivityData auto = new OngoingActivityData("com.samsung.android.app.routines", false);
         auto.mIsAutomation = true;
-        adapter.mItems.add(auto);
+        OngoingActivityDataHelper.add(auto);
         RecyclerView.ViewHolder h = holder();
         bind(h, 0);
         assertTrue(h.itemView.getBackground() instanceof GradientDrawable);
@@ -143,7 +146,7 @@ public class LiveChipHooksTest {
     }
 
     @Test public void gateOffKeepsNativeAndRefreshAppliesThenRestoresExactly() {
-        adapter.mItems.add(new OngoingActivityData("com.example.timer", false));
+        OngoingActivityDataHelper.add(new OngoingActivityData("com.example.timer", false));
         env.on.remove(LiveSurface.CHIP);
         RecyclerView.ViewHolder h = holder();
         bind(h, 0);
@@ -161,7 +164,7 @@ public class LiveChipHooksTest {
     }
 
     @Test public void otherSurfacesAreUnaffectedByTheChipGate() {
-        adapter.mItems.add(new OngoingActivityData("com.example.timer", false));
+        OngoingActivityDataHelper.add(new OngoingActivityData("com.example.timer", false));
         env.on.clear();
         env.on.add(LiveSurface.CHIP);
         RecyclerView.ViewHolder h = holder();
@@ -173,7 +176,7 @@ public class LiveChipHooksTest {
 
     /** A writer hook firing inside our own setBackground (reentrancy) is ignored: one wrapper, no recursion. */
     @Test public void reentrantWriterDuringOurOwnSetBackgroundIsIgnored() {
-        adapter.mItems.add(new OngoingActivityData("com.example.timer", false));
+        OngoingActivityDataHelper.add(new OngoingActivityData("com.example.timer", false));
         int[] reentered = {0};
         FrameLayout chip = new FrameLayout(activity) {
             @Override public void setBackground(Drawable d) {
@@ -190,8 +193,36 @@ public class LiveChipHooksTest {
         assertFalse(glass.writing());
     }
 
+    /** DZIF's adapter has no getItem(int) and no data list: only the helper yields its data. */
+    @Test public void dataComesFromTheHelperNotFromAdapterFields() {
+        OngoingActivityData d = new OngoingActivityData("com.example.timer", false);
+        OngoingActivityDataHelper.add(d);
+        assertNull(new DataLocator(LiveEligibility.DATA).at(adapter, 0));
+        OngoingDataSource source = OngoingDataSource.of(OngoingActivityDataHelper.class);
+        assertTrue(source.isStatic());
+        assertSame(d, source.at(adapter, 0));
+        assertNull("outside getItemCount", source.at(adapter, 1));
+        assertNull(source.at(adapter, -1));
+        LiveChipHooks listsOnly = new LiveChipHooks(glass);
+        RecyclerView.ViewHolder h = holder();
+        listsOnly.bindStart(adapter, h, 0);
+        adapter.onBindViewHolder(h, 0);
+        listsOnly.chipBackground(adapter, h.itemView);
+        listsOnly.bindEnd(adapter, h, false);
+        assertTrue("without the helper the chip stays native", h.itemView.getBackground() instanceof GradientDrawable);
+    }
+
+    /** The data at the bound position changed during the bind: no trustworthy owner, native. */
+    @Test public void dataReplacedDuringTheBindStaysNative() {
+        OngoingActivityDataHelper.add(new OngoingActivityData("com.example.timer", false));
+        adapter.duringBind = () -> OngoingActivityDataHelper.set(0, new OngoingActivityData("com.spotify.music", true));
+        RecyclerView.ViewHolder h = holder();
+        bind(h, 0);
+        assertTrue(h.itemView.getBackground() instanceof GradientDrawable);
+    }
+
     @Test public void unbalancedBindIsDropped() {
-        adapter.mItems.add(new OngoingActivityData("com.example.timer", false));
+        OngoingActivityDataHelper.add(new OngoingActivityData("com.example.timer", false));
         RecyclerView.ViewHolder h = holder();
         hooks.bindStart(adapter, h, 0);
         adapter.onBindViewHolder(h, 0);

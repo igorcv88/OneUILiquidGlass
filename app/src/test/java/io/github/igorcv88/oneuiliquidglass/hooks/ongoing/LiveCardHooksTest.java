@@ -85,6 +85,21 @@ public class LiveCardHooksTest {
         assertFalse(glass.tracked(v));
     }
 
+    /** Without a data list the helper supplies the card's data; isMediaView still vetoes. */
+    @Test public void helperIsTheFallbackDataSourceAndNativeVerdictStillWins() {
+        com.android.systemui.statusbar.phone.ongoingactivity.OngoingActivityDataHelper.reset();
+        com.android.systemui.statusbar.phone.ongoingactivity.OngoingActivityDataHelper.add(new OngoingActivityData("com.samsung.android.health", false));
+        com.android.systemui.statusbar.phone.ongoingactivity.OngoingActivityDataHelper.add(new OngoingActivityData("com.samsung.android.health", false));
+        hooks.setHelper(OngoingDataSource.of(com.android.systemui.statusbar.phone.ongoingactivity.OngoingActivityDataHelper.class));
+        View v = card(0); // mList is empty
+        assertTrue(v.getBackground() instanceof LiveGlassDrawable);
+        View media = adapter.getView(1, null, stack);
+        adapter.mediaViews.add(media);
+        hooks.cardBound(adapter, media, 1);
+        assertTrue(media.getBackground() instanceof GradientDrawable);
+        com.android.systemui.statusbar.phone.ongoingactivity.OngoingActivityDataHelper.reset();
+    }
+
     @Test public void mediaDataFlagAloneExcludes() {
         adapter.mList.add(new OngoingActivityData("com.example.player", true));
         View v = card(0);

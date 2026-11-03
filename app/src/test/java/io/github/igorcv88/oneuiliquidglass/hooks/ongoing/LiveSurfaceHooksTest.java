@@ -11,6 +11,7 @@ import android.widget.FrameLayout;
 import androidx.recyclerview.widget.RecyclerView;
 import com.android.systemui.shared.plugins.PluginInstance;
 import com.android.systemui.statusbar.phone.ongoingactivity.OngoingActivityData;
+import com.android.systemui.statusbar.phone.ongoingactivity.OngoingActivityDataHelper;
 import com.android.systemui.statusbar.phone.ongoingactivity.OngoingCardAdapter;
 import com.android.systemui.statusbar.phone.ongoingactivity.ongoingchip.OngoingChipAdapter;
 import com.android.systemui.statusbar.phone.ongoingactivity.CardStackview.CardStackView;
@@ -55,6 +56,7 @@ public class LiveSurfaceHooksTest {
         env = new Env();
         site = new RecordingSite();
         hooks = new LiveSurfaceHooks(getClass().getClassLoader(), () -> master, c -> configStarts++, site, env, env);
+        OngoingActivityDataHelper.reset();
         hooks.install();
         OngoingChipAdapter.nested = (thiz, args) -> site.after(thiz, "setChipBg", args);
         activity = Robolectric.buildActivity(Activity.class).setup().get();
@@ -78,7 +80,7 @@ public class LiveSurfaceHooksTest {
 
     @Test public void chipBindThroughTheHooksGetsGlassAndConfigStarts() throws Exception {
         OngoingChipAdapter adapter = new OngoingChipAdapter();
-        adapter.mItems.add(new OngoingActivityData("com.example.timer", false));
+        OngoingActivityDataHelper.add(new OngoingActivityData("com.example.timer", false));
         RecyclerView.ViewHolder h = new RecyclerView.ViewHolder(new FrameLayout(activity));
         site.call(adapter, "onBindViewHolder", h, 0);
         assertTrue(h.itemView.getBackground() instanceof LiveGlassDrawable);
@@ -91,7 +93,7 @@ public class LiveSurfaceHooksTest {
     @Test public void eachOptInIsIndependentAndMasterGatesAll() throws Exception {
         flags(ProductFlags.TOAST);
         OngoingChipAdapter adapter = new OngoingChipAdapter();
-        adapter.mItems.add(new OngoingActivityData("com.example.timer", false));
+        OngoingActivityDataHelper.add(new OngoingActivityData("com.example.timer", false));
         RecyclerView.ViewHolder h = new RecyclerView.ViewHolder(new FrameLayout(activity));
         site.call(adapter, "onBindViewHolder", h, 0);
         assertTrue("live update off: native", h.itemView.getBackground() instanceof GradientDrawable);
@@ -108,7 +110,7 @@ public class LiveSurfaceHooksTest {
 
     @Test public void failuresDisableOnlyTheirSurfaceAndRestoreIt() throws Exception {
         OngoingChipAdapter adapter = new OngoingChipAdapter();
-        adapter.mItems.add(new OngoingActivityData("com.example.timer", false));
+        OngoingActivityDataHelper.add(new OngoingActivityData("com.example.timer", false));
         RecyclerView.ViewHolder h = new RecyclerView.ViewHolder(new FrameLayout(activity));
         site.call(adapter, "onBindViewHolder", h, 0);
         assertTrue(h.itemView.getBackground() instanceof LiveGlassDrawable);

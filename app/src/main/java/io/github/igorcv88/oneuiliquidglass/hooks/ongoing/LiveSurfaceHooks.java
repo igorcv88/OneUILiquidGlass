@@ -91,6 +91,9 @@ public final class LiveSurfaceHooks {
         Method bind = HookSite.exact(adapter, "onBindViewHolder", void.class, holder, int.class);
         Method writer = HookSite.exact(adapter, "setChipBg", void.class, ViewGroup.class, ColorStateList.class);
         if (bind == null || writer == null) { unavailable(LiveSurface.CHIP, "adapter=" + (adapter != null) + " bind=" + (bind != null) + " setChipBg=" + (writer != null)); return; }
+        OngoingDataSource source = OngoingDataSource.resolve(loader);
+        if (source != null) chips.setLocator(source::at);
+        Probe.log("LIVE_CHIP_DATA", "source=" + (source == null ? "list-fallback" : source.helper.getName() + (source.isStatic() ? "#static" : "#instance")));
         boolean ok = site.hook(bind, new HookSite.Callback() {
             @Override public void before(HookSite.Param p) {
                 guard(LiveSurface.CHIP, () -> chips.bindStart(p.thisObject, p.args[0], (Integer) p.args[1]));
@@ -129,6 +132,7 @@ public final class LiveSurfaceHooks {
             return;
         }
         cards.setIsMediaView(isMedia);
+        cards.setHelper(OngoingDataSource.resolve(loader));
         boolean ok = true;
         if (getView != null) ok &= site.hook(getView, after(LiveSurface.CARD, p -> {
             if (p.result instanceof View) { ensure((View) p.result); cards.cardBound(p.thisObject, (View) p.result, (Integer) p.args[0]); }

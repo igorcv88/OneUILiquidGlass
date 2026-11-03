@@ -37,6 +37,17 @@ public final class LiveGlass {
         BackgroundBlurBridge create(View host) throws ReflectiveOperationException;
         boolean enabled(View host);
     }
+    /** Samsung's own SemBlurInfo on a host (read, clear, re-install); production: SemBlurBridge. */
+    public interface NativeBlur {
+        Object held(View host);
+        void clear(View host);
+        void set(View host, Object info);
+    }
+    static final NativeBlur SAMSUNG = new NativeBlur() {
+        @Override public Object held(View host) { return SemBlurBridge.heldInfo(host); }
+        @Override public void clear(View host) { SemBlurBridge.clearNative(host); }
+        @Override public void set(View host, Object info) { SemBlurBridge.setInfo(host, info); }
+    };
     /** Master switch, opt-in and failure budget of a surface. */
     public interface Gate { boolean allows(LiveSurface surface); }
     /** Surface policy for the region: false while it must stay native (Now Bar in doze). */
@@ -70,6 +81,13 @@ public final class LiveGlass {
         WeakReference<View> shapeSource = new WeakReference<>(null);
         /** The region failed while drawing: no new one for this wrapper (no rebuild loop). */
         boolean regionBroken;
+        /**
+         * Host with Samsung's own blur, kept native until the compositor region can exist: it is
+         * wrapped only while the glass is really drawn, never left without both blurs.
+         */
+        boolean waiting;
+        /** Last non-blur native background, kept across a return to Samsung's blur. */
+        Drawable lastNative;
         boolean lastShown;
         View.OnAttachStateChangeListener attach;
         ViewTreeObserver.OnPreDrawListener preDraw;
@@ -85,7 +103,11 @@ public final class LiveGlass {
     /** True while this controller itself writes a background (no owner hook may react to it). */
     private boolean writing;
 
-    public LiveGlass(Blur blur, Gate gate, Policy policy) { this.blur = blur; this.gate = gate; this.policy = policy; }
+    private final NativeBlur nativeBlur;
+    public LiveGlass(Blur blur, Gate gate, Policy policy) { this(blur, gate, policy, SAMSUNG); }
+    public LiveGlass(Blur blur, Gate gate, Policy policy, NativeBlur nativeBlur) {
+        this.blur = blur; this.gate = gate; this.policy = policy; this.nativeBlur = nativeBlur;
+    }
 
     public boolean writing() { return writing; }
     public boolean tracked(View v) { return states.containsKey(v); }
@@ -177,7 +199,7 @@ public final class LiveGlass {
 
     /** Cross-window blur or display state changed: rebuild or drop the region of every host. */
     public void syncAll() {
-        for (State s : new ArrayList<>(states.values())) if (s.glass != null) sync(s);
+        for (State s : new ArrayList<>(states.values())) if (s.glass != null || s.waiting) sync(s);
     }
 
     // ---- internals -------------------------------------------------------------------------
@@ -192,9 +214,9 @@ public final class LiveGlass {
         if (v == null) return Outcome.DENIED;
         Drawable bg = v.getBackground();
         if (bg instanceof LiveGlassDrawable) return Outcome.INTACT;
-        // Samsung's own blur on the host (setBlurBG, a.N), wherever One UI draws it: put aside.
-        Object sem = SemBlurBridge.heldInfo(v);
-        if (blurDrawable(bg)) bg = null;
+        // Samsung's own blur on the host (setBlurBG, a.N), wherever One UI draws it.
+        Object sem = nativeBlur.held(v);
+        if (blurDrawable(bg)) bg = s.lastNative;
         if (bg == null && !s.allowEmptyNative) return nativeOutcome(s, "noBackground");
         if (bg != null && NativeShape.interactive(bg)) return nativeOutcome(s, "ripple");
         if (bg != null && NativeShape.cardLike(v)) return nativeOutcome(s, "cardview");
@@ -202,15 +224,32 @@ public final class LiveGlass {
         float[] radii = source != null ? NativeShape.radii(source.getBackground(), source) : NativeShape.radii(bg, v);
         if (radii == null) return nativeOutcome(s, "noRadius");
         Integer color = source != null ? NativeShape.color(source.getBackground(), source) : bg == null ? null : NativeShape.color(bg, v);
+        BackgroundBlurBridge region = null;
+        if (sem != null) {
+            // Samsung's blur leaves only for a region that exists now: otherwise it stays, and the
+            // host is wrapped on attach or when blur/display allow it (sync).
+            s.waiting = true;
+            listen(s, v);
+            if (!canShow(s, v)) return Outcome.NATIVE;
+            try { region = blur.create(v); }
+            catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
+                s.regionBroken = true;
+                logOnce(s.surface, "LIVE_GLASS_NO_REGION", "surface=" + s.surface + " stage=create keep=samsungBlur");
+                return Outcome.NATIVE;
+            }
+        }
+        s.waiting = false;
         LiveGlassDrawable glass = new LiveGlassDrawable(bg, radii, color, s.surface.spec, v.getResources().getDisplayMetrics().density);
-        if (sem != null) SemBlurBridge.clearNative(v);
+        if (sem != null) nativeBlur.clear(v);
         writing = true;
         try {
             v.setBackground(glass);
             glass.setNative(bg);
         } finally { writing = false; }
+        if (region != null) glass.setBlur(region);
         s.glass = glass;
         s.semInfo = sem;
+        if (bg != null) s.lastNative = bg;
         s.lastShown = false;
         s.regionBroken = false;
         glass.setOnRegionFailed(() -> regionFailed(s));
@@ -230,11 +269,13 @@ public final class LiveGlass {
         View v = s.host.get();
         if (v == null) return Outcome.DENIED;
         Drawable bg = v.getBackground();
-        Object held = SemBlurBridge.heldInfo(v);
+        Object held = nativeBlur.held(v);
         if (held != null) {
-            // Samsung re-installed its own blur (setBlurBG, a.N): it leaves while the glass is on.
+            // Samsung re-installed its own blur (setBlurBG, a.N). It leaves only while the glass is
+            // really drawn; otherwise the host goes back to it at once.
             s.semInfo = held;
-            SemBlurBridge.clearNative(v);
+            if (!canShow(s, v) || s.glass.blur() == null) { nativeBlurBack(s, "rewritten"); return Outcome.NATIVE; }
+            nativeBlur.clear(v);
             bg = v.getBackground();
             if (bg == s.glass) return Outcome.REASSERTED;
             if (bg == null || blurDrawable(bg)) bg = s.glass.nativeDrawable();
@@ -249,7 +290,7 @@ public final class LiveGlass {
             g.release();
             removeListeners(s);
             if (s.lastShown && s.onShown != null) { s.lastShown = false; s.onShown.accept(v, false); }
-            if (s.semInfo != null) { SemBlurBridge.setInfo(v, s.semInfo); s.semInfo = null; }
+            if (s.semInfo != null) { if (nativeBlur.held(v) == null) nativeBlur.set(v, s.semInfo); s.semInfo = null; }
             return Outcome.NATIVE;
         } else if (bg instanceof LiveGlassDrawable) {
             bg = ((LiveGlassDrawable) bg).nativeDrawable();
@@ -264,6 +305,7 @@ public final class LiveGlass {
             v.setBackground(s.glass);
             s.glass.setNative(bg);
         } finally { writing = false; }
+        if (bg != null) s.lastNative = bg;
         return Outcome.REASSERTED;
     }
 
@@ -282,7 +324,7 @@ public final class LiveGlass {
             // Only our wrapper is replaced: a background Samsung wrote meanwhile stays.
             if (v.getBackground() == g) v.setBackground(nativeBg);
         } finally { writing = false; }
-        if (s.semInfo != null) { SemBlurBridge.setInfo(v, s.semInfo); s.semInfo = null; }
+        if (s.semInfo != null) { if (nativeBlur.held(v) == null) nativeBlur.set(v, s.semInfo); s.semInfo = null; }
         Probe.log("LIVE_GLASS_RESTORE", "surface=" + s.surface + " reason=" + reason + " host=" + v.getClass().getSimpleName());
     }
 
@@ -314,9 +356,18 @@ public final class LiveGlass {
     /** Builds or drops the region for the current blur capability and surface policy. */
     void sync(State s) {
         View v = s.host.get();
+        if (v == null) return;
+        if (s.glass == null) {
+            // A host left on Samsung's blur is wrapped as soon as the region can exist.
+            if (!s.waiting || !gate.allows(s.surface) || !canShow(s, v)) return;
+            Object owner = s.owner.get();
+            if (owner == null || s.recheck == null || !s.recheck.test(owner)) return;
+            apply(s);
+            return;
+        }
         LiveGlassDrawable g = s.glass;
-        if (v == null || g == null) return;
-        boolean want = !s.regionBroken && v.isAttachedToWindow() && blur.enabled(v) && policy.glassAllowed(s.surface, v);
+        boolean want = canShow(s, v);
+        boolean before = g.showsGlass();
         if (want && g.blur() == null) {
             try { g.setBlur(blur.create(v)); }
             catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
@@ -324,6 +375,8 @@ public final class LiveGlass {
                 g.setBlur(null);
             }
         } else if (!want && g.blur() != null) g.setBlur(null);
+        // Samsung's blur is never removed for a pane that is not drawn: back to it now.
+        if (s.semInfo != null && (!want || g.blur() == null)) { nativeBlurBack(s, want ? "noRegion" : "unavailable"); return; }
         g.setGlass(want);
         shown(s, v, g.showsGlass());
         if (v.isAttachedToWindow() && s.preDraw == null) {
@@ -333,7 +386,31 @@ public final class LiveGlass {
             o.addOnPreDrawListener(s.preDraw);
         }
         fade(s);
-        v.invalidate();
+        if (before != g.showsGlass()) v.invalidate();
+    }
+    private boolean canShow(State s, View v) {
+        return !s.regionBroken && v.isAttachedToWindow() && blur.enabled(v) && policy.glassAllowed(s.surface, v);
+    }
+    /**
+     * The glass is not drawn on a host that had Samsung's blur: the native background and that
+     * blur go back exactly, the host stays tracked and is wrapped again when the region can exist.
+     */
+    private void nativeBlurBack(State s, String reason) {
+        View v = s.host.get();
+        LiveGlassDrawable g = s.glass;
+        if (v == null || g == null) return;
+        s.glass = null;
+        s.waiting = true;
+        removePreDraw(s);
+        Drawable nativeBg = g.nativeDrawable();
+        if (nativeBg != null) s.lastNative = nativeBg;
+        g.release();
+        shown(s, v, false);
+        writing = true;
+        try { if (v.getBackground() == g) v.setBackground(nativeBg); }
+        finally { writing = false; }
+        if (s.semInfo != null && nativeBlur.held(v) == null) nativeBlur.set(v, s.semInfo);
+        logOnce(s.surface, "LIVE_GLASS_SAMSUNG_BLUR", "surface=" + s.surface + " reason=" + reason);
     }
     /** Mid-draw failure of the region: native at once, companions (CardView, gradient) restored. */
     private void regionFailed(State s) {
@@ -343,6 +420,9 @@ public final class LiveGlass {
         s.glass.setGlass(false);
         shown(s, v, false);
         logOnce(s.surface, "LIVE_GLASS_NO_REGION", "surface=" + s.surface + " stage=draw");
+        // Not from inside the draw: the background is replaced right after it.
+        LiveGlassDrawable g = s.glass;
+        if (s.semInfo != null) v.post(() -> { if (s.glass == g) nativeBlurBack(s, "drawFailure"); });
     }
     private void shown(State s, View v, boolean on) {
         if (s.lastShown == on) return;
