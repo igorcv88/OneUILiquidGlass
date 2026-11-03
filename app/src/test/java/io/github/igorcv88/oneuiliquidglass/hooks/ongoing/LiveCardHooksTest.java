@@ -3,21 +3,32 @@ package io.github.igorcv88.oneuiliquidglass.hooks.ongoing;
 import static org.junit.Assert.*;
 
 import android.app.Activity;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.RippleDrawable;
+import android.os.Looper;
 import android.view.View;
 import android.widget.FrameLayout;
-import com.android.systemui.statusbar.phone.ongoingactivity.OngoingActivityData;
-import com.android.systemui.statusbar.phone.ongoingactivity.OngoingCardAdapter;
+import com.android.systemui.statusbar.phone.ongoingactivity.CardStackview.CardItemView;
 import com.android.systemui.statusbar.phone.ongoingactivity.CardStackview.CardStackView;
+import com.android.systemui.statusbar.phone.ongoingactivity.OngoingActivityData;
+import com.android.systemui.statusbar.phone.ongoingactivity.OngoingActivityDataHelper;
+import com.android.systemui.statusbar.phone.ongoingactivity.OngoingCardAdapter;
 import io.github.igorcv88.oneuiliquidglass.glass.LiveGlassDrawable;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
+import org.robolectric.Shadows;
 import org.robolectric.annotation.Config;
 
-/** L2: classified cards follow changeCardBg/updateItemBg; media cards in the same stack stay native. */
+/**
+ * L2 on DZIF's real layering: CardItemView root without background, opaque GradientDrawable fill
+ * below it, Samsung's blur region on an ancestor frame. The fill becomes translucent over that
+ * blur (no second region); Samsung's blur and ripple frames are never touched; media stays native.
+ */
 @RunWith(RobolectricTestRunner.class) @Config(sdk = 34)
 public class LiveCardHooksTest {
     private Env env;
@@ -29,106 +40,171 @@ public class LiveCardHooksTest {
     @Before public void setUp() throws Exception {
         env = new Env();
         glass = env.glass();
-        hooks = new LiveCardHooks(glass);
+        hooks = new LiveCardHooks(glass, env);
         hooks.setIsMediaView(OngoingCardAdapter.class.getDeclaredMethod("isMediaView", View.class));
         adapter = new OngoingCardAdapter();
         Activity a = Robolectric.buildActivity(Activity.class).setup().get();
         stack = new CardStackView(a);
+        FrameLayout window = new FrameLayout(a);
+        window.addView(stack);
+        a.setContentView(window);
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        OngoingActivityDataHelper.reset();
     }
-    private View card(int position) {
-        View v = adapter.getView(position, null, stack);
-        stack.addView(v);
-        hooks.cardBound(adapter, v, position);
-        return v;
+    @After public void tearDown() { OngoingActivityDataHelper.reset(); }
+
+    /** Samsung's sequence for one card: getView, wrap in ripple/blur frames, setBlurBG. */
+    private CardItemView card(int position) {
+        CardItemView root = (CardItemView) adapter.getView(position, null, stack);
+        hooks.cardBound(adapter, root, position);
+        FrameLayout blur = stack.addCard(root);
+        stack.setBlurBG(blur, position);
+        hooks.cardWriter(blur, false);
+        return root;
+    }
+    private static boolean nativeBlur(Drawable d) { return d instanceof CardStackView.NativeBackgroundBlurDrawable; }
+
+    @Test public void fillOverSamsungsBlurBecomesTranslucentWithoutASecondRegion() {
+        adapter.mList.add(new OngoingActivityData("com.samsung.android.health", false));
+        CardItemView root = card(0);
+        assertNull("the root keeps no background", root.getBackground());
+        LiveGlassDrawable g = (LiveGlassDrawable) root.fill().getBackground();
+        assertTrue(g.regionless());
+        assertTrue(g.showsGlass());
+        assertNull("no region of ours: Samsung's blur is the region", g.blur());
+        for (FakeBlurDrawable r : env.regions) assertEquals("any earlier region released", 0, r.radius);
+        View blurFrame = (View) root.getParent();
+        assertTrue("Samsung's blur frame untouched", nativeBlur(blurFrame.getBackground()));
+        assertTrue(((View) blurFrame.getParent()).getBackground() instanceof RippleDrawable);
+        assertEquals(0x002050c0, g.currentTint() & 0x00ffffff);
     }
 
-    @Test public void nonMediaCardIsWrappedAtGetViewAndFollowsChangeCardBg() {
+    @Test public void changeCardBgOnTheFillIsFollowed() {
         adapter.mList.add(new OngoingActivityData("com.samsung.android.health", false));
-        View v = card(0);
-        LiveGlassDrawable g = (LiveGlassDrawable) v.getBackground();
-        stack.changeCardBg(v, 0xff0055ff);
-        assertTrue(v.getBackground() instanceof GradientDrawable);
-        hooks.cardWriter(v);
-        assertSame(g, v.getBackground());
+        CardItemView root = card(0);
+        LiveGlassDrawable g = (LiveGlassDrawable) root.fill().getBackground();
+        stack.changeCardBg(root.fill(), 0xff0055ff);
+        assertTrue(root.fill().getBackground() instanceof GradientDrawable);
+        hooks.cardWriter(root.fill(), true);
+        assertSame(g, root.fill().getBackground());
         assertEquals(0x000055ff, g.currentTint() & 0x00ffffff);
+        stack.updateItemBg();
+        hooks.stackUpdated(stack);
+        assertSame(g, root.fill().getBackground());
     }
 
     @Test public void mediaViewInTheSameStackIsNeverTouched() {
         adapter.mList.add(new OngoingActivityData("com.samsung.android.health", false));
         adapter.mList.add(new OngoingActivityData("com.spotify.music", false));
-        View rest = card(0);
-        View media = adapter.getView(1, null, stack);
+        CardItemView rest = card(0);
+        CardItemView media = (CardItemView) adapter.getView(1, null, stack);
         adapter.mediaViews.add(media); // Samsung's own verdict, even with the data flag false
-        stack.addView(media);
         hooks.cardBound(adapter, media, 1);
-        assertTrue(media.getBackground() instanceof GradientDrawable);
+        stack.setBlurBG(stack.addCard(media), 1);
         stack.updateItemBg();
         hooks.stackUpdated(stack);
-        assertTrue(rest.getBackground() instanceof LiveGlassDrawable);
-        assertTrue(media.getBackground() instanceof GradientDrawable);
-        stack.changeCardBg(media, 0xff000000);
-        hooks.cardWriter(media);
-        assertTrue(media.getBackground() instanceof GradientDrawable);
-        assertFalse(glass.tracked(media));
+        assertTrue(rest.fill().getBackground() instanceof LiveGlassDrawable);
+        assertTrue(media.fill().getBackground() instanceof GradientDrawable);
+        stack.changeCardBg(media.fill(), 0xff000000);
+        hooks.cardWriter(media.fill(), true);
+        assertTrue(media.fill().getBackground() instanceof GradientDrawable);
+        assertFalse(glass.tracked(media.fill()));
     }
 
-    /** Data flipped to media in place, then a writer before the next bind: re-read, restored. */
     @Test public void writerRereadsTheDataFlags() {
         OngoingActivityData d = new OngoingActivityData("com.samsung.android.health", false);
         adapter.mList.add(d);
-        View v = card(0);
-        assertTrue(v.getBackground() instanceof LiveGlassDrawable);
+        CardItemView root = card(0);
+        assertTrue(root.fill().getBackground() instanceof LiveGlassDrawable);
         d.mIsMediaOngoingData = true;
-        stack.changeCardBg(v, 0xff0055ff);
-        hooks.cardWriter(v);
-        assertTrue(v.getBackground() instanceof GradientDrawable);
-        assertFalse(glass.tracked(v));
+        stack.changeCardBg(root.fill(), 0xff0055ff);
+        hooks.cardWriter(root.fill(), true);
+        assertTrue(root.fill().getBackground() instanceof GradientDrawable);
+        assertFalse(glass.tracked(root.fill()));
     }
 
-    /** Without a data list the helper supplies the card's data; isMediaView still vetoes. */
-    @Test public void helperIsTheFallbackDataSourceAndNativeVerdictStillWins() {
-        com.android.systemui.statusbar.phone.ongoingactivity.OngoingActivityDataHelper.reset();
-        com.android.systemui.statusbar.phone.ongoingactivity.OngoingActivityDataHelper.add(new OngoingActivityData("com.samsung.android.health", false));
-        com.android.systemui.statusbar.phone.ongoingactivity.OngoingActivityDataHelper.add(new OngoingActivityData("com.samsung.android.health", false));
-        hooks.setHelper(OngoingDataSource.of(com.android.systemui.statusbar.phone.ongoingactivity.OngoingActivityDataHelper.class));
-        View v = card(0); // mList is empty
-        assertTrue(v.getBackground() instanceof LiveGlassDrawable);
-        View media = adapter.getView(1, null, stack);
-        adapter.mediaViews.add(media);
-        hooks.cardBound(adapter, media, 1);
-        assertTrue(media.getBackground() instanceof GradientDrawable);
-        com.android.systemui.statusbar.phone.ongoingactivity.OngoingActivityDataHelper.reset();
+    @Test public void withoutANativeBlurBehindTheFillTakesItsOwnRegion() {
+        adapter.mList.add(new OngoingActivityData("com.samsung.android.health", false));
+        CardItemView root = (CardItemView) adapter.getView(0, null, stack);
+        stack.addView(root); // no Samsung blur frame
+        hooks.cardBound(adapter, root, 0);
+        LiveGlassDrawable g = (LiveGlassDrawable) root.fill().getBackground();
+        assertFalse(g.regionless());
+        assertTrue(g.showsGlass());
+        assertEquals(1, env.regions.size());
+        // Samsung adds its blur afterwards (setBlurBG on an ancestor): ours is dropped, no double blur.
+        FrameLayout blur = new FrameLayout(stack.getContext());
+        stack.removeView(root);
+        blur.addView(root);
+        stack.addView(blur);
+        stack.setBlurBG(blur, 0);
+        hooks.cardWriter(blur, false);
+        assertTrue(g.regionless());
+        assertNull(g.blur());
+    }
+
+    @Test public void batterySaverKeepsTheOpaqueNativeFill() {
+        adapter.mList.add(new OngoingActivityData("com.samsung.android.health", false));
+        env.blurEnabled = false;
+        CardItemView root = card(0);
+        LiveGlassDrawable g = (LiveGlassDrawable) root.fill().getBackground();
+        assertFalse("native fill drawn opaque", g.showsGlass());
+        env.blurEnabled = true;
+        glass.syncAll();
+        assertTrue(g.showsGlass());
     }
 
     @Test public void mediaDataFlagAloneExcludes() {
         adapter.mList.add(new OngoingActivityData("com.example.player", true));
-        View v = card(0);
-        assertTrue(v.getBackground() instanceof GradientDrawable);
+        CardItemView root = card(0);
+        assertTrue(root.fill().getBackground() instanceof GradientDrawable);
     }
 
     @Test public void unknownNativeVerdictKeepsEverythingNative() {
         hooks.setIsMediaView(null);
         adapter.mList.add(new OngoingActivityData("com.samsung.android.health", false));
-        View v = card(0);
-        assertTrue(v.getBackground() instanceof GradientDrawable);
+        CardItemView root = card(0);
+        assertTrue(root.fill().getBackground() instanceof GradientDrawable);
     }
 
     @Test public void convertViewReusedForMediaIsRestored() {
         adapter.mList.add(new OngoingActivityData("com.samsung.android.health", false));
         adapter.mList.add(new OngoingActivityData("com.spotify.music", true));
-        View v = card(0);
-        assertTrue(v.getBackground() instanceof LiveGlassDrawable);
-        View again = adapter.getView(1, v, stack);
+        CardItemView root = card(0);
+        assertTrue(root.fill().getBackground() instanceof LiveGlassDrawable);
+        View again = adapter.getView(1, root, stack);
         hooks.cardBound(adapter, again, 1);
-        assertTrue(again.getBackground() instanceof GradientDrawable);
-        assertFalse(glass.tracked(again));
+        assertTrue(root.fill().getBackground() instanceof GradientDrawable);
+        assertFalse(glass.tracked(root.fill()));
+    }
+
+    @Test public void helperIsTheFallbackDataSourceAndNativeVerdictStillWins() {
+        OngoingActivityDataHelper.add(new OngoingActivityData("com.samsung.android.health", false));
+        OngoingActivityDataHelper.add(new OngoingActivityData("com.samsung.android.health", false));
+        hooks.setHelper(OngoingDataSource.of(OngoingActivityDataHelper.class));
+        CardItemView root = card(0); // mList is empty
+        assertTrue(root.fill().getBackground() instanceof LiveGlassDrawable);
+        CardItemView media = (CardItemView) adapter.getView(1, null, stack);
+        adapter.mediaViews.add(media);
+        hooks.cardBound(adapter, media, 1);
+        assertTrue(media.fill().getBackground() instanceof GradientDrawable);
     }
 
     @Test public void writerOnAnUnclassifiedViewDoesNothing() {
         View stray = new FrameLayout(stack.getContext());
         stack.changeCardBg(stray, 0xff123456);
-        hooks.cardWriter(stray);
+        hooks.cardWriter(stray, true);
         assertTrue(stray.getBackground() instanceof GradientDrawable);
         assertFalse(glass.tracked(stray));
+    }
+
+    @Test public void turningTheSurfaceOffRestoresTheExactFill() {
+        adapter.mList.add(new OngoingActivityData("com.samsung.android.health", false));
+        CardItemView root = card(0);
+        Drawable nativeFill = ((LiveGlassDrawable) root.fill().getBackground()).nativeDrawable();
+        env.on.remove(LiveSurface.CARD);
+        glass.refresh(LiveSurface.CARD);
+        assertSame(nativeFill, root.fill().getBackground());
+        assertEquals("translucency was draw-only", 255, nativeFill.getAlpha());
     }
 }

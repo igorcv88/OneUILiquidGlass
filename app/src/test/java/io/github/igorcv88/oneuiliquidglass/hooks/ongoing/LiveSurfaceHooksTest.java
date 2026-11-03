@@ -138,8 +138,18 @@ public class LiveSurfaceHooksTest {
         CardStackView stack = new CardStackView(activity);
         View ok = (View) site.call(adapter, "getView", 0, null, stack);
         View media = (View) site.call(adapter, "getView", 1, null, stack);
-        assertTrue(ok.getBackground() instanceof LiveGlassDrawable);
-        assertTrue(media.getBackground() instanceof GradientDrawable);
+        // DZIF: the root has no background; its fill carries the card colour.
+        assertNull(ok.getBackground());
+        assertTrue(((com.android.systemui.statusbar.phone.ongoingactivity.CardStackview.CardItemView) ok).fill().getBackground() instanceof LiveGlassDrawable);
+        assertTrue(((com.android.systemui.statusbar.phone.ongoingactivity.CardStackview.CardItemView) media).fill().getBackground() instanceof GradientDrawable);
+    }
+
+    /** DZIF reports no cross-window blur; the glass follows the system only on Battery Saver or the developer switch. */
+    @Test public void blurPolicyIgnoresCrossWindowFlagAndHonoursSaver() {
+        assertTrue(LiveSurfaceHooks.allowed(false, null));
+        assertTrue(LiveSurfaceHooks.allowed(false, "0"));
+        assertFalse(LiveSurfaceHooks.allowed(true, null));
+        assertFalse(LiveSurfaceHooks.allowed(false, "1"));
     }
 
     @Test public void defaultsKeepEveryNewSurfaceOff() {

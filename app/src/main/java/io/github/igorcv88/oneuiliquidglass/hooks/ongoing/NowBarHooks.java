@@ -3,6 +3,7 @@ package io.github.igorcv88.oneuiliquidglass.hooks.ongoing;
 import android.content.ComponentName;
 import android.content.res.ColorStateList;
 import android.view.View;
+import android.view.ViewGroup;
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Method;
 import java.util.Collections;
@@ -26,12 +27,15 @@ import io.github.igorcv88.oneuiliquidglass.diagnostics.Probe;
  * contrast writer, semantically untouched), the stack's refreshAllViews (q) and
  * setExpandedCardState.</p>
  *
- * <p>Glass host: the card container when it is a plain view whose background Samsung writes. A
- * CardView-like container cannot take a foreign background (its own setCardBackgroundColor casts
- * it); there the plugin's blur container carries the glass, only if it covers exactly the same
- * frame, and the CardView colour/elevation are made transparent through its own public setters
- * while the glass is drawn and restored as soon as it is not. The gradient layer is hidden
- * through Samsung's own setGradientBackgroundVisible while the glass is drawn.</p>
+ * <p>Glass host: the card container when it is a plain view whose background Samsung writes. On
+ * DZIF the container is an androidx CardView and getBlurContainer() returns that same CardView
+ * (field {@code a.J}) or null, so there is no separate layer to use, and a CardView's background
+ * cannot be replaced (its own setCardBackgroundColor casts it). The glass is drawn on a
+ * {@link GlassLayer} added inside the CardView, over its whole frame and behind Samsung's content,
+ * only for an eligible card with the surface on; the CardView colour/elevation are made
+ * transparent through its own public setters while the glass is drawn and restored as soon as it
+ * is not; the gradient layer is hidden through Samsung's own setGradientBackgroundVisible
+ * meanwhile. Releasing removes the layer, leaving Samsung's hierarchy as it was.</p>
  */
 final class NowBarHooks {
     static final String PLUGIN_INSTANCE = "com.android.systemui.shared.plugins.PluginInstance";
@@ -107,6 +111,10 @@ final class NowBarHooks {
         Float nativeElevation;
         boolean gradientHidden;
         Abi abi;
+        /** The glass layer added inside the CardView container (DZIF), or none. */
+        WeakReference<GlassLayer> layer = new WeakReference<>(null);
+        /** Last native reason logged for this card: the same state is never logged twice. */
+        String lastNative;
     }
 
     private final LiveGlass glass;
@@ -115,8 +123,6 @@ final class NowBarHooks {
     private final WeakHashMap<View, Card> cards = new WeakHashMap<>();
     /** Last visibility each gradient view was asked for (only those inside a tracked card matter). */
     private final WeakHashMap<View, Boolean> gradientRequested = new WeakHashMap<>();
-    /** One-shot layout checks waiting for a CardView card's first layout. */
-    private final WeakHashMap<View, Boolean> pendingLayout = new WeakHashMap<>();
     /** Installs the plugin hooks of a verified ABI (production: through the HookSite). */
     interface Installer { void install(Abi abi); }
     private Installer installer;
@@ -171,14 +177,13 @@ final class NowBarHooks {
         View host = container;
         boolean emptyNative = false;
         if (NativeShape.cardLike(container)) {
-            View blurC = view(abi.blurContainer, card);
-            if (blurC == null || blurC == container || NativeShape.cardLike(blurC)) { release(card, c, "cardviewWithoutLayer"); return; }
-            if (container.getWidth() == 0 || blurC.getWidth() == 0) {
-                // Sizes unknown before the first layout: decided in the pre-draw that follows it.
-                if (verdict.ok()) awaitLayout(abi, card);
-                if (!glass.tracked(blurC)) return;
-            } else if (!sameFrame(blurC, container, card)) { release(card, c, "frameMismatch"); return; }
-            host = blurC;
+            // DZIF: the container and the "blur container" are the same CardView, whose own
+            // background must stay its own drawable class. The glass goes on a layer inside it,
+            // created only for an eligible card with the surface on, so nothing is added otherwise.
+            if (!verdict.ok()) { release(card, c, "verdict=" + verdict); return; }
+            if (!glass.allows(LiveSurface.NOWBAR)) { release(card, c, "gate"); return; }
+            if (!(container instanceof ViewGroup)) { release(card, c, "containerNotGroup"); return; }
+            host = layer(c, (ViewGroup) container);
             emptyNative = true;
         }
         View previous = c.host.get();
@@ -193,6 +198,7 @@ final class NowBarHooks {
         options.onShown = (v, shown) -> { View k = weakCard.get(); if (k != null) companions(k, fc, shown); };
         options.shapeSource = emptyNative ? container : null;
         glass.offer(host, LiveSurface.NOWBAR, it, verdict, i -> { View k = weakCard.get(); return k != null && LiveEligibility.nowBar(k, i).ok(); }, options);
+        c.lastNative = null;
         if (!glass.applied(host)) companions(card, c, false);
         else if (glass.glassOf(host) != null && glass.glassOf(host).showsGlass()) companions(card, c, true);
     }
@@ -248,12 +254,18 @@ final class NowBarHooks {
     private void cardTransparent(View container, Card c, boolean on) {
         try {
             if (on) {
+                // Written only when Samsung put a value back: the Now Bar rebinds dozens of times per
+                // second, and a setter per call would invalidate the CardView on every one.
                 Object color = NativeShape.call(container, "getCardBackgroundColor");
-                if (color instanceof ColorStateList && ((ColorStateList) color).getDefaultColor() != 0) c.nativeCardColor = (ColorStateList) color;
+                if (color instanceof ColorStateList && ((ColorStateList) color).getDefaultColor() != 0) {
+                    c.nativeCardColor = (ColorStateList) color;
+                    container.getClass().getMethod("setCardBackgroundColor", ColorStateList.class).invoke(container, ColorStateList.valueOf(0));
+                }
                 Object elevation = NativeShape.call(container, "getCardElevation");
-                if (elevation instanceof Float && (Float) elevation != 0f) c.nativeElevation = (Float) elevation;
-                container.getClass().getMethod("setCardBackgroundColor", ColorStateList.class).invoke(container, ColorStateList.valueOf(0));
-                if (c.nativeElevation != null) container.getClass().getMethod("setCardElevation", float.class).invoke(container, 0f);
+                if (elevation instanceof Float && (Float) elevation != 0f) {
+                    c.nativeElevation = (Float) elevation;
+                    container.getClass().getMethod("setCardElevation", float.class).invoke(container, 0f);
+                }
             } else {
                 if (c.nativeCardColor != null) container.getClass().getMethod("setCardBackgroundColor", ColorStateList.class).invoke(container, c.nativeCardColor);
                 if (c.nativeElevation != null) container.getClass().getMethod("setCardElevation", float.class).invoke(container, c.nativeElevation);
@@ -268,42 +280,29 @@ final class NowBarHooks {
         if (host != null) glass.forget(host, reason);
         companions(card, c, false);
         c.host = new WeakReference<>(null);
-        Probe.log("NOWBAR_NATIVE", "reason=" + reason);
+        GlassLayer layer = c.layer.get();
+        if (layer != null && layer.getParent() instanceof ViewGroup) ((ViewGroup) layer.getParent()).removeView(layer);
+        c.layer = new WeakReference<>(null);
+        if (!reason.equals(c.lastNative)) { c.lastNative = reason; Probe.log("NOWBAR_NATIVE", "reason=" + reason); }
     }
 
-    private void awaitLayout(Abi abi, View card) {
-        if (pendingLayout.containsKey(card)) return;
-        pendingLayout.put(card, Boolean.TRUE);
-        android.view.ViewTreeObserver o = card.getViewTreeObserver();
-        o.addOnPreDrawListener(new android.view.ViewTreeObserver.OnPreDrawListener() {
-            @Override public boolean onPreDraw() {
-                if (card.getWidth() == 0) return true;
-                pendingLayout.remove(card);
-                if (card.getViewTreeObserver().isAlive()) card.getViewTreeObserver().removeOnPreDrawListener(this);
-                cardBound(abi, card, null);
-                return true;
-            }
-        });
-    }
-
-    /** Whether two views cover the same rectangle of {@code root} (within 2 px), translations ignored. */
-    static boolean sameFrame(View a, View b, View root) {
-        int[] pa = offset(a, root), pb = offset(b, root);
-        if (pa == null || pb == null) return false;
-        return Math.abs(pa[0] - pb[0]) <= 2 && Math.abs(pa[1] - pb[1]) <= 2
-                && Math.abs(a.getWidth() - b.getWidth()) <= 2 && Math.abs(a.getHeight() - b.getHeight()) <= 2;
-    }
-    private static int[] offset(View v, View root) {
-        int x = 0, y = 0;
-        Object p = v;
-        for (int i = 0; i < 16 && p instanceof View; i++) {
-            if (p == root) return new int[]{x, y};
-            View q = (View) p;
-            x += q.getLeft(); y += q.getTop();
-            p = q.getParent();
+    /** The card's glass layer inside its CardView, added once and re-added if Samsung dropped it. */
+    private GlassLayer layer(Card c, ViewGroup container) {
+        GlassLayer layer = c.layer.get();
+        if (layer == null) { layer = new GlassLayer(container.getContext()); c.layer = new WeakReference<>(layer); }
+        if (layer.getParent() != container) {
+            if (layer.getParent() instanceof ViewGroup) ((ViewGroup) layer.getParent()).removeView(layer);
+            container.addView(layer, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         }
-        return null;
+        return layer;
     }
+
+    /** Config changed: every known ongoing card is evaluated again (adds or removes its layer). */
+    void refreshAll() {
+        for (Map.Entry<View, Card> e : new java.util.ArrayList<>(cards.entrySet()))
+            if (e.getKey() != null && e.getValue().abi != null) cardBound(e.getValue().abi, e.getKey(), null);
+    }
+
     private static View view(Method getter, Object card) {
         if (getter == null) return null;
         try { Object v = getter.invoke(card); return v instanceof View ? (View) v : null; }

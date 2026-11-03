@@ -41,6 +41,21 @@ public class LiveGlassDrawableTest {
         assertEquals(12f, out[3], 0f);
     }
 
+    @Test public void unchangedRadiiDoNotInvalidateTheDrawable() {
+        LiveGlassDrawable d = new LiveGlassDrawable(new ColorDrawable(0xff123456), NativeShape.uniform(16f),
+                0xff123456, LiveSurface.NOWBAR.spec, 1f);
+        int[] invalidations = {0};
+        d.setCallback(new android.graphics.drawable.Drawable.Callback() {
+            @Override public void invalidateDrawable(android.graphics.drawable.Drawable who) { invalidations[0]++; }
+            @Override public void scheduleDrawable(android.graphics.drawable.Drawable who, Runnable what, long when) { }
+            @Override public void unscheduleDrawable(android.graphics.drawable.Drawable who, Runnable what) { }
+        });
+        for (int i = 0; i < 60; i++) d.setRadii(NativeShape.uniform(16f));
+        assertEquals("the Now Bar rebinds frequently but its shape rarely changes", 0, invalidations[0]);
+        d.setRadii(NativeShape.uniform(24f));
+        assertEquals(1, invalidations[0]);
+    }
+
     /** Padding, minimum and intrinsic size are the native ones: the host measures exactly as before. */
     @Test public void geometryIsDelegatedToTheNativeDrawable() {
         GradientDrawable g = new GradientDrawable();
@@ -123,6 +138,10 @@ public class LiveGlassDrawableTest {
         assertFalse(NativeShape.cardLike(new FrameLayout(a)));
         g.setColor(0xff445566);
         assertEquals(Integer.valueOf(0xff445566), NativeShape.color(g, null));
+        FakeCardView card = new FakeCardView(a);
+        card.setCardBackgroundColor(0xff2266ee);
+        assertEquals("CardView's own colour outranks its old ColorDrawable background",
+                Integer.valueOf(0xff2266ee), NativeShape.color(card.getBackground(), card));
     }
 
     @Test public void rippleAndCardViewBackgroundsAreNeverReplaced() {

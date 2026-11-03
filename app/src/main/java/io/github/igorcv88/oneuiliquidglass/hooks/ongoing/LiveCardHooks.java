@@ -1,17 +1,39 @@
 package io.github.igorcv88.oneuiliquidglass.hooks.ongoing;
 
+import android.graphics.drawable.Drawable;
+import android.graphics.drawable.GradientDrawable;
 import android.view.View;
+import android.view.ViewGroup;
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import java.util.WeakHashMap;
+import java.util.function.Predicate;
 
 /**
- * L2: expanded card of the top live update (OngoingCardAdapter + CardStackView). getView/bindView
- * classify the card root with Samsung's own isMediaView(View) and the data at that position; the
- * stack's writers (changeCardBg rebuilds a GradientDrawable, setBlurBG re-installs a Samsung blur,
- * updateItemBg changes every item's background) are followed on the classified card only. The
- * app's RemoteViews content is never touched: only a view whose background Samsung writes (the
- * root, or a target of changeCardBg/setBlurBG inside it) carries the glass.
+ * L2: expanded card of the top live update (OngoingCardAdapter + CardStackView).
+ *
+ * <p>DZIF's real tree (window OngoingCard, 02/11/2026), all at the same frame:</p>
+ * <pre>
+ * CardStackView
+ *  └ FrameLayout (RippleDrawable)
+ *     └ FrameLayout (BackgroundBlurDrawable)   Samsung's own blur region (setBlurBG)
+ *        └ CardItemView (no background)        root returned by the adapter
+ *           └ FrameLayout (GradientDrawable)   the opaque card fill (changeCardBg)
+ * </pre>
+ * The blur already exists; what hides it is the opaque fill. So the glass here adds <b>no region
+ * of its own</b> while a native blur layer sits behind: the fill is wrapped and drawn at the glass
+ * alpha (RGB intact) with the rim, and Samsung's blur, ripple, RemoteViews and controls are never
+ * touched. Without a native blur layer behind (not seen on DZIF) the fill takes its own region,
+ * as the other hosts do.
+ *
+ * <p>Ownership: getView/bindView classify the root with the data at that position and Samsung's
+ * isMediaView(View). The fill is found structurally (a GradientDrawable host that covers the root,
+ * never a fixed depth) or is the view changeCardBg wrote. Every writer (changeCardBg, setBlurBG,
+ * updateItemBg, initNormalNotificationView) re-evaluates only classified cards it touches, with
+ * the data's flags re-read.</p>
  */
 final class LiveCardHooks {
     static final String ADAPTER = "com.android.systemui.statusbar.phone.ongoingactivity.OngoingCardAdapter";
@@ -23,7 +45,10 @@ final class LiveCardHooks {
         Classification(Object data, LiveEligibility.Verdict verdict) { this.data = new WeakReference<>(data); this.verdict = verdict; }
     }
     private final WeakHashMap<View, Classification> roots = new WeakHashMap<>();
+    /** Fill views changeCardBg wrote, by the root they belong to (found by structure otherwise). */
+    private final WeakHashMap<View, WeakReference<View>> writtenFill = new WeakHashMap<>();
     private final LiveGlass glass;
+    private final LiveGlass.NativeBlur nativeBlur;
     private final DataLocator locator = new DataLocator(LiveEligibility.DATA);
     /** OngoingCardAdapter.isMediaView(View), resolved at install; null: no native verdict, all native. */
     private Method isMediaView;
@@ -31,7 +56,8 @@ final class LiveCardHooks {
     private OngoingDataSource helper;
     void setHelper(OngoingDataSource h) { helper = h; }
 
-    LiveCardHooks(LiveGlass glass) { this.glass = glass; }
+    LiveCardHooks(LiveGlass glass) { this(glass, LiveGlass.SAMSUNG); }
+    LiveCardHooks(LiveGlass glass, LiveGlass.NativeBlur nativeBlur) { this.glass = glass; this.nativeBlur = nativeBlur; }
     void setIsMediaView(Method m) { isMediaView = m; }
 
     /** After getView(position, convert, parent) (result) and bindView(view, position). */
@@ -40,30 +66,116 @@ final class LiveCardHooks {
         Object data = locator.at(adapter, position);
         if (data == null && helper != null) data = helper.at(adapter, position);
         LiveEligibility.Verdict verdict = LiveEligibility.card(data, nativeMedia(adapter, root));
-        roots.put(root, new Classification(data, verdict));
-        if (root.getBackground() != null || glass.tracked(root)) glass.offer(root, LiveSurface.CARD, data, verdict, LiveChipHooks.RECHECK);
-        for (View h : glass.hosts(LiveSurface.CARD))
-            if (h != root && LiveChipHooks.within(h, root)) glass.offer(h, LiveSurface.CARD, data, verdict, LiveChipHooks.RECHECK);
+        Classification c = new Classification(data, verdict);
+        roots.put(root, c);
+        evaluate(root, c);
     }
 
     /** After changeCardBg(View, int), setBlurBG(View, int) and initNormalNotificationView(View). */
-    void cardWriter(View target) {
+    void cardWriter(View target, boolean fillWriter) {
         if (target == null || glass.writing()) return;
-        Classification c = classify(target);
-        if (c == null) { if (glass.tracked(target)) glass.forget(target, "unclassified"); return; }
+        View root = rootOf(target);
+        if (root != null) {
+            // The view changeCardBg rewrote inside a card is that card's fill, whatever its depth.
+            if (fillWriter && target != root && target.getBackground() != null && !blurLayer(target)) writtenFill.put(root, new WeakReference<>(target));
+            evaluate(root, roots.get(root));
+            return;
+        }
+        // A writer on a layer above the cards (setBlurBG on the blur frame): its cards change mode.
+        boolean any = false;
+        for (Map.Entry<View, Classification> e : new ArrayList<>(roots.entrySet())) {
+            View r = e.getKey();
+            if (r != null && LiveChipHooks.within(r, target)) { evaluate(r, e.getValue()); any = true; }
+        }
+        if (!any && glass.tracked(target)) glass.forget(target, "unclassified");
+    }
+    /** Old single-argument form (tests, initNormalNotificationView). */
+    void cardWriter(View target) { cardWriter(target, false); }
+
+    /** After CardStackView.updateItemBg(): every classified card of that stack, nothing else. */
+    void stackUpdated(View stack) {
+        if (stack == null || glass.writing()) return;
+        for (Map.Entry<View, Classification> e : new ArrayList<>(roots.entrySet()))
+            if (e.getKey() != null && LiveChipHooks.within(e.getKey(), stack)) evaluate(e.getKey(), e.getValue());
+    }
+
+    /** Offers the card's fill (and a root that has its own background) with the current verdict. */
+    private void evaluate(View root, Classification c) {
+        if (c == null) return;
         Object data = c.data.get();
         // The native media verdict is the bind's; the data's own flags are read again now (they can
         // flip to media or automation in place before the next bind).
         LiveEligibility.Verdict verdict = data == null ? LiveEligibility.Verdict.NO_DATA
                 : c.verdict.ok() ? LiveEligibility.ongoing(data) : c.verdict;
-        glass.offer(target, LiveSurface.CARD, data, verdict, LiveChipHooks.RECHECK);
+        LiveGlass.Options options = new LiveGlass.Options();
+        options.nativeRegion = nativeBlurBehind;
+        List<View> targets = fills(root);
+        for (View t : targets) glass.offer(t, LiveSurface.CARD, data, verdict, LiveChipHooks.RECHECK, options);
+        // Hosts of this card that are no longer its fill (recycled layout) go back to native.
+        for (View h : glass.hosts(LiveSurface.CARD))
+            if (h != null && !targets.contains(h) && (h == root || LiveChipHooks.within(h, root))) glass.forget(h, "notFill");
     }
 
-    /** After CardStackView.updateItemBg(): every classified card of that stack, nothing else. */
-    void stackUpdated(View stack) {
-        if (stack == null || glass.writing()) return;
-        for (View h : glass.hosts(LiveSurface.CARD)) if (LiveChipHooks.within(h, stack)) glass.rewrite(h);
+    /**
+     * The views drawing this card's fill: the root itself when it has a background of its own, the
+     * view changeCardBg wrote, and the descendants whose GradientDrawable covers the root. Samsung's
+     * blur layers and touch-feedback backgrounds are never candidates.
+     */
+    List<View> fills(View root) {
+        List<View> out = new ArrayList<>();
+        if (fillCandidate(root)) out.add(root);
+        WeakReference<View> w = writtenFill.get(root);
+        View written = w == null ? null : w.get();
+        if (written != null && LiveChipHooks.within(written, root) && fillCandidate(written) && !out.contains(written)) out.add(written);
+        if (out.isEmpty() && root instanceof ViewGroup) collect((ViewGroup) root, root, out, 0);
+        return out;
     }
+    private void collect(ViewGroup g, View root, List<View> out, int level) {
+        if (level > 3) return;
+        for (int i = 0; i < g.getChildCount(); i++) {
+            View v = g.getChildAt(i);
+            if (fillCandidate(v) && gradientFill(v) && covers(v, root)) { out.add(v); continue; }
+            if (v instanceof ViewGroup) collect((ViewGroup) v, root, out, level + 1);
+        }
+    }
+    /** A GradientDrawable fill, also once wrapped by the glass. */
+    private static boolean gradientFill(View v) {
+        Drawable d = v.getBackground();
+        if (d instanceof io.github.igorcv88.oneuiliquidglass.glass.LiveGlassDrawable) d = ((io.github.igorcv88.oneuiliquidglass.glass.LiveGlassDrawable) d).nativeDrawable();
+        return NativeShape.unwrap(d) instanceof GradientDrawable;
+    }
+    private boolean fillCandidate(View v) {
+        Drawable d = v.getBackground();
+        if (d == null || blurLayer(v)) return false;
+        if (d instanceof io.github.igorcv88.oneuiliquidglass.glass.LiveGlassDrawable) return true;
+        return !NativeShape.interactive(d);
+    }
+    /** Same frame as the root once laid out; before layout, match_parent in both directions. */
+    static boolean covers(View v, View root) {
+        if (v.getWidth() > 0 && root.getWidth() > 0)
+            return Math.abs(v.getWidth() - root.getWidth()) <= 2 && Math.abs(v.getHeight() - root.getHeight()) <= 2;
+        ViewGroup.LayoutParams lp = v.getLayoutParams();
+        return lp != null && lp.width == ViewGroup.LayoutParams.MATCH_PARENT && lp.height == ViewGroup.LayoutParams.MATCH_PARENT;
+    }
+
+    /** A view carrying Samsung's blur: a *BlurDrawable* background or a held SemBlurInfo. */
+    boolean blurLayer(View v) {
+        Drawable d = v.getBackground();
+        if (d != null && !(d instanceof io.github.igorcv88.oneuiliquidglass.glass.LiveGlassDrawable)
+                && d.getClass().getName().contains("BlurDrawable")) return true;
+        return nativeBlur.held(v) != null;
+    }
+    /** Whether a native blur layer sits behind the host, between it and the CardStackView. */
+    private final Predicate<View> nativeBlurBehind = host -> {
+        Object p = host.getParent();
+        for (int i = 0; i < 16 && p instanceof View; i++) {
+            View x = (View) p;
+            if (STACK.equals(x.getClass().getName())) return false;
+            if (blurLayer(x)) return true;
+            p = x.getParent();
+        }
+        return false;
+    };
 
     Boolean nativeMedia(Object adapter, View root) {
         if (isMediaView == null || adapter == null) return null;
@@ -73,11 +185,12 @@ final class LiveCardHooks {
         } catch (ReflectiveOperationException | RuntimeException e) { return null; }
     }
 
-    private Classification classify(View target) {
+    /** The classified root a view belongs to: itself or an ancestor below the stack. */
+    private View rootOf(View target) {
         Object p = target;
-        for (int i = 0; i < 8 && p instanceof View; i++) {
-            Classification c = roots.get(p);
-            if (c != null) return c;
+        for (int i = 0; i < 16 && p instanceof View; i++) {
+            if (roots.containsKey(p)) return (View) p;
+            if (STACK.equals(p.getClass().getName())) return null;
             p = ((View) p).getParent();
         }
         return null;
