@@ -258,7 +258,10 @@ public class LiveChipHooksTest {
         assertTrue("requested", g.blur().neutralCurve());
         assertFalse("not applied before a draw sends it", g.blur().curveApplied());
         h.itemView.layout(0, 0, 300, 80);
-        h.itemView.draw(new TestCanvas(300, 80));
+        // TestCanvas models the drawable contract, not Android's RecordingCanvas. Passing it
+        // through View.draw() makes the framework cast the fake canvas to RecordingCanvas.
+        g.setBounds(0, 0, h.itemView.getWidth(), h.itemView.getHeight());
+        g.draw(new TestCanvas(300, 80));
         FakeBlurDrawable region = env.regions.get(0);
         assertEquals(1, region.draws);
         assertArrayEquals("neutral curve through DZIF's setBlurColorCurve/1", new float[]{0, 0, 0, 255, 0, 255}, region.curve, 0f);

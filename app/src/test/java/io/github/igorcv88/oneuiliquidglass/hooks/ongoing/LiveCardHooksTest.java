@@ -59,12 +59,16 @@ public class LiveCardHooksTest {
         hooks.cardBound(adapter, root, position);
         FrameLayout blur = stack.addCard(root);
         stack.setBlurBG(blur, position);
-        root.layout(0, 0, 1340, 288);
-        root.fill().layout(0, 0, 1340, 288);
-        blur.layout(0, 0, 1340, 288);
-        blur.getBackground().setBounds(0, 0, 1340, 288);
+        layoutNativeRegion(blur);
         hooks.cardWriter(blur, false);
         return root;
+    }
+    /** A real frame measures before laying out its MATCH_PARENT descendants. */
+    private static void layoutNativeRegion(FrameLayout frame) {
+        frame.measure(View.MeasureSpec.makeMeasureSpec(1340, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(288, View.MeasureSpec.EXACTLY));
+        frame.layout(0, 0, 1340, 288);
+        frame.getBackground().setBounds(0, 0, 1340, 288);
     }
     private static boolean nativeBlur(Drawable d) { return d instanceof CardStackView.NativeBackgroundBlurDrawable; }
 
@@ -342,6 +346,7 @@ public class LiveCardHooksTest {
         blur.addView(root);
         stack.addView(blur);
         stack.setBlurBG(blur, 0);
+        layoutNativeRegion(blur);
         hooks.cardWriter(blur, false);
         assertTrue(g.regionless());
         assertNull(g.blur());
