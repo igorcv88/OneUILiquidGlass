@@ -14,6 +14,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
 import java.util.function.Predicate;
+import io.github.igorcv88.oneuiliquidglass.diagnostics.LiveRenderProbe;
+import io.github.igorcv88.oneuiliquidglass.diagnostics.Probe;
 
 /**
  * L2: expanded card of the top live update (OngoingCardAdapter + CardStackView).
@@ -67,6 +69,12 @@ final class LiveCardHooks {
         TintedRegion(View v, Drawable d) { layer = new WeakReference<>(v); drawable = new WeakReference<>(d); }
     }
     private final WeakHashMap<View, List<TintedRegion>> tinted = new WeakHashMap<>();
+    private static final class CompanionSignature {
+        boolean shown;
+        int regions = -1, fills = -1;
+    }
+    private final WeakHashMap<View, CompanionSignature> companionTrace = new WeakHashMap<>();
+    private final WeakHashMap<Drawable, LiveRenderProbe> tintTrace = new WeakHashMap<>();
     private final LiveGlass glass;
     private final LiveGlass.NativeBlur nativeBlur;
     private final DataLocator locator = new DataLocator(LiveEligibility.DATA);
@@ -218,6 +226,7 @@ final class LiveCardHooks {
         // Restore companions even after a fill was reparented or recycled.
         if (!shown) {
             restoreCompanions(host);
+            companionState(host, false);
             return;
         }
         List<TintedRegion> prior = tinted.get(host);
@@ -261,6 +270,17 @@ final class LiveCardHooks {
             }
             p = layer.getParent();
         }
+        companionState(host, true);
+    }
+    private void companionState(View host, boolean shown) {
+        int regions = tinted.containsKey(host) ? tinted.get(host).size() : 0;
+        int fills = covered.containsKey(host) ? covered.get(host).size() : 0;
+        CompanionSignature old = companionTrace.computeIfAbsent(host, v -> new CompanionSignature());
+        if (old.shown == shown && old.regions == regions && old.fills == fills) return;
+        old.shown = shown; old.regions = regions; old.fills = fills;
+        Probe.log("LIVE_RENDER_CARD", "shown=" + shown + " tintedRegions=" + regions
+                + " coveredFills=" + fills + " " + LiveRenderProbe.view(host)
+                + " ancestors=" + LiveRenderProbe.ancestors(host));
     }
     private static void remember(WeakHashMap<View, List<WeakReference<View>>> map, View host, View layer) {
         List<WeakReference<View>> list = map.computeIfAbsent(host, k -> new ArrayList<>());
@@ -296,11 +316,28 @@ final class LiveCardHooks {
                 regionColors.put(d, orig);
             }
             int clear = orig & 0x00ffffff;
-            if (now != clear) setRegionColor(layer, d, clear);
+            if (now != clear) {
+                setRegionColor(layer, d, clear);
+                tintState(layer, d, "CLEAR", now, clear);
+            }
         } else {
             Integer orig = regionColors.remove(d);
-            if (orig != null && !orig.equals(now)) setRegionColor(layer, d, orig);
+            if (orig != null && !orig.equals(now)) {
+                setRegionColor(layer, d, orig);
+                tintState(layer, d, "RESTORE", now, orig);
+            }
         }
+    }
+    private void tintState(View layer, Drawable d, String mode, int before, int requested) {
+        Integer after = regionColor(d);
+        String key = mode + "/" + before + "/" + requested + "/" + after;
+        LiveRenderProbe recorder = tintTrace.computeIfAbsent(d, ignored -> new LiveRenderProbe());
+        if (recorder.changed(key))
+            Probe.log("LIVE_RENDER_REGION_TINT", "mode=" + mode + " before=" + Integer.toHexString(before)
+                    + " requested=" + Integer.toHexString(requested)
+                    + " actual=" + (after == null ? "?" : Integer.toHexString(after))
+                    + " verified=" + (after != null && after == requested)
+                    + " " + LiveRenderProbe.view(layer));
     }
     private static final class CoveredFill extends DrawableWrapper {
         CoveredFill(Drawable nativeFill) { super(nativeFill); }

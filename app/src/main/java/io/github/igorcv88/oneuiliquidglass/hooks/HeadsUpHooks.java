@@ -24,6 +24,7 @@ import io.github.igorcv88.oneuiliquidglass.diagnostics.WindowSurvey;
 import io.github.igorcv88.oneuiliquidglass.glass.Backdrop;
 import io.github.igorcv88.oneuiliquidglass.glass.BackdropMotion;
 import io.github.igorcv88.oneuiliquidglass.glass.BackgroundBlurBridge;
+import io.github.igorcv88.oneuiliquidglass.diagnostics.LiveRenderProbe;
 import io.github.igorcv88.oneuiliquidglass.glass.CaptureBackdrop;
 import io.github.igorcv88.oneuiliquidglass.glass.CaptureHub;
 import io.github.igorcv88.oneuiliquidglass.glass.GridBackdrop;
@@ -1260,6 +1261,8 @@ public final class HeadsUpHooks {
     private final class State implements View.OnAttachStateChangeListener, ViewTreeObserver.OnPreDrawListener {
         final WeakReference<View> background;
         final WeakReference<View> row;
+        /** Positive control: exactly which path was drawn by the already approved notification. */
+        final LiveRenderProbe renderControl = new LiveRenderProbe();
         GlassDrawable glass;
         /** The Samsung blur behind glass, when glassKind is SAMSUNG. */
         SemBlurBridge semBridge;
@@ -2626,6 +2629,12 @@ public final class HeadsUpHooks {
                 long started = Perf.start(Perf.DRAW_AFTER);
                 try { composeGlass(p, (Canvas) real); } finally { Perf.end(Perf.DRAW_AFTER, started); }
             }
+            if (!replaced && p.thisObject instanceof View) {
+                View v = (View) p.thisObject;
+                State s = states.get(v);
+                if (s != null && s.renderControl.changed("NATIVE"))
+                    Probe.log("LIVE_RENDER_CONTROL", "mode=NATIVE " + LiveRenderProbe.view(v));
+            }
             // ROW_FRAME describes the hierarchy, not which normal/dimmed sibling is drawn.
             // Report both the replaced and still-native paths, in actual draw order.
             if (Probe.trace && p.thisObject instanceof View) {
@@ -2661,6 +2670,16 @@ public final class HeadsUpHooks {
                     glass.setBounds(bounds);
                     glass.draw(canvas);
                     p.setObjectExtra("oulgRendered", "glass");
+                    if (s != null) {
+                        String path = String.valueOf(s.glassKind) + "/" + canvas.isHardwareAccelerated();
+                        if (s.renderControl.changed(path))
+                            Probe.log("LIVE_RENDER_CONTROL", "mode=GLASS path=" + s.glassKind
+                                    + " hwCanvas=" + canvas.isHardwareAccelerated()
+                                    + " bounds=" + bounds.width() + "x" + bounds.height()
+                                    + " compBridge=" + (s.compBridge != null)
+                                    + " semBridge=" + (s.semBridge != null)
+                                    + " " + LiveRenderProbe.view(v));
+                    }
                 } finally { canvas.restoreToCount(save); }
             } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
                 if (s != null) { s.failed = true; s.release(); }
