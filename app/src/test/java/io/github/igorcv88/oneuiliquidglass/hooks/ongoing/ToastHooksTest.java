@@ -66,6 +66,25 @@ public class ToastHooksTest {
         assertFalse(glass.tracked(root));
     }
 
+    /** Created before the window exists; the region and its neutral curve arrive with the attach. */
+    @Test public void regionArrivesWithTheWindowNotBefore() {
+        View root = hooks.created(toast("Copied"));
+        LiveGlassDrawable g = (LiveGlassDrawable) root.getBackground();
+        assertFalse("no window yet: nothing translucent is drawn", g.showsGlass());
+        assertTrue(env.regions.isEmpty());
+        FrameLayout w = window();
+        w.addView(root);
+        assertTrue(g.showsGlass());
+        assertTrue(g.blur().neutralCurve());
+        assertFalse(g.blur().curveApplied());
+        root.layout(0, 0, 400, 120);
+        root.draw(new android.graphics.Canvas(android.graphics.Bitmap.createBitmap(400, 120, android.graphics.Bitmap.Config.ARGB_8888)));
+        assertArrayEquals(new float[]{0, 0, 0, 255, 0, 255}, env.regions.get(0).curve, 0f);
+        assertTrue(g.blur().curveApplied());
+        w.removeView(root);
+        assertEquals("region released with the window", 0, env.regions.get(0).radius);
+    }
+
     @Test public void fourCopiesInARowEachGetTheirOwnGlass() {
         FrameLayout w = window();
         for (int i = 0; i < 4; i++) {

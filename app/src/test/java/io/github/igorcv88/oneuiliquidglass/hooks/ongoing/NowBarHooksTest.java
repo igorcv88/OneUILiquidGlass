@@ -250,6 +250,28 @@ public class NowBarHooksTest {
         assertEquals(1, env.regions.size());
     }
 
+    /** Only the minimum contract (class, media veto, container, bind writer): no optional AOD member is needed. */
+    @Test public void worksWithoutTheOptionalAodMembers() throws Exception {
+        for (String name : new String[]{"n", "u", "viewMode", "expandedColor", "stackRefresh", "expandedState", "gradientVisible", "gradientView", "blurContainer"}) {
+            java.lang.reflect.Field f = NowBarHooks.Abi.class.getDeclaredField(name);
+            f.setAccessible(true);
+            f.set(abi, null);
+        }
+        assertTrue(abi.usable());
+        NowBarOngoingCardView card = layeredCard();
+        FakeCardView container = (FakeCardView) card.getCardViewContainer();
+        int nativeColor = container.getCardBackgroundColor().getDefaultColor();
+        hooks.cardBound(abi, card, new NowBarItem("com.example.timer", null));
+        LiveGlassDrawable g = (LiveGlassDrawable) layerOf(container).getBackground();
+        assertTrue(g.showsGlass());
+        assertTrue("gradient left alone without its setter", gradient(card).gradientVisible);
+        env.on.remove(LiveSurface.NOWBAR);
+        glass.refresh(LiveSurface.NOWBAR);
+        hooks.refreshAll();
+        assertNull(layerOf(container));
+        assertEquals(nativeColor, container.getCardBackgroundColor().getDefaultColor());
+    }
+
     @Test public void layerCoversTheWholeCardViewFrame() {
         NowBarOngoingCardView card = layeredCard();
         FakeCardView container = (FakeCardView) card.getCardViewContainer();

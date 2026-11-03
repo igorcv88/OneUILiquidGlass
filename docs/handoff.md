@@ -155,6 +155,12 @@ as quatro superfícies ficaram sem vidro no aparelho. Causas e correções em
 capability de blur errada (L1/T1), preenchimento real do cartão não envolvido
 (L2), CardView recusado (L3). 501 testes locais passaram; ☐ sem prova física.
 
+**Atualização 03/11/2026 (tarde) — pós-teste do PR #117 (🔧):** curva de cor
+neutra nas regiões novas, fill do L2 estável (fim do `notFill` em loop) com a
+cor sobreposta da região Samsung transparente enquanto há vidro, e dado do
+ViewHolder priorizado no L1. 509 testes locais, `lintDebug` e `assembleDebug`
+passaram; ☐ sem prova física. Ver `live-toast-dzif.md`.
+
 ### Critérios de saída das próximas correções
 
 1. Cada superfície não-mídia mantém o vidro e o texto legível desde a criação
