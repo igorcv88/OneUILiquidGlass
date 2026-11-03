@@ -63,12 +63,16 @@ public class LiveCardHooksTest {
         hooks.cardWriter(blur, false);
         return root;
     }
-    /** A real frame measures before laying out its MATCH_PARENT descendants. */
+    /** Simulates a measured and visible native region, including visibility aggregation. */
     private static void layoutNativeRegion(FrameLayout frame) {
         frame.measure(View.MeasureSpec.makeMeasureSpec(1340, View.MeasureSpec.EXACTLY),
                 View.MeasureSpec.makeMeasureSpec(288, View.MeasureSpec.EXACTLY));
         frame.layout(0, 0, 1340, 288);
         frame.getBackground().setBounds(0, 0, 1340, 288);
+        // The runner reported isVisible=false even with every ancestor VISIBLE. This fixture
+        // simulates Samsung's active region, so establish its drawable visibility explicitly.
+        // Do not override isVisible(): the hidden-region regression must still exercise it.
+        frame.getBackground().setVisible(true, false);
     }
     private static boolean nativeBlur(Drawable d) { return d instanceof CardStackView.NativeBackgroundBlurDrawable; }
 
@@ -161,6 +165,29 @@ public class LiveCardHooksTest {
         LiveGlassDrawable g = (LiveGlassDrawable) root.fill().getBackground();
         assertFalse(g.regionless());
         assertNotNull(g.blur());
+    }
+
+    @Test public void hiddenNativeRegionUsesOwnBlurUntilVisibleAgain() {
+        adapter.mList.add(new OngoingActivityData("com.samsung.android.health", false));
+        CardItemView root = card(0);
+        View fill = root.fill();
+        Drawable nativeRegion = ((View) root.getParent()).getBackground();
+        LiveGlassDrawable g = (LiveGlassDrawable) fill.getBackground();
+        assertTrue(nativeRegionState(root), g.regionless());
+        nativeRegion.setVisible(false, false);
+        fill.getViewTreeObserver().dispatchOnPreDraw();
+        assertFalse("a hidden drawable cannot provide native blur", g.regionless());
+        assertNotNull(g.blur());
+        assertFalse("the controller must not force Samsung's region visible", nativeRegion.isVisible());
+        FakeBlurDrawable own = env.regions.get(env.regions.size() - 1);
+        g.setBounds(0, 0, fill.getWidth(), fill.getHeight());
+        g.draw(new TestCanvas(1340, 288));
+        assertEquals(LiveSurface.CARD.spec.blurPx, own.radius);
+        nativeRegion.setVisible(true, false);
+        fill.getViewTreeObserver().dispatchOnPreDraw();
+        assertTrue(nativeRegionState(root), g.regionless());
+        assertNull(g.blur());
+        assertEquals("the replacement region is released", 0, own.radius);
     }
 
     @Test public void detachAndFailedOwnRegionNeverLeaveARegionlessPane() {
