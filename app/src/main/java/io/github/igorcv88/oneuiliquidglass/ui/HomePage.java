@@ -28,6 +28,14 @@ public final class HomePage implements Page {
     private final Map<Controls.Surface, Toggle> toggles = new EnumMap<>(Controls.Surface.class);
     private final Toggle quickSettingsToggle;
     private final LinearLayout quickSettingsRow;
+    /** Live update at the top, Now Bar and toasts: opt-ins of their own (hooks/ongoing). */
+    private static final String[][] LIVE_SURFACES = {
+            {ProductFlags.LIVE_ACTIVITY, "Atividade ao vivo", "Pílula e cartão no topo, sem mídia"},
+            {ProductFlags.NOW_BAR, "Now Bar", "Cartão na tela de bloqueio, sem mídia"},
+            {ProductFlags.TOAST, "Avisos rápidos", "Toasts do sistema, como “Copiado”"},
+    };
+    private final Map<String, Toggle> liveToggles = new LinkedHashMap<>();
+    private final Map<String, LinearLayout> liveRows = new LinkedHashMap<>();
     private final TextView testResult;
     private final Toggle traceToggle;
     private final LinearLayout traceRow;
@@ -119,6 +127,21 @@ public final class HomePage implements Page {
         quickSettingsRow = Ui.listRow(a, t, Icon.SHADE, "Central de controle", "Vidro nos controles e sliders", quickSettingsToggle);
         quickSettingsRow.setOnClickListener(v -> quickSettingsToggle.toggleByUser());
         surfaces.addView(quickSettingsRow);
+        for (String[] live : LIVE_SURFACES) {
+            String key = live[0], label = live[1];
+            Toggle tg = new Toggle(a, t);
+            tg.setContentDescription("Vidro em " + label);
+            tg.listener((x, on) -> {
+                host.model().flag(key, on);
+                host.feedback(label + (on ? ": vidro ligado" : ": vidro desligado"));
+            });
+            LinearLayout r = Ui.listRow(a, t, Icon.SHADE, label, live[2], tg);
+            r.setOnClickListener(v -> tg.toggleByUser());
+            surfaces.addView(Ui.divider(a, t, t.dp(72)));
+            surfaces.addView(r);
+            liveToggles.put(key, tg);
+            liveRows.put(key, r);
+        }
         content.addView(surfaces, Ui.match());
 
         content.addView(Ui.section(a, t, "Teste"));
@@ -222,6 +245,13 @@ public final class HomePage implements Page {
         Ui.enable(quickSettingsToggle, st.enabled);
         Ui.setSubtitle(quickSettingsRow, !st.enabled ? "Vidro desligado" : quickOn
                 ? "Ativo · teste os tiles no aparelho" : "Experimental · desativado por padrão");
+        for (Map.Entry<String, Toggle> e : liveToggles.entrySet()) {
+            boolean on = "1".equals(st.shown(e.getKey()));
+            e.getValue().set(on, true);
+            Ui.enable(e.getValue(), st.enabled);
+            Ui.setSubtitle(liveRows.get(e.getKey()), !st.enabled ? "Vidro desligado" : on
+                    ? "Ativo · sem mídia · confirme no aparelho" : "Experimental · desativado por padrão");
+        }
         boolean traceRequested = "1".equals(st.shown("trace"));
         traceToggle.set(traceRequested, true);
         AppModel.Sync traceSync = m.sync();

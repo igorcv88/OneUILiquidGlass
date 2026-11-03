@@ -128,7 +128,7 @@ public final class ControlState {
                 m.put(k, shown(k));
             }
         }
-        m.put(ProductFlags.QUICK_SETTINGS, shown(ProductFlags.QUICK_SETTINGS));
+        for (String k : ProductFlags.OPT_IN) m.put(k, shown(k));
         m.put("enabled", enabled ? "1" : "0");
         return m;
     }

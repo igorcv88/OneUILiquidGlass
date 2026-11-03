@@ -60,6 +60,8 @@ public final class HeadsUpHooks {
     private boolean drawHook;
     private boolean shadeHook;
     private QuickSettingsHooks quickSettings;
+    /** Non-media live updates and toasts (laudo 02/11/2026); independent of notification state. */
+    private io.github.igorcv88.oneuiliquidglass.hooks.ongoing.LiveSurfaceHooks ongoing;
     private boolean blurEnvironmentReported;
     private final boolean samsungBlur = SemBlurBridge.available();
     private final GlassSpec spec = new GlassSpec();
@@ -135,6 +137,7 @@ public final class HeadsUpHooks {
         io.github.igorcv88.oneuiliquidglass.config.ConfigClient.start(context, value -> {
             enabled = value;
             if (quickSettings != null) quickSettings.refresh();
+            if (ongoing != null) ongoing.refresh();
             if (!shadeConfigEnabled()) { panelDim(false); restoreHeader(); orphanTone(); }
             else if (shadeGrid != null) headerTone(shadeGrid);
             for (State state : new ArrayList<>(states.values())) {
@@ -229,6 +232,11 @@ public final class HeadsUpHooks {
         // QS is an independent opt-in surface: no notification-state or drawing hooks are shared.
         quickSettings = new QuickSettingsHooks(loader, () -> enabled, this::resolveConfig);
         quickSettings.install();
+        // Live update chip/card, Now Bar (AOD plugin) and toasts: own opt-ins, own failure budget.
+        try {
+            ongoing = new io.github.igorcv88.oneuiliquidglass.hooks.ongoing.LiveSurfaceHooks(loader, () -> enabled, this::resolveConfig);
+            ongoing.install();
+        } catch (RuntimeException | LinkageError e) { ongoing = null; Probe.error("LIVE_INSTALL_FAILED", e); }
         // ConfigClient dispatches immediately, but Tuning publishes its new material on a
         // worker. Invalidating notifications at CONFIG_DISPATCH can therefore repaint with
         // the previous shadelightglass value and leave a stable, visible card unchanged until

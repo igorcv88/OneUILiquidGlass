@@ -110,6 +110,37 @@ public final class SemBlurBridge implements Backdrop {
         } catch (ReflectiveOperationException | RuntimeException | LinkageError e) { Probe.error("SEM_BLUR_CLEAR_FAILED", e); }
         finally { applying = false; }
     }
+    /**
+     * The SemBlurInfo a view holds now (Samsung's own blur on a live update card), or null if none or
+     * the firmware has no such field. Read-only.
+     */
+    public static Object heldInfo(View view) {
+        Class<?> type = infoType();
+        if (type == null) return null;
+        try {
+            java.lang.reflect.Field f = infoField(type);
+            return f == null ? null : f.get(view);
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError e) { return null; }
+    }
+    private static volatile Class<?> infoType;
+    private static volatile boolean infoTypeResolved;
+    /** SemBlurInfo, resolved once per process (null where the firmware has none). */
+    private static Class<?> infoType() {
+        if (!infoTypeResolved) {
+            try { infoType = Class.forName(INFO); } catch (ReflectiveOperationException | LinkageError e) { infoType = null; }
+            infoTypeResolved = true;
+        }
+        return infoType;
+    }
+    /** Re-installs a SemBlurInfo read by {@link #heldInfo} (restoring a native blur). */
+    public static void setInfo(View view, Object info) {
+        try {
+            Class<?> type = Class.forName(INFO);
+            applying = true;
+            View.class.getMethod("semSetBlurInfo", type).invoke(view, info);
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError e) { Probe.error("SEM_BLUR_SET_FAILED", e); }
+        finally { applying = false; }
+    }
     /** Main thread only: true while this bridge itself calls semSetBlurInfo (see the blur guard). */
     private static boolean applying;
     public static boolean applying() { return applying; }

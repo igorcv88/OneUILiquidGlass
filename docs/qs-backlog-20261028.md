@@ -32,10 +32,21 @@ notificações personalizadas, live updates ou traduções.
   update; o código compartilha rotas, não há prova de causa única.
 - ☐ Validar notificações customizadas `RemoteViews`, incluindo Drogasil,
   com texto, fundo e camadas próprios.
-- ☐ Corrigir/validar toast que recebe vidro na criação e é recriado opaco
-  pela Samsung.
-- ☐ Live updates não-mídia imóveis/expandidos e na lockscreen: preservar o
-  vidro após o gesto/rebind; mídia na lockscreen só depois dessa validação.
+- 🔧 Toast (T1, laudo 02/11): vidro aplicado na saída de
+  `ToastFactory.createToast`, antes de `ToastPresenter.show`; causa comprovada é
+  a falta de composição no toast nativo (fade de ~100 ms é nativo). Sem
+  workaround de “rebuild”, não comprovado. Opt-in `surface.toast.enabled`,
+  desligado por padrão. ☐ validar no Galaxy (cópia 4×, outro app, cancelamento).
+- 🔧 Live updates não-mídia: pílula (L1, `setChipBg`) e cartão expandido (L2,
+  `changeCardBg`/`setBlurBG`/`updateItemBg`) com vidro desde o bind e após cada
+  writer; Now Bar da lockscreen (L3, plugin AODService, uma instalação por
+  classloader) só em `NowBarOngoingCardView`. Mídia excluída por
+  `mIsMediaOngoingData`, `isMediaView`, classe exata e `getFaceWidgetMediaData`.
+  Opt-ins `surface.liveactivity.enabled` e `surface.nowbar.enabled`. Detalhes,
+  limitações e roteiro físico: [live-toast-dzif.md](live-toast-dzif.md).
+  ☐ validar no Galaxy, inclusive mídia simultânea como testemunha de regressão,
+  Now Bar com container CardView (`NOWBAR_NATIVE reason=…`) e AOD/doze.
+- ☐ Mídia nas live updates/lockscreen: continua fora de escopo.
 
 ### Central de Controle / Quick Settings
 
