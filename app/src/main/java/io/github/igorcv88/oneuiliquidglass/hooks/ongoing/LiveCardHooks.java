@@ -47,6 +47,15 @@ final class LiveCardHooks {
     private final WeakHashMap<View, Classification> roots = new WeakHashMap<>();
     /** Fill views changeCardBg wrote, by the root they belong to (found by structure otherwise). */
     private final WeakHashMap<View, WeakReference<View>> writtenFill = new WeakHashMap<>();
+    /**
+     * The fill chosen for each root, kept while it stays a valid fill of that root. Choosing it
+     * again on every writer from live sizes made it flap during expand/collapse (sizes differ for a
+     * few frames), restoring and re-wrapping it in pairs ~20 ms apart (LIVE_GLASS_RESTORE
+     * reason=notFill dozens of times, DZIF log 03/11).
+     */
+    private final WeakHashMap<View, WeakReference<View>> fillOf = new WeakHashMap<>();
+    /** Colour of each native blur region before the glass cleared it, for an exact restore. */
+    private final WeakHashMap<Drawable, Integer> regionColors = new WeakHashMap<>();
     private final LiveGlass glass;
     private final LiveGlass.NativeBlur nativeBlur;
     private final DataLocator locator = new DataLocator(LiveEligibility.DATA);
@@ -109,8 +118,14 @@ final class LiveCardHooks {
                 : c.verdict.ok() ? LiveEligibility.ongoing(data) : c.verdict;
         LiveGlass.Options options = new LiveGlass.Options();
         options.nativeRegion = nativeBlurBehind;
+        options.onShown = this::regionTint;
         List<View> targets = fills(root);
-        for (View t : targets) glass.offer(t, LiveSurface.CARD, data, verdict, LiveChipHooks.RECHECK, options);
+        for (View t : targets) {
+            glass.offer(t, LiveSurface.CARD, data, verdict, LiveChipHooks.RECHECK, options);
+            // Samsung's writer may have put its region colour back: clear it again while glass shows.
+            io.github.igorcv88.oneuiliquidglass.glass.LiveGlassDrawable g = glass.glassOf(t);
+            if (g != null && g.showsGlass()) regionTint(t, true);
+        }
         // Hosts of this card that are no longer its fill (recycled layout) go back to native.
         for (View h : glass.hosts(LiveSurface.CARD))
             if (h != null && !targets.contains(h) && (h == root || LiveChipHooks.within(h, root))) glass.forget(h, "notFill");
@@ -124,11 +139,30 @@ final class LiveCardHooks {
     List<View> fills(View root) {
         List<View> out = new ArrayList<>();
         if (fillCandidate(root)) out.add(root);
+        // Samsung's own writer names the fill; otherwise the fill already chosen stays while it is
+        // valid; only then is the tree searched. The choice is stable across writers and animations.
+        View chosen = null;
         WeakReference<View> w = writtenFill.get(root);
         View written = w == null ? null : w.get();
-        if (written != null && LiveChipHooks.within(written, root) && fillCandidate(written) && !out.contains(written)) out.add(written);
-        if (out.isEmpty() && root instanceof ViewGroup) collect((ViewGroup) root, root, out, 0);
+        if (validFill(written, root)) chosen = written;
+        if (chosen == null) {
+            WeakReference<View> k = fillOf.get(root);
+            View kept = k == null ? null : k.get();
+            if (validFill(kept, root)) chosen = kept;
+        }
+        if (chosen == null && root instanceof ViewGroup) {
+            List<View> found = new ArrayList<>();
+            collect((ViewGroup) root, root, found, 0);
+            if (!found.isEmpty()) chosen = found.get(0);
+        }
+        if (chosen != null) {
+            fillOf.put(root, new WeakReference<>(chosen));
+            if (!out.contains(chosen)) out.add(chosen);
+        }
         return out;
+    }
+    private boolean validFill(View v, View root) {
+        return v != null && v != root && LiveChipHooks.within(v, root) && fillCandidate(v) && gradientFill(v);
     }
     private void collect(ViewGroup g, View root, List<View> out, int level) {
         if (level > 3) return;
@@ -150,12 +184,64 @@ final class LiveCardHooks {
         if (d instanceof io.github.igorcv88.oneuiliquidglass.glass.LiveGlassDrawable) return true;
         return !NativeShape.interactive(d);
     }
-    /** Same frame as the root once laid out; before layout, match_parent in both directions. */
+    /**
+     * Covers the root: match_parent in both directions (stable through animations), otherwise the
+     * same laid-out frame. Live sizes are only the fallback: they differ for a few frames while the
+     * card expands or collapses.
+     */
     static boolean covers(View v, View root) {
-        if (v.getWidth() > 0 && root.getWidth() > 0)
-            return Math.abs(v.getWidth() - root.getWidth()) <= 2 && Math.abs(v.getHeight() - root.getHeight()) <= 2;
         ViewGroup.LayoutParams lp = v.getLayoutParams();
-        return lp != null && lp.width == ViewGroup.LayoutParams.MATCH_PARENT && lp.height == ViewGroup.LayoutParams.MATCH_PARENT;
+        if (lp != null && lp.width == ViewGroup.LayoutParams.MATCH_PARENT && lp.height == ViewGroup.LayoutParams.MATCH_PARENT) return true;
+        return v.getWidth() > 0 && root.getWidth() > 0
+                && Math.abs(v.getWidth() - root.getWidth()) <= 2 && Math.abs(v.getHeight() - root.getHeight()) <= 2;
+    }
+
+    /** The view carrying the native blur behind a host, up to the CardStackView. */
+    private View blurAncestor(View host) {
+        Object p = host.getParent();
+        for (int i = 0; i < 16 && p instanceof View; i++) {
+            View x = (View) p;
+            if (STACK.equals(x.getClass().getName())) return null;
+            if (blurLayer(x)) return x;
+            p = x.getParent();
+        }
+        return null;
+    }
+    /**
+     * While the glass is drawn over Samsung's blur, that region's own colour overlay (dark and
+     * almost opaque on DZIF: the expanded card stayed navy over a colourful wallpaper) is made
+     * transparent; the blur itself, its radius, shape and alpha are untouched. Its colour comes
+     * back exactly when the glass is not drawn. A region whose colour cannot be read is left alone.
+     */
+    void regionTint(View host, boolean shown) {
+        View layer = host == null ? null : blurAncestor(host);
+        Drawable d = layer == null ? null : layer.getBackground();
+        if (d == null || !d.getClass().getName().contains("BlurDrawable")) return;
+        Integer now = regionColor(d);
+        if (now == null) return;
+        if (shown) {
+            // A visible colour is Samsung's latest native one (first time, or rewritten since).
+            if ((now >>> 24) != 0) regionColors.put(d, now);
+            Integer orig = regionColors.get(d);
+            if (orig == null) return;
+            int clear = orig & 0x00ffffff;
+            if (now != clear) setRegionColor(d, clear);
+        } else {
+            Integer orig = regionColors.remove(d);
+            if (orig != null && !orig.equals(now)) setRegionColor(d, orig);
+        }
+    }
+    /** BackgroundBlurDrawable keeps its colour in a Paint (AOSP mPaint); getColor() where it exists. */
+    static Integer regionColor(Drawable d) {
+        Object c = NativeShape.call(d, "getColor");
+        if (c instanceof Integer) return (Integer) c;
+        Object paint = io.github.igorcv88.oneuiliquidglass.hooks.Reflect.read(d, "mPaint");
+        if (paint instanceof android.graphics.Paint) return ((android.graphics.Paint) paint).getColor();
+        return null;
+    }
+    private static void setRegionColor(Drawable d, int color) {
+        try { d.getClass().getMethod("setColor", int.class).invoke(d, color); }
+        catch (ReflectiveOperationException | RuntimeException ignored) { }
     }
 
     /** A view carrying Samsung's blur: a *BlurDrawable* background or a held SemBlurInfo. */

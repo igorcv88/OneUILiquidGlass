@@ -69,14 +69,58 @@ final class LiveChipHooks {
             if (top.adapter == adapter && top.holder == holder) { f = top; break; }
         }
         if (f == null) return;
-        LiveEligibility.Verdict verdict = LiveEligibility.ongoing(f.data);
-        // The data must still be the one at the bound position when the bind ends: a list that
-        // changed during the bind gives no trustworthy owner.
-        if (threw || locator.at(adapter, f.position) != f.data) verdict = LiveEligibility.Verdict.NO_DATA;
+        // The data the holder itself keeps, when it keeps one, is the item actually shown: it
+        // wins over the helper index (whose list may hold items the chip adapter does not show,
+        // such as media, shifting the positions).
+        Object held = heldData(holder);
+        Object data = held != null ? held : f.data;
+        LiveEligibility.Verdict verdict = LiveEligibility.ongoing(data);
+        // Without it, the data must still be the one at the bound position when the bind ends: a
+        // list that changed during the bind gives no trustworthy owner.
+        if (threw || (held == null && locator.at(adapter, f.position) != f.data)) verdict = LiveEligibility.Verdict.NO_DATA;
         Set<View> hosts = new LinkedHashSet<>(f.written);
         View item = itemView(holder);
         if (item != null) for (View h : glass.hosts(LiveSurface.CHIP)) if (within(h, item)) hosts.add(h);
-        for (View h : hosts) glass.offer(h, LiveSurface.CHIP, f.data, verdict, RECHECK);
+        for (View h : hosts) glass.offer(h, LiveSurface.CHIP, data, verdict, RECHECK);
+    }
+
+    private static final Object NONE = new Object();
+    private final java.util.Map<Class<?>, Object> holderFields = new java.util.WeakHashMap<>();
+    /**
+     * The OngoingActivityData the holder keeps in its single field of that type (resolved once per
+     * holder class), or its itemView's tag; null when it keeps none or more than one.
+     */
+    Object heldData(Object holder) {
+        if (holder == null) return null;
+        Object member;
+        synchronized (holderFields) {
+            member = holderFields.get(holder.getClass());
+            if (member == null) { member = dataField(holder.getClass()); holderFields.put(holder.getClass(), member); }
+        }
+        if (member instanceof java.lang.reflect.Field) {
+            try {
+                Object v = ((java.lang.reflect.Field) member).get(holder);
+                if (v != null && LiveEligibility.DATA.equals(v.getClass().getName())) return v;
+            } catch (IllegalAccessException | RuntimeException ignored) { }
+        }
+        View item = itemView(holder);
+        Object tag = item == null ? null : item.getTag();
+        return tag != null && LiveEligibility.DATA.equals(tag.getClass().getName()) ? tag : null;
+    }
+    private static Object dataField(Class<?> type) {
+        java.lang.reflect.Field found = null;
+        for (Class<?> c = type; c != null && !DataLocator.framework(c); c = c.getSuperclass()) {
+            java.lang.reflect.Field[] fields;
+            try { fields = c.getDeclaredFields(); } catch (LinkageError | RuntimeException e) { continue; }
+            for (java.lang.reflect.Field f : fields) {
+                if (java.lang.reflect.Modifier.isStatic(f.getModifiers()) || !LiveEligibility.DATA.equals(f.getType().getName())) continue;
+                if (found != null) return NONE;
+                found = f;
+            }
+        }
+        if (found == null) return NONE;
+        found.setAccessible(true);
+        return found;
     }
 
     static View itemView(Object holder) {

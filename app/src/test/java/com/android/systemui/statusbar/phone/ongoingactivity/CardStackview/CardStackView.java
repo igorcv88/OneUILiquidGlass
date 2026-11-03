@@ -13,8 +13,11 @@ import android.widget.FrameLayout;
  * (setBlurBG installs a BlurDrawable there); changeCardBg rebuilds the card fill.
  */
 public class CardStackView extends FrameLayout {
-    /** Stands in for com.android.internal.graphics.drawable.BackgroundBlurDrawable. */
-    public static class NativeBackgroundBlurDrawable extends ColorDrawable { public NativeBackgroundBlurDrawable() { super(0x33ffffff); } }
+    /**
+     * Stands in for com.android.internal.graphics.drawable.BackgroundBlurDrawable: its colour is
+     * dark and almost opaque, as the expanded card looked on DZIF (navy over a colourful wallpaper).
+     */
+    public static class NativeBackgroundBlurDrawable extends ColorDrawable { public NativeBackgroundBlurDrawable() { super(0xe6141428); } }
     public CardStackView(Context c) { super(c); }
     /** Wraps a card root as Samsung does and returns its blur frame. */
     public FrameLayout addCard(View root) {

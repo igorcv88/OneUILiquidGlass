@@ -239,7 +239,7 @@ public final class LiveGlass {
             s.waiting = true;
             listen(s, v);
             if (!canShow(s, v)) return Outcome.NATIVE;
-            try { region = blur.create(v); }
+            try { region = neutral(blur.create(v)); }
             catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
                 s.regionBroken = true;
                 logOnce(s.surface, "LIVE_GLASS_NO_REGION", "surface=" + s.surface + " stage=create keep=samsungBlur");
@@ -401,7 +401,7 @@ public final class LiveGlass {
         g.setRegionless(false);
         boolean want = canShow(s, v);
         if (want && g.blur() == null) {
-            try { g.setBlur(blur.create(v)); }
+            try { g.setBlur(neutral(blur.create(v))); }
             catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
                 logOnce(s.surface, "LIVE_GLASS_NO_REGION", "surface=" + s.surface + " error=" + e.getClass().getSimpleName());
                 g.setBlur(null);
@@ -423,6 +423,11 @@ public final class LiveGlass {
     private boolean regionless(State s, View v) {
         try { return s.nativeRegion != null && s.nativeRegion.test(v); }
         catch (RuntimeException e) { return false; }
+    }
+    /** Every live region carries the neutral colour curve of the approved glass. */
+    private static BackgroundBlurBridge neutral(BackgroundBlurBridge b) {
+        if (b != null) b.setNeutralCurve(true);
+        return b;
     }
     private boolean canShow(State s, View v) {
         return !s.regionBroken && v.isAttachedToWindow() && blur.enabled(v) && policy.glassAllowed(s.surface, v);

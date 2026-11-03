@@ -118,6 +118,7 @@ public final class BackgroundBlurBridge implements Backdrop {
         // API order: top-left, top-right, bottom-left, bottom-right.
         corners.invoke(drawable, tl, tr, bl, br);
         if (lensMode && curve != null && (lens || keyguard || curveSent)) applyCurve();
+        else if (neutral && curve != null) sendNeutralCurve();
     }
     /** Redraws the host; the drawable has no callback of its own (it is drawn by the glass). */
     private Runnable invalidator;
@@ -159,6 +160,19 @@ public final class BackgroundBlurBridge implements Backdrop {
     /** The region colour last requested, for the same snapshot. */
     public int requestedTint() { return lastRequestedTint; }
     private int lastRequestedTint;
+    /**
+     * Live surfaces (hooks/ongoing): always send Samsung's neutral colour curve, as the approved
+     * lens cards do. A region sent without one takes whatever curve the compositor last had (the
+     * panel's dark one after a pull-down), which reads as a grey, dim pane instead of glass.
+     */
+    private boolean neutral;
+    public void setNeutralCurve(boolean on) { neutral = on; }
+    public boolean neutralCurve() { return neutral; }
+    private void sendNeutralCurve() throws ReflectiveOperationException {
+        float[] v = SemBlurBridge.explicitCurve(SemBlurBridge.NEUTRAL_CURVE);
+        curve.invoke(drawable, v[0], v[1], v[2], v[3], v[4], v[5]);
+        curveSent = true;
+    }
     /** Whether a curve was ever sent: the drawable keeps it, so from then on one is always sent. */
     private boolean curveSent;
     private boolean scaled;

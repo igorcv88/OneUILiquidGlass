@@ -7,6 +7,7 @@ import android.content.res.ColorStateList;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Looper;
+import android.view.View;
 import android.widget.FrameLayout;
 import androidx.recyclerview.widget.RecyclerView;
 import com.android.systemui.statusbar.phone.ongoingactivity.OngoingActivityData;
@@ -219,6 +220,53 @@ public class LiveChipHooksTest {
         RecyclerView.ViewHolder h = holder();
         bind(h, 0);
         assertTrue(h.itemView.getBackground() instanceof GradientDrawable);
+    }
+
+    /** A holder that keeps its own data: the item it shows wins over the helper index. */
+    public static class DataHolder extends RecyclerView.ViewHolder {
+        OngoingActivityData mData;
+        DataHolder(View v) { super(v); }
+    }
+
+    @Test public void holderDataWinsOverAShiftedHelperIndex() {
+        // Helper list holds a media item the chip adapter does not show: index 0 is media.
+        OngoingActivityDataHelper.add(new OngoingActivityData("com.spotify.music", true));
+        OngoingActivityData timer = new OngoingActivityData("com.sec.android.app.clockpackage", false);
+        OngoingActivityDataHelper.add(timer);
+        DataHolder h = new DataHolder(new FrameLayout(activity));
+        h.mData = timer;
+        bind(h, 0);
+        assertTrue("the timer chip shown by this holder gets glass", h.itemView.getBackground() instanceof LiveGlassDrawable);
+        assertSame(timer, glass.ownerOf(h.itemView));
+        // And the reverse: the holder shows media, whatever the index says.
+        DataHolder m = new DataHolder(new FrameLayout(activity));
+        m.mData = new OngoingActivityData("com.spotify.music", true);
+        bind(m, 1);
+        assertTrue(m.itemView.getBackground() instanceof GradientDrawable);
+    }
+
+    /** L1 is wrapped before attach; the region exists only once attached, with the neutral curve. */
+    @Test public void regionIsCreatedOnAttachWithTheNeutralCurveAndRedrawn() {
+        OngoingActivityDataHelper.add(new OngoingActivityData("com.example.timer", false));
+        RecyclerView.ViewHolder h = holder();
+        bind(h, 0);
+        LiveGlassDrawable g = (LiveGlassDrawable) h.itemView.getBackground();
+        assertNull(g.blur());
+        activity.setContentView(h.itemView);
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        assertTrue(g.showsGlass());
+        assertTrue(g.blur().neutralCurve());
+        h.itemView.layout(0, 0, 300, 80);
+        h.itemView.draw(new android.graphics.Canvas(android.graphics.Bitmap.createBitmap(300, 80, android.graphics.Bitmap.Config.ARGB_8888)));
+        FakeBlurDrawable region = env.regions.get(0);
+        assertEquals(1, region.draws);
+        assertArrayEquals("Samsung's neutral curve, as the approved glass sends", new float[]{0, 0, 0, 255, 0, 255}, region.curve, 0f);
+        assertEquals(LiveSurface.CHIP.spec.blurPx, region.radius);
+        // Samsung replaces the background after attach: same wrapper and region come back.
+        adapter.setChipBg((android.view.ViewGroup) h.itemView, ColorStateList.valueOf(0xff00aa55));
+        hooks.chipBackground(adapter, h.itemView);
+        assertSame(g, h.itemView.getBackground());
+        assertEquals(1, env.regions.size());
     }
 
     @Test public void unbalancedBindIsDropped() {

@@ -49,6 +49,8 @@ notificações personalizadas, live updates ou traduções.
 - ☐ Pós-PR #116 (02/11, físico): nenhuma das quatro superfícies mostrou vidro.
   🔧 corrigido em seguida (capability de blur, fill real do L2, camada no
   CardView do L3); ☐ repetir `docs/live-toast-dzif.md` no Galaxy.
+- ☐ Pós-PR #117 (03/11, físico): superfícies visíveis, material não convincente;
+  🔧 curva neutra, fill estável e região do L2 sem cor sobreposta; ☐ repetir no Galaxy.
 - ☐ Mídia nas live updates/lockscreen: continua fora de escopo.
 
 ### Central de Controle / Quick Settings

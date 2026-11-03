@@ -46,6 +46,23 @@ Não há hook em `View.setBackground`, `WindowManagerGlobal.addView`,
 `LinearLayout`, `WindowSurvey`, SurfaceFlinger, QS, sliders, heads-up, shade ou
 notificações comuns. `WindowSurvey` continua log-only.
 
+## Correção pós-teste do PR #117 (03/11/2026)
+
+Teste físico (vídeo de 15 s + log, SystemUI PID 13036): as quatro superfícies
+aparecem e os hooks rodam, mas o material não convence. Causas no código e
+correções:
+
+| ID | Evidência | Causa | Correção |
+|---|---|---|---|
+| L1, T1, L3 | Região criada (nenhum `LIVE_GLASS_NO_REGION`), aparência cinza/apagada | As regiões novas eram enviadas **sem curva de cor**; o caminho aprovado (`BackgroundBlurBridge` em `lensMode`) envia a curva neutra da Samsung. Sem curva, a região herda a última do compositor (a escura do painel) | `BackgroundBlurBridge.setNeutralCurve(true)` em toda região das superfícies novas |
+| L2 | Um `LIVE_GLASS_APPLY` seguido de dezenas de `LIVE_GLASS_RESTORE reason=notFill` em pares (~20 ms) | `covers()` comparava tamanhos vivos antes de `MATCH_PARENT`; durante expandir/recolher o fill diverge do root por alguns quadros e era descartado e reenvolvido | O fill escolhido fica fixo por root enquanto válido (prioridade: alvo de `changeCardBg` → fill já escolhido → busca); `MATCH_PARENT` decide antes dos tamanhos |
+| L2 | Cartão azul-marinho quase opaco sobre wallpaper colorido | A região Samsung do ancestral tem cor sobreposta escura e quase opaca; o fill translúcido por cima não mudava o resultado | Enquanto o vidro aparece, só a cor sobreposta dessa região fica transparente (RGB mantido); blur, raio, forma e alpha da região intactos; cor original restaurada exatamente quando o vidro some ou a superfície é desligada |
+| L1 | `RESTORE reason=verdict=MEDIA_FLAG` numa pílula de timer | O índice do helper pode incluir itens que a pílula não mostra (mídia), deslocando posições | Se o ViewHolder guarda o próprio `OngoingActivityData` (campo único) ou a tag do `itemView`, esse dado prevalece |
+
+L3 roda no **processo SystemUI**: `NOWBAR_PLUGIN` e `LIVE_GLASS_APPLY surface=NOWBAR`
+saem do mesmo PID 13036; o plugin AODService é carregado pelo SystemUI no
+classloader dele. No AOD/doze a Now Bar continua nativa por política.
+
 ## Material
 
 `glass/LiveGlassDrawable` envolve o drawable que a Samsung acabou de escrever:
@@ -156,8 +173,9 @@ repetição a cada callback). Nenhum texto de notificação/toast é registrado.
   numa janela `TYPE_TOAST` e na barra de status como renderiza nos cartões
   aprovados; se não renderizar, o resultado é o fundo translúcido sem blur, e
   a correção seria trocar para o caminho Samsung (`SemBlurInfo`) nesses hosts.
-- L2: o blur Samsung atrás do preenchimento não foi alterado; se a cor da
-  região Samsung for quase opaca, o efeito do vidro fica limitado por ela.
+- L2: a cor sobreposta da região Samsung é lida de `getColor()` ou do `Paint`
+  interno (`mPaint`); se o firmware não expuser nenhum dos dois, ela fica intacta
+  e o efeito continua limitado por ela.
 - L3: a `GlassLayer` dentro do CardView é uma proposta de implementação; a
   compatibilidade com a animação/clip da Now Bar só o aparelho confirma.
 - Exclusão de Now Brief por classe exata e por pacote (heurística conservadora,

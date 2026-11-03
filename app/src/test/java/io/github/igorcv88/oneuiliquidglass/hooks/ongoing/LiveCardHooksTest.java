@@ -79,6 +79,67 @@ public class LiveCardHooksTest {
         assertEquals(0x002050c0, g.currentTint() & 0x00ffffff);
     }
 
+    /**
+     * DZIF log 03/11: dozens of LIVE_GLASS_RESTORE reason=notFill in pairs. During expand/collapse
+     * the fill's laid-out size differs from the root for a few frames; the fill must stay the same
+     * host, wrapped once, through every writer.
+     */
+    @Test public void fillStaysStableThroughAnimationsAndWriters() {
+        adapter.mList.add(new OngoingActivityData("com.samsung.android.health", false));
+        CardItemView root = card(0);
+        LiveGlassDrawable g = (LiveGlassDrawable) root.fill().getBackground();
+        root.layout(0, 0, 1340, 288);
+        root.fill().layout(0, 0, 1340, 120); // mid-animation: sizes differ
+        for (int i = 0; i < 20; i++) {
+            stack.updateItemBg();
+            hooks.stackUpdated(stack);
+            hooks.cardBound(adapter, root, 0);
+            stack.setBlurBG((View) root.getParent(), 0);
+            hooks.cardWriter((View) root.getParent(), false);
+        }
+        assertTrue(glass.tracked(root.fill()));
+        assertSame("never restored and re-wrapped", g, root.fill().getBackground());
+        assertTrue(g.showsGlass());
+        assertEquals(1, glass.hosts(LiveSurface.CARD).size());
+    }
+
+    /** Samsung's region keeps its blur; only its dark colour overlay is cleared while glass shows. */
+    @Test public void nativeRegionColourIsClearedWhileGlassShowsAndRestoredExactly() {
+        adapter.mList.add(new OngoingActivityData("com.samsung.android.health", false));
+        CardItemView root = card(0);
+        CardStackView.NativeBackgroundBlurDrawable region = (CardStackView.NativeBackgroundBlurDrawable) ((View) root.getParent()).getBackground();
+        assertEquals("overlay transparent, RGB kept", 0x00141428, region.getColor());
+        // Samsung re-installs its blur (new drawable, native colour): cleared again.
+        stack.setBlurBG((View) root.getParent(), 0);
+        hooks.cardWriter((View) root.getParent(), false);
+        CardStackView.NativeBackgroundBlurDrawable again = (CardStackView.NativeBackgroundBlurDrawable) ((View) root.getParent()).getBackground();
+        assertNotSame(region, again);
+        assertEquals(0x00141428, again.getColor());
+        // Battery Saver: no glass, the native overlay comes back.
+        env.blurEnabled = false;
+        glass.syncAll();
+        assertEquals(0xe6141428, again.getColor());
+        env.blurEnabled = true;
+        glass.syncAll();
+        assertEquals(0x00141428, again.getColor());
+        // Off: exact restore of colour and fill.
+        env.on.remove(LiveSurface.CARD);
+        glass.refresh(LiveSurface.CARD);
+        assertEquals(0xe6141428, again.getColor());
+        assertTrue(root.fill().getBackground() instanceof GradientDrawable);
+    }
+
+    @Test public void mediaCardRegionColourIsNeverTouched() {
+        adapter.mList.add(new OngoingActivityData("com.spotify.music", false));
+        CardItemView media = (CardItemView) adapter.getView(0, null, stack);
+        adapter.mediaViews.add(media);
+        hooks.cardBound(adapter, media, 0);
+        FrameLayout blur = stack.addCard(media);
+        stack.setBlurBG(blur, 0);
+        hooks.cardWriter(blur, false);
+        assertEquals(0xe6141428, ((CardStackView.NativeBackgroundBlurDrawable) blur.getBackground()).getColor());
+    }
+
     @Test public void changeCardBgOnTheFillIsFollowed() {
         adapter.mList.add(new OngoingActivityData("com.samsung.android.health", false));
         CardItemView root = card(0);
