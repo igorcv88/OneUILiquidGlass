@@ -119,7 +119,10 @@ final class LiveChipHooks {
             }
         }
         if (found == null) return NONE;
-        found.setAccessible(true);
+        // Access can be refused (hidden-API policy, module/loader rules): then the holder is not
+        // read and the helper path stays in charge, as without a data field.
+        try { found.setAccessible(true); }
+        catch (RuntimeException | LinkageError e) { return NONE; }
         return found;
     }
 

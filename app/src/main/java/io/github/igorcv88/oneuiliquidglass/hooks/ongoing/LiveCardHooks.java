@@ -225,10 +225,10 @@ final class LiveCardHooks {
             Integer orig = regionColors.get(d);
             if (orig == null) return;
             int clear = orig & 0x00ffffff;
-            if (now != clear) setRegionColor(d, clear);
+            if (now != clear) setRegionColor(layer, d, clear);
         } else {
             Integer orig = regionColors.remove(d);
-            if (orig != null && !orig.equals(now)) setRegionColor(d, orig);
+            if (orig != null && !orig.equals(now)) setRegionColor(layer, d, orig);
         }
     }
     /** BackgroundBlurDrawable keeps its colour in a Paint (AOSP mPaint); getColor() where it exists. */
@@ -239,9 +239,17 @@ final class LiveCardHooks {
         if (paint instanceof android.graphics.Paint) return ((android.graphics.Paint) paint).getColor();
         return null;
     }
-    private static void setRegionColor(Drawable d, int color) {
+    /**
+     * AOSP BackgroundBlurDrawable.setColor only changes its Paint: unlike setAlpha/setBlurRadius it
+     * does not invalidate, so the previous display list (the dark overlay) could stay on screen.
+     * The layer is redrawn here, once per real change (callers only come here when the value
+     * differs), never per rebind.
+     */
+    private static void setRegionColor(View layer, Drawable d, int color) {
         try { d.getClass().getMethod("setColor", int.class).invoke(d, color); }
-        catch (ReflectiveOperationException | RuntimeException ignored) { }
+        catch (ReflectiveOperationException | RuntimeException e) { return; }
+        d.invalidateSelf();
+        layer.invalidate();
     }
 
     /** A view carrying Samsung's blur: a *BlurDrawable* background or a held SemBlurInfo. */

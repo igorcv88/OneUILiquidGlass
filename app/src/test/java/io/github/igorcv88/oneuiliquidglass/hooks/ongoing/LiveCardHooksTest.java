@@ -108,25 +108,46 @@ public class LiveCardHooksTest {
         adapter.mList.add(new OngoingActivityData("com.samsung.android.health", false));
         CardItemView root = card(0);
         CardStackView.NativeBackgroundBlurDrawable region = (CardStackView.NativeBackgroundBlurDrawable) ((View) root.getParent()).getBackground();
-        assertEquals("overlay transparent, RGB kept", 0x00141428, region.getColor());
+        assertEquals("overlay transparent, RGB kept", 0x00141428, region.color());
         // Samsung re-installs its blur (new drawable, native colour): cleared again.
         stack.setBlurBG((View) root.getParent(), 0);
         hooks.cardWriter((View) root.getParent(), false);
         CardStackView.NativeBackgroundBlurDrawable again = (CardStackView.NativeBackgroundBlurDrawable) ((View) root.getParent()).getBackground();
         assertNotSame(region, again);
-        assertEquals(0x00141428, again.getColor());
+        assertEquals(0x00141428, again.color());
         // Battery Saver: no glass, the native overlay comes back.
         env.blurEnabled = false;
         glass.syncAll();
-        assertEquals(0xe6141428, again.getColor());
+        assertEquals(0xe6141428, again.color());
         env.blurEnabled = true;
         glass.syncAll();
-        assertEquals(0x00141428, again.getColor());
+        assertEquals(0x00141428, again.color());
         // Off: exact restore of colour and fill.
         env.on.remove(LiveSurface.CARD);
         glass.refresh(LiveSurface.CARD);
-        assertEquals(0xe6141428, again.getColor());
+        assertEquals(0xe6141428, again.color());
         assertTrue(root.fill().getBackground() instanceof GradientDrawable);
+    }
+
+    /**
+     * BackgroundBlurDrawable.setColor does not invalidate: the layer must be redrawn on each real
+     * colour change (clear and restore), and not on rebinds that change nothing.
+     */
+    @Test public void regionColourChangesRedrawTheLayerOnlyWhenTheValueChanges() {
+        adapter.mList.add(new OngoingActivityData("com.samsung.android.health", false));
+        CardItemView root = card(0);
+        CardStackView.BlurFrame frame = (CardStackView.BlurFrame) root.getParent();
+        CardStackView.NativeBackgroundBlurDrawable region = (CardStackView.NativeBackgroundBlurDrawable) frame.getBackground();
+        assertEquals(0x00141428, region.color());
+        int frameAfterClear = frame.invalidations, drawableAfterClear = region.invalidations;
+        assertTrue("cleared colour redrawn", frameAfterClear >= 1 && drawableAfterClear >= 1);
+        for (int i = 0; i < 30; i++) { hooks.cardBound(adapter, root, 0); hooks.stackUpdated(stack); }
+        assertEquals("rebinds with nothing to change: no redraw", frameAfterClear, frame.invalidations);
+        assertEquals(drawableAfterClear, region.invalidations);
+        env.on.remove(LiveSurface.CARD);
+        glass.refresh(LiveSurface.CARD);
+        assertEquals(0xe6141428, region.color());
+        assertTrue("restored colour redrawn", frame.invalidations > frameAfterClear);
     }
 
     @Test public void mediaCardRegionColourIsNeverTouched() {
@@ -137,7 +158,7 @@ public class LiveCardHooksTest {
         FrameLayout blur = stack.addCard(media);
         stack.setBlurBG(blur, 0);
         hooks.cardWriter(blur, false);
-        assertEquals(0xe6141428, ((CardStackView.NativeBackgroundBlurDrawable) blur.getBackground()).getColor());
+        assertEquals(0xe6141428, ((CardStackView.NativeBackgroundBlurDrawable) blur.getBackground()).color());
     }
 
     @Test public void changeCardBgOnTheFillIsFollowed() {

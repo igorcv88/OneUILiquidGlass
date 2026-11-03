@@ -255,12 +255,14 @@ public class LiveChipHooksTest {
         activity.setContentView(h.itemView);
         Shadows.shadowOf(Looper.getMainLooper()).idle();
         assertTrue(g.showsGlass());
-        assertTrue(g.blur().neutralCurve());
+        assertTrue("requested", g.blur().neutralCurve());
+        assertFalse("not applied before a draw sends it", g.blur().curveApplied());
         h.itemView.layout(0, 0, 300, 80);
         h.itemView.draw(new android.graphics.Canvas(android.graphics.Bitmap.createBitmap(300, 80, android.graphics.Bitmap.Config.ARGB_8888)));
         FakeBlurDrawable region = env.regions.get(0);
         assertEquals(1, region.draws);
-        assertArrayEquals("Samsung's neutral curve, as the approved glass sends", new float[]{0, 0, 0, 255, 0, 255}, region.curve, 0f);
+        assertArrayEquals("neutral curve through DZIF's setBlurColorCurve/1", new float[]{0, 0, 0, 255, 0, 255}, region.curve, 0f);
+        assertTrue(g.blur().curveApplied());
         assertEquals(LiveSurface.CHIP.spec.blurPx, region.radius);
         // Samsung replaces the background after attach: same wrapper and region come back.
         adapter.setChipBg((android.view.ViewGroup) h.itemView, ColorStateList.valueOf(0xff00aa55));

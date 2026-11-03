@@ -50,7 +50,10 @@ public final class BackgroundBlurBridge implements Backdrop {
         StringBuilder sb = new StringBuilder();
         for (Method m : c.getMethods()) {
             if (!m.getName().startsWith("set") || m.getDeclaringClass() == Drawable.class || m.getDeclaringClass() == Object.class) continue;
-            sb.append(' ').append(m.getName()).append('/').append(m.getParameterCount());
+            sb.append(' ').append(m.getName()).append('(');
+            Class<?>[] types = m.getParameterTypes();
+            for (int i = 0; i < types.length; i++) sb.append(i == 0 ? "" : ",").append(types[i].getSimpleName());
+            sb.append(')');
         }
         Probe.log("BLUR_DRAWABLE_API", "class=" + c.getName() + " setters=" + sb.toString().trim());
     }
@@ -118,7 +121,7 @@ public final class BackgroundBlurBridge implements Backdrop {
         // API order: top-left, top-right, bottom-left, bottom-right.
         corners.invoke(drawable, tl, tr, bl, br);
         if (lensMode && curve != null && (lens || keyguard || curveSent)) applyCurve();
-        else if (neutral && curve != null) sendNeutralCurve();
+        else if (neutral && !curveApplied) curveApplied = sendNeutralCurve();
     }
     /** Redraws the host; the drawable has no callback of its own (it is drawn by the glass). */
     private Runnable invalidator;
@@ -166,13 +169,29 @@ public final class BackgroundBlurBridge implements Backdrop {
      * panel's dark one after a pull-down), which reads as a grey, dim pane instead of glass.
      */
     private boolean neutral;
-    public void setNeutralCurve(boolean on) { neutral = on; }
+    /** True only once a curve setter of this firmware actually ran (never for a missing API). */
+    private boolean curveApplied;
+    public void setNeutralCurve(boolean on) { neutral = on; if (!on) curveApplied = false; }
+    /** Requested, not proof: see {@link #curveApplied()}. */
     public boolean neutralCurve() { return neutral; }
-    private void sendNeutralCurve() throws ReflectiveOperationException {
-        float[] v = SemBlurBridge.explicitCurve(SemBlurBridge.NEUTRAL_CURVE);
-        curve.invoke(drawable, v[0], v[1], v[2], v[3], v[4], v[5]);
-        curveSent = true;
+    public boolean curveApplied() { return curveApplied; }
+    /**
+     * Through the firmware's real setter (BlurCurve: DZIF has setBlurColorCurve/1, not the
+     * six-float setColorCurve the lens path looks for). The curve is constant and kept by the
+     * drawable, so it is sent once per region; a missing setter leaves curveApplied false.
+     */
+    private boolean sendNeutralCurve() {
+        BlurCurve.Sender sender = BlurCurve.forClass(drawable.getClass());
+        try {
+            boolean sent = sender.send(drawable, SemBlurBridge.explicitCurve(SemBlurBridge.NEUTRAL_CURVE));
+            if (!curveLogged) { curveLogged = true; Probe.log("BLUR_CURVE", "api=" + sender.describe() + " applied=" + sent); }
+            return sent;
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            if (!curveLogged) { curveLogged = true; Probe.error("BLUR_CURVE_FAILED", sender.describe(), e); }
+            return false;
+        }
     }
+    private static boolean curveLogged;
     /** Whether a curve was ever sent: the drawable keeps it, so from then on one is always sent. */
     private boolean curveSent;
     private boolean scaled;

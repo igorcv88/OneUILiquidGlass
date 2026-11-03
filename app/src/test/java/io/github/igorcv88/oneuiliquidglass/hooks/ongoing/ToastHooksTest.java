@@ -76,9 +76,11 @@ public class ToastHooksTest {
         w.addView(root);
         assertTrue(g.showsGlass());
         assertTrue(g.blur().neutralCurve());
+        assertFalse(g.blur().curveApplied());
         root.layout(0, 0, 400, 120);
         root.draw(new android.graphics.Canvas(android.graphics.Bitmap.createBitmap(400, 120, android.graphics.Bitmap.Config.ARGB_8888)));
         assertArrayEquals(new float[]{0, 0, 0, 255, 0, 255}, env.regions.get(0).curve, 0f);
+        assertTrue(g.blur().curveApplied());
         w.removeView(root);
         assertEquals("region released with the window", 0, env.regions.get(0).radius);
     }

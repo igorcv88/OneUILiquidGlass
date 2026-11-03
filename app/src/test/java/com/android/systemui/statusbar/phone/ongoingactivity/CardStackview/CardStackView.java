@@ -14,16 +14,35 @@ import android.widget.FrameLayout;
  */
 public class CardStackView extends FrameLayout {
     /**
-     * Stands in for com.android.internal.graphics.drawable.BackgroundBlurDrawable: its colour is
-     * dark and almost opaque, as the expanded card looked on DZIF (navy over a colourful wallpaper).
+     * Stands in for com.android.internal.graphics.drawable.BackgroundBlurDrawable as AOSP writes it:
+     * the colour lives in a Paint (mPaint), setColor does not invalidate, and there is no getColor().
+     * Dark and almost opaque, as the expanded card looked on DZIF (navy over a colourful wallpaper).
      */
-    public static class NativeBackgroundBlurDrawable extends ColorDrawable { public NativeBackgroundBlurDrawable() { super(0xe6141428); } }
+    public static class NativeBackgroundBlurDrawable extends android.graphics.drawable.Drawable {
+        private final android.graphics.Paint mPaint = new android.graphics.Paint();
+        public int invalidations;
+        public NativeBackgroundBlurDrawable() { mPaint.setColor(0xe6141428); }
+        public void setColor(int c) { mPaint.setColor(c); }
+        /** Test accessor only (not getColor: the real class has none). */
+        public int color() { return mPaint.getColor(); }
+        @Override public void invalidateSelf() { invalidations++; super.invalidateSelf(); }
+        @Override public void draw(android.graphics.Canvas c) { }
+        @Override public void setAlpha(int a) { }
+        @Override public void setColorFilter(android.graphics.ColorFilter f) { }
+        @Override public int getOpacity() { return android.graphics.PixelFormat.TRANSLUCENT; }
+    }
+    /** The blur frame Samsung wraps each card in; counts redraw requests. */
+    public static class BlurFrame extends FrameLayout {
+        public int invalidations;
+        public BlurFrame(Context c) { super(c); }
+        @Override public void invalidate() { invalidations++; super.invalidate(); }
+    }
     public CardStackView(Context c) { super(c); }
     /** Wraps a card root as Samsung does and returns its blur frame. */
     public FrameLayout addCard(View root) {
         FrameLayout ripple = new FrameLayout(getContext());
         ripple.setBackground(new RippleDrawable(ColorStateList.valueOf(0x22000000), null, null));
-        FrameLayout blur = new FrameLayout(getContext());
+        FrameLayout blur = new BlurFrame(getContext());
         ripple.addView(blur, new LayoutParams(-1, -1));
         blur.addView(root, new LayoutParams(-1, -1));
         addView(ripple, new LayoutParams(-1, -1));

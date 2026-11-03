@@ -13,9 +13,13 @@ public class FakeBlurDrawable extends Drawable {
     public void setBlurRadius(int r) { if (fail) throw new IllegalStateException("region"); radius = r; }
     public void setColor(int c) { color = c; }
     public void setCornerRadius(float tl, float tr, float bl, float br) { corners = new float[]{tl, tr, bl, br}; }
-    /** Samsung's colour curve setter (s, c, x0, x1, y0, y1); null until one is sent. */
+    /**
+     * DZIF's API (BLUR_DRAWABLE_API, 03/11/2026): setBlurColorCurve/1 and setBGColorAdjustment/1,
+     * no six-float setColorCurve. The curve sent through it; null until one is sent.
+     */
     public float[] curve;
-    public void setColorCurve(float s, float c, float x0, float x1, float y0, float y1) { curve = new float[]{s, c, x0, x1, y0, y1}; }
+    public void setBlurColorCurve(float[] c) { curve = c; }
+    public void setBGColorAdjustment(float[] a) { }
     @Override public void draw(Canvas canvas) { draws++; }
     @Override public void setAlpha(int a) { alpha = a; }
     @Override public void setColorFilter(ColorFilter cf) { }
