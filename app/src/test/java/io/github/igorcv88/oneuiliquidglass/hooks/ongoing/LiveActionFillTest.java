@@ -42,31 +42,35 @@ public class LiveActionFillTest {
             assertSame(background, button.getBackground());
             assertNotSame(content, background.getDrawable(0));
             assertEquals(android.graphics.PixelFormat.OPAQUE, background.getDrawable(0).getOpacity());
-            assertSame(content, ((android.graphics.drawable.DrawableWrapper) background.getDrawable(0)).getDrawable());
+            // RippleDrawable.mutate() may clone its content; the native material to restore is
+            // the content *after* mutation, when this instance no longer shares ConstantState.
+            Drawable isolatedContent = ((android.graphics.drawable.DrawableWrapper) background.getDrawable(0)).getDrawable();
+            assertTrue(NativeShape.unwrap(isolatedContent) instanceof GradientDrawable);
+            assertEquals(0xffffffff, ((GradientDrawable) NativeShape.unwrap(isolatedContent)).getColor().getDefaultColor());
             lease.sync(button, true);
-            assertSame("idempotent", content, ((android.graphics.drawable.DrawableWrapper) background.getDrawable(0)).getDrawable());
+            assertSame("idempotent", isolatedContent, ((android.graphics.drawable.DrawableWrapper) background.getDrawable(0)).getDrawable());
             button.performClick();
             assertEquals(1, clicks[0]);
             lease.restore();
-            assertSame("exact native content restored", content, background.getDrawable(0));
+            assertSame("exact isolated native content restored", isolatedContent, background.getDrawable(0));
         }
     }
 
     @Test public void samsungRebindRestoresOldRippleBeforeTakingNewOne() {
         Button button = new Button(activity);
         RippleDrawable old = ripple(0xffffffff, false);
-        Drawable oldContent = old.getDrawable(0);
         button.setBackground(old);
         LiveActionFill lease = new LiveActionFill();
         lease.sync(button, true);
+        Drawable oldIsolated = ((android.graphics.drawable.DrawableWrapper) old.getDrawable(0)).getDrawable();
         RippleDrawable next = ripple(0xffffffff, true);
-        Drawable nextContent = next.getDrawable(0);
         button.setBackground(next);
         lease.sync(button, true);
-        assertSame(oldContent, old.getDrawable(0));
-        assertNotSame(nextContent, next.getDrawable(0));
+        Drawable nextIsolated = ((android.graphics.drawable.DrawableWrapper) next.getDrawable(0)).getDrawable();
+        assertSame(oldIsolated, old.getDrawable(0));
+        assertNotSame(nextIsolated, next.getDrawable(0));
         lease.sync(button, false);
-        assertSame(nextContent, next.getDrawable(0));
+        assertSame(nextIsolated, next.getDrawable(0));
     }
 
     @Test public void nonWhiteContentRemainsUnchanged() {

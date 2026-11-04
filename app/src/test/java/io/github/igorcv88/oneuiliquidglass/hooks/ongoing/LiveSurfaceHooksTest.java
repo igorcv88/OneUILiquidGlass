@@ -134,7 +134,7 @@ public class LiveSurfaceHooksTest {
         for (LiveSurface s : LiveSurface.values()) assertFalse(none.available(s));
     }
 
-    @Test public void cardThroughTheHooksExcludesMedia() throws Exception {
+    @Test public void cardThroughTheHooksIncludesCompatibleMedia() throws Exception {
         OngoingCardAdapter adapter = new OngoingCardAdapter();
         adapter.mList.add(new OngoingActivityData("com.samsung.android.health", false));
         adapter.mList.add(new OngoingActivityData("com.spotify.music", true));
@@ -144,7 +144,7 @@ public class LiveSurfaceHooksTest {
         // DZIF: the root has no background; its fill carries the card colour.
         assertNull(ok.getBackground());
         assertTrue(((com.android.systemui.statusbar.phone.ongoingactivity.CardStackview.CardItemView) ok).fill().getBackground() instanceof LiveGlassDrawable);
-        assertTrue(((com.android.systemui.statusbar.phone.ongoingactivity.CardStackview.CardItemView) media).fill().getBackground() instanceof GradientDrawable);
+        assertTrue(((com.android.systemui.statusbar.phone.ongoingactivity.CardStackview.CardItemView) media).fill().getBackground() instanceof LiveGlassDrawable);
     }
 
     /** DZIF reports no cross-window blur; the glass follows the system only on Battery Saver or the developer switch. */
