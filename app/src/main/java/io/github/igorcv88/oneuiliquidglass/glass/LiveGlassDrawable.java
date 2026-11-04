@@ -137,10 +137,10 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
         if (blur == b) return;
         if (blur != null) blur.release();
         blur = b;
-        traceMaterial(b == null ? "BLUR_RELEASED" : "BLUR_ASSIGNED", null);
         optics = null;
         lastPx = -1;
         if (b != null) b.setRegionFade(regionFade);
+        traceMaterial(b == null ? "BLUR_RELEASED" : "BLUR_ASSIGNED", null);
         invalidateSelf();
     }
     public BackgroundBlurBridge blur() { return blur; }
@@ -171,8 +171,9 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
         f = Math.max(0f, Math.min(1f, f));
         if (Math.abs(f - regionFade) < 0.004f) return false;
         regionFade = f;
+        boolean changed = blur != null && blur.setRegionFade(f);
         traceMaterial("REGION_FADE", null);
-        return blur != null && blur.setRegionFade(f);
+        return changed;
     }
     /** Drops the region and unlinks the native drawable, which the host is about to take back. */
     public void release() {
