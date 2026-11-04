@@ -312,7 +312,6 @@ final class LiveCardHooks {
      */
     void syncStackFills(View stack) {
         if (stack == null || !STACK.equals(stack.getClass().getName())) return;
-        syncStackBackgrounds(stack);
         List<View> supported = new ArrayList<>();
         boolean glassPresent = false;
         for (Map.Entry<View, Classification> e : new ArrayList<>(roots.entrySet())) {
@@ -357,54 +356,6 @@ final class LiveCardHooks {
             if (lease == null) { lease = new StackLease(frame); leases.add(lease); }
             lease.fill.sync(frame);
         }
-    }
-
-    /**
-     * DZIF CardStackView.getTopViewIndex() returns the index of the frontmost child. A second
-     * eligible card may have its OWN LiveGlassDrawable and blur region even when Samsung is
-     * keeping it behind the active card, exposing a second capsule under the action row.
-     *
-     * Suppress only the sibling's drawable draw() during glass mode, not the View, native
-     * RippleDrawable, outline, children, touch listeners or its ordinary native fallback.
-     * Re-evaluate at every card sync (including the pre-draw sync when Samsung reorders cards).
-     * Fail open to native behavior if the DZIF method is unavailable.
-     */
-    void syncStackBackgrounds(View stack) {
-        if (stack == null || !STACK.equals(stack.getClass().getName())) return;
-        Object index = NativeShape.call(stack, "getTopViewIndex");
-        final int top = index instanceof Number ? ((Number) index).intValue() : -1;
-        // A decorative child must not make a single classified notification look multi-card.
-        int cardCount = 0;
-        boolean topIsCard = false;
-        for (View root : new ArrayList<>(roots.keySet())) {
-            if (root == null || !LiveChipHooks.within(root, stack)) continue;
-            View child = directStackChild(root, stack);
-            if (child == null) continue;
-            cardCount++;
-            if (((ViewGroup) stack).indexOfChild(child) == top) topIsCard = true;
-        }
-        final boolean multi = cardCount > 1 && topIsCard;
-        for (Map.Entry<View, Classification> e : new ArrayList<>(roots.entrySet())) {
-            View root = e.getKey();
-            if (root == null || !LiveChipHooks.within(root, stack)) continue;
-            View sibling = directStackChild(root, stack);
-            int siblingIndex = sibling != null ? ((ViewGroup) stack).indexOfChild(sibling) : -1;
-            boolean secondary = multi && top >= 0 && siblingIndex >= 0 && siblingIndex != top;
-            for (View fill : fills(root)) {
-                io.github.igorcv88.oneuiliquidglass.glass.LiveGlassDrawable g = glass.glassOf(fill);
-                if (g != null) g.setStackBackgroundOccluded(secondary && g.showsGlass());
-            }
-        }
-    }
-
-    private static View directStackChild(View root, View stack) {
-        for (Object current = root; current instanceof View; current = ((View) current).getParent()) {
-            View parent = ((View) current).getParent() instanceof View
-                    ? (View) ((View) current).getParent() : null;
-            if (parent == stack) return (View) current;
-            if (current == stack) break;
-        }
-        return null;
     }
 
     private static View stackOf(View view) {
