@@ -165,7 +165,7 @@ final class LockMediaProbe {
     static final class Lease {
         private final WeakReference<View> view;
         private final WeakReference<Drawable> drawable;
-        private final int originalAlpha;
+        private int nativeAlpha;
         private boolean hidden;
         private boolean failed;
 
@@ -173,11 +173,11 @@ final class LockMediaProbe {
             this.view = new WeakReference<>(view);
             Drawable bg = view == null ? null : view.getBackground();
             this.drawable = new WeakReference<>(bg);
-            this.originalAlpha = bg == null ? 255 : bg.getAlpha();
+            this.nativeAlpha = bg == null ? 255 : bg.getAlpha();
         }
 
         boolean valid() { return drawable.get() != null; }
-        int nativeAlpha() { return originalAlpha; }
+        int nativeAlpha() { return nativeAlpha; }
 
         boolean matches(View candidate) {
             return view.get() == candidate && drawable.get() != null
@@ -190,7 +190,9 @@ final class LockMediaProbe {
             // The same instance may be written by Samsung after our previous tick.
             // Suppress it again without emitting another log or allocating per frame.
             try {
-                if (d.getAlpha() != 0 || !hidden) d.setAlpha(0);
+                int current = d.getAlpha();
+                if (hidden && current != 0) nativeAlpha = current;
+                if (current != 0 || !hidden) d.setAlpha(0);
                 hidden = true;
                 return true;
             } catch (RuntimeException | LinkageError e) {
@@ -203,7 +205,7 @@ final class LockMediaProbe {
         void restore() {
             Drawable d = drawable.get();
             if (d != null && hidden) {
-                try { d.setAlpha(originalAlpha); }
+                try { d.setAlpha(nativeAlpha); }
                 catch (RuntimeException | LinkageError e) {
                     Probe.log("LOCK_MEDIA_PROBE_ERROR", "action=restore type=" + e.getClass().getSimpleName());
                 }
