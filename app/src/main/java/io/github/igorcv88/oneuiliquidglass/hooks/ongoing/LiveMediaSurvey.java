@@ -50,12 +50,21 @@ public final class LiveMediaSurvey {
     }
 
     private static void tick() {
+        int lockMode = 0;
         try {
-            if (enabled()) scan();
+            lockMode = LockMediaProbe.mode();
+            boolean survey = enabled();
+            if (survey || lockMode != 0 || LockMediaProbe.hasSessions()) scan(survey, lockMode);
             else if (!signatures.isEmpty()) { signatures.clear(); lastLogged.clear(); }
         } catch (RuntimeException | LinkageError e) {
             Probe.log("LIVE_MEDIA_SURVEY_ERROR", "type=" + e.getClass().getSimpleName());
         } finally {
+            // A vanished lockscreen card or a property switch must restore its native alphas
+            // even if the window traversal above failed.
+            try { LockMediaProbe.endScan(lockMode); }
+            catch (RuntimeException | LinkageError e) {
+                Probe.log("LOCK_MEDIA_PROBE_ERROR", "type=" + e.getClass().getSimpleName());
+            }
             MAIN.postDelayed(LiveMediaSurvey::tick, PERIOD_MS);
         }
     }
@@ -70,7 +79,8 @@ public final class LiveMediaSurvey {
     }
 
     @SuppressWarnings("unchecked")
-    private static void scan() throws RuntimeException {
+    private static void scan(boolean survey, int lockMode) throws RuntimeException {
+        LockMediaProbe.beginScan();
         List<View> views;
         List<WindowManager.LayoutParams> params;
         try {
@@ -88,21 +98,29 @@ public final class LiveMediaSurvey {
             View root = views.get(w);
             if (root == null || !root.isShown()) continue;
             String title = String.valueOf(params.get(w).getTitle());
-            find(root, title, scan, roots, 0);
+            find(root, title, scan, roots, 0, survey, lockMode);
         }
     }
 
-    /** Outermost media views only: a match is described with its subtree, never re-matched inside. */
-    private static void find(View v, String window, int scan, int[] roots, int depth) {
+    /** Media survey roots plus the exact AOD plugin media card for opt-in layer isolation. */
+    private static void find(View v, String window, int scan, int[] roots, int depth,
+                             boolean survey, int lockMode) {
         if (roots[0] >= MAX_ROOTS || depth > 40 || !v.isShown()) return;
-        if (media(v)) {
+        if (LockMediaProbe.isLockMedia(v)) {
+            roots[0]++;
+            if (survey) describeRoot(v, window, scan);
+            if (lockMode != 0) LockMediaProbe.observe(v, lockMode, window);
+            return;
+        }
+        if (survey && media(v)) {
             roots[0]++;
             describeRoot(v, window, scan);
             return;
         }
         if (v instanceof ViewGroup) {
             ViewGroup g = (ViewGroup) v;
-            for (int i = 0; i < g.getChildCount(); i++) find(g.getChildAt(i), window, scan, roots, depth + 1);
+            for (int i = 0; i < g.getChildCount(); i++)
+                find(g.getChildAt(i), window, scan, roots, depth + 1, survey, lockMode);
         }
     }
 
