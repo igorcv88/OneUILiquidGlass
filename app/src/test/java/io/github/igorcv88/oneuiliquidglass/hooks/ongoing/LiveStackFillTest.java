@@ -19,6 +19,7 @@ import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
+import org.robolectric.annotation.GraphicsMode;
 
 @RunWith(RobolectricTestRunner.class) @Config(sdk = 34)
 public class LiveStackFillTest {
@@ -144,6 +145,8 @@ public class LiveStackFillTest {
         assertNull(rb.getDrawable(0).getColorFilter());
     }
 
+    // Legacy ShadowRenderNode does not implement ambient/spot shadow colour storage.
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Test public void shadowColoursAreMutedWithoutChangingCarouselOrderOrClipping() {
         Activity a = Robolectric.buildActivity(Activity.class).setup().get();
         FrameLayout frame = new FrameLayout(a);
@@ -171,6 +174,8 @@ public class LiveStackFillTest {
         assertEquals(0xff556677, frame.getOutlineSpotShadowColor());
     }
 
+    // Legacy ShadowRenderNode does not implement ambient/spot shadow colour storage.
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Test public void replacementAndNativeRewritesRestoreShadowColours() {
         Activity a = Robolectric.buildActivity(Activity.class).setup().get();
         FrameLayout frame = new FrameLayout(a);
