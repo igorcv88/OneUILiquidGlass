@@ -42,7 +42,7 @@ public class MediaArtGlassTest {
         activity = Robolectric.buildActivity(Activity.class).setup().get();
         NativeIds.clearForTest();
         MediaArtGlass.resetForTest();
-        MediaArtGlass.names = new MediaArtGlass.Names("widget_frame", "background", "icon_frame");
+        MediaArtGlass.names = new MediaArtGlass.Names("widget_frame", "background", "icon_frame", "content");
         MediaArtGlass.clock = now::get;
         MediaArtGlass.property = () -> { reads.incrementAndGet(); return prop; };
         MediaArtGlass.probeProperty = () -> probeProp;
