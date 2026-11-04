@@ -13,7 +13,9 @@ import java.lang.ref.WeakReference;
 /** The eligible Now Bar's native AdaptiveIconDrawable already contains a monochrome glyph. */
 final class NowBarIconLease {
     private WeakReference<ImageView> image = new WeakReference<>(null);
-    private WeakReference<Drawable> original = new WeakReference<>(null);
+    // The ImageView stops owning the native drawable as soon as the monochrome glyph replaces it.
+    // Keep it strongly for the active lease; only views/card references remain weak.
+    private Drawable original;
     private WeakReference<Drawable> applied = new WeakReference<>(null);
     private WeakReference<View> disc = new WeakReference<>(null);
     private ColorStateList nativeDisc;
@@ -34,7 +36,7 @@ final class NowBarIconLease {
         Drawable mono = glyph.getConstantState().newDrawable(target.getResources()).mutate();
         mono.setColorFilter(new PorterDuffColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN));
         image = new WeakReference<>(target);
-        original = new WeakReference<>(nativeIcon);
+        original = nativeIcon;
         applied = new WeakReference<>(mono);
         target.setImageDrawable(mono);
         transparentDisc(target);
@@ -57,11 +59,11 @@ final class NowBarIconLease {
 
     void restore() {
         ImageView target = image.get();
-        if (target != null && target.getDrawable() == applied.get() && original.get() != null)
-            target.setImageDrawable(original.get());
+        if (target != null && target.getDrawable() == applied.get() && original != null)
+            target.setImageDrawable(original);
         restoreDisc();
         image.clear();
-        original.clear();
+        original = null;
         applied.clear();
     }
 

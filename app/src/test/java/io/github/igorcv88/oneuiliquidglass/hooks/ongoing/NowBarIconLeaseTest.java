@@ -32,6 +32,8 @@ public class NowBarIconLeaseTest {
         lease.sync(icon, true);
         Drawable mono = icon.getDrawable();
         assertNotSame(nativeIcon, mono);
+        assertSame("the replacement icon cannot keep the native adaptive drawable alive",
+                nativeIcon, io.github.igorcv88.oneuiliquidglass.hooks.Reflect.read(lease, "original"));
         assertEquals(0, disc.getCardBackgroundColor().getDefaultColor());
         int writes = disc.colorWrites;
         for (int i = 0; i < 30; i++) lease.sync(icon, true);
@@ -43,6 +45,8 @@ public class NowBarIconLeaseTest {
         assertEquals(0, disc.getCardBackgroundColor().getDefaultColor());
         lease.sync(icon, false);
         assertSame(nativeIcon, icon.getDrawable());
+        assertNull("the native icon is released after restoration",
+                io.github.igorcv88.oneuiliquidglass.hooks.Reflect.read(lease, "original"));
         assertEquals(0xff6644aa, disc.getCardBackgroundColor().getDefaultColor());
         assertNotEquals(0, nativeColor);
     }
