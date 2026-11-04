@@ -102,6 +102,12 @@ final class LiveStackTimeline {
             Probe.log("LIVE_STACK_TIMELINE_TICK", "burst=" + burst.id + " planMs=" + scheduled
                     + " actualMs=" + elapsed + " children=" + stack.getChildCount()
                     + " topIndex=" + top + " stack=" + id(v));
+            String stackState = describe(v, "CardStackView", v.getBackground());
+            String previousStack = burst.previous.put(System.identityHashCode(v), stackState);
+            if (!stackState.equals(previousStack)) {
+                Probe.log("LIVE_STACK_TIMELINE_NODE", "burst=" + burst.id + " path=stack obj=" + id(v)
+                        + " " + stackState);
+            }
             int n = Math.min(MAX_CARDS, stack.getChildCount());
             // Per-card quotas keep the incoming and outgoing cards visible in the same sample.
             // One large subtree must never exhaust the budget before the second card is visited.
