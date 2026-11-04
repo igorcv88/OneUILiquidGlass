@@ -30,7 +30,8 @@ import java.util.function.IntSupplier;
  * opaque; behind the translucent glass the whole shape shows through. That attribution is still a
  * hypothesis: this class exists to test it on the device.</p>
  *
- * <p>Selected with {@code setprop debug.oulg.stackshadow N}; default 0 keeps today's behaviour:</p>
+ * <p>Selected with {@code setprop debug.oulg.stackshadow N}. Unset, mode 9 applies (the fix for the
+ * capsule behind the expanded card); {@code 0} turns everything off and restores it:</p>
  * <ul>
  *   <li>0 native, nothing touched (everything this class changed is restored);</li>
  *   <li>1 attribution: paint the content layer of both indicators magenta;</li>
@@ -453,13 +454,21 @@ final class LiveStackShadowExperiment {
             ok1 &= region1.apply(a);
             ok2 &= region2.apply(b);
         }
-        if (a == null || b == null) pending = PENDING_NO_INDICATOR;
-        else if (!a.isShown() || !b.isShown()) pending = PENDING_NOT_SHOWN;
-        else if (a.getWidth() <= 0 || a.getHeight() <= 0 || b.getWidth() <= 0 || b.getHeight() <= 0) pending = PENDING_NOT_LAID_OUT;
-        else if (region && (!nativeBlur(a.getBackground()) || !nativeBlur(b.getBackground()))) pending = PENDING_REGION_NOT_BLUR;
-        else if (!ok1 || !ok2) pending = PENDING_NOT_SUPPRESSED;
+        // Samsung shows shadow2 only with more cards (DZIF: GONE, 0x0 with two): success means at
+        // least one indicator on screen and every indicator on screen suppressed.
+        boolean on1 = onScreen(a), on2 = onScreen(b);
+        if (a == null && b == null) pending = PENDING_NO_INDICATOR;
+        else if (!on1 && !on2) pending = (a != null && a.isShown()) || (b != null && b.isShown())
+                ? PENDING_NOT_LAID_OUT : PENDING_NOT_SHOWN;
+        else if (region && ((on1 && !nativeBlur(a.getBackground())) || (on2 && !nativeBlur(b.getBackground()))))
+            pending = PENDING_REGION_NOT_BLUR;
+        else if ((on1 && !ok1) || (on2 && !ok2)) pending = PENDING_NOT_SUPPRESSED;
         else pending = PENDING_NONE;
         return pending == PENDING_NONE;
+    }
+
+    private static boolean onScreen(View v) {
+        return v != null && v.isShown() && v.getWidth() > 0 && v.getHeight() > 0;
     }
 
     private boolean clipFrame(View f) {
@@ -610,6 +619,9 @@ final class LiveStackShadowExperiment {
      * suppressed status changed. Animated alpha values alone never log.
      */
     private void log(String state) {
+        // Default (property unset): the fix runs for everyone, so nothing is logged per swipe;
+        // only a failure. Any explicit value of the property turns the full telemetry on.
+        if (!explicitProperty && !state.startsWith("restored:error")) return;
         View f = frame.get(), a = shadow1.get(), b = shadow2.get();
         int fid = f == null ? 0 : System.identityHashCode(f);
         int w = f == null ? -1 : f.getWidth(), h = f == null ? -1 : f.getHeight();
@@ -689,6 +701,13 @@ final class LiveStackShadowExperiment {
         return null;
     }
 
+    /**
+     * Mode 9 by default (DZIF 04/11: modes 8 and 9 both removed the capsule behind the expanded
+     * card; 9 is the smaller intervention, the indicators' view alpha stays native).
+     * {@code setprop debug.oulg.stackshadow 0} turns it off; any other digit selects a mode.
+     */
+    static final int DEFAULT_MODE = MODE_REGION;
+    private static volatile boolean explicitProperty;
     private static long lastRead = -1;
     private static int cached;
     private static Method getter;
@@ -697,14 +716,19 @@ final class LiveStackShadowExperiment {
         long now = SystemClock.uptimeMillis();
         if (lastRead >= 0 && now - lastRead < PROPERTY_TTL_MS) return cached;
         lastRead = now;
-        int value = MODE_OFF;
+        int value = DEFAULT_MODE;
+        boolean explicit = false;
         try {
             if (getter == null) getter = Class.forName("android.os.SystemProperties").getMethod("get", String.class);
             String s = (String) getter.invoke(null, PROPERTY);
-            if (s != null && s.length() == 1 && s.charAt(0) >= '0' && s.charAt(0) <= '9') value = s.charAt(0) - '0';
+            if (s != null && !s.isEmpty()) {
+                explicit = true;
+                if (s.length() == 1 && s.charAt(0) >= '0' && s.charAt(0) <= '9') value = s.charAt(0) - '0';
+            }
         } catch (ReflectiveOperationException | RuntimeException | LinkageError ignored) {
-            value = MODE_OFF;
+            // No readable property: keep the default, which only touches the two named views.
         }
+        explicitProperty = explicit;
         cached = value;
         return value;
     }

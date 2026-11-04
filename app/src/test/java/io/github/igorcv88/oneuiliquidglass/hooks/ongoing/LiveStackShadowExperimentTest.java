@@ -515,6 +515,35 @@ public class LiveStackShadowExperimentTest {
         assertEquals(1f, shadow1.getTransitionAlpha(), 0f);
     }
 
+    /** DZIF with two cards: Samsung shows only shadow1; shadow2 stays GONE at 0x0. */
+    @Test public void regionModeIsEffectiveWhenOnlyTheFirstIndicatorIsShown() {
+        CardStackView.NativeBackgroundBlurDrawable b1 = show(shadow1, 0.5f);
+        show(shadow2, 0.3f);
+        shadow2.setVisibility(View.GONE);
+        mode.set(LiveStackShadowExperiment.MODE_REGION);
+        experiment.sync(stack, true);
+        assertTrue(experiment.effective());
+        assertEquals(LiveStackShadowExperiment.PENDING_NONE, experiment.pending());
+        assertEquals(0, b1.getAlpha());
+        assertEquals("view alpha untouched in mode 9", 0.5f, shadow1.getAlpha(), 0f);
+        assertEquals(1f, shadow1.getTransitionAlpha(), 0f);
+    }
+
+    @Test public void regionModeIsNotEffectiveWhileNoIndicatorIsShown() {
+        show(shadow1, 0.5f);
+        show(shadow2, 0.3f);
+        frame.setVisibility(View.GONE);
+        mode.set(LiveStackShadowExperiment.MODE_REGION);
+        experiment.sync(stack, true);
+        assertFalse(experiment.effective());
+        assertEquals(LiveStackShadowExperiment.PENDING_NOT_SHOWN, experiment.pending());
+    }
+
+    @Test public void unsetPropertyDefaultsToTheRegionFix() {
+        // Robolectric's SystemProperties returns "" for an unset key.
+        assertEquals(LiveStackShadowExperiment.MODE_REGION, LiveStackShadowExperiment.propertyMode());
+    }
+
     @Test public void degenerateGeometryKeepsNativeClip() {
         View empty = new View(activity);
         assertNull(LiveStackShadowExperiment.belowParentTop(empty));
