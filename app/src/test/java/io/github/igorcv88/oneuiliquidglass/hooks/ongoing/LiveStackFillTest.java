@@ -99,6 +99,8 @@ public class LiveStackFillTest {
         RippleDrawable first = new RippleDrawable(ColorStateList.valueOf(0),
                 shape(0xfa3a3a3d), null);
         frame.setBackground(first);
+        // Capture the content after mutate(), since RippleDrawable can isolate its layers.
+        first.mutate();
         LiveStackFill lease = new LiveStackFill();
         Drawable original = first.getDrawable(0);
         ColorFilter previous = new PorterDuffColorFilter(0xff112233, PorterDuff.Mode.SRC_ATOP);
