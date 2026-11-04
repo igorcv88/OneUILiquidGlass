@@ -67,6 +67,7 @@ final class LiveCardHooks {
         final LiveStackFill fill = new LiveStackFill();
         StackLease(View v) { layer = new WeakReference<>(v); }
     }
+    /** Stack-scoped leases survive individual card rebinds and carousel swipes. */
     private final WeakHashMap<View, List<StackLease>> stackFills = new WeakHashMap<>();
     private final WeakHashMap<View, LiveActionFill> actionFills = new WeakHashMap<>();
     private static final class TintedRegion {
@@ -131,6 +132,7 @@ final class LiveCardHooks {
         if (stack == null || glass.writing()) return;
         for (Map.Entry<View, Classification> e : new ArrayList<>(roots.entrySet()))
             if (e.getKey() != null && LiveChipHooks.within(e.getKey(), stack)) evaluate(e.getKey(), e.getValue());
+        syncStackFills(stack);
     }
 
     /** Offers the card's fill (and a root that has its own background) with the current verdict. */
@@ -230,19 +232,14 @@ final class LiveCardHooks {
     void regionTint(View host, boolean shown) {
         if (host == null) return;
         // Restore companions even after a fill was reparented or recycled.
+        View stack = stackOf(host);
         if (!shown) {
             restoreCompanions(host);
             companionState(host, false);
+            if (stack != null) syncStackFills(stack);
             return;
         }
         syncActions(host);
-        List<StackLease> stackLeases = stackFills.computeIfAbsent(host, ignored -> new ArrayList<>());
-        stackLeases.removeIf(lease -> {
-            View frame = lease.layer.get();
-            if (frame != null && LiveChipHooks.within(host, frame)) return false;
-            lease.fill.restore();
-            return true;
-        });
         List<TintedRegion> prior = tinted.get(host);
         if (prior != null) prior.removeIf(r -> {
             View layer = r.layer.get();
@@ -263,12 +260,6 @@ final class LiveCardHooks {
             View layer = (View) p;
             if (STACK.equals(layer.getClass().getName())) break;
             Drawable d = layer.getBackground();
-            if (d instanceof android.graphics.drawable.RippleDrawable && stackFrame(layer)) {
-                StackLease lease = null;
-                for (StackLease kept : stackLeases) if (kept.layer.get() == layer) { lease = kept; break; }
-                if (lease == null) { lease = new StackLease(layer); stackLeases.add(lease); }
-                lease.fill.sync(layer);
-            }
             if (d != null && d.getClass().getName().contains("BlurDrawable")) {
                 tintRegion(layer, d, true);
                 List<TintedRegion> list = tinted.computeIfAbsent(host, k -> new ArrayList<>());
@@ -292,6 +283,7 @@ final class LiveCardHooks {
             p = layer.getParent();
         }
         companionState(host, true);
+        if (stack != null) syncStackFills(stack);
     }
     private void companionState(View host, boolean shown) {
         int regions = tinted.containsKey(host) ? tinted.get(host).size() : 0;
@@ -313,9 +305,74 @@ final class LiveCardHooks {
         try { return "stack_pip_layout".equals(view.getResources().getResourceEntryName(view.getId())); }
         catch (android.content.res.Resources.NotFoundException e) { return false; }
     }
+    /** A CARD's ripple frame lives above its root and has a single owner: the CardStackView.
+     * One visible glass card keeps the decorative fills muted for every classified sibling
+     * still participating in the carousel, including an outgoing card in the swipe animation.
+     * A disqualified/native-only sibling retains its Samsung background.
+     */
+    void syncStackFills(View stack) {
+        if (stack == null || !STACK.equals(stack.getClass().getName())) return;
+        List<View> supported = new ArrayList<>();
+        boolean glassPresent = false;
+        for (Map.Entry<View, Classification> e : new ArrayList<>(roots.entrySet())) {
+            View root = e.getKey();
+            Classification c = e.getValue();
+            if (root == null || c == null || !c.verdict.ok() || !LiveChipHooks.within(root, stack)) continue;
+            Object data = c.data.get();
+            if (data == null || !LiveEligibility.ongoing(data).ok()) continue;
+            View frame = stackFrameOf(root);
+            if (frame == null) continue;
+            boolean materialAttached = false;
+            for (View fill : fills(root)) {
+                io.github.igorcv88.oneuiliquidglass.glass.LiveGlassDrawable g = glass.glassOf(fill);
+                if (g == null) continue;
+                materialAttached = true;
+                if (g.showsGlass()) glassPresent = true;
+            }
+            if (materialAttached && !supported.contains(frame)) supported.add(frame);
+        }
+
+        List<StackLease> leases = stackFills.get(stack);
+        if (leases != null) leases.removeIf(lease -> {
+            View frame = lease.layer.get();
+            if (glassPresent && frame != null && supported.contains(frame)) return false;
+            lease.fill.restore();
+            return true;
+        });
+        if (!glassPresent) {
+            if (leases != null && leases.isEmpty()) stackFills.remove(stack);
+            return;
+        }
+        if (leases == null) {
+            leases = new ArrayList<>();
+            stackFills.put(stack, leases);
+        }
+        for (View frame : supported) {
+            StackLease lease = null;
+            for (StackLease existing : leases) {
+                if (existing.layer.get() == frame) { lease = existing; break; }
+            }
+            if (lease == null) { lease = new StackLease(frame); leases.add(lease); }
+            lease.fill.sync(frame);
+        }
+    }
+
+    private static View stackOf(View view) {
+        for (Object current = view; current instanceof View; current = ((View) current).getParent()) {
+            if (STACK.equals(current.getClass().getName())) return (View) current;
+        }
+        return null;
+    }
+
+    private static View stackFrameOf(View root) {
+        for (Object current = root; current instanceof View; current = ((View) current).getParent()) {
+            View candidate = (View) current;
+            if (STACK.equals(candidate.getClass().getName())) break;
+            if (stackFrame(candidate)) return candidate;
+        }
+        return null;
+    }
     private void restoreCompanions(View host) {
-        List<StackLease> stack = stackFills.remove(host);
-        if (stack != null) for (StackLease lease : stack) lease.fill.restore();
         List<WeakReference<View>> buttons = actionButtons.remove(host);
         if (buttons != null) for (WeakReference<View> ref : buttons) {
             View button = ref.get();
