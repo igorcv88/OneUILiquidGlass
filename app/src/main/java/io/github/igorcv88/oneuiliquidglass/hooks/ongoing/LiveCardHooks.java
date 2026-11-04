@@ -373,7 +373,17 @@ final class LiveCardHooks {
         if (stack == null || !STACK.equals(stack.getClass().getName())) return;
         Object index = NativeShape.call(stack, "getTopViewIndex");
         final int top = index instanceof Number ? ((Number) index).intValue() : -1;
-        final boolean multi = stack instanceof ViewGroup && ((ViewGroup) stack).getChildCount() > 1;
+        // A decorative child must not make a single classified notification look multi-card.
+        int cardCount = 0;
+        boolean topIsCard = false;
+        for (View root : new ArrayList<>(roots.keySet())) {
+            if (root == null || !LiveChipHooks.within(root, stack)) continue;
+            View child = directStackChild(root, stack);
+            if (child == null) continue;
+            cardCount++;
+            if (((ViewGroup) stack).indexOfChild(child) == top) topIsCard = true;
+        }
+        final boolean multi = cardCount > 1 && topIsCard;
         for (Map.Entry<View, Classification> e : new ArrayList<>(roots.entrySet())) {
             View root = e.getKey();
             if (root == null || !LiveChipHooks.within(root, stack)) continue;
