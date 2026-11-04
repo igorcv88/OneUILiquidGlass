@@ -218,17 +218,16 @@ public class LiveGlassDrawableTest {
                 new com.android.systemui.statusbar.phone.ongoingactivity.OngoingActivityData("com.example", false);
         assertEquals(LiveEligibility.Verdict.OK, LiveEligibility.ongoing(d));
         d.mIsMediaOngoingData = true;
-        assertEquals(LiveEligibility.Verdict.MEDIA_FLAG, LiveEligibility.ongoing(d));
+        assertEquals(LiveEligibility.Verdict.OK, LiveEligibility.ongoing(d));
         d.mIsMediaOngoingData = false; d.mPackageName = null;
         assertEquals(LiveEligibility.Verdict.NO_PACKAGE, LiveEligibility.ongoing(d));
         assertEquals(LiveEligibility.Verdict.NO_DATA, LiveEligibility.ongoing(new Object()));
         assertEquals(LiveEligibility.Verdict.NO_DATA, LiveEligibility.ongoing(null));
-        assertEquals(LiveEligibility.Verdict.MEDIA_UNKNOWN, LiveEligibility.card(d, null));
-        assertEquals(LiveEligibility.Verdict.MEDIA_VIEW, LiveEligibility.card(d, true));
+        assertEquals(LiveEligibility.Verdict.NO_PACKAGE, LiveEligibility.card(d));
         Activity a = Robolectric.buildActivity(Activity.class).setup().get();
         assertEquals(LiveEligibility.Verdict.WRONG_CLASS,
                 LiveEligibility.nowBar(new com.samsung.android.app.facewidget.presentation.NowBarMediaCardView(a), new Object()));
-        assertEquals(LiveEligibility.Verdict.MEDIA_UNKNOWN,
+        assertEquals(LiveEligibility.Verdict.NO_PACKAGE,
                 LiveEligibility.nowBar(new com.samsung.android.app.facewidget.presentation.NowBarOngoingCardView(a), new Object()));
         LinearLayout toast = new LinearLayout(a);
         assertEquals(LiveEligibility.Verdict.NOT_TEXT, LiveEligibility.toast(toast));

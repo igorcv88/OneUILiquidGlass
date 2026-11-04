@@ -4,6 +4,7 @@ import android.content.ComponentName;
 import android.content.res.ColorStateList;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageView;
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Method;
 import java.util.Collections;
@@ -54,7 +55,7 @@ final class NowBarHooks {
     static final class Abi {
         final ClassLoader loader;
         final Class<?> ongoing, base, item, stack, gradient;
-        final Method container, gradientView, blurContainer, mediaData;
+        final Method container, gradientView, blurContainer;
         final Method d0, e0, n, u, viewMode, expandedColor, stackRefresh, expandedState, gradientVisible;
         Abi(ClassLoader cl) {
             loader = cl;
@@ -68,7 +69,6 @@ final class NowBarHooks {
             container = family ? viewGetter(base, "getCardViewContainer") : null;
             gradientView = family ? viewGetter(base, "getGradientBgView") : null;
             blurContainer = family ? viewGetter(base, "getBlurContainer") : null;
-            mediaData = item != null ? anyGetter(item, "getFaceWidgetMediaData") : null;
             d0 = family ? HookSite.exact(ongoing, "d0", void.class, item) : null;
             e0 = family ? HookSite.exact(ongoing, "e0", void.class, item, boolean.class) : null;
             n = family ? HookSite.exact(base, "N", void.class, item, View.class, float.class, int.class) : null;
@@ -79,12 +79,12 @@ final class NowBarHooks {
             expandedState = stack != null ? HookSite.exact(stack, "setExpandedCardState", void.class, boolean.class) : null;
             gradientVisible = gradient != null ? HookSite.exact(gradient, "setGradientBackgroundVisible", void.class, boolean.class) : null;
         }
-        /** The minimum contract: exact classes, media veto readable, a container and a bind writer. */
-        boolean usable() { return ongoing != null && base != null && item != null && container != null && mediaData != null && (d0 != null || e0 != null); }
+        /** The minimum contract: exact classes, a container and a bind writer. */
+        boolean usable() { return ongoing != null && base != null && item != null && container != null && (d0 != null || e0 != null); }
         String missing() {
             StringBuilder b = new StringBuilder();
             if (ongoing == null) b.append(" ongoing"); if (base == null) b.append(" base"); if (item == null) b.append(" item");
-            if (container == null) b.append(" container"); if (mediaData == null) b.append(" mediaData");
+            if (container == null) b.append(" container");
             if (d0 == null && e0 == null) b.append(" bind");
             return b.toString().trim();
         }
@@ -96,12 +96,6 @@ final class NowBarHooks {
                 return m;
             } catch (NoSuchMethodException | LinkageError | RuntimeException e) { return null; }
         }
-        private static Method anyGetter(Class<?> c, String name) {
-            try {
-                Method m = c.getMethod(name);
-                return m.getReturnType().isPrimitive() ? null : m;
-            } catch (NoSuchMethodException | LinkageError | RuntimeException e) { return null; }
-        }
     }
 
     /** Per card: the item it shows, the layers found, the native CardView values put aside. */
@@ -110,6 +104,7 @@ final class NowBarHooks {
         WeakReference<View> host = new WeakReference<>(null), container = new WeakReference<>(null), gradient = new WeakReference<>(null);
         ColorStateList nativeCardColor;
         final NativeRegionLease nativeRegion = new NativeRegionLease();
+        final NowBarIconLease icon = new NowBarIconLease();
         Float nativeElevation;
         boolean gradientHidden;
         WeakReference<View> hiddenGradient = new WeakReference<>(null);
@@ -230,6 +225,9 @@ final class NowBarHooks {
         View container = c.container.get();
         c.nativeRegion.sync(container, shown && c.host.get() != container);
         if (container != null && NativeShape.cardLike(container) && c.host.get() != container) cardTransparent(container, c, shown);
+        ImageView icon = c.icon.target();
+        if (icon == null || !LiveChipHooks.within(icon, card)) icon = findIcon(card, 0);
+        c.icon.sync(icon, shown);
         View gradient = c.gradient.get();
         View hidden = c.hiddenGradient.get();
         if (c.nativeGradientVisibility != null && (!shown || hidden != gradient)) {
@@ -276,6 +274,24 @@ final class NowBarHooks {
             Probe.log("LIVE_RENDER_NOWBAR_GRADIENT", "shown=" + shown + " requested=" + asked
                     + " observed=" + gradientState(gradient) + " " + LiveRenderProbe.view(gradient));
         } catch (ReflectiveOperationException | RuntimeException e) { Probe.error("NOWBAR_GRADIENT_FAILED", e); }
+    }
+
+    /** No changes to vector-only icons or sibling UI outside NowBarOngoingCardView. */
+    private static ImageView findIcon(View v, int depth) {
+        if (depth > 14) return null;
+        if (v instanceof ImageView && v.getId() != View.NO_ID) {
+            try {
+                if ("nowbar_icon".equals(v.getResources().getResourceEntryName(v.getId()))) return (ImageView) v;
+            } catch (RuntimeException ignored) { }
+        }
+        if (v instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) v;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                ImageView icon = findIcon(group.getChildAt(i), depth + 1);
+                if (icon != null) return icon;
+            }
+        }
+        return null;
     }
 
     /** The gradient view's own visibility getter, if the plugin has one; null otherwise. */

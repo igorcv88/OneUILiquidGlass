@@ -123,17 +123,14 @@ public final class LiveSurfaceHooks {
         Class<?> stack = HookSite.type(LiveCardHooks.STACK, loader);
         Method getView = HookSite.exact(adapter, "getView", View.class, int.class, View.class, ViewGroup.class);
         Method bindView = HookSite.exact(adapter, "bindView", void.class, View.class, int.class);
-        Method isMedia = HookSite.exact(adapter, "isMediaView", boolean.class, View.class);
         Method initNormal = HookSite.exact(adapter, "initNormalNotificationView", void.class, View.class);
         Method changeBg = HookSite.exact(stack, "changeCardBg", void.class, View.class, int.class);
         Method blurBg = HookSite.exact(stack, "setBlurBG", void.class, View.class, int.class);
         Method itemBg = HookSite.exact(stack, "updateItemBg", void.class);
-        // Without Samsung's own media verdict there is no structural media exclusion: all native.
-        if (isMedia == null || (getView == null && bindView == null)) {
-            unavailable(LiveSurface.CARD, "adapter=" + (adapter != null) + " isMediaView=" + (isMedia != null) + " getView=" + (getView != null) + " bindView=" + (bindView != null));
+        if (getView == null && bindView == null) {
+            unavailable(LiveSurface.CARD, "adapter=" + (adapter != null) + " getView=" + (getView != null) + " bindView=" + (bindView != null));
             return;
         }
-        cards.setIsMediaView(isMedia);
         cards.setHelper(OngoingDataSource.resolve(loader));
         boolean ok = true;
         if (getView != null) ok &= site.hook(getView, after(LiveSurface.CARD, p -> {

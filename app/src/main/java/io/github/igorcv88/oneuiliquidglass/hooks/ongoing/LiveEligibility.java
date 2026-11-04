@@ -10,27 +10,23 @@ import io.github.igorcv88.oneuiliquidglass.hooks.Reflect;
 
 /**
  * Classification before any mutation. Every rule denies on doubt: a missing field, an unreadable
- * flag or an unknown native verdict keeps the host native. Media is excluded structurally (the
- * flag of the data bound to that position, Samsung's own isMediaView, the card class and the
- * item's media payload), never by package, colour or text.
+ * flag keeps the host native. Media has no extra veto: a verified view class and compatible
+ * native background structure decide whether glass can be installed.
  */
 public final class LiveEligibility {
     private LiveEligibility() {}
 
     public enum Verdict {
-        OK, NO_DATA, MEDIA_FLAG, MEDIA_VIEW, MEDIA_UNKNOWN, MEDIA_DATA, MEDIA_CLASS, AUTOMATION,
+        OK, NO_DATA, AUTOMATION,
         FLAG_UNREADABLE, NO_PACKAGE, WRONG_CLASS, BRIEF, NOT_TEXT, INTERACTIVE;
         public boolean ok() { return this == OK; }
     }
 
     static final String DATA = "com.android.systemui.statusbar.phone.ongoingactivity.OngoingActivityData";
 
-    /** L1/L2 data: OngoingActivityData with mIsMediaOngoingData == false, no automation, a package. */
+    /** L1/L2 data: OngoingActivityData with no automation and a package. */
     public static Verdict ongoing(Object data) {
         if (data == null || !DATA.equals(data.getClass().getName())) return Verdict.NO_DATA;
-        Boolean media = bool(data, "mIsMediaOngoingData");
-        if (media == null) return Verdict.FLAG_UNREADABLE;
-        if (media) return Verdict.MEDIA_FLAG;
         Boolean automation = bool(data, "mIsAutomation");
         if (automation == null) return Verdict.FLAG_UNREADABLE;
         // No proven support for automation chips: restricted, not treated as media.
@@ -40,31 +36,17 @@ public final class LiveEligibility {
         return Verdict.OK;
     }
 
-    /** L2: Samsung's isMediaView(View) must answer false (null = could not ask) and the data must pass. */
-    public static Verdict card(Object data, Boolean nativeIsMedia) {
-        if (nativeIsMedia == null) return Verdict.MEDIA_UNKNOWN;
-        if (nativeIsMedia) return Verdict.MEDIA_VIEW;
-        return ongoing(data);
-    }
+    /** L2: action/album layouts are handled by the fill selector, not a media classifier. */
+    public static Verdict card(Object data) { return ongoing(data); }
 
     static final String ONGOING_CARD = "com.samsung.android.app.facewidget.presentation.NowBarOngoingCardView";
-    static final String MEDIA_CARD = "com.samsung.android.app.facewidget.presentation.NowBarMediaCardView";
-
     /**
-     * L3: the exact NowBarOngoingCardView class (never the shared base, never a subclass), an item
-     * without media payload (the getter must exist), a package, and not a briefing item.
+     * L3: the exact NowBarOngoingCardView class (never the shared base or NowBarMediaCardView),
+     * a package and not a briefing item. Media payloads do not change the card's class.
      */
     public static Verdict nowBar(Object card, Object item) {
         if (card == null || !ONGOING_CARD.equals(card.getClass().getName())) return Verdict.WRONG_CLASS;
-        for (Class<?> c = card.getClass(); c != null; c = c.getSuperclass())
-            if (MEDIA_CARD.equals(c.getName())) return Verdict.MEDIA_CLASS;
         if (item == null) return Verdict.NO_DATA;
-        Method mediaGetter = Reflect.method(item.getClass(), "getFaceWidgetMediaData");
-        if (mediaGetter == null) return Verdict.MEDIA_UNKNOWN;
-        Object media;
-        try { media = mediaGetter.invoke(item); } catch (ReflectiveOperationException | RuntimeException e) { return Verdict.MEDIA_UNKNOWN; }
-        // A media payload vetoes; its absence alone is not taken as proof (the other rules still apply).
-        if (media != null) return Verdict.MEDIA_DATA;
         Method pkgGetter = Reflect.method(item.getClass(), "getNowBarPackage");
         Object pkg = null;
         try { if (pkgGetter != null) pkg = pkgGetter.invoke(item); } catch (ReflectiveOperationException | RuntimeException ignored) { }

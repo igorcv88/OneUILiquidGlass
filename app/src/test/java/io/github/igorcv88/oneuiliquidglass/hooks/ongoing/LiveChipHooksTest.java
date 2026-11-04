@@ -100,15 +100,14 @@ public class LiveChipHooksTest {
         assertEquals(0x0000aa55, first.currentTint() & 0x00ffffff);
     }
 
-    @Test public void holderRecycledForMediaGoesBackToTheNativeBackground() {
+    @Test public void holderRecycledForMediaKeepsGlass() {
         OngoingActivityDataHelper.add(new OngoingActivityData("com.example.timer", false));
         OngoingActivityDataHelper.add(new OngoingActivityData("com.spotify.music", true));
         RecyclerView.ViewHolder h = holder();
         bind(h, 0);
         assertTrue(h.itemView.getBackground() instanceof LiveGlassDrawable);
         bind(h, 1);
-        assertTrue("media chip native", h.itemView.getBackground() instanceof GradientDrawable);
-        assertFalse(glass.tracked(h.itemView));
+        assertTrue("media chip uses the same compatible background", h.itemView.getBackground() instanceof LiveGlassDrawable);
     }
 
     @Test public void recycledHolderWithoutWriterIsClassifiedAgainstTheNewData() {
@@ -119,10 +118,12 @@ public class LiveChipHooksTest {
         Drawable nativeBg = ((LiveGlassDrawable) h.itemView.getBackground()).nativeDrawable();
         adapter.writeOnBind = false;
         bind(h, 1);
-        assertSame("restored to exactly the last native drawable", nativeBg, h.itemView.getBackground());
+        assertTrue(h.itemView.getBackground() instanceof LiveGlassDrawable);
+        assertSame("native drawable is retained under the glass", nativeBg,
+                ((LiveGlassDrawable) h.itemView.getBackground()).nativeDrawable());
     }
 
-    @Test public void mediaFlagFlippedInPlaceRestoresOnTheNextWriter() {
+    @Test public void mediaFlagFlippedInPlaceDoesNotDiscardGlass() {
         OngoingActivityData d = new OngoingActivityData("com.example.timer", false);
         OngoingActivityDataHelper.add(d);
         RecyclerView.ViewHolder h = holder();
@@ -130,8 +131,8 @@ public class LiveChipHooksTest {
         d.mIsMediaOngoingData = true;
         adapter.setChipBg((android.view.ViewGroup) h.itemView, ColorStateList.valueOf(0xff112233));
         hooks.chipBackground(adapter, h.itemView);
-        assertTrue(h.itemView.getBackground() instanceof GradientDrawable);
-        assertFalse(glass.tracked(h.itemView));
+        assertTrue(h.itemView.getBackground() instanceof LiveGlassDrawable);
+        assertTrue(glass.tracked(h.itemView));
     }
 
     @Test public void automationAndUnknownDataStayNative() {
@@ -238,11 +239,12 @@ public class LiveChipHooksTest {
         bind(h, 0);
         assertTrue("the timer chip shown by this holder gets glass", h.itemView.getBackground() instanceof LiveGlassDrawable);
         assertSame(timer, glass.ownerOf(h.itemView));
-        // And the reverse: the holder shows media, whatever the index says.
+        // The reverse still follows the holder, but media is now eligible too.
         DataHolder m = new DataHolder(new FrameLayout(activity));
         m.mData = new OngoingActivityData("com.spotify.music", true);
         bind(m, 1);
-        assertTrue(m.itemView.getBackground() instanceof GradientDrawable);
+        assertTrue(m.itemView.getBackground() instanceof LiveGlassDrawable);
+        assertSame(m.mData, glass.ownerOf(m.itemView));
     }
 
     /** L1 is wrapped before attach; the region exists only once attached, with the neutral curve. */
