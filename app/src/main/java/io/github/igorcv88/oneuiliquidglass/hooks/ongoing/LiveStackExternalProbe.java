@@ -8,7 +8,6 @@ import android.view.ViewOutlineProvider;
 import android.view.ViewParent;
 import io.github.igorcv88.oneuiliquidglass.diagnostics.Probe;
 import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
 import java.util.Map;
 
 /**
@@ -138,7 +137,7 @@ final class LiveStackExternalProbe {
         methodsListed = true;
         int emitted = 0;
         for (Method method : stackClass.getDeclaredMethods()) {
-            if (Modifier.isSynthetic(method.getModifiers())) continue;
+            if (method.isSynthetic()) continue;
             String name = method.getName();
             String low = name.toLowerCase(java.util.Locale.ROOT);
             if (!(low.contains("draw") || low.contains("shadow") || low.contains("peek")
