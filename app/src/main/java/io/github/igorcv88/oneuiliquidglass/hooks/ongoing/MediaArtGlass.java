@@ -23,30 +23,32 @@ import java.util.function.LongSupplier;
  * Album art over the module's glass in the shade's media player and in the Live Updates stack's
  * media card (both QSMediaCornerRoundedView#media_carousel_layout, same subtree on DZIF).
  *
- * <p>Survey facts (OULG_MEDIA_SURVEY_20261104_173145): below originImage and newImage the only
- * opaque layer is shade_album_art's own ColorDrawable (alpha 255, opaque); media_carousel_layout,
- * sec_qs_media_controls and circleReveal carry ColorDrawables at alpha 0. Behind the subtree sits
- * our material: the row's NotificationBackgroundView in the shade, the LiveGlassDrawable of
- * stack_expand_contents in the stack. Lowering the art's opacity without clearing that
- * ColorDrawable would only darken the art over Samsung's fill.</p>
+ * <p>Two layers occlude the glass (PR #159, DZIF, 04/11/2026, both surfaces): shade_album_art
+ * (originImage, circleReveal/newImage, and its own opaque ColorDrawable) and its sibling above,
+ * sec_album_art, which leaves a dark film over the glass when only the art is hidden. Hiding only
+ * sec_album_art changed nothing visible; hiding both showed the glass with working controls. #158
+ * lowered only shade_album_art, so the film stayed and nothing changed on screen.</p>
  *
- * <p>Applied while glass is behind: shade_album_art gets transitionAlpha = opacity (Samsung's own
- * alpha is untouched; final alpha = alpha x transitionAlpha) and its ColorDrawable alpha 0. The
- * opacity is a group alpha on the parent of originImage and newImage: both get the same value and
- * the circle reveal composes inside one layer, so the overlap of the two images is not denser
- * than the rest during a track change. Controls, header, WaveSeekbar and sec_album_art (the
- * legibility gradients above the art) are not touched. Without glass, the property off, or on
- * detach, both values are handed back exactly.</p>
+ * <p>Applied while glass is behind, in one pre-draw (no frame with only one of them changed):
+ * shade_album_art gets the configured opacity as a group alpha (originImage and newImage share it
+ * and the circle reveal composes inside one layer, so their overlap is not denser during a track
+ * change), its ColorDrawable alpha 0, and sec_album_art alpha 0. Controls, header, text and
+ * WaveSeekbar are not touched. A value Samsung (or a framework Fade) writes meanwhile becomes the
+ * native value and ours follows it proportionally (native x opacity, native x 0). Without glass,
+ * with the property off, on detach or error, every native value is handed back exactly.</p>
  *
- * <p>{@code debug.oulg.mediaart}: unset = 0.80; a number is clamped to [0.50, 1.00]; "0" or "off"
- * keeps the media native. Read when a root attaches and when it draws again after a pause of
- * {@link #SESSION_GAP_MS} (a new shade opening or stack showing), never on every frame. The
- * per-frame work is a few reference and float compares; no lookup, reflection or allocation.</p>
+ * <p>{@code debug.oulg.mediaart}: unset = 0.50; a number is clamped to [0.50, 1.00]; "0" or "off"
+ * keeps the media native. {@code debug.oulg.mediaart.alpha}: "transition" (default,
+ * View.setTransitionAlpha, which leaves Samsung's own alpha field alone) or "view"
+ * (View.setAlpha, the call #159 showed effective). Both are read when a root attaches and when it
+ * draws again after a pause of {@link #SESSION_GAP_MS}, never on every frame. Per frame: a few
+ * reference and float compares on cached views; no lookup, reflection, allocation or log.</p>
  */
 public final class MediaArtGlass implements View.OnAttachStateChangeListener, ViewTreeObserver.OnPreDrawListener {
     public static final String PROPERTY = "debug.oulg.mediaart";
     public static final String PROBE_PROPERTY = "debug.oulg.mediaart.probe";
-    static final float DEFAULT_OPACITY = 0.80f, MIN_OPACITY = 0.50f, MAX_OPACITY = 1.00f, OFF = -1f;
+    public static final String ALPHA_PROPERTY = "debug.oulg.mediaart.alpha";
+    static final float DEFAULT_OPACITY = 0.50f, MIN_OPACITY = 0.50f, MAX_OPACITY = 1.00f, OFF = -1f;
     static final long SESSION_GAP_MS = 1000;
     private static final String ROOT_CLASS = "com.android.systemui.media.QSMediaCornerRoundedView";
 
@@ -68,6 +70,7 @@ public final class MediaArtGlass implements View.OnAttachStateChangeListener, Vi
     static RowGlass rowGlass = row -> false;
     static PropertySource property = MediaArtGlass::systemProperty;
     static PropertySource probeProperty = () -> systemProperty(PROBE_PROPERTY);
+    static PropertySource alphaProperty = () -> systemProperty(ALPHA_PROPERTY);
     static LongSupplier clock = SystemClock::uptimeMillis;
     private static final Map<View, MediaArtGlass> WATCHED = new WeakHashMap<>();
     private static Method getter;
@@ -81,6 +84,8 @@ public final class MediaArtGlass implements View.OnAttachStateChangeListener, Vi
     private View art;
     private View overlayView;
     private float opacity = DEFAULT_OPACITY;
+    /** true: View.setAlpha; false: View.setTransitionAlpha (debug.oulg.mediaart.alpha). */
+    private boolean viewAlpha;
     private int probeMode;
     private int appliedProbeMode;
     private View leasedProbeArt, leasedProbeOverlay;
@@ -89,8 +94,7 @@ public final class MediaArtGlass implements View.OnAttachStateChangeListener, Vi
     private long lastFrame = Long.MIN_VALUE / 2;
     private boolean rootChecked, isRoot;
     // Leases: what was changed, on which object, and the native value to hand back.
-    private View alphaHost;
-    private float appliedOpacity, nativeTransitionAlpha;
+    private final AlphaLease artLease = new AlphaLease(), overlayLease = new AlphaLease();
     private ColorDrawable leasedFill;
     private int nativeFillAlpha;
     private int reasserts;
@@ -141,8 +145,7 @@ public final class MediaArtGlass implements View.OnAttachStateChangeListener, Vi
         resolveContext(v);
         art = NativeIds.find(v, names.art);
         overlayView = findOverlaySibling(art);
-        opacity = parse(readProperty());
-        probeMode = parseProbe(readProbeProperty());
+        readProperties();
         lastFrame = clock.getAsLong();
         observer = v.getViewTreeObserver();
         observer.addOnPreDrawListener(this);
@@ -170,8 +173,7 @@ public final class MediaArtGlass implements View.OnAttachStateChangeListener, Vi
         if (r == null) return;
         long now = clock.getAsLong();
         if (now - lastFrame > SESSION_GAP_MS) {
-            opacity = parse(readProperty());
-            probeMode = parseProbe(readProbeProperty());
+            readProperties();
             if (art == null || !art.isAttachedToWindow()) {
                 art = NativeIds.find(r, names.art);
                 overlayView = findOverlaySibling(art);
@@ -206,21 +208,12 @@ public final class MediaArtGlass implements View.OnAttachStateChangeListener, Vi
     }
 
     private void apply(ColorDrawable fill) {
-        boolean entering = alphaHost == null && leasedFill == null;
-        boolean changed = entering;
-        if (alphaHost != art) {
-            restoreAlpha();
-            alphaHost = art;
-            nativeTransitionAlpha = art.getTransitionAlpha();
-            changed = true;
-        }
-        if (art.getTransitionAlpha() != opacity) {
-            // Our own value overwritten (a framework Fade, for instance): counted, then reasserted.
-            if (appliedOpacity == opacity) reasserts++;
-            else changed = true;
-            art.setTransitionAlpha(opacity);
-            appliedOpacity = opacity;
-        }
+        boolean entering = !artLease.held() && leasedFill == null;
+        // Both layers change in this same pre-draw: no frame shows the art translucent under the
+        // film, or the film gone over the opaque art.
+        boolean changed = artLease.hold(art, viewAlpha, opacity);
+        if (overlayView != null) changed |= overlayLease.hold(overlayView, viewAlpha, 0f);
+        else overlayLease.release();
         if (fill != leasedFill) {
             restoreFill();
             if (fill != null) {
@@ -237,29 +230,74 @@ public final class MediaArtGlass implements View.OnAttachStateChangeListener, Vi
         }
         if (!changed) return;
         lastReason = null;
-        View r = root.get();
         Probe.log("MEDIA_ART", "state=applied context=" + context.name().toLowerCase(Locale.ROOT)
-                + " opacity=" + fmt(opacity) + " nativeTAlpha=" + fmt(nativeTransitionAlpha)
+                + " method=" + (viewAlpha ? "view" : "transition") + " opacity=" + fmt(opacity)
+                + " art=" + id(art) + " artNative=" + fmt(artLease.nativeValue) + " artApplied=" + fmt(artLease.applied)
+                + " overlay=" + id(overlayView)
+                + (overlayView == null ? "" : " overlayNative=" + fmt(overlayLease.nativeValue) + " overlayApplied=" + fmt(overlayLease.applied))
                 + " fill=" + (leasedFill == null ? "none" : "ColorDrawable/alpha" + nativeFillAlpha)
-                + (entering ? overlay() : "") + " root=" + id(r));
+                + " artShown=" + art.isShown() + " root=" + id(root.get()));
     }
 
     /** reason is a literal: an unchanged reason is recognised by identity, without building a string. */
     private void restore(String reason, Drawable fill) {
-        boolean held = alphaHost != null || leasedFill != null;
-        restoreAlpha();
+        boolean held = artLease.held() || overlayLease.held() || leasedFill != null;
+        int nativeWrites = artLease.nativeWrites + overlayLease.nativeWrites;
+        artLease.release();
+        overlayLease.release();
         restoreFill();
         if (!held && reason == lastReason) return;
         lastReason = reason;
         Probe.log("MEDIA_ART", "state=native context=" + context.name().toLowerCase(Locale.ROOT) + " reason=" + reason
-                + (fill == null ? "" : " fill=" + fill.getClass().getName()) + " reasserts=" + reasserts + " root=" + id(root.get()));
+                + (fill == null ? "" : " fill=" + fill.getClass().getName())
+                + " restored=" + held + " artAlpha=" + (art == null ? "null" : fmt(art.getAlpha()) + "/" + fmt(art.getTransitionAlpha()))
+                + " overlayAlpha=" + (overlayView == null ? "null" : fmt(overlayView.getAlpha()) + "/" + fmt(overlayView.getTransitionAlpha()))
+                + " nativeWrites=" + nativeWrites + " fillReasserts=" + reasserts + " root=" + id(root.get()));
         reasserts = 0;
     }
 
-    private void restoreAlpha() {
-        if (alphaHost != null && alphaHost.getTransitionAlpha() == appliedOpacity) alphaHost.setTransitionAlpha(nativeTransitionAlpha);
-        alphaHost = null;
-        appliedOpacity = Float.NaN;
+    /**
+     * One view's alpha (View alpha or transition alpha) held at native x factor. A value written
+     * by someone else while held is taken as the new native value; release hands back the native
+     * value only if ours is still in place.
+     */
+    static final class AlphaLease {
+        private View view;
+        private boolean viewAlpha;
+        float nativeValue = Float.NaN, applied = Float.NaN;
+        int nativeWrites;
+
+        boolean held() { return view != null; }
+
+        /** True when the target, the method or the factor changed (a line worth logging). */
+        boolean hold(View v, boolean viewMode, float factor) {
+            boolean fresh = v != view || viewMode != viewAlpha;
+            if (fresh) {
+                release();
+                view = v;
+                viewAlpha = viewMode;
+                nativeValue = read();
+                applied = Float.NaN;
+            }
+            float current = read();
+            boolean nativeWrite = !fresh && current != applied;
+            if (nativeWrite) { nativeValue = current; nativeWrites++; }
+            float want = nativeValue * factor;
+            boolean factorChanged = !fresh && !nativeWrite && want != applied;
+            if (current != want) write(want);
+            applied = want;
+            return fresh || factorChanged;
+        }
+
+        void release() {
+            if (view != null && read() == applied) write(nativeValue);
+            view = null;
+            applied = Float.NaN;
+            nativeWrites = 0;
+        }
+
+        private float read() { return viewAlpha ? view.getAlpha() : view.getTransitionAlpha(); }
+        private void write(float f) { if (viewAlpha) view.setAlpha(f); else view.setTransitionAlpha(f); }
     }
 
     private void restoreFill() {
@@ -364,24 +402,6 @@ public final class MediaArtGlass implements View.OnAttachStateChangeListener, Vi
         }
     }
 
-    /**
-     * sec_album_art (above the art) reports an opaque white GradientDrawable background while the
-     * art shows through it on device, so something not captured by the survey composes it. Its
-     * public compositing state is logged when the art starts showing the glass, to explain what
-     * the glass shows through.
-     */
-    private String overlay() {
-        View parent = art.getParent() instanceof android.view.ViewGroup ? (View) art.getParent() : null;
-        if (parent == null) return "";
-        android.view.ViewGroup g = (android.view.ViewGroup) parent;
-        int index = g.indexOfChild(art);
-        View above = index >= 0 && index + 1 < g.getChildCount() ? g.getChildAt(index + 1) : null;
-        if (above == null) return " overlay=none";
-        return " overlay=" + LiveStackExternalProbe.resourceName(above) + "/layer" + above.getLayerType()
-                + "/bgBlend" + above.getBackgroundTintBlendMode() + "/fgBlend" + above.getForegroundTintBlendMode()
-                + "/overlap" + above.hasOverlappingRendering();
-    }
-
     private static String id(View v) { return v == null ? "null" : Integer.toHexString(System.identityHashCode(v)); }
 
     static float parse(String raw) {
@@ -396,6 +416,21 @@ public final class MediaArtGlass implements View.OnAttachStateChangeListener, Vi
         } catch (NumberFormatException e) {
             return DEFAULT_OPACITY;
         }
+    }
+
+    private void readProperties() {
+        opacity = parse(readProperty());
+        probeMode = parseProbe(readProbeProperty());
+        viewAlpha = parseAlphaMethod(read(alphaProperty));
+    }
+
+    /** "view" selects View.setAlpha; anything else keeps setTransitionAlpha. */
+    static boolean parseAlphaMethod(String raw) {
+        return raw != null && "view".equals(raw.trim().toLowerCase(Locale.ROOT));
+    }
+
+    private static String read(PropertySource source) {
+        try { return source.get(); } catch (RuntimeException e) { return null; }
     }
 
     private static String readProperty() {
@@ -413,7 +448,7 @@ public final class MediaArtGlass implements View.OnAttachStateChangeListener, Vi
         }
     }
 
-    private static String fmt(float f) { return String.format(Locale.ROOT, "%.2f", f); }
+    private static String fmt(float f) { return Float.isNaN(f) ? "none" : String.format(Locale.ROOT, "%.2f", f); }
 
     // Tests.
     Context contextForTest() { return context; }
@@ -424,6 +459,7 @@ public final class MediaArtGlass implements View.OnAttachStateChangeListener, Vi
         rowGlass = row -> false;
         property = MediaArtGlass::systemProperty;
         probeProperty = () -> systemProperty(PROBE_PROPERTY);
+        alphaProperty = () -> systemProperty(ALPHA_PROPERTY);
         clock = SystemClock::uptimeMillis;
     }
 }

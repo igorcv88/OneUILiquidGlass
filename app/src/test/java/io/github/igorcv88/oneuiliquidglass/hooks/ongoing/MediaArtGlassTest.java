@@ -32,6 +32,7 @@ public class MediaArtGlassTest {
     private final AtomicInteger reads = new AtomicInteger();
     private volatile String prop;
     private volatile String probeProp;
+    private volatile String alphaProp;
     private volatile boolean glass;
     private FrameLayout root, art;
     private ImageView origin, fresh;
@@ -46,6 +47,7 @@ public class MediaArtGlassTest {
         MediaArtGlass.clock = now::get;
         MediaArtGlass.property = () -> { reads.incrementAndGet(); return prop; };
         MediaArtGlass.probeProperty = () -> probeProp;
+        MediaArtGlass.alphaProperty = () -> alphaProp;
         MediaArtGlass.rowGlass = row -> glass;
     }
 
@@ -79,7 +81,7 @@ public class MediaArtGlassTest {
         MediaArtGlass m = MediaArtGlass.watch(root);
         assertEquals(MediaArtGlass.Context.SHADE, m.contextForTest());
         frame();
-        assertEquals(0.80f, art.getTransitionAlpha(), 0f);
+        assertEquals(0.50f, art.getTransitionAlpha(), 0f);
         assertEquals("Samsung's alpha is untouched", 1f, art.getAlpha(), 0f);
         assertEquals("the opaque fill no longer hides the glass", 0, fill.getAlpha());
         assertSame(fill, art.getBackground());
@@ -272,13 +274,184 @@ public class MediaArtGlassTest {
     }
 
     @Test public void opacityParsing() {
-        assertEquals(0.80f, MediaArtGlass.parse(null), 0f);
-        assertEquals(0.80f, MediaArtGlass.parse(""), 0f);
+        assertEquals(0.50f, MediaArtGlass.parse(null), 0f);
+        assertEquals(0.50f, MediaArtGlass.parse(""), 0f);
         assertEquals(MediaArtGlass.OFF, MediaArtGlass.parse("0"), 0f);
         assertEquals(MediaArtGlass.OFF, MediaArtGlass.parse("off"), 0f);
         assertEquals(0.50f, MediaArtGlass.parse("0.3"), 0f);
         assertEquals(1.00f, MediaArtGlass.parse("1.4"), 0f);
         assertEquals(0.65f, MediaArtGlass.parse("0.65"), 0f);
-        assertEquals(0.80f, MediaArtGlass.parse("abc"), 0f);
+        assertEquals(0.50f, MediaArtGlass.parse("abc"), 0f);
+    }
+
+    // --- Both occluding layers (#159: hiding shade_album_art alone left sec_album_art's film).
+
+    @Test public void artAndFilmChangeTogetherInOnePreDraw() {
+        shade();
+        View overlay = addOverlay(1f);
+        glass = true;
+        MediaArtGlass.watch(root);
+        frame();
+        assertEquals(0.50f, art.getTransitionAlpha(), 0f);
+        assertEquals(0, fill.getAlpha());
+        assertEquals("the film goes in the same frame", 0f, overlay.getTransitionAlpha(), 0f);
+        assertEquals("Samsung's alpha fields stay untouched", 1f, overlay.getAlpha(), 0f);
+        assertEquals(1f, art.getAlpha(), 0f);
+        assertEquals("controls stay opaque", 1f, controls.getAlpha(), 0f);
+        assertEquals(1f, controls.getTransitionAlpha(), 0f);
+        assertEquals(1f, origin.getTransitionAlpha(), 0f);
+        assertEquals(1f, fresh.getTransitionAlpha(), 0f);
+    }
+
+    @Test public void noGlassHandsBothLayersBackExactly() {
+        shade();
+        View overlay = addOverlay(0.65f);
+        glass = true;
+        MediaArtGlass.watch(root);
+        frame();
+        glass = false;
+        frame();
+        assertEquals(1f, art.getTransitionAlpha(), 0f);
+        assertEquals(1f, overlay.getTransitionAlpha(), 0f);
+        assertEquals(0.65f, overlay.getAlpha(), 0f);
+        assertEquals(255, fill.getAlpha());
+        glass = true;
+        frame();
+        assertEquals("reapplied on the next frame with glass", 0f, overlay.getTransitionAlpha(), 0f);
+    }
+
+    @Test public void detachAndReattachRestoreThenReapplyBothLayers() {
+        shade();
+        View overlay = addOverlay(1f);
+        glass = true;
+        MediaArtGlass.watch(root);
+        frame();
+        FrameLayout row = (FrameLayout) root.getParent();
+        row.removeView(root);
+        assertEquals(1f, art.getTransitionAlpha(), 0f);
+        assertEquals(1f, overlay.getTransitionAlpha(), 0f);
+        assertEquals(255, fill.getAlpha());
+        row.addView(root);
+        frame();
+        assertEquals(0.50f, art.getTransitionAlpha(), 0f);
+        assertEquals(0f, overlay.getTransitionAlpha(), 0f);
+    }
+
+    @Test public void viewAlphaMethodUsesSetAlphaAndRestoresExactly() {
+        shade();
+        View overlay = addOverlay(0.90f);
+        art.setAlpha(0.80f);
+        alphaProp = "view";
+        glass = true;
+        MediaArtGlass.watch(root);
+        frame();
+        assertEquals(0.40f, art.getAlpha(), 1e-6f);
+        assertEquals(0f, overlay.getAlpha(), 0f);
+        assertEquals("transition alpha untouched in this mode", 1f, art.getTransitionAlpha(), 0f);
+        assertEquals(1f, overlay.getTransitionAlpha(), 0f);
+        glass = false;
+        frame();
+        assertEquals(0.80f, art.getAlpha(), 0f);
+        assertEquals(0.90f, overlay.getAlpha(), 0f);
+    }
+
+    @Test public void aNativeWriteBecomesTheNativeValueAndIsFollowedProportionally() {
+        shade();
+        View overlay = addOverlay(1f);
+        alphaProp = "view";
+        glass = true;
+        MediaArtGlass.watch(root);
+        frame();
+        art.setAlpha(0.60f);   // Samsung animates the art while we hold it
+        overlay.setAlpha(0.70f);
+        frame();
+        assertEquals(0.30f, art.getAlpha(), 1e-6f);
+        assertEquals(0f, overlay.getAlpha(), 0f);
+        glass = false;
+        frame();
+        assertEquals("the latest native value comes back", 0.60f, art.getAlpha(), 0f);
+        assertEquals(0.70f, overlay.getAlpha(), 0f);
+    }
+
+    @Test public void switchingTheAlphaMethodHandsTheFirstOneBack() {
+        shade();
+        View overlay = addOverlay(1f);
+        glass = true;
+        MediaArtGlass.watch(root);
+        frame();
+        alphaProp = "view";
+        now.addAndGet(MediaArtGlass.SESSION_GAP_MS + 1);
+        frame();
+        assertEquals(1f, art.getTransitionAlpha(), 0f);
+        assertEquals(1f, overlay.getTransitionAlpha(), 0f);
+        assertEquals(0.50f, art.getAlpha(), 0f);
+        assertEquals(0f, overlay.getAlpha(), 0f);
+    }
+
+    @Test public void opacityChangeAppliesWithoutTouchingTheFilmAgain() {
+        shade();
+        View overlay = addOverlay(1f);
+        glass = true;
+        MediaArtGlass.watch(root);
+        frame();
+        prop = "0.75";
+        now.addAndGet(MediaArtGlass.SESSION_GAP_MS + 1);
+        frame();
+        assertEquals(0.75f, art.getTransitionAlpha(), 0f);
+        assertEquals(0f, overlay.getTransitionAlpha(), 0f);
+        prop = "off";
+        now.addAndGet(MediaArtGlass.SESSION_GAP_MS + 1);
+        frame();
+        assertEquals(1f, art.getTransitionAlpha(), 0f);
+        assertEquals(1f, overlay.getTransitionAlpha(), 0f);
+        assertEquals(255, fill.getAlpha());
+    }
+
+    @Test public void albumChangeKeepsOneGroupAlphaForBothImages() {
+        shade();
+        addOverlay(1f);
+        glass = true;
+        MediaArtGlass.watch(root);
+        frame();
+        // Track change: new bitmaps, circle reveal, colour extraction.
+        origin.setImageDrawable(new ColorDrawable(0xff123456));
+        fresh.setImageDrawable(new ColorDrawable(0xff654321));
+        fill.setColor(0xff222222);
+        frame();
+        assertEquals(0.50f, art.getTransitionAlpha(), 0f);
+        assertEquals(0, fill.getAlpha());
+        assertEquals(1f, origin.getAlpha(), 0f);
+        assertEquals(1f, origin.getTransitionAlpha(), 0f);
+        assertEquals(1f, fresh.getAlpha(), 0f);
+        assertEquals(1f, fresh.getTransitionAlpha(), 0f);
+    }
+
+    @Test public void aMediaPlayerOutsideTheShadeRowAndTheStackIsNeverTouched() {
+        // QS panel media: same class and ids, no row or stack holder above it.
+        FrameLayout panel = new FrameLayout(activity);
+        root = new FrameLayout(activity);
+        root.setId(android.R.id.widget_frame);
+        art = new FrameLayout(activity);
+        art.setId(android.R.id.background);
+        fill = new ColorDrawable(0xff000000);
+        art.setBackground(fill);
+        root.addView(art);
+        View overlay = addOverlay(1f);
+        panel.addView(root);
+        activity.setContentView(panel);
+        glass = true;
+        MediaArtGlass m = MediaArtGlass.watch(root);
+        assertEquals(MediaArtGlass.Context.NONE, m.contextForTest());
+        frame();
+        assertEquals(1f, art.getTransitionAlpha(), 0f);
+        assertEquals(1f, overlay.getTransitionAlpha(), 0f);
+        assertEquals(255, fill.getAlpha());
+    }
+
+    @Test public void alphaMethodParsing() {
+        assertFalse(MediaArtGlass.parseAlphaMethod(null));
+        assertFalse(MediaArtGlass.parseAlphaMethod("transition"));
+        assertFalse(MediaArtGlass.parseAlphaMethod("x"));
+        assertTrue(MediaArtGlass.parseAlphaMethod(" View "));
     }
 }
