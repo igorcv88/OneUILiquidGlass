@@ -117,62 +117,93 @@ public class LiveCardHooksTest {
         return state.toString();
     }
 
-    @Test public void oneLiveCardAlwaysKeepsItsBackgroundOnFirstExpansion() {
-        adapter.mList.add(new OngoingActivityData("com.samsung.android.health", false));
-        CardItemView only = card(0);
-        hooks.stackUpdated(stack);
-        LiveGlassDrawable g = glass.glassOf(only.fill());
-        assertNotNull(g);
-        assertTrue(g.showsGlass());
-        assertFalse("one notification cannot have the lower capsule", g.stackBackgroundOccluded());
-        for (int i = 0; i < 4; i++) {
-            only.fill().getViewTreeObserver().dispatchOnPreDraw();
-            hooks.syncStackBackgrounds(stack);
-            assertFalse(g.stackBackgroundOccluded());
-        }
-        // An unrelated decorative child is not a second ongoing notification.
-        stack.addView(new FrameLayout(stack.getContext()));
-        hooks.syncStackBackgrounds(stack);
-        assertFalse(g.stackBackgroundOccluded());
+    /** Actual adapter result observed in OULG_STACK_DETAIL_2: item_root encloses pip. */
+    private FrameLayout boundOuterCard(int position) {
+        CardItemView content = (CardItemView) adapter.getView(position, null, stack);
+        FrameLayout outer = new FrameLayout(stack.getContext());
+        android.content.res.Resources original = stack.getResources();
+        android.content.res.Resources named = new android.content.res.Resources(
+                original.getAssets(), original.getDisplayMetrics(), original.getConfiguration()) {
+            @Override public String getResourceEntryName(int id) {
+                return id == 0x123456 ? "stack_pip_layout" : super.getResourceEntryName(id);
+            }
+        };
+        FrameLayout pip = new FrameLayout(stack.getContext()) {
+            @Override public android.content.res.Resources getResources() { return named; }
+        };
+        pip.setId(0x123456);
+        pip.setClipToOutline(true);
+        GradientDrawable white = new GradientDrawable(); white.setColor(0xffffffff);
+        white.setCornerRadius(48f);
+        GradientDrawable grey = new GradientDrawable(); grey.setColor(0xfa3a3a3d);
+        RippleDrawable ripple = new RippleDrawable(ColorStateList.valueOf(0), white, null);
+        ripple.addLayer(grey);
+        pip.setBackground(ripple);
+        FrameLayout blur = new CardStackView.BlurFrame(stack.getContext());
+        blur.addView(content, new FrameLayout.LayoutParams(-1, -1));
+        pip.addView(blur, new FrameLayout.LayoutParams(-1, -1));
+        outer.addView(pip, new FrameLayout.LayoutParams(-1, -1));
+        stack.addView(outer, new FrameLayout.LayoutParams(-1, -1));
+        stack.setBlurBG(blur, position);
+        layoutNativeRegion(blur);
+        hooks.cardBound(adapter, outer, position);
+        hooks.cardWriter(content.fill(), true);
+        return outer;
     }
 
-    @Test public void twoCardStackRendersOnlyTheFrontGlassBackgroundWithoutHidingContent() {
-        adapter.mList.add(new OngoingActivityData("com.samsung.android.health", false));
+    @Test public void outerAdapterRootMutesBothDecorationsThroughSwipesAndRestoresThem() {
+        checkOuterCards(false);
+    }
+
+    @Test public void liveAndMediaCardsKeepTheirGlassThroughSwipes() {
+        checkOuterCards(true);
+    }
+
+    @Test public void oneOuterCardAlsoMutesItsOwnFrame() {
         adapter.mList.add(new OngoingActivityData("com.sec.android.app.clockpackage", false));
-        CardItemView back = card(0);
-        CardItemView front = card(1);
-        LiveGlassDrawable backGlass = glass.glassOf(back.fill());
-        LiveGlassDrawable frontGlass = glass.glassOf(front.fill());
-        assertNotNull(backGlass);
-        assertNotNull(frontGlass);
-        assertTrue(backGlass.showsGlass());
-        assertTrue(frontGlass.showsGlass());
+        FrameLayout outer = boundOuterCard(0);
+        hooks.syncStackFills(stack);
+        RippleDrawable ripple = (RippleDrawable) outer.getChildAt(0).getBackground();
+        assertNotNull(ripple.getDrawable(0).getColorFilter());
+        assertNotNull(ripple.getDrawable(1).getColorFilter());
+        assertTrue(glass.glassOf(hooks.fills(outer).get(0)).showsGlass());
+    }
 
-        hooks.stackUpdated(stack);
-        assertTrue("second glass background must not peek behind front card actions",
-                backGlass.stackBackgroundOccluded());
-        assertFalse(frontGlass.stackBackgroundOccluded());
-        assertEquals(View.VISIBLE, back.getVisibility());
-        assertEquals(View.VISIBLE, front.getVisibility());
-        assertSame(backGlass, back.fill().getBackground());
-        assertSame(frontGlass, front.fill().getBackground());
-        // Samsung changes the drawn top by reordering children without rebuilding card data.
-        View oldBackSlot = (View) back.getParent().getParent();
-        stack.bringChildToFront(oldBackSlot);
-        for (int swipe = 0; swipe < 4; swipe++) {
-            hooks.syncStackBackgrounds(stack);
-            assertFalse(backGlass.stackBackgroundOccluded());
-            assertTrue(frontGlass.stackBackgroundOccluded());
-            assertSame(backGlass, back.fill().getBackground());
-            assertSame(frontGlass, front.fill().getBackground());
-            assertEquals(View.VISIBLE, front.getVisibility());
+    private void checkOuterCards(boolean media) {
+        adapter.mList.add(new OngoingActivityData("com.samsung.android.health", false));
+        adapter.mList.add(new OngoingActivityData("com.sec.android.app.clockpackage", media));
+        FrameLayout first = boundOuterCard(0), second = boundOuterCard(1);
+        for (int swipe = 0; swipe < 6; swipe++) {
+            stack.bringChildToFront(swipe % 2 == 0 ? first : second);
+            hooks.stackUpdated(stack);
+            first.getViewTreeObserver().dispatchOnPreDraw();
+            for (FrameLayout outer : new FrameLayout[]{first, second}) {
+                FrameLayout pip = (FrameLayout) outer.getChildAt(0);
+                RippleDrawable ripple = (RippleDrawable) pip.getBackground();
+                assertNotNull("white fill must be muted below item_root", ripple.getDrawable(0).getColorFilter());
+                assertNotNull("grey fill must be muted below item_root", ripple.getDrawable(1).getColorFilter());
+                assertTrue(pip.getClipToOutline());
+                View fill = hooks.fills(outer).get(0);
+                LiveGlassDrawable material = glass.glassOf(fill);
+                assertNotNull(material);
+                assertTrue(material.showsGlass());
+                material.setBounds(0, 0, 1340, 288);
+                FakeBlurDrawable region = (FakeBlurDrawable) material.blur().drawable;
+                int before = region.draws;
+                material.draw(new android.graphics.Canvas() {
+                    @Override public boolean isHardwareAccelerated() { return true; }
+                });
+                assertEquals("incoming and outgoing cards both submit glass", before + 1, region.draws);
+            }
         }
-
         env.on.remove(LiveSurface.CARD);
         glass.refresh(LiveSurface.CARD);
-        hooks.syncStackBackgrounds(stack);
-        assertFalse("native fallback cannot be hidden", backGlass.stackBackgroundOccluded());
-        assertFalse("native fallback cannot be hidden", frontGlass.stackBackgroundOccluded());
+        hooks.syncStackFills(stack);
+        for (FrameLayout outer : new FrameLayout[]{first, second}) {
+            RippleDrawable ripple = (RippleDrawable) outer.getChildAt(0).getBackground();
+            assertNull(ripple.getDrawable(0).getColorFilter());
+            assertNull(ripple.getDrawable(1).getColorFilter());
+        }
     }
 
     @Test public void rapidCardDetachReattachNeverRestoresOpaqueNativeBlurMidSwipe() {
@@ -568,4 +599,5 @@ public class LiveCardHooksTest {
         assertEquals("translucency was draw-only", 255, nativeFill.getAlpha());
     }
 }
+
 
