@@ -34,9 +34,10 @@ final class LiveStackTimeline {
     private static final long[] TICKS = {0, 16, 32, 48, 64, 96, 128, 176, 256, 352, 480};
     private static final long COOLDOWN_MS = 620;
     private static final int MAX_CARDS = 4;
-    private static final int MAX_DEPTH = 9;
-    private static final int MAX_VISITS = 110;
-    private static final int MAX_LINES_PER_SAMPLE = 48;
+    // The expanded action0 is 10-12 levels below the Samsung card root on DZIF.
+    private static final int MAX_DEPTH = 16;
+    private static final int MAX_VISITS = 200;
+    private static final int MAX_LINES_PER_SAMPLE = 72;
     private static final String STACK = LiveCardHooks.STACK;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final WeakHashMap<View, Burst> bursts = new WeakHashMap<>();
@@ -118,7 +119,7 @@ final class LiveStackTimeline {
         remaining[2]++;
         Drawable bg = v.getBackground();
         String resource = resourceName(v);
-        boolean selected = bg != null || v.getElevation() != 0f
+        boolean selected = bg != null || v.getForeground() != null || v.getElevation() != 0f
                 || resource.contains("action") || resource.contains("stack")
                 || resource.contains("blur") || resource.contains("pip");
         if (selected && remaining[1] > 0) {
@@ -145,13 +146,18 @@ final class LiveStackTimeline {
                 .append(" res=").append(name).append(" xy=").append(xy[0]).append(',').append(xy[1])
                 .append(" wh=").append(v.getWidth()).append('x').append(v.getHeight())
                 .append(" vis=").append(v.getVisibility()).append(" alpha=").append(v.getAlpha())
-                .append(" ty=").append(v.getTranslationY()).append(" tz=").append(v.getTranslationZ())
+                .append(" pressed=").append(v.isPressed()).append(" selected=").append(v.isSelected())
+                .append(" activated=").append(v.isActivated())
+                .append(" tx=").append(v.getTranslationX()).append(" ty=").append(v.getTranslationY())
+                .append(" tz=").append(v.getTranslationZ()).append(" sx=").append(v.getScaleX())
+                .append(" sy=").append(v.getScaleY())
                 .append(" elev=").append(v.getElevation()).append(" clip=").append(v.getClipToOutline())
                 .append(" layer=").append(v.getLayerType())
                 .append(" children=").append(v instanceof ViewGroup ? ((ViewGroup) v).getChildCount() : 0)
                 .append(" shadowA=").append(shadow(v, true))
                 .append(" shadowS=").append(shadow(v, false))
-                .append(" bg=").append(drawable(bg));
+                .append(" bg=").append(drawable(bg))
+                .append(" fg=").append(drawable(v.getForeground()));
         return b.toString();
     }
 
@@ -167,7 +173,10 @@ final class LiveStackTimeline {
         if (background instanceof RippleDrawable) {
             RippleDrawable ripple = (RippleDrawable) background;
             int n = Math.min(5, ripple.getNumberOfLayers());
-            b.append(" rippleLayers=").append(ripple.getNumberOfLayers());
+            Rect hotspot = new Rect();
+            ripple.getHotspotBounds(hotspot);
+            b.append(" rippleLayers=").append(ripple.getNumberOfLayers())
+                    .append(" hotspot=").append(hotspot.toShortString());
             for (int i = 0; i < n; i++) {
                 Drawable layer = ripple.getDrawable(i);
                 b.append(" [").append(i).append(" id=").append(ripple.getId(i))
