@@ -122,6 +122,12 @@ final class LiveStackTimeline {
                 Probe.log("LIVE_STACK_TIMELINE_NODE", "burst=" + burst.id + " path=stack obj=" + id(v)
                         + " " + stackState);
             }
+            // At 640–1200 ms the only new question is whether external nodes appear after the
+            // card settles. Avoid repeating a costly deep action-tree walk at those late ticks.
+            if (burst.level >= 2 && scheduled > 480) {
+                LiveStackExternalProbe.sample(stack, burst.id, elapsed, burst.externalPrevious);
+                return;
+            }
             int n = Math.min(MAX_CARDS, stack.getChildCount());
             // Per-card quotas keep the incoming and outgoing cards visible in the same sample.
             // One large subtree must never exhaust the budget before the second card is visited.
