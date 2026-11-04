@@ -206,6 +206,7 @@ final class NowBarHooks {
         c.lastNative = null;
         if (!glass.applied(host)) companions(card, c, false);
         else if (glass.glassOf(host) != null && glass.glassOf(host).showsGlass()) companions(card, c, true);
+        if (verdict.ok()) Probe.liveSurfaceLater(card, "NOWBAR", 550);
     }
 
     /** After the stack's q (refreshAllViews) and setExpandedCardState: its ongoing cards only. */
