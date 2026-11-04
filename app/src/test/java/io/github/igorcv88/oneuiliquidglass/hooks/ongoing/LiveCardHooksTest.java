@@ -8,6 +8,8 @@ import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.RippleDrawable;
 import android.os.Looper;
+import java.time.Duration;
+import android.view.ViewGroup;
 import android.view.View;
 import android.widget.FrameLayout;
 import com.android.systemui.statusbar.phone.ongoingactivity.CardStackview.CardItemView;
@@ -171,6 +173,46 @@ public class LiveCardHooksTest {
         hooks.syncStackBackgrounds(stack);
         assertFalse("native fallback cannot be hidden", backGlass.stackBackgroundOccluded());
         assertFalse("native fallback cannot be hidden", frontGlass.stackBackgroundOccluded());
+    }
+
+    @Test public void rapidCardDetachReattachNeverRestoresOpaqueNativeBlurMidSwipe() {
+        adapter.mList.add(new OngoingActivityData("com.samsung.android.health", false));
+        CardItemView root = card(0);
+        View blurFrame = (View) root.getParent();
+        CardStackView.NativeBackgroundBlurDrawable nativeRegion =
+                (CardStackView.NativeBackgroundBlurDrawable) blurFrame.getBackground();
+        assertEquals(0, nativeRegion.getAlpha());
+        ViewGroup window = (ViewGroup) stack.getParent();
+
+        for (int swipe = 0; swipe < 4; swipe++) {
+            window.removeView(stack);
+            // A short detach must not restore Samsung's opaque grey backing.
+            assertEquals("native region must stay muted during a brief detach", 0, nativeRegion.getAlpha());
+            window.addView(stack);
+            Shadows.shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(64));
+            assertEquals("reattached live card retains the glass companion", 0, nativeRegion.getAlpha());
+            assertTrue(((LiveGlassDrawable) root.fill().getBackground()).showsGlass());
+        }
+
+        window.removeView(stack);
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(64));
+        assertEquals("a genuinely detached card must restore its native region",
+                255, nativeRegion.getAlpha());
+    }
+
+    @Test public void explicitCardGateOffRestoresNativeImmediatelyDespiteDetachGrace() {
+        adapter.mList.add(new OngoingActivityData("com.samsung.android.health", false));
+        CardItemView root = card(0);
+        CardStackView.NativeBackgroundBlurDrawable region =
+                (CardStackView.NativeBackgroundBlurDrawable) ((View) root.getParent()).getBackground();
+        ViewGroup window = (ViewGroup) stack.getParent();
+        window.removeView(stack);
+        assertEquals(0, region.getAlpha());
+        env.on.remove(LiveSurface.CARD);
+        glass.refresh(LiveSurface.CARD);
+        assertEquals("explicit gate-off must never defer native fallback", 255, region.getAlpha());
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(64));
+        assertEquals(255, region.getAlpha());
     }
 
     @Test public void expansionKeepsOneRegionDespiteNativeGeometryAndRadiusChanges() {
