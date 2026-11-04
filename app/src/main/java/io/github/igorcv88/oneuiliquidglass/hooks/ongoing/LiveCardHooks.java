@@ -332,10 +332,11 @@ final class LiveCardHooks {
             if (materialAttached && !supported.contains(frame)) supported.add(frame);
         }
 
+        final boolean keepVisible = glassPresent;
         List<StackLease> leases = stackFills.get(stack);
         if (leases != null) leases.removeIf(lease -> {
             View frame = lease.layer.get();
-            if (glassPresent && frame != null && supported.contains(frame)) return false;
+            if (keepVisible && frame != null && supported.contains(frame)) return false;
             lease.fill.restore();
             return true;
         });
