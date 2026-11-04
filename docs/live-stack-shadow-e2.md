@@ -48,6 +48,11 @@ A propriedade é relida no máximo a cada 750 ms, sempre que o Samsung reescreve
 | 4 | suprimir ambos | prévia da opção B: sem indicador |
 | 5 | **A2**: recortar o frame | `frame.setClipBounds(0, 0, w, h)`: só o que fica abaixo da base do cartão |
 | 6 | **A**: recortar cada view | `setClipBounds` local calculado a partir de top, `translationY`, pivô e escala (hoje 203/216 e 183/216) |
+| 7 | alpha da view | alpha final 0 em shadow1/shadow2 via `View.setTransitionAlpha(0f)` (o `getAlpha()` da Samsung fica intacto); não suspende a região do compositor |
+| 8 | supressão completa | modo 7 + região `BackgroundBlurDrawable` de cada indicador com alpha 0 (`NativeRegionLease`) |
+| 9 | só a região | região de blur dos indicadores com alpha 0; alpha da view nativo |
+
+> Os indicadores trocam o `RippleDrawable` por um `BackgroundBlurDrawable` quando ficam visíveis (E1: `@c7ded7f`/`@d7956aa`, alpha 8→127). Por isso os modos 1–4 perdem a elegibilidade (`reject=notRipple`), e recortes ou alpha da view não limitam a região que o SurfaceFlinger desfoca.
 
 Escopo e garantias:
 

@@ -321,6 +321,199 @@ public class LiveStackShadowExperimentTest {
         assertTrue(filterIs(content(shadow1), LiveStackShadowExperiment.CLEAR));
     }
 
+    // ---- modes 7-9: direct suppression, DZIF show sequence ----------------------------------
+
+    /** What Samsung does when it shows the indicator: VISIBLE, blur background, alpha fade start. */
+    private static CardStackView.NativeBackgroundBlurDrawable show(View indicator, float alpha) {
+        CardStackView.NativeBackgroundBlurDrawable blur = new CardStackView.NativeBackgroundBlurDrawable();
+        blur.setAlpha(Math.round(alpha * 255));
+        indicator.setBackground(blur);
+        indicator.setAlpha(alpha);
+        return blur;
+    }
+
+    @Test public void filterModeReportsLossOfEligibilityWhenSamsungInstallsTheBlurRegion() {
+        frame.setVisibility(View.GONE);
+        mode.set(LiveStackShadowExperiment.MODE_HIDE_BOTH);
+        experiment.sync(stack, true);
+        assertTrue(filterIs(content(shadow1), LiveStackShadowExperiment.CLEAR));
+
+        frame.setVisibility(View.VISIBLE);
+        show(shadow1, 0.03f);
+        show(shadow2, 0.03f);
+        preDraw();
+        assertFalse(experiment.effective());
+        assertEquals(LiveStackShadowExperiment.PENDING_FILTER_REJECTED, experiment.pending());
+        assertEquals(LiveStackShadowExperiment.REJECT_NOT_RIPPLE, experiment.filterReject(1));
+        assertEquals(LiveStackShadowExperiment.REJECT_NOT_RIPPLE, experiment.filterReject(2));
+        // The old ripple content is restored even though the view no longer draws it.
+        assertNull(ripple1.getDrawable(0).getColorFilter());
+    }
+
+    @Test public void suppressAllSurvivesGoneToVisibleAndSamsungFadeThenRestoresExactly() {
+        frame.setVisibility(View.GONE);
+        mode.set(LiveStackShadowExperiment.MODE_SUPPRESS_ALL);
+        experiment.sync(stack, true);
+        assertFalse("GONE is never a success", experiment.effective());
+        assertEquals(LiveStackShadowExperiment.PENDING_NOT_SHOWN, experiment.pending());
+
+        frame.setVisibility(View.VISIBLE);
+        CardStackView.NativeBackgroundBlurDrawable b1 = show(shadow1, 0.03f), b2 = show(shadow2, 0.01f);
+        preDraw();
+        assertTrue(experiment.effective());
+        assertEquals(0f, shadow1.getTransitionAlpha(), 0f);
+        assertEquals(0f, shadow2.getTransitionAlpha(), 0f);
+        assertEquals(0, b1.getAlpha());
+        assertEquals(0, b2.getAlpha());
+
+        // Samsung's fade keeps writing both alphas: each write is undone before the frame draws.
+        shadow1.setAlpha(0.5f); b1.setAlpha(127);
+        shadow2.setAlpha(0.3f); b2.setAlpha(76);
+        preDraw();
+        assertTrue(experiment.effective());
+        assertEquals(0f, shadow1.getTransitionAlpha(), 0f);
+        assertEquals(0, b1.getAlpha());
+
+        // Steady: no further writes.
+        preDraw();
+        assertTrue(experiment.effective());
+
+        // Samsung's own alpha was never overwritten.
+        assertEquals(0.5f, shadow1.getAlpha(), 0f);
+        mode.set(LiveStackShadowExperiment.MODE_OFF);
+        preDraw();
+        assertEquals(1f, shadow1.getTransitionAlpha(), 0f);
+        assertEquals(1f, shadow2.getTransitionAlpha(), 0f);
+        assertEquals(0.5f, shadow1.getAlpha(), 0f);
+        assertEquals(0.3f, shadow2.getAlpha(), 0f);
+        assertEquals(127, b1.getAlpha());
+        assertEquals(76, b2.getAlpha());
+    }
+
+    @Test public void alphaOnlyLeavesTheRegionAndRegionOnlyLeavesTheView() {
+        CardStackView.NativeBackgroundBlurDrawable b1 = show(shadow1, 0.5f);
+        show(shadow2, 0.3f);
+        mode.set(LiveStackShadowExperiment.MODE_ALPHA);
+        experiment.sync(stack, true);
+        assertTrue(experiment.effective());
+        assertEquals(0f, shadow1.getTransitionAlpha(), 0f);
+        assertEquals(127, b1.getAlpha());
+
+        mode.set(LiveStackShadowExperiment.MODE_REGION);
+        preDraw();
+        assertTrue(experiment.effective());
+        assertEquals(0.5f, shadow1.getAlpha(), 0f);
+        assertEquals(0, b1.getAlpha());
+
+        experiment.restore("test");
+        assertEquals(127, b1.getAlpha());
+        assertEquals(0.5f, shadow1.getAlpha(), 0f);
+    }
+
+    @Test public void regionModeIsPendingWhileTheIndicatorStillHasTheRipple() {
+        mode.set(LiveStackShadowExperiment.MODE_REGION);
+        experiment.sync(stack, true);
+        assertFalse(experiment.effective());
+        assertEquals(LiveStackShadowExperiment.PENDING_REGION_NOT_BLUR, experiment.pending());
+    }
+
+    @Test public void lateLayoutIsPendingUntilTheIndicatorsHaveASize() {
+        layout.removeView(frame);
+        CountingFrame fresh = newFrame();
+        layout.addView(fresh, 1, new LinearLayout.LayoutParams(1340, 216));
+        View a = fresh.getChildAt(0), b = fresh.getChildAt(1);
+        show(a, 0.5f);
+        show(b, 0.3f);
+        mode.set(LiveStackShadowExperiment.MODE_SUPPRESS_ALL);
+        experiment.sync(stack, true);
+        assertFalse(experiment.effective());
+        assertEquals(LiveStackShadowExperiment.PENDING_NOT_LAID_OUT, experiment.pending());
+        layoutAll();
+        preDraw();
+        assertTrue(experiment.effective());
+        assertEquals(0f, a.getTransitionAlpha(), 0f);
+    }
+
+    @Test public void replacedBlurBackgroundIsRestoredAndTheNewOneSuppressed() {
+        CardStackView.NativeBackgroundBlurDrawable old = show(shadow1, 0.5f);
+        show(shadow2, 0.3f);
+        mode.set(LiveStackShadowExperiment.MODE_SUPPRESS_ALL);
+        experiment.sync(stack, true);
+        assertEquals(0, old.getAlpha());
+        CardStackView.NativeBackgroundBlurDrawable next = new CardStackView.NativeBackgroundBlurDrawable();
+        next.setAlpha(127);
+        shadow1.setBackground(next);
+        preDraw();
+        assertEquals("old region restored", 127, old.getAlpha());
+        assertEquals(0, next.getAlpha());
+        assertTrue(experiment.effective());
+    }
+
+    @Test public void rebuiltIndicatorsGetSuppressedAndTheOldOnesRestored() {
+        show(shadow1, 0.5f);
+        show(shadow2, 0.3f);
+        mode.set(LiveStackShadowExperiment.MODE_ALPHA);
+        experiment.sync(stack, true);
+        assertEquals(0f, shadow1.getTransitionAlpha(), 0f);
+        View oldA = shadow1;
+        layout.removeView(frame);
+        CountingFrame fresh = newFrame();
+        layout.addView(fresh, 1, new LinearLayout.LayoutParams(1340, 216));
+        layoutAll();
+        preDraw();
+        assertEquals("old indicator restored", 1f, oldA.getTransitionAlpha(), 0f);
+        assertEquals(0.5f, oldA.getAlpha(), 0f);
+        assertEquals(0f, fresh.getChildAt(0).getTransitionAlpha(), 0f);
+        assertEquals(0f, fresh.getChildAt(1).getTransitionAlpha(), 0f);
+        assertTrue(experiment.effective());
+    }
+
+    @Test public void stackDetachRestoresAlphaAndReattachSuppressesAgain() {
+        CardStackView.NativeBackgroundBlurDrawable b1 = show(shadow1, 0.5f);
+        show(shadow2, 0.3f);
+        mode.set(LiveStackShadowExperiment.MODE_SUPPRESS_ALL);
+        experiment.sync(stack, true);
+        assertTrue(experiment.effective());
+        activity.setContentView(new FrameLayout(activity));
+        assertEquals(1f, shadow1.getTransitionAlpha(), 0f);
+        assertEquals(0.5f, shadow1.getAlpha(), 0f);
+        assertEquals(127, b1.getAlpha());
+        assertFalse(experiment.effective());
+        activity.setContentView(layout);
+        layoutAll();
+        preDraw();
+        assertTrue(experiment.effective());
+        assertEquals(0f, shadow1.getTransitionAlpha(), 0f);
+        assertEquals(0, b1.getAlpha());
+    }
+
+    @Test public void losingGlassRestoresAlpha() {
+        show(shadow1, 0.5f);
+        show(shadow2, 0.3f);
+        mode.set(LiveStackShadowExperiment.MODE_ALPHA);
+        experiment.sync(stack, true);
+        assertEquals(0f, shadow1.getTransitionAlpha(), 0f);
+        experiment.sync(stack, false);
+        assertEquals(1f, shadow1.getTransitionAlpha(), 0f);
+        assertEquals(1f, shadow2.getTransitionAlpha(), 0f);
+        assertEquals(0.5f, shadow1.getAlpha(), 0f);
+        assertEquals(0.3f, shadow2.getAlpha(), 0f);
+    }
+
+    @Test public void nativeWriteOfZeroDuringSuppressionSurvivesTheRestore() {
+        show(shadow1, 0.5f);
+        show(shadow2, 0.3f);
+        mode.set(LiveStackShadowExperiment.MODE_ALPHA);
+        experiment.sync(stack, true);
+        assertEquals(0f, shadow1.getTransitionAlpha(), 0f);
+        // End of Samsung's fade-out while we suppress.
+        shadow1.setAlpha(0f);
+        preDraw();
+        experiment.restore("test");
+        assertEquals("native 0 kept", 0f, shadow1.getAlpha(), 0f);
+        assertEquals(1f, shadow1.getTransitionAlpha(), 0f);
+    }
+
     @Test public void degenerateGeometryKeepsNativeClip() {
         View empty = new View(activity);
         assertNull(LiveStackShadowExperiment.belowParentTop(empty));
