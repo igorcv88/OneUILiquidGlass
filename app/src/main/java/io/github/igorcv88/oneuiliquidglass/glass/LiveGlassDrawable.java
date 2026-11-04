@@ -266,7 +266,8 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
     private void drawReport(String mode, Canvas canvas, Rect b, String reason) {
         // Unlike LIVE_RENDER_DRAW's change-only mode, this samples successive draw submissions
         // during a bounded stackprobe window; never changes a drawable or the rendering path.
-        traceMaterial("DRAW_" + mode, canvas);
+        if ("CARD".equals(renderSurface) && LiveMaterialTrace.isArmed())
+            traceMaterial("DRAW_" + mode, canvas);
         if (renderProbe == null || !renderProbe.changed(mode)) return;
         try {
             Probe.log("LIVE_RENDER_DRAW", "surface=" + renderSurface + " mode=" + mode + " reason=" + reason
