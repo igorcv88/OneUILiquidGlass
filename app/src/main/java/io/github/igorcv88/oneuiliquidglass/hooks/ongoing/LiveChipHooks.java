@@ -8,6 +8,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Predicate;
+import io.github.igorcv88.oneuiliquidglass.diagnostics.Probe;
 import io.github.igorcv88.oneuiliquidglass.hooks.Reflect;
 
 /**
@@ -35,6 +36,7 @@ final class LiveChipHooks {
         }
     }
     private final ArrayDeque<Frame> frames = new ArrayDeque<>();
+    private final java.util.WeakHashMap<Object, String> lastBindTrace = new java.util.WeakHashMap<>();
     private final LiveGlass glass;
     private Locator locator;
 
@@ -58,7 +60,16 @@ final class LiveChipHooks {
         if (chip == null || glass.writing()) return;
         Frame f = frames.peek();
         if (f != null && f.adapter == adapter) { if (!f.written.contains(chip)) f.written.add(chip); return; }
-        if (glass.tracked(chip)) glass.rewrite(chip);
+        if (glass.tracked(chip)) {
+            LiveGlass.Outcome outcome = glass.rewrite(chip);
+            if (Probe.trace) {
+                android.graphics.drawable.Drawable background = chip.getBackground();
+                Probe.log("LIVE_DETAIL_CHIP_WRITER", "view=" + Integer.toHexString(System.identityHashCode(chip))
+                        + " outcome=" + outcome + " background="
+                        + (background == null ? "null" : background.getClass().getSimpleName()));
+                Probe.liveSurfaceLater(chip, "CHIP", 250);
+            }
+        }
     }
 
     /** After onBindViewHolder; {@code threw}: the original failed, nothing is classified. */
@@ -82,6 +93,16 @@ final class LiveChipHooks {
         View item = itemView(holder);
         if (item != null) for (View h : glass.hosts(LiveSurface.CHIP)) if (within(h, item)) hosts.add(h);
         for (View h : hosts) glass.offer(h, LiveSurface.CHIP, data, verdict, RECHECK);
+        if (Probe.trace) {
+            String signature = verdict + "/" + (held != null ? "holder" : "index")
+                    + "/" + System.identityHashCode(data) + "/" + hosts.size();
+            if (!signature.equals(lastBindTrace.put(holder, signature)))
+                Probe.log("LIVE_DETAIL_CHIP_BIND", "position=" + f.position + " holder="
+                        + Integer.toHexString(System.identityHashCode(holder)) + " owner="
+                        + Integer.toHexString(System.identityHashCode(data)) + " source="
+                        + (held != null ? "holder" : "index") + " verdict=" + verdict + " hosts=" + hosts.size());
+            if (item != null) Probe.liveSurfaceLater(item, "CHIP", 300);
+        }
     }
 
     private static final Object NONE = new Object();

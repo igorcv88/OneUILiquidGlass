@@ -7,7 +7,10 @@ import android.provider.Settings;
 import android.os.SystemClock;
 import android.util.Log;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.WindowInsets;
+import android.widget.ImageView;
+import java.lang.ref.WeakReference;
 import java.lang.reflect.Method;
 import java.lang.reflect.Field;
 import android.view.ViewParent;
@@ -111,6 +114,87 @@ public final class Probe {
                 + " rootId=" + Integer.toHexString(System.identityHashCode(root))
                 + " windowType=" + Reflect.read(attrs, "type") + " flags=" + Reflect.read(attrs, "flags")
                 + " alpha=" + view.getAlpha() + " ime=" + (insets != null && insets.isVisible(WindowInsets.Type.ime())));
+    }
+    /**
+     * One delayed, bounded view snapshot for a live surface. The ongoing adapters bind repeatedly
+     * during animations; the per-view cooldown prevents a hierarchy walk on each frame. This is
+     * opt-in (debug.oulg.trace=1), contains no notification text and changes no drawable.
+     */
+    private static final java.util.WeakHashMap<View, Long> liveSnapshots = new java.util.WeakHashMap<>();
+    public static void liveSurfaceLater(View anchor, String surface, long delayMs) {
+        if (!trace || anchor == null) return;
+        try {
+            long now = SystemClock.uptimeMillis();
+            synchronized (liveSnapshots) {
+                Long previous = liveSnapshots.get(anchor);
+                if (previous != null && now - previous < 1500) return;
+                liveSnapshots.put(anchor, now);
+            }
+            WeakReference<View> weak = new WeakReference<>(anchor);
+            anchor.postDelayed(() -> {
+                try {
+                    View target = weak.get();
+                    if (trace && target != null && target.isAttachedToWindow()) liveSurfaceTree(target, surface);
+                } catch (RuntimeException | LinkageError ignored) {
+                    // A diagnostic callback must never affect SystemUI's rendering lifecycle.
+                }
+            }, delayMs);
+        } catch (RuntimeException | LinkageError ignored) { }
+    }
+    /** View backgrounds, geometry and icon metadata only; no TextView text or notification data. */
+    public static void liveSurfaceTree(View anchor, String surface) {
+        if (!trace || anchor == null) return;
+        String kind = ("CARD".equals(surface) || "CHIP".equals(surface) || "NOWBAR".equals(surface)) ? surface : "UNKNOWN";
+        log("LIVE_DETAIL_BEGIN", "surface=" + kind + " anchor=" + Integer.toHexString(System.identityHashCode(anchor)));
+        Object parent = anchor.getParent();
+        for (int level = 1; level <= 5 && parent instanceof View; level++) {
+            View v = (View) parent;
+            liveNode(v, kind, "ancestor", level);
+            parent = v.getParent();
+        }
+        int[] budget = {80};
+        liveChildren(anchor, kind, 0, budget);
+        log("LIVE_DETAIL_END", "surface=" + kind + " remaining=" + budget[0]);
+    }
+    private static void liveChildren(View v, String kind, int depth, int[] budget) {
+        if (v == null || budget[0] <= 0 || depth > 12 || !v.isShown()) return;
+        budget[0]--;
+        liveNode(v, kind, "child", depth);
+        if (v instanceof ViewGroup) {
+            ViewGroup g = (ViewGroup) v;
+            for (int i = 0; i < g.getChildCount() && budget[0] > 0; i++)
+                liveChildren(g.getChildAt(i), kind, depth + 1, budget);
+        }
+    }
+    private static void liveNode(View v, String surface, String role, int depth) {
+        try {
+            int[] xy = new int[2];
+            v.getLocationOnScreen(xy);
+            String id;
+            try { id = v.getId() == View.NO_ID ? "-" : v.getResources().getResourceEntryName(v.getId()); }
+            catch (RuntimeException e) { id = "?"; }
+            String image = "";
+            if (v instanceof ImageView) {
+                ImageView icon = (ImageView) v;
+                android.graphics.drawable.Drawable d = icon.getDrawable();
+                boolean mono = d instanceof android.graphics.drawable.AdaptiveIconDrawable
+                        && ((android.graphics.drawable.AdaptiveIconDrawable) d).getMonochrome() != null;
+                image = " image=" + describe(d, 0) + " monochrome=" + mono
+                        + " imageTint=" + (icon.getImageTintList() == null ? "null" : hex(icon.getImageTintList().getDefaultColor()));
+            }
+            log("LIVE_DETAIL_NODE", "surface=" + surface + " role=" + role + " depth=" + depth
+                    + " class=" + v.getClass().getName() + " id=" + id
+                    + " view=" + Integer.toHexString(System.identityHashCode(v))
+                    + " xy=" + xy[0] + "," + xy[1] + " size=" + v.getWidth() + "x" + v.getHeight()
+                    + " alpha=" + v.getAlpha() + " elevation=" + v.getElevation() + " shown=" + v.isShown()
+                    + " clickable=" + v.isClickable() + " clipOutline=" + v.getClipToOutline()
+                    + " translation=" + v.getTranslationX() + "," + v.getTranslationY()
+                    + " bg=" + describe(v.getBackground(), 0)
+                    + " bgTint=" + (v.getBackgroundTintList() == null ? "null" : hex(v.getBackgroundTintList().getDefaultColor()))
+                    + image);
+        } catch (RuntimeException | LinkageError e) {
+            log("LIVE_DETAIL_NODE_FAILED", "surface=" + surface + " error=" + e.getClass().getSimpleName());
+        }
     }
     /**
      * Every view under root that carries a compositor blur: a SemBlurInfo on the view, a background
@@ -392,6 +476,11 @@ public final class Probe {
             b.append(" color=").append(c == null ? "null" : hex(c.getDefaultColor()));
         }
         if (d.getColorFilter() != null) b.append(" filter=").append(d.getColorFilter().getClass().getSimpleName());
+        if (d instanceof io.github.igorcv88.oneuiliquidglass.glass.LiveGlassDrawable && depth < 2) {
+            io.github.igorcv88.oneuiliquidglass.glass.LiveGlassDrawable g = (io.github.igorcv88.oneuiliquidglass.glass.LiveGlassDrawable) d;
+            b.append(" glass=").append(g.showsGlass()).append(" regionless=").append(g.regionless());
+            b.append(" native=").append(describe(g.nativeDrawable(), depth + 1));
+        }
         if (d instanceof android.graphics.drawable.LayerDrawable && depth < 2) {
             android.graphics.drawable.LayerDrawable l = (android.graphics.drawable.LayerDrawable) d;
             for (int i = 0; i < l.getNumberOfLayers() && i < 6; i++) b.append(" L").append(i).append('=').append(describe(l.getDrawable(i), depth + 1));

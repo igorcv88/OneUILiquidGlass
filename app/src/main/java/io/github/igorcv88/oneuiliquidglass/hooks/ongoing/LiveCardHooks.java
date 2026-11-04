@@ -96,6 +96,7 @@ final class LiveCardHooks {
         Classification c = new Classification(data, verdict);
         roots.put(root, c);
         evaluate(root, c);
+        if (verdict.ok()) Probe.liveSurfaceLater(root, "CARD", 450);
     }
 
     /** After changeCardBg(View, int), setBlurBG(View, int) and initNormalNotificationView(View). */
@@ -106,6 +107,7 @@ final class LiveCardHooks {
             // The view changeCardBg rewrote inside a card is that card's fill, whatever its depth.
             if (fillWriter && target != root && target.getBackground() != null && !blurLayer(target)) writtenFill.put(root, new WeakReference<>(target));
             evaluate(root, roots.get(root));
+            Probe.liveSurfaceLater(root, "CARD", 450);
             return;
         }
         // A writer on a layer above the cards (setBlurBG on the blur frame): its cards change mode.
