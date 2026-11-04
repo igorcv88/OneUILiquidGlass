@@ -86,8 +86,12 @@ final class LiveCardHooks {
     private final LiveGlass glass;
     /** Independent, opt-in structural telemetry. Does not participate in material ownership. */
     private final LiveStackTimeline timeline = new LiveStackTimeline();
-    /** Flag-gated experiment on the native bottom stack indicator; replaceable by tests. */
-    LiveStackShadowExperiment shadowExperiment = new LiveStackShadowExperiment();
+    /**
+     * Flag-gated experiment on the native bottom stack indicator, one per CardStackView: SystemUI
+     * can hold more than one stack (lockscreen, shade, OngoingCard window), and a single shared
+     * instance would act on whichever stack wrote last, possibly not the one on screen.
+     */
+    private final WeakHashMap<View, LiveStackShadowExperiment> shadowExperiments = new WeakHashMap<>();
     private final LiveGlass.NativeBlur nativeBlur;
     private final DataLocator locator = new DataLocator(LiveEligibility.DATA);
     /** DZIF's data helper, used when the adapter exposes no getItem(int) nor data list. */
@@ -348,7 +352,12 @@ final class LiveCardHooks {
 
         // E2 / option A (debug.oulg.stackshadow, default 0 = untouched): the bottom stack
         // indicator outside CardStackView. Restored as soon as no glass card is shown here.
-        shadowExperiment.sync(stack, glassPresent);
+        LiveStackShadowExperiment experiment = shadowExperiments.get(stack);
+        if (experiment == null && glassPresent && LiveStackShadowExperiment.propertyMode() != LiveStackShadowExperiment.MODE_OFF) {
+            experiment = new LiveStackShadowExperiment();
+            shadowExperiments.put(stack, experiment);
+        }
+        if (experiment != null) experiment.sync(stack, glassPresent);
 
         final boolean keepVisible = glassPresent;
         List<StackLease> leases = stackFills.get(stack);
