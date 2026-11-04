@@ -1,8 +1,6 @@
 package io.github.igorcv88.oneuiliquidglass.hooks.ongoing;
 
 import android.graphics.drawable.Drawable;
-import android.os.Handler;
-import android.os.Looper;
 import android.view.View;
 import android.view.ViewTreeObserver;
 import java.lang.ref.WeakReference;
@@ -34,12 +32,6 @@ import io.github.igorcv88.oneuiliquidglass.glass.SemBlurBridge;
  * makes the region follow ancestor alpha without rebuilding it on unchanged frames.</p>
  */
 public final class LiveGlass {
-    // A live card can detach and reattach in the same transition frame. Releasing its old
-    // compositor blur must remain immediate, but restoring the Samsung ancestor colour/blur
-    // during that brief gap exposes a grey backing layer for one frame. This grace period
-    // applies ONLY to the CARD companion-restoration callback, not to region lifetime.
-    private static final long CARD_DETACH_GRACE_MS = 48L;
-    private final Handler cardDetachHandler = new Handler(Looper.getMainLooper());
     /** The compositor region for a host, and whether cross-window blur is on now. */
     public interface Blur {
         BackgroundBlurBridge create(View host) throws ReflectiveOperationException;
@@ -110,7 +102,6 @@ public final class LiveGlass {
         Drawable displacedBackground;
         int backgroundRepairs;
         boolean lastShown;
-        Runnable pendingCardDetachRestore;
         /** Policy/capability sampled by lifecycle events, never queried through Binder per frame. */
         boolean available;
         /** Per-host state-change telemetry; never holds the host or its notification data. */
@@ -383,45 +374,16 @@ public final class LiveGlass {
         Probe.log("LIVE_GLASS_RESTORE", "surface=" + s.surface + " reason=" + reason + " host=" + v.getClass().getSimpleName());
     }
 
-    private void cancelPendingCardRestore(State s) {
-        Runnable pending = s.pendingCardDetachRestore;
-        if (pending != null) {
-            cardDetachHandler.removeCallbacks(pending);
-            s.pendingCardDetachRestore = null;
-        }
-    }
-
-    private void delayCardCompanionRestore(State s, View view) {
-        cancelPendingCardRestore(s);
-        final Runnable[] task = new Runnable[1];
-        task[0] = () -> {
-            if (s.pendingCardDetachRestore != task[0]) return;
-            s.pendingCardDetachRestore = null;
-            // Another card's short-lived detach does not mean this card left the stack.
-            // Explicit gate-off/forget/native fallback still restores immediately elsewhere.
-            if (s.glass != null && !view.isAttachedToWindow()) shown(s, view, false);
-        };
-        s.pendingCardDetachRestore = task[0];
-        cardDetachHandler.postDelayed(task[0], CARD_DETACH_GRACE_MS);
-    }
-
     private void listen(State s, View v) {
         if (s.attach != null) return;
         s.attach = new View.OnAttachStateChangeListener() {
-            @Override public void onViewAttachedToWindow(View view) {
-                cancelPendingCardRestore(s);
-                s.backgroundRepairs = 0;
-                sync(s);
-            }
+            @Override public void onViewAttachedToWindow(View view) { s.backgroundRepairs = 0; sync(s); }
             @Override public void onViewDetachedFromWindow(View view) {
                 if (s.glass != null) {
-                    // The old blur region is tied to the previous ViewRoot and is released NOW.
                     s.glass.setRegionless(false);
                     s.glass.setBlur(null);
                     s.glass.setGlass(false);
-                    if (s.surface == LiveSurface.CARD && s.lastShown)
-                        delayCardCompanionRestore(s, view);
-                    else shown(s, view, false);
+                    shown(s, view, false);
                 }
                 render(s, "DETACHED", "windowLost");
                 removePreDraw(s);
@@ -432,7 +394,6 @@ public final class LiveGlass {
         v.addOnAttachStateChangeListener(s.attach);
     }
     private void removeListeners(State s) {
-        cancelPendingCardRestore(s);
         View v = s.host.get();
         removePreDraw(s);
         if (v != null && s.attach != null) v.removeOnAttachStateChangeListener(s.attach);
@@ -536,7 +497,6 @@ public final class LiveGlass {
      * blur go back exactly, the host stays tracked and is wrapped again when the region can exist.
      */
     private void nativeBlurBack(State s, String reason) {
-        cancelPendingCardRestore(s);
         View v = s.host.get();
         LiveGlassDrawable g = s.glass;
         if (v == null || g == null) return;
