@@ -43,8 +43,6 @@ public class CardStackView extends FrameLayout {
         @Override public void invalidate() { invalidations++; super.invalidate(); }
     }
     public CardStackView(Context c) { super(c); }
-    /** DZIF returns the final child index for the uppermost stack card. */
-    public int getTopViewIndex() { return getChildCount() - 1; }
     /** Wraps a card root as Samsung does and returns its blur frame. */
     public FrameLayout addCard(View root) {
         FrameLayout ripple = new FrameLayout(getContext());
