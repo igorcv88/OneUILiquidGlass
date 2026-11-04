@@ -13,6 +13,9 @@ import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Shader;
 import android.graphics.drawable.Drawable;
+import android.view.View;
+import java.lang.ref.WeakReference;
+import io.github.igorcv88.oneuiliquidglass.diagnostics.LiveMaterialTrace;
 import io.github.igorcv88.oneuiliquidglass.diagnostics.LiveRenderProbe;
 import io.github.igorcv88.oneuiliquidglass.diagnostics.Probe;
 
@@ -73,6 +76,15 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
     private Runnable onRegionFailed;
     private LiveRenderProbe renderProbe;
     private String renderSurface;
+    private WeakReference<View> materialTraceHost = new WeakReference<>(null);
+    /** Read-only host association for the optional CARD paint/region timeline. */
+    public void setMaterialTraceHost(View host) {
+        if ("CARD".equals(renderSurface)) materialTraceHost = new WeakReference<>(host);
+    }
+    private void traceMaterial(String phase, Canvas canvas) {
+        if ("CARD".equals(renderSurface))
+            LiveMaterialTrace.note(materialTraceHost.get(), this, phase, canvas);
+    }
     public void setOnRegionFailed(Runnable r) { onRegionFailed = r; }
     /** Temporary telemetry attached by the controller; no change to how the drawable renders. */
     public void setRenderProbe(String surface) { renderSurface = surface; renderProbe = new LiveRenderProbe(); }
@@ -125,6 +137,7 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
         if (blur == b) return;
         if (blur != null) blur.release();
         blur = b;
+        traceMaterial(b == null ? "BLUR_RELEASED" : "BLUR_ASSIGNED", null);
         optics = null;
         lastPx = -1;
         if (b != null) b.setRegionFade(regionFade);
@@ -135,7 +148,10 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
     public void setGlass(boolean on) {
         boolean changed = glass != on;
         glass = on;
-        if (changed) invalidateSelf();
+        if (changed) {
+            traceMaterial(on ? "GLASS_ENABLED" : "GLASS_DISABLED", null);
+            invalidateSelf();
+        }
     }
     /**
      * The blur comes from a native layer behind this host (Samsung's own BackgroundBlurDrawable on
@@ -153,6 +169,7 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
         f = Math.max(0f, Math.min(1f, f));
         if (Math.abs(f - regionFade) < 0.004f) return false;
         regionFade = f;
+        traceMaterial("REGION_FADE", null);
         return blur != null && blur.setRegionFade(f);
     }
     /** Drops the region and unlinks the native drawable, which the host is about to take back. */
@@ -234,6 +251,9 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
         drawReport("OWN_REGION", canvas, b, "blurDrawReturned");
     }
     private void drawReport(String mode, Canvas canvas, Rect b, String reason) {
+        // Unlike LIVE_RENDER_DRAW's change-only mode, this samples successive draw submissions
+        // during a bounded stackprobe window; never changes a drawable or the rendering path.
+        traceMaterial("DRAW_" + mode, canvas);
         if (renderProbe == null || !renderProbe.changed(mode)) return;
         try {
             Probe.log("LIVE_RENDER_DRAW", "surface=" + renderSurface + " mode=" + mode + " reason=" + reason
