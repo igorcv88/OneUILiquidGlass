@@ -95,12 +95,25 @@ public final class NativeShape {
         return null;
     }
 
+    /**
+     * Per class, weakly keyed (plugin classloaders can go away). getMethods() copies, deduplicates
+     * and sorts every public method: run on each node of a tree walk it dominated SystemUI's main
+     * thread on DZIF (simpleperf 04/11/2026). The answer depends only on the class.
+     */
+    private static final java.util.Map<Class<?>, Boolean> CARD_LIKE =
+            java.util.Collections.synchronizedMap(new java.util.WeakHashMap<>());
+
     /** Whether a host is a CardView-like view: its background must stay its own drawable class. */
     static boolean cardLike(View host) {
         if (host == null) return false;
-        for (Method m : host.getClass().getMethods())
-            if (m.getName().equals("setCardBackgroundColor")) return true;
-        return false;
+        Class<?> type = host.getClass();
+        Boolean known = CARD_LIKE.get(type);
+        if (known != null) return known;
+        boolean found = false;
+        for (Method m : type.getMethods())
+            if (m.getName().equals("setCardBackgroundColor")) { found = true; break; }
+        CARD_LIKE.put(type, found);
+        return found;
     }
 
     static float[] uniform(float r) { float[] a = new float[8]; java.util.Arrays.fill(a, r); return a; }

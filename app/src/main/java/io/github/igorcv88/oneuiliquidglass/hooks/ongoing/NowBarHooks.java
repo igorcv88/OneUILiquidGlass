@@ -226,11 +226,11 @@ final class NowBarHooks {
         c.nativeRegion.sync(container, shown && c.host.get() != container);
         if (container != null && NativeShape.cardLike(container) && c.host.get() != container) cardTransparent(container, c, shown);
         ImageView icon = c.icon.target();
-        if (icon == null || !LiveChipHooks.within(icon, card)) icon = findIcon(card, 0);
+        if (icon == null || !LiveChipHooks.within(icon, card)) icon = findIcon(card);
         c.icon.sync(icon, shown);
         // DZIF uses a different CardView for the EXPANDED ongoing app icon; the normal
         // nowbar_icon lease only clears its compact disc. Never touch MediaCardView.
-        c.icon.syncExpandedDisc(findExpandedIconContainer(card, 0), shown);
+        c.icon.syncExpandedDisc(findExpandedIconContainer(card), shown);
         View gradient = c.gradient.get();
         View hidden = c.hiddenGradient.get();
         if (c.nativeGradientVisibility != null && (!shown || hidden != gradient)) {
@@ -279,40 +279,21 @@ final class NowBarHooks {
         } catch (ReflectiveOperationException | RuntimeException e) { Probe.error("NOWBAR_GRADIENT_FAILED", e); }
     }
 
-    /** The verified DZIF resource id on NowBarOngoingCardView's expanded app-icon CardView. */
-    private static View findExpandedIconContainer(View view, int depth) {
-        if (view == null || depth > 16) return null;
-        if (view.getId() != View.NO_ID && NativeShape.cardLike(view)) {
-            try {
-                if ("ongoing_app_expanded_icon_container".equals(
-                        view.getResources().getResourceEntryName(view.getId()))) return view;
-            } catch (RuntimeException ignored) { }
-        }
-        if (!(view instanceof ViewGroup)) return null;
-        ViewGroup group = (ViewGroup) view;
-        for (int i = 0; i < group.getChildCount(); i++) {
-            View found = findExpandedIconContainer(group.getChildAt(i), depth + 1);
-            if (found != null) return found;
-        }
-        return null;
+    /**
+     * The verified DZIF resource id on NowBarOngoingCardView's expanded app-icon CardView. Called
+     * from every pre-draw (onSync): the id is resolved once and found by int, and the CardView test
+     * runs only on that one view (DZIF simpleperf 04/11: the previous walk ran reflection on every
+     * node and dominated SystemUI's main thread).
+     */
+    private static View findExpandedIconContainer(View card) {
+        View v = NativeIds.find(card, "ongoing_app_expanded_icon_container");
+        return v != null && NativeShape.cardLike(v) ? v : null;
     }
 
     /** No changes to vector-only icons or sibling UI outside NowBarOngoingCardView. */
-    private static ImageView findIcon(View v, int depth) {
-        if (depth > 14) return null;
-        if (v instanceof ImageView && v.getId() != View.NO_ID) {
-            try {
-                if ("nowbar_icon".equals(v.getResources().getResourceEntryName(v.getId()))) return (ImageView) v;
-            } catch (RuntimeException ignored) { }
-        }
-        if (v instanceof ViewGroup) {
-            ViewGroup group = (ViewGroup) v;
-            for (int i = 0; i < group.getChildCount(); i++) {
-                ImageView icon = findIcon(group.getChildAt(i), depth + 1);
-                if (icon != null) return icon;
-            }
-        }
-        return null;
+    private static ImageView findIcon(View card) {
+        View v = NativeIds.find(card, "nowbar_icon");
+        return v instanceof ImageView ? (ImageView) v : null;
     }
 
     /** The gradient view's own visibility getter, if the plugin has one; null otherwise. */
@@ -364,6 +345,9 @@ final class NowBarHooks {
     }
 
     private void release(View card, Card c, String reason) {
+        // Already native for this reason with nothing acquired since: companions(true) needs a
+        // host, so with no host and no layer there is no state to put back.
+        if (c.host.get() == null && c.layer.get() == null && reason.equals(c.lastNative)) return;
         View host = c.host.get();
         if (host != null) glass.forget(host, reason);
         companions(card, c, false);
