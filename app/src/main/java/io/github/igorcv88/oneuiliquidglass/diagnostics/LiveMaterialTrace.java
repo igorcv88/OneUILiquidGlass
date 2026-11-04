@@ -24,8 +24,8 @@ import java.util.WeakHashMap;
 public final class LiveMaterialTrace {
     private LiveMaterialTrace() {}
     private static final long MAX_WINDOW_MS = 650L;
-    private static final int MAX_EVENTS = 160;
-    private static final int MAX_DRAWS_PER_MATERIAL = 28;
+    private static final int MAX_EVENTS = 96;
+    private static final int MAX_DRAWS_PER_MATERIAL = 25;
 
     private static volatile Burst active;
 
@@ -112,6 +112,7 @@ public final class LiveMaterialTrace {
                         + " glass=" + material.showsGlass()
                         + " regionless=" + material.regionless()
                         + " fade=" + material.regionFadeForTrace()
+                        + " blurPx=" + material.blurRadiusForTrace()
                         + " region=" + id(region)
                         + " regionDrawable=" + id(blurDrawable)
                         + " regionAlpha=" + (blurDrawable == null ? -1 : blurDrawable.getAlpha())
