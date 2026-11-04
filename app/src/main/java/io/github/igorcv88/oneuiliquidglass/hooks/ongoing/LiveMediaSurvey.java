@@ -24,7 +24,7 @@ import java.util.Map;
  * traversal. With {@code setprop debug.oulg.mediaprobe 1}, once per second every shown SystemUI
  * window is searched for media roots (class or resource name containing "media"), and each root
  * is described with its ancestors and its subtree: classes (the waveform's included), resource
- * names, geometry, visibility, alpha, elevation, clipping, render effects, backgrounds,
+ * names, geometry, visibility, alpha, elevation, clipping, layer type, backgrounds,
  * foregrounds and image drawable classes. A root is logged again only when its description
  * changed. Nothing is changed; no text, bitmap or notification content is read.</p>
  */
@@ -175,12 +175,8 @@ public final class LiveMediaSurvey {
             b.append(" children=").append(g.getChildCount())
                     .append(" clipChildren=").append(g.getClipChildren());
         }
-        try {
-            Object effect = View.class.getMethod("getRenderEffect").invoke(v);
-            b.append(" renderEffect=").append(effect == null ? "null" : effect.getClass().getSimpleName());
-        } catch (ReflectiveOperationException | RuntimeException e) {
-            b.append(" renderEffect=?");
-        }
+        // No render effect field: the framework has setRenderEffect but no public getter, so the
+        // state is not observable and a placeholder would only mislead.
         b.append(" bg=").append(LiveStackTimeline.drawable(v.getBackground()));
         b.append(" fg=").append(LiveStackTimeline.drawable(v.getForeground()));
         if (v instanceof ImageView) {
