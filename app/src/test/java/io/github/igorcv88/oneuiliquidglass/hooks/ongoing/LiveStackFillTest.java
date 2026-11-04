@@ -144,6 +144,49 @@ public class LiveStackFillTest {
         assertNull(rb.getDrawable(0).getColorFilter());
     }
 
+    @Test public void shadowColoursAreMutedWithoutChangingCarouselOrderOrClipping() {
+        Activity a = Robolectric.buildActivity(Activity.class).setup().get();
+        FrameLayout frame = new FrameLayout(a);
+        frame.setBackground(new RippleDrawable(ColorStateList.valueOf(0),
+                shape(0xfa3a3a3d), null));
+        frame.setClipToOutline(true);
+        frame.setElevation(60f);
+        frame.setTranslationZ(3f);
+        frame.setOutlineAmbientShadowColor(0xff112233);
+        frame.setOutlineSpotShadowColor(0xff445566);
+        LiveStackFill lease = new LiveStackFill();
+        lease.sync(frame);
+        assertEquals(0, frame.getOutlineAmbientShadowColor());
+        assertEquals(0, frame.getOutlineSpotShadowColor());
+        for (int swipe = 0; swipe < 6; swipe++) {
+            frame.setOutlineSpotShadowColor(0xff556677);
+            lease.sync(frame);
+            assertEquals(0, frame.getOutlineSpotShadowColor());
+            assertEquals(60f, frame.getElevation(), 0f);
+            assertEquals(3f, frame.getTranslationZ(), 0f);
+            assertTrue(frame.getClipToOutline());
+        }
+        lease.restore();
+        assertEquals(0xff112233, frame.getOutlineAmbientShadowColor());
+        assertEquals(0xff556677, frame.getOutlineSpotShadowColor());
+    }
+
+    @Test public void replacementAndNativeRewritesRestoreShadowColours() {
+        Activity a = Robolectric.buildActivity(Activity.class).setup().get();
+        FrameLayout frame = new FrameLayout(a);
+        frame.setBackground(new RippleDrawable(ColorStateList.valueOf(0),
+                shape(0xffffffff), null));
+        frame.setOutlineAmbientShadowColor(0xff112233);
+        frame.setOutlineSpotShadowColor(0xff445566);
+        LiveStackFill lease = new LiveStackFill();
+        lease.sync(frame);
+        frame.setOutlineAmbientShadowColor(0xff778899);
+        frame.setBackground(shape(0xff123456));
+        lease.sync(frame);
+        assertEquals(0xff778899, frame.getOutlineAmbientShadowColor());
+        assertEquals(0xff445566, frame.getOutlineSpotShadowColor());
+    }
+
     @Test public void unrecognizedFillRemainsNative() {
         Activity a = Robolectric.buildActivity(Activity.class).setup().get();
         FrameLayout frame = new FrameLayout(a);
@@ -157,3 +200,4 @@ public class LiveStackFillTest {
         lease.restore();
     }
 }
+

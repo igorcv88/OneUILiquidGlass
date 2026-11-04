@@ -28,6 +28,31 @@ final class LiveStackFill {
     private WeakReference<View> owner = new WeakReference<>(null);
     private WeakReference<RippleDrawable> ripple = new WeakReference<>(null);
     private final ArrayList<MutedLayer> muted = new ArrayList<>();
+    private boolean shadowSaved;
+    private int ambientShadow, spotShadow;
+
+    // Transparent Paint preserves the opaque clipping outline, which still casts a shadow.
+    // Change shadow colour only: elevation orders Samsung's carousel and outline alpha clips it.
+    private void syncShadow(View frame) {
+        if (muted.isEmpty()) { restoreShadow(frame); return; }
+        int ambient = frame.getOutlineAmbientShadowColor();
+        int spot = frame.getOutlineSpotShadowColor();
+        if (!shadowSaved || ambient != Color.TRANSPARENT) ambientShadow = ambient;
+        if (!shadowSaved || spot != Color.TRANSPARENT) spotShadow = spot;
+        shadowSaved = true;
+        if (ambient != Color.TRANSPARENT) frame.setOutlineAmbientShadowColor(Color.TRANSPARENT);
+        if (spot != Color.TRANSPARENT) frame.setOutlineSpotShadowColor(Color.TRANSPARENT);
+    }
+
+    private void restoreShadow(View frame) {
+        if (shadowSaved && frame != null) {
+            if (frame.getOutlineAmbientShadowColor() == Color.TRANSPARENT)
+                frame.setOutlineAmbientShadowColor(ambientShadow);
+            if (frame.getOutlineSpotShadowColor() == Color.TRANSPARENT)
+                frame.setOutlineSpotShadowColor(spotShadow);
+        }
+        shadowSaved = false;
+    }
 
     private static final class MutedLayer {
         final int index;
@@ -99,6 +124,7 @@ final class LiveStackFill {
                 d.setColorFilter(CLEAR_PAINT);
             }
         }
+        syncShadow(frame);
     }
 
     private static boolean decorative(Drawable layer) {
@@ -119,9 +145,11 @@ final class LiveStackFill {
             ViewTreeObserver observer = frame.getViewTreeObserver();
             if (observer.isAlive()) observer.removeOnPreDrawListener(preDraw);
         }
+        restoreShadow(frame);
         for (MutedLayer m : muted) m.restore();
         muted.clear();
         ripple.clear();
         owner.clear();
     }
 }
+
