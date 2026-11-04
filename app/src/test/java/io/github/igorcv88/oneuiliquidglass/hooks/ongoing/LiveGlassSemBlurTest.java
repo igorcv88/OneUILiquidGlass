@@ -126,8 +126,10 @@ public class LiveGlassSemBlurTest {
 
     @Test public void restoreReinstallsSamsungBlurExactly() {
         View v = samsungCard();
-        window.addView(v);
         Object info = env.held(v);
+        assertNotNull("capture Samsung's info before attach reconciliation consumes it", info);
+        window.addView(v);
+        assertNull("our region replaces the held info while glass is active", env.held(v));
         glass.offer(v, LiveSurface.CARD, new Object(), LiveEligibility.Verdict.OK, x -> true);
         glass.forget(v, "test");
         assertSame(info, env.held(v));
