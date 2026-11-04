@@ -276,9 +276,10 @@ public final class MediaArtGlass implements View.OnAttachStateChangeListener, Vi
     private void applyProbe(int mode) {
         boolean hideArt = (mode & 1) != 0;
         boolean hideOverlay = (mode & 2) != 0;
-        if (appliedProbeMode != mode
+        boolean entering = appliedProbeMode != mode
                 || (hideArt && leasedProbeArt != art)
-                || (hideOverlay && leasedProbeOverlay != overlayView)) {
+                || (hideOverlay && leasedProbeOverlay != overlayView);
+        if (entering) {
             restoreProbe("changed");
             appliedProbeMode = mode;
             probeStartMs = clock.getAsLong();
@@ -290,6 +291,11 @@ public final class MediaArtGlass implements View.OnAttachStateChangeListener, Vi
                 leasedProbeOverlay = overlayView;
                 nativeProbeOverlayAlpha = overlayView.getAlpha();
             }
+        }
+        // Reassert only if Samsung overwrote our diagnostic alpha; no reflection or allocations.
+        if (leasedProbeArt != null && leasedProbeArt.getAlpha() != 0f) leasedProbeArt.setAlpha(0f);
+        if (leasedProbeOverlay != null && leasedProbeOverlay.getAlpha() != 0f) leasedProbeOverlay.setAlpha(0f);
+        if (entering) {
             Rect visible = new Rect();
             boolean onScreen = art != null && art.getGlobalVisibleRect(visible);
             Probe.log("MEDIA_ART_PROBE", "state=applied mode=" + mode
@@ -298,12 +304,11 @@ public final class MediaArtGlass implements View.OnAttachStateChangeListener, Vi
                     + " artShown=" + (art != null && art.isShown())
                     + " onScreen=" + onScreen + " rect=" + visible.flattenToString()
                     + " glassBehind=" + glassBehind()
-                    + " artNativeAlpha=" + fmt(nativeProbeArtAlpha)
-                    + " overlayNativeAlpha=" + fmt(nativeProbeOverlayAlpha));
+                    + " artNativeAlpha=" + (art == null ? "null" : fmt(hideArt ? nativeProbeArtAlpha : art.getAlpha()))
+                    + " overlayNativeAlpha=" + (overlayView == null ? "null" : fmt(hideOverlay ? nativeProbeOverlayAlpha : overlayView.getAlpha()))
+                    + " artAppliedAlpha=" + (art == null ? "null" : fmt(art.getAlpha()))
+                    + " overlayAppliedAlpha=" + (overlayView == null ? "null" : fmt(overlayView.getAlpha())));
         }
-        // Reassert only if Samsung overwrote our diagnostic alpha; no reflection or allocations.
-        if (leasedProbeArt != null && leasedProbeArt.getAlpha() != 0f) leasedProbeArt.setAlpha(0f);
-        if (leasedProbeOverlay != null && leasedProbeOverlay.getAlpha() != 0f) leasedProbeOverlay.setAlpha(0f);
     }
 
     private void restoreProbe(String reason) {
