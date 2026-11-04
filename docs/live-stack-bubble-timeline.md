@@ -38,13 +38,13 @@ Durante a gravação: abra a primeira live update expandida, observe o aparecime
 
 - `LIVE_STACK_TIMELINE_BEGIN`: início de uma janela de observação após a primeira exibição do vidro, `changeCardBg`, outro writer ou `updateItemBg`, com identificador numérico da janela.
 - `LIVE_STACK_TIMELINE_TICK`: marca temporal planejada e real em milissegundos, número de filhos da pilha e `getTopViewIndex()`.
-- `LIVE_STACK_TIMELINE_NODE`: somente mudanças desde a amostra anterior do mesmo objeto: identidade, caminho estrutural, id do recurso, posição, dimensões, alpha, `translationY/Z`, elevação, clipping, cores de sombra ambiental/spot e fundo.
-- Os `RippleDrawable` incluem IDs de cada layer, flag `mask`, cor dos `GradientDrawable`, filtro, opacidade, alpha e outline. Os drawables dos botões/contêineres também aparecem se estiverem na árvore.
+- `LIVE_STACK_TIMELINE_NODE`: somente mudanças desde a amostra anterior do mesmo objeto: identidade, caminho estrutural, id do recurso, posição, dimensões, alpha, `translationX/Y/Z`, escala, estados de toque, elevação, clipping, cores de sombra ambiental/spot, fundo e foreground.
+- Os `RippleDrawable` incluem IDs de cada layer, flag `mask`, cor dos `GradientDrawable`, filtro, opacidade, alpha, hotspot e outline. Os drawables dos botões/contêineres também aparecem se estiverem na árvore.
 - `LIVE_STACK_TIMELINE_END_TICK`: contagem de objetos percorridos e de alterações publicadas.
 - `LIVE_STACK_TIMELINE_DONE`: fim do intervalo de aproximadamente 520 ms.
 - `LIVE_RENDER_DRAW` existente: mudanças de modo de desenho do material (`OWN_REGION`, `NATIVE` etc.) para correlacionar com a nova telemetria.
 
-As amostras são em **0, 16, 32, 48, 64, 96, 128, 176, 256, 352 e 480 ms**, com duração real informada em cada linha. Há limites de 4 cartões, 110 views, 48 linhas alteradas por amostra e cooldown de 620 ms para não instalar uma coleta por frame.
+As amostras são em **0, 16, 32, 48, 64, 96, 128, 176, 256, 352 e 480 ms**, com duração real informada em cada linha. Há limites de 4 cartões, 200 views, 72 linhas alteradas por amostra (com orçamento separado para cada cartão), profundidade máxima de 16 níveis e cooldown de 620 ms para não instalar uma coleta por frame.
 
 ## Como interpretar
 
