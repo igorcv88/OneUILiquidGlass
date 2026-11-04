@@ -137,6 +137,9 @@ public final class MediaArtGlass implements View.OnAttachStateChangeListener, Vi
         if (observer != null && observer.isAlive()) observer.removeOnPreDrawListener(this);
         observer = null;
         restore("detached", null);
+        // WATCHED holds this strongly: a child of the root kept here would keep its weak key
+        // (the root, through the parent chain) and the whole card alive. Attach finds it again.
+        art = null;
     }
 
     @Override public boolean onPreDraw() {
@@ -303,6 +306,7 @@ public final class MediaArtGlass implements View.OnAttachStateChangeListener, Vi
 
     // Tests.
     Context contextForTest() { return context; }
+    View artForTest() { return art; }
     static void resetForTest() {
         WATCHED.clear();
         names = DZIF;

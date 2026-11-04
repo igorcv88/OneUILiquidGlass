@@ -166,14 +166,16 @@ public class MediaArtGlassTest {
         assertEquals(255, fill.getAlpha());
     }
 
-    @Test public void detachHandsEverythingBack() {
+    @Test public void detachHandsEverythingBackAndKeepsNoChildOfTheRoot() {
         shade();
         glass = true;
-        MediaArtGlass.watch(root);
+        MediaArtGlass m = MediaArtGlass.watch(root);
         frame();
+        assertSame(art, m.artForTest());
         ((FrameLayout) root.getParent()).removeView(root);
         assertEquals(1f, art.getTransitionAlpha(), 0f);
         assertEquals(255, fill.getAlpha());
+        assertNull("a strong child reference would keep the weak key alive", m.artForTest());
     }
 
     @Test public void aStackHolderWithoutLiveGlassStaysNative() {
