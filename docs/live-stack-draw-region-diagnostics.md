@@ -53,13 +53,15 @@ Para um controle negativo, repita com uma live update sozinha. Na coleta princip
 `LIVE_MATERIAL_FRAME` (novos): usa o **mesmo burst** e mede `ms` desde seu começo. Registra:
 
 - `BLUR_ASSIGNED` e `BLUR_RELEASED`: bridge criada/descartada pelo owner; não equivale a bitmap de blur disponível na tela.
+- `BLUR_UPDATED`: blur radius/tint/shape repassados ao bridge; `blurPx` e `regionAlpha` ajudam a comparar a configuração com a imagem posterior.
+- `REGIONLESS_ENABLED` / `REGIONLESS_DISABLED`: troca entre o blur do ancestral Samsung e a região de vidro própria.
 - `GLASS_ENABLED` / `GLASS_DISABLED`: decisão de desenhar vidro ou fallback nativo.
 - `REGION_FADE`: variação do alpha efetivo solicitado.
 - `DRAW_OWN_REGION`, `DRAW_REGIONLESS`, `DRAW_NATIVE`, outros modos: caminho de `LiveGlassDrawable.draw()`; `DRAW_OWN_REGION` significa somente que a chamada `blur.draw(canvas)` retornou.
 - `host`, `material`, `stack`, `stackChild`: identidade do host, drawable, pilha e índice do filho direto.
-- `xy`/ `wh`/ `bounds`, `region`, `regionDrawable`, `regionAlpha`, `regionBounds`, `fade`, `nativeHostBg`, `glass`, `attached` e `hwCanvas`.
+- `xy`/ `wh`/ `bounds`, `region`, `regionDrawable`, `regionAlpha`, `regionBounds`, `fade`, `blurPx`, `nativeHostBg`, `glass`, `attached` e `hwCanvas`.
 
-O evento tem limite de 160 linhas por janela e até 28 submissões de desenho por drawable; visitas de outras pilhas são descartadas. Valores fora da janela de 650 ms não são registrados. Os campos não incluem texto, pacote, contato ou conteúdo de mídia.
+O evento tem limite de 96 linhas por janela e até 25 submissões de desenho por drawable; visitas de outras pilhas são descartadas. Valores fora da janela de 650 ms não são registrados. Os campos não incluem texto, pacote, contato ou conteúdo de mídia.
 
 ## Interpretação sem induzir causa
 
