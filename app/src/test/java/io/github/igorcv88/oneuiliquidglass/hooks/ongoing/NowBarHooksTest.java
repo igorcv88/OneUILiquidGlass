@@ -291,7 +291,7 @@ public class NowBarHooksTest {
         assertEquals(1, env.regions.size());
     }
 
-    /** Only the minimum contract (class, media veto, container, bind writer): no optional AOD member is needed. */
+    /** Only the minimum contract (class, container, bind writer): no optional AOD member is needed. */
     @Test public void worksWithoutTheOptionalAodMembers() throws Exception {
         for (String name : new String[]{"n", "u", "viewMode", "expandedColor", "stackRefresh", "expandedState", "gradientVisible", "gradientView", "blurContainer"}) {
             java.lang.reflect.Field f = NowBarHooks.Abi.class.getDeclaredField(name);
@@ -379,17 +379,16 @@ public class NowBarHooksTest {
         assertNotEquals(0, ((FakeCardView) card.getCardViewContainer()).getCardBackgroundColor().getDefaultColor());
     }
 
-    /** Ineligible or surface off: no layer is ever added to Samsung's CardView. */
-    @Test public void noLayerForMediaOrWithTheSurfaceOff() {
+    /** Media payload is eligible on an ongoing card, but the surface gate still prevents injection. */
+    @Test public void mediaPayloadRespectsTheSurfaceGate() {
         NowBarOngoingCardView card = layeredCard();
-        hooks.cardBound(abi, card, new NowBarItem("com.example", new Object()));
-        assertNull(layerOf(card.getCardViewContainer()));
+        NowBarItem item = new NowBarItem("com.example", new Object());
         env.on.remove(LiveSurface.NOWBAR);
-        hooks.cardBound(abi, card, new NowBarItem("com.example.timer", null));
+        hooks.cardBound(abi, card, item);
         assertNull(layerOf(card.getCardViewContainer()));
         env.on.add(LiveSurface.NOWBAR);
         hooks.refreshAll();
-        assertNotNull("config on: the known card gets its layer without waiting for a writer", layerOf(card.getCardViewContainer()));
+        assertNotNull("config on: the same media-payload card gets glass without another writer", layerOf(card.getCardViewContainer()));
     }
 }
 
