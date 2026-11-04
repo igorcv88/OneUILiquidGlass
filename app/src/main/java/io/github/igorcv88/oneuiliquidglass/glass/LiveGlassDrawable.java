@@ -62,6 +62,13 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
     private BackgroundBlurBridge blur;
     private GlassDrawable optics;
     private boolean glass = true;
+    /**
+     * An eligible sibling behind the top card in Samsung's expanded CardStackView can expose
+     * an extra glass capsule below the foreground action row. Suppress its BACKGROUND drawing
+     * only: the View and all its descendants, outline, alpha and Samsung listeners stay intact.
+     * Used exclusively by the ongoing CARD owner (never CHIP/NOWBAR/TOAST).
+     */
+    private boolean stackBackgroundOccluded;
     private int alpha = 255;
     private float regionFade = 1f;
     private final Paint rim = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -144,6 +151,12 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
     public boolean regionless() { return regionless; }
     /** Whether the glass is what would be drawn now. */
     public boolean showsGlass() { return glass && (blur != null || regionless); }
+    public void setStackBackgroundOccluded(boolean occluded) {
+        if (stackBackgroundOccluded == occluded) return;
+        stackBackgroundOccluded = occluded;
+        invalidateSelf();
+    }
+    public boolean stackBackgroundOccluded() { return stackBackgroundOccluded; }
     /** Ancestor alpha, which fades the view but not the compositor region. True if it changed. */
     public boolean setRegionFade(float f) {
         f = Math.max(0f, Math.min(1f, f));
@@ -187,6 +200,12 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
             setGlass(false);
             drawReport("SOFTWARE_FALLBACK", canvas, b, "noHardwareCanvas");
             if (onRegionFailed != null) onRegionFailed.run();
+        }
+        // Hidden sibling: drop ONLY its second glass background, never the View, children
+        // or native fallback. Evaluate after the hardware gate to preserve safe fallback.
+        if (stackBackgroundOccluded && showsGlass()) {
+            drawReport("STACK_BACKGROUND_OCCLUDED", canvas, b, "secondaryCard");
+            return;
         }
         if (!showsGlass() || b.isEmpty()
                 || (regionless && !nativeRegionActive.getAsBoolean())) {
