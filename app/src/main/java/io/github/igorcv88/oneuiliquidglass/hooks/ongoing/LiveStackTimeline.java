@@ -68,6 +68,8 @@ final class LiveStackTimeline {
         if (last != null && now - last.start < COOLDOWN_MS) return;
         Burst burst = new Burst(stack, now, ++serial, reason);
         bursts.put(stack, burst);
+        // The draw/region probe observes the same window, timestamp and card stack.
+        io.github.igorcv88.oneuiliquidglass.diagnostics.LiveMaterialTrace.begin(stack, burst.id, now);
         Probe.log("LIVE_STACK_TIMELINE_BEGIN", "burst=" + burst.id + " reason=" + reason
                 + " stack=" + id(stack) + " cards=" + ((ViewGroup) stack).getChildCount());
         for (long tick : TICKS) main.postDelayed(() -> sample(burst, tick), tick);

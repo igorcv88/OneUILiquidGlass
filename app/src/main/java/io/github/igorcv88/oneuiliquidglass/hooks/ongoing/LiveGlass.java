@@ -272,6 +272,9 @@ public final class LiveGlass {
         s.waiting = false;
         LiveGlassDrawable glass = new LiveGlassDrawable(bg, radii, color, s.surface.spec, v.getResources().getDisplayMetrics().density);
         glass.setRenderProbe(s.surface.name());
+        // Bind only a weak host identity for the optional bounded stackprobe draw timeline.
+        // No additional hook, draw operation or visual state is installed.
+        if (s.surface == LiveSurface.CARD) glass.setMaterialTraceHost(v);
         if (sem != null) nativeBlur.clear(v);
         writing = true;
         try {
