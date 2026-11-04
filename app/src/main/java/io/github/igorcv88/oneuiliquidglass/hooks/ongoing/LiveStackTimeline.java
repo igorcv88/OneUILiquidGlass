@@ -32,7 +32,11 @@ import io.github.igorcv88.oneuiliquidglass.diagnostics.Probe;
  */
 final class LiveStackTimeline {
     private static final long[] TICKS = {0, 16, 32, 48, 64, 96, 128, 176, 256, 352, 480};
+    /** Diagnostic E1: covers the ~400–600 ms delayed capsule and its settled state. */
+    private static final long[] EXTERNAL_TICKS =
+            {0, 16, 32, 48, 64, 96, 128, 176, 256, 352, 480, 640, 800, 960, 1200};
     private static final long COOLDOWN_MS = 620;
+    private static final long EXTERNAL_COOLDOWN_MS = 1250;
     private static final int MAX_CARDS = 4;
     // The expanded action0 is 10-12 levels below the Samsung card root on DZIF.
     private static final int MAX_DEPTH = 16;
@@ -42,7 +46,7 @@ final class LiveStackTimeline {
     private final Handler main = new Handler(Looper.getMainLooper());
     private final WeakHashMap<View, Burst> bursts = new WeakHashMap<>();
     private long lastPropertyCheck = -1;
-    private boolean enabled;
+    private int probeLevel;
     private int serial;
 
     private static final class Burst {
@@ -50,45 +54,53 @@ final class LiveStackTimeline {
         final long start;
         final int id;
         final String reason;
+        final int level;
         final Map<Integer, String> previous = new HashMap<>();
-        Burst(View stack, long start, int id, String reason) {
+        final Map<Integer, String> externalPrevious = new HashMap<>();
+        Burst(View stack, long start, int id, String reason, int level) {
             this.stack = new WeakReference<>(stack);
             this.start = start;
             this.id = id;
             this.reason = reason;
+            this.level = level;
         }
     }
 
     /** Existing callbacks call this only for a classified expanded CARD, never for CHIP or media. */
     void begin(View stack, String reason) {
-        if (stack == null || !STACK.equals(stack.getClass().getName()) || !stack.isAttachedToWindow()
-                || !propertyEnabled()) return;
+        if (stack == null || !STACK.equals(stack.getClass().getName()) || !stack.isAttachedToWindow()) return;
+        int level = propertyLevel();
+        if (level == 0) return;
         long now = SystemClock.uptimeMillis();
         Burst last = bursts.get(stack);
-        if (last != null && now - last.start < COOLDOWN_MS) return;
-        Burst burst = new Burst(stack, now, ++serial, reason);
+        if (last != null && now - last.start <
+                (level >= 2 ? EXTERNAL_COOLDOWN_MS : COOLDOWN_MS)) return;
+        Burst burst = new Burst(stack, now, ++serial, reason, level);
         bursts.put(stack, burst);
         // The draw/region probe observes the same window, timestamp and card stack.
         io.github.igorcv88.oneuiliquidglass.diagnostics.LiveMaterialTrace.begin(stack, burst.id, now);
         Probe.log("LIVE_STACK_TIMELINE_BEGIN", "burst=" + burst.id + " reason=" + reason
-                + " stack=" + id(stack) + " cards=" + ((ViewGroup) stack).getChildCount());
-        for (long tick : TICKS) main.postDelayed(() -> sample(burst, tick), tick);
-        main.postDelayed(() -> finish(burst), 520);
+                + " level=" + level + " stack=" + id(stack)
+                + " cards=" + ((ViewGroup) stack).getChildCount());
+        long[] ticks = level >= 2 ? EXTERNAL_TICKS : TICKS;
+        for (long tick : ticks) main.postDelayed(() -> sample(burst, tick), tick);
+        main.postDelayed(() -> finish(burst), level >= 2 ? 1220 : 520);
     }
 
-    private boolean propertyEnabled() {
+    private int propertyLevel() {
         long now = SystemClock.uptimeMillis();
-        if (lastPropertyCheck >= 0 && now - lastPropertyCheck < 750) return enabled;
+        if (lastPropertyCheck >= 0 && now - lastPropertyCheck < 750) return probeLevel;
         lastPropertyCheck = now;
         try {
             Class<?> props = Class.forName("android.os.SystemProperties");
             Method get = props.getMethod("get", String.class);
             String value = (String) get.invoke(null, "debug.oulg.stackprobe");
-            enabled = "1".equals(value) || "true".equalsIgnoreCase(value);
+            probeLevel = "2".equals(value) ? 2
+                    : ("1".equals(value) || "true".equalsIgnoreCase(value) ? 1 : 0);
         } catch (ReflectiveOperationException | RuntimeException | LinkageError ignored) {
-            enabled = false;
+            probeLevel = 0;
         }
-        return enabled;
+        return probeLevel;
     }
 
     private void sample(Burst burst, long scheduled) {
@@ -124,6 +136,8 @@ final class LiveStackTimeline {
             Probe.log("LIVE_STACK_TIMELINE_END_TICK", "burst=" + burst.id + " ms=" + elapsed
                     + " nodes=" + remaining[2] + " left=" + remaining[0]
                     + " emitted=" + (MAX_LINES_PER_SAMPLE - remaining[1]));
+            if (burst.level >= 2)
+                LiveStackExternalProbe.sample(stack, burst.id, elapsed, burst.externalPrevious);
         } catch (RuntimeException | LinkageError e) {
             Probe.log("LIVE_STACK_TIMELINE_ERROR", "burst=" + burst.id
                     + " type=" + e.getClass().getSimpleName());
@@ -247,5 +261,6 @@ final class LiveStackTimeline {
                 + " objects=" + burst.previous.size());
         // Keep the timestamp for the cooldown; avoid retaining stale view identities.
         burst.previous.clear();
+        burst.externalPrevious.clear();
     }
 }
