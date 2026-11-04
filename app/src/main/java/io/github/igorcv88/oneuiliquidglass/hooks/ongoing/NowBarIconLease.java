@@ -19,6 +19,9 @@ final class NowBarIconLease {
     private WeakReference<Drawable> applied = new WeakReference<>(null);
     private WeakReference<View> disc = new WeakReference<>(null);
     private ColorStateList nativeDisc, nativeTint;
+    /** DZIF has a SEPARATE MaterialCardView for the icon in the expanded Now Bar. */
+    private WeakReference<View> expandedDisc = new WeakReference<>(null);
+    private ColorStateList nativeExpandedDisc;
     private long generation, nextSample;
     private Boolean lightBackdrop;
     private int ink = Color.WHITE;
@@ -95,6 +98,35 @@ final class NowBarIconLease {
         cardColor(container, ColorStateList.valueOf(Color.TRANSPARENT));
     }
 
+    /** Clear only the expanded icon container's coloured fill; leave its icon/children native. */
+    void syncExpandedDisc(View container, boolean glass) {
+        if (!glass || container == null || !NativeShape.cardLike(container)) {
+            restoreExpandedDisc();
+            return;
+        }
+        if (expandedDisc.get() != container) restoreExpandedDisc();
+        Object nativeValue = NativeShape.call(container, "getCardBackgroundColor");
+        if (!(nativeValue instanceof ColorStateList)) return;
+        ColorStateList current = (ColorStateList) nativeValue;
+        if (current.getDefaultColor() == Color.TRANSPARENT) return;
+        // Store the latest Samsung colour; it may be rewritten when expanding or switching mode.
+        nativeExpandedDisc = current;
+        expandedDisc = new WeakReference<>(container);
+        cardColor(container, ColorStateList.valueOf(Color.TRANSPARENT));
+    }
+
+    private void restoreExpandedDisc() {
+        View target = expandedDisc.get();
+        if (target != null && nativeExpandedDisc != null) {
+            Object current = NativeShape.call(target, "getCardBackgroundColor");
+            if (current instanceof ColorStateList &&
+                    ((ColorStateList) current).getDefaultColor() == Color.TRANSPARENT)
+                cardColor(target, nativeExpandedDisc);
+        }
+        expandedDisc.clear();
+        nativeExpandedDisc = null;
+    }
+
     void restore() {
         generation++;
         nextSample = 0;
@@ -108,6 +140,7 @@ final class NowBarIconLease {
         if (target != null && target.getImageTintList() == null) target.setImageTintList(nativeTint);
         nativeTint = null;
         restoreDisc();
+        restoreExpandedDisc();
         image.clear();
         original = null;
         applied.clear();

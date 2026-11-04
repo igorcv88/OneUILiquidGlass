@@ -228,6 +228,9 @@ final class NowBarHooks {
         ImageView icon = c.icon.target();
         if (icon == null || !LiveChipHooks.within(icon, card)) icon = findIcon(card, 0);
         c.icon.sync(icon, shown);
+        // DZIF uses a different CardView for the EXPANDED ongoing app icon; the normal
+        // nowbar_icon lease only clears its compact disc. Never touch MediaCardView.
+        c.icon.syncExpandedDisc(findExpandedIconContainer(card, 0), shown);
         View gradient = c.gradient.get();
         View hidden = c.hiddenGradient.get();
         if (c.nativeGradientVisibility != null && (!shown || hidden != gradient)) {
@@ -274,6 +277,24 @@ final class NowBarHooks {
             Probe.log("LIVE_RENDER_NOWBAR_GRADIENT", "shown=" + shown + " requested=" + asked
                     + " observed=" + gradientState(gradient) + " " + LiveRenderProbe.view(gradient));
         } catch (ReflectiveOperationException | RuntimeException e) { Probe.error("NOWBAR_GRADIENT_FAILED", e); }
+    }
+
+    /** The verified DZIF resource id on NowBarOngoingCardView's expanded app-icon CardView. */
+    private static View findExpandedIconContainer(View view, int depth) {
+        if (view == null || depth > 16) return null;
+        if (view.getId() != View.NO_ID && NativeShape.cardLike(view)) {
+            try {
+                if ("ongoing_app_expanded_icon_container".equals(
+                        view.getResources().getResourceEntryName(view.getId()))) return view;
+            } catch (RuntimeException ignored) { }
+        }
+        if (!(view instanceof ViewGroup)) return null;
+        ViewGroup group = (ViewGroup) view;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            View found = findExpandedIconContainer(group.getChildAt(i), depth + 1);
+            if (found != null) return found;
+        }
+        return null;
     }
 
     /** No changes to vector-only icons or sibling UI outside NowBarOngoingCardView. */
