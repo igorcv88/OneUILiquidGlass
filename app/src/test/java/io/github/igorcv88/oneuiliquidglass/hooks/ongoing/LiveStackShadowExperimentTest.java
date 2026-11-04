@@ -34,7 +34,8 @@ import org.robolectric.annotation.GraphicsMode;
 public class LiveStackShadowExperimentTest {
     private Activity activity;
     private CardStackView stack;
-    private FrameLayout frame;
+    private CountingFrame frame;
+    private LinearLayout layout;
     private View shadow1, shadow2, unrelated;
     private RippleDrawable ripple1, ripple2;
     private final Map<View, String> names = new IdentityHashMap<>();
@@ -43,32 +44,52 @@ public class LiveStackShadowExperimentTest {
 
     @Before public void setUp() {
         activity = Robolectric.buildActivity(Activity.class).setup().get();
-        LinearLayout layout = new LinearLayout(activity);
+        layout = new LinearLayout(activity);
         layout.setOrientation(LinearLayout.VERTICAL);
         stack = new CardStackView(activity);
         stack.addView(new View(activity), new FrameLayout.LayoutParams(1340, 438));
-        frame = new FrameLayout(activity);
-        frame.setClipChildren(false);
-        shadow1 = indicator(0.92f, -195f);
-        shadow2 = indicator(0.84f, -171f);
+        frame = newFrame();
+        shadow1 = frame.getChildAt(0);
+        shadow2 = frame.getChildAt(1);
         ripple1 = (RippleDrawable) shadow1.getBackground();
         ripple2 = (RippleDrawable) shadow2.getBackground();
-        frame.addView(shadow1, new FrameLayout.LayoutParams(1340, 216));
-        frame.addView(shadow2, new FrameLayout.LayoutParams(1340, 216));
         unrelated = new View(activity);
         unrelated.setBackground(new GradientDrawable());
         layout.addView(stack, new LinearLayout.LayoutParams(1340, 438));
         layout.addView(frame, new LinearLayout.LayoutParams(1340, 216));
         layout.addView(unrelated, new LinearLayout.LayoutParams(1340, 10));
         activity.setContentView(layout);
+        layoutAll();
+        experiment = new LiveStackShadowExperiment(v -> names.getOrDefault(v, "-"), mode::get);
+    }
+
+    /** Counts clip writes, to prove a steady frame re-applies nothing. */
+    static final class CountingFrame extends FrameLayout {
+        int clipWrites;
+        CountingFrame(Activity a) { super(a); }
+        @Override public void setClipBounds(Rect r) { clipWrites++; super.setClipBounds(r); }
+    }
+
+    /** A named frame with both named indicators, as DZIF inflates it; not laid out (0x0). */
+    private CountingFrame newFrame() {
+        CountingFrame f = new CountingFrame(activity);
+        f.setClipChildren(false);
+        View a = indicator(0.92f, -195f), b = indicator(0.84f, -171f);
+        f.addView(a, new FrameLayout.LayoutParams(1340, 216));
+        f.addView(b, new FrameLayout.LayoutParams(1340, 216));
+        names.put(f, LiveStackShadowExperiment.FRAME);
+        names.put(a, LiveStackShadowExperiment.SHADOW1);
+        names.put(b, LiveStackShadowExperiment.SHADOW2);
+        return f;
+    }
+
+    private void layoutAll() {
         layout.measure(View.MeasureSpec.makeMeasureSpec(1340, View.MeasureSpec.EXACTLY),
                 View.MeasureSpec.makeMeasureSpec(3120, View.MeasureSpec.EXACTLY));
         layout.layout(0, 0, 1340, 3120);
-        names.put(frame, LiveStackShadowExperiment.FRAME);
-        names.put(shadow1, LiveStackShadowExperiment.SHADOW1);
-        names.put(shadow2, LiveStackShadowExperiment.SHADOW2);
-        experiment = new LiveStackShadowExperiment(v -> names.getOrDefault(v, "-"), mode::get);
     }
+
+    private void preDraw() { stack.getViewTreeObserver().dispatchOnPreDraw(); }
 
     private View indicator(float scale, float ty) {
         View v = new View(activity);
@@ -192,18 +213,112 @@ public class LiveStackShadowExperimentTest {
         names.clear();
         mode.set(LiveStackShadowExperiment.MODE_HIDE_BOTH);
         experiment.sync(stack, true);
+        preDraw();
         assertNull(content(shadow1).getColorFilter());
         assertNull(content(shadow2).getColorFilter());
-        assertEquals(LiveStackShadowExperiment.MODE_OFF, experiment.mode());
+        assertNull(frame.getClipBounds());
     }
 
-    @Test public void detachRestores() {
+    @Test public void removedFrameIsRestoredOnTheNextFrame() {
         mode.set(LiveStackShadowExperiment.MODE_HIDE_BOTH);
         experiment.sync(stack, true);
         assertTrue(filterIs(content(shadow1), LiveStackShadowExperiment.CLEAR));
-        ((LinearLayout) frame.getParent()).removeView(frame);
+        layout.removeView(frame);
+        preDraw();
         assertNull(content(shadow1).getColorFilter());
         assertNull(content(shadow2).getColorFilter());
+    }
+
+    @Test public void frameClipWaitsForLayoutThenPersists() {
+        // The DZIF frame can be 0x0 when the first writer arrives.
+        layout.removeView(frame);
+        CountingFrame fresh = newFrame();
+        layout.addView(fresh, 1, new LinearLayout.LayoutParams(1340, 216));
+        assertEquals(0, fresh.getWidth());
+        mode.set(LiveStackShadowExperiment.MODE_CLIP_FRAME);
+        experiment.sync(stack, true);
+        assertNull("no clip before layout", fresh.getClipBounds());
+        assertEquals(0, fresh.clipWrites);
+
+        layoutAll();
+        preDraw();
+        assertEquals(new Rect(0, 0, 1340, 216), fresh.getClipBounds());
+        assertEquals(1, fresh.clipWrites);
+
+        // Steady frames: no new clip write.
+        for (int i = 0; i < 5; i++) preDraw();
+        assertEquals(1, fresh.clipWrites);
+        assertEquals(new Rect(0, 0, 1340, 216), fresh.getClipBounds());
+    }
+
+    @Test public void recreatedFrameGetsTheClipAndTheOldOneIsRestored() {
+        mode.set(LiveStackShadowExperiment.MODE_CLIP_FRAME);
+        experiment.sync(stack, true);
+        assertEquals(new Rect(0, 0, 1340, 216), frame.getClipBounds());
+
+        CountingFrame old = frame;
+        layout.removeView(old);
+        CountingFrame fresh = newFrame();
+        layout.addView(fresh, 1, new LinearLayout.LayoutParams(1340, 216));
+        preDraw();
+        assertNull("old frame restored", old.getClipBounds());
+        assertNull("new frame waits for layout", fresh.getClipBounds());
+        layoutAll();
+        preDraw();
+        assertEquals(new Rect(0, 0, 1340, 216), fresh.getClipBounds());
+    }
+
+    @Test public void stackDetachSuspendsAndReattachResumes() {
+        mode.set(LiveStackShadowExperiment.MODE_CLIP_FRAME);
+        experiment.sync(stack, true);
+        assertEquals(new Rect(0, 0, 1340, 216), frame.getClipBounds());
+
+        activity.setContentView(new FrameLayout(activity));
+        assertFalse(stack.isAttachedToWindow());
+        assertNull("restored while detached", frame.getClipBounds());
+        assertEquals(LiveStackShadowExperiment.MODE_CLIP_FRAME, experiment.mode());
+
+        activity.setContentView(layout);
+        layoutAll();
+        preDraw();
+        assertEquals(new Rect(0, 0, 1340, 216), frame.getClipBounds());
+    }
+
+    @Test public void propertyZeroRestoresWithoutANewWriter() {
+        mode.set(LiveStackShadowExperiment.MODE_CLIP_FRAME);
+        experiment.sync(stack, true);
+        assertEquals(new Rect(0, 0, 1340, 216), frame.getClipBounds());
+        mode.set(LiveStackShadowExperiment.MODE_OFF);
+        preDraw();
+        assertNull(frame.getClipBounds());
+        assertEquals(LiveStackShadowExperiment.MODE_OFF, experiment.mode());
+        // Disarmed: later frames do nothing.
+        mode.set(LiveStackShadowExperiment.MODE_CLIP_FRAME);
+        preDraw();
+        assertNull(frame.getClipBounds());
+    }
+
+    @Test public void modeChangeOnAFrameSwapsLeasesExactly() {
+        mode.set(LiveStackShadowExperiment.MODE_CLIP_FRAME);
+        experiment.sync(stack, true);
+        assertEquals(new Rect(0, 0, 1340, 216), frame.getClipBounds());
+        mode.set(LiveStackShadowExperiment.MODE_TINT);
+        preDraw();
+        assertNull(frame.getClipBounds());
+        assertTrue(filterIs(content(shadow1), LiveStackShadowExperiment.MAGENTA));
+        assertTrue(filterIs(content(shadow2), LiveStackShadowExperiment.MAGENTA));
+    }
+
+    @Test public void replacedIndicatorDrawableIsRestoredAndTheNewOneFiltered() {
+        mode.set(LiveStackShadowExperiment.MODE_HIDE_BOTH);
+        experiment.sync(stack, true);
+        Drawable oldContent = content(shadow1);
+        assertTrue(filterIs(oldContent, LiveStackShadowExperiment.CLEAR));
+        View replacement = indicator(0.92f, -195f);
+        shadow1.setBackground(replacement.getBackground());
+        preDraw();
+        assertNull("old drawable restored", oldContent.getColorFilter());
+        assertTrue(filterIs(content(shadow1), LiveStackShadowExperiment.CLEAR));
     }
 
     @Test public void degenerateGeometryKeepsNativeClip() {

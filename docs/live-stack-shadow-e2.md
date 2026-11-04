@@ -56,6 +56,29 @@ Escopo e garantias:
 - Máscara, outline, alpha, visibilidade, layout, toque, `stack_pip_layout`, botões, CHIP, Now Bar e notificações comuns **não** são tocados.
 - O estado é registrado em `LIVE_STACK_SHADOW_E2` apenas quando muda.
 
+## Ciclo de vida e log (revisão após o primeiro teste no DZIF)
+
+No primeiro teste do modo 5, o log mostrou `state=applied frameClip=-` às 15:13:53.069 e `restored:detached` às 15:13:53.085. O recorte nunca foi aplicado, porque o frame ainda estava 0×0. Além disso, o detach do frame desarmou o experimento por completo. **Esse teste não refuta o A2.**
+
+Correções desta revisão:
+
+- Os listeners de pre-draw e de attach ficam no `CardStackView`, não no frame transitório. A cada quadro, as três views são resolvidas de novo a partir do pai do stack, com verificação de identidade primeiro.
+- Quando o frame, um indicador ou o drawable é substituído, os leases antigos são restaurados antes de a nova instância ser alterada.
+- O modo 5 só é aplicado quando o frame tem tamanho de layout válido. Até lá, o log registra `state=requested pending=frameNotLaidOut`.
+- O detach do stack restaura os leases e mantém o pedido (`state=suspended`). O attach seguinte retoma.
+- A propriedade também é relida no pre-draw, com cache de 750 ms. `stackshadow=0` restaura e desarma sem esperar swipe, desde que a janela continue desenhando. O caminho inverso, de 0 para N, ainda precisa de um writer do stack, como um swipe ou a atualização do timer.
+- Um quadro estável não aloca, não invalida e não registra log.
+
+Formato do evento, emitido só quando algo muda:
+
+```
+LIVE_STACK_SHADOW_E2 mode=5 state=effective pending=- frame=<id> frameWh=1340x216 frameVis=0 frameClip=[0,0][1340,216] ... attached=true
+```
+
+`state` assume `requested` (pedido feito, ainda não aplicado; `pending` traz o motivo: `noFrame`, `frameNotLaidOut`, `noIndicator`, `noGeometry`, `detached`), `effective`, `suspended` ou `restored:<motivo>`.
+
+**Critério mínimo para avaliar o A2:** `mode=5 state=effective frameClip=[0,0][1340,216]` (ou as dimensões reais do frame) mantido depois que o cartão assenta.
+
 ## Captura
 
 Use o mesmo script do E1, trocando a propriedade por `debug.oulg.stackshadow` e mantendo `debug.oulg.stackprobe 2`. Faça uma captura por modo, de 15 s, com **pausas de mais de 1 s em cada cartão**.
