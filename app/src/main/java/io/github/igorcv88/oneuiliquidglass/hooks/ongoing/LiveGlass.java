@@ -23,7 +23,7 @@ import io.github.igorcv88.oneuiliquidglass.glass.SemBlurBridge;
  * wrapped in a {@link LiveGlassDrawable} inside the same call that classified it (bind, factory,
  * writer), so the first frame already draws it. A later native writer replaces the background;
  * the owner offers the host again and the new drawable becomes the wrapped native one. Not
- * eligible any more (recycled for media, data changed), gate off or detach of a dead toast: the
+ * eligible any more (recycled for an unknown item, data changed), gate off or detach of a dead toast: the
  * exact native background and Samsung's own blur are put back.</p>
  *
  * <p>The compositor region exists only while the host is attached and cross-window blur is on;
@@ -148,7 +148,7 @@ public final class LiveGlass {
 
     /**
      * Classifies {@code host} for {@code owner}. {@code recheck} re-reads the owner's own flags
-     * (media may flip in place) when the gate changes or a writer fires outside a bind.
+     * (automation flags may flip in place) when the gate changes or a writer fires outside a bind.
      */
     public Outcome offer(View host, LiveSurface surface, Object owner, LiveEligibility.Verdict verdict, Predicate<Object> recheck,
                          Options options) {

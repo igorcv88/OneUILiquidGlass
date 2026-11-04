@@ -8,7 +8,6 @@ import android.graphics.Rect;
 import android.view.View;
 import android.view.ViewGroup;
 import java.lang.ref.WeakReference;
-import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -32,8 +31,8 @@ import io.github.igorcv88.oneuiliquidglass.diagnostics.Probe;
  * while that material is enabled and restored on fallback, detach or gate changes. Geometry
  * updates never switch the card to an unconfigured native region.
  *
- * <p>Ownership: getView/bindView classify the root with the data at that position and Samsung's
- * isMediaView(View). The fill is found structurally (a GradientDrawable host that covers the root,
+ * <p>Ownership: getView/bindView classify the root with the data at that position. The fill is
+ * found structurally (a GradientDrawable host that covers the root,
  * never a fixed depth) or is the view changeCardBg wrote. Every writer (changeCardBg, setBlurBG,
  * updateItemBg, initNormalNotificationView) re-evaluates only classified cards it touches, with
  * the data's flags re-read.</p>
@@ -61,6 +60,9 @@ final class LiveCardHooks {
     private final WeakHashMap<Drawable, Integer> regionColors = new WeakHashMap<>();
     /** Only background layers on this fill's ancestor path; never RemoteViews or controls. */
     private final WeakHashMap<View, List<WeakReference<View>>> covered = new WeakHashMap<>();
+    /** Exact Samsung action buttons within each classified card, not arbitrary notification UI. */
+    private final WeakHashMap<View, List<WeakReference<View>>> actionButtons = new WeakHashMap<>();
+    private final WeakHashMap<View, LiveActionFill> actionFills = new WeakHashMap<>();
     private static final class TintedRegion {
         final WeakReference<View> layer;
         final WeakReference<Drawable> drawable;
@@ -77,22 +79,19 @@ final class LiveCardHooks {
     private final LiveGlass glass;
     private final LiveGlass.NativeBlur nativeBlur;
     private final DataLocator locator = new DataLocator(LiveEligibility.DATA);
-    /** OngoingCardAdapter.isMediaView(View), resolved at install; null: no native verdict, all native. */
-    private Method isMediaView;
     /** DZIF's data helper, used when the adapter exposes no getItem(int) nor data list. */
     private OngoingDataSource helper;
     void setHelper(OngoingDataSource h) { helper = h; }
 
     LiveCardHooks(LiveGlass glass) { this(glass, LiveGlass.SAMSUNG); }
     LiveCardHooks(LiveGlass glass, LiveGlass.NativeBlur nativeBlur) { this.glass = glass; this.nativeBlur = nativeBlur; }
-    void setIsMediaView(Method m) { isMediaView = m; }
 
     /** After getView(position, convert, parent) (result) and bindView(view, position). */
     void cardBound(Object adapter, View root, int position) {
         if (root == null) return;
         Object data = locator.at(adapter, position);
         if (data == null && helper != null) data = helper.at(adapter, position);
-        LiveEligibility.Verdict verdict = LiveEligibility.card(data, nativeMedia(adapter, root));
+        LiveEligibility.Verdict verdict = LiveEligibility.card(data);
         Classification c = new Classification(data, verdict);
         roots.put(root, c);
         evaluate(root, c);
@@ -132,8 +131,8 @@ final class LiveCardHooks {
     private void evaluate(View root, Classification c) {
         if (c == null) return;
         Object data = c.data.get();
-        // The native media verdict is the bind's; the data's own flags are read again now (they can
-        // flip to media or automation in place before the next bind).
+        // Recheck mutable data (especially automation) before each writer; the bind's structural
+        // result is retained only when it was already ineligible.
         LiveEligibility.Verdict verdict = data == null ? LiveEligibility.Verdict.NO_DATA
                 : c.verdict.ok() ? LiveEligibility.ongoing(data) : c.verdict;
         LiveGlass.Options options = new LiveGlass.Options();
@@ -230,6 +229,7 @@ final class LiveCardHooks {
             companionState(host, false);
             return;
         }
+        syncActions(host);
         List<TintedRegion> prior = tinted.get(host);
         if (prior != null) prior.removeIf(r -> {
             View layer = r.layer.get();
@@ -290,6 +290,14 @@ final class LiveCardHooks {
         list.add(new WeakReference<>(layer));
     }
     private void restoreCompanions(View host) {
+        List<WeakReference<View>> buttons = actionButtons.remove(host);
+        if (buttons != null) for (WeakReference<View> ref : buttons) {
+            View button = ref.get();
+            if (button != null) {
+                LiveActionFill lease = actionFills.remove(button);
+                if (lease != null) lease.restore();
+            }
+        }
         List<WeakReference<View>> fills = covered.remove(host);
         if (fills != null) for (WeakReference<View> ref : fills) {
             View layer = ref.get();
@@ -302,6 +310,44 @@ final class LiveCardHooks {
             ref.lease.restore();
             if (layer != null && d != null) tintRegion(layer, d, false);
         }
+    }
+
+    /** The two DZIF action layouts differ, but their buttons have these exact resource names. */
+    private void syncActions(View host) {
+        List<View> found = new ArrayList<>();
+        findActions(host, found, 0);
+        List<WeakReference<View>> prior = actionButtons.get(host);
+        if (prior != null) prior.removeIf(ref -> {
+            View old = ref.get();
+            boolean stale = old == null || !found.contains(old);
+            if (stale && old != null) {
+                LiveActionFill lease = actionFills.remove(old);
+                if (lease != null) lease.restore();
+            }
+            return stale;
+        });
+        for (View button : found) {
+            LiveActionFill lease = actionFills.computeIfAbsent(button, ignored -> new LiveActionFill());
+            lease.sync(button, true);
+            if (lease.active()) remember(actionButtons, host, button);
+        }
+    }
+
+    private static void findActions(View view, List<View> out, int depth) {
+        if (depth > 12 || out.size() >= 8) return;
+        if (view instanceof android.widget.Button && namedAction(view)) { out.add(view); return; }
+        if (!(view instanceof ViewGroup)) return;
+        ViewGroup parent = (ViewGroup) view;
+        for (int i = 0; i < parent.getChildCount() && out.size() < 8; i++)
+            findActions(parent.getChildAt(i), out, depth + 1);
+    }
+
+    private static boolean namedAction(View view) {
+        if (view.getId() == View.NO_ID) return false;
+        try {
+            String name = view.getResources().getResourceEntryName(view.getId());
+            return "action0".equals(name) || "ongoing_action_text_button".equals(name);
+        } catch (RuntimeException e) { return false; }
     }
     private static void restoreCovered(View layer) {
         if (layer.getBackground() instanceof CoveredFill)
@@ -417,14 +463,6 @@ final class LiveCardHooks {
         try { ((ViewGroup) layer).offsetDescendantRectToMyCoords(host, area); }
         catch (IllegalArgumentException e) { return false; }
         return d.getBounds().contains(area);
-    }
-
-    Boolean nativeMedia(Object adapter, View root) {
-        if (isMediaView == null || adapter == null) return null;
-        try {
-            Object r = isMediaView.invoke(adapter, root);
-            return r instanceof Boolean ? (Boolean) r : null;
-        } catch (ReflectiveOperationException | RuntimeException e) { return null; }
     }
 
     /** The classified root a view belongs to: itself or an ancestor below the stack. */

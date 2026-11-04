@@ -17,8 +17,9 @@ import io.github.igorcv88.oneuiliquidglass.hooks.Reflect;
  * and tints it: that writer is what removed any earlier glass. Each setChipBg inside a bind is
  * attributed to the data bound at that position; at the end of the bind every chip view of the
  * holder (written now or in an earlier bind, i.e. recycled) is classified against <i>this</i>
- * bind's data, so a holder reused for media goes back to native. A setChipBg outside a bind
- * (recolour) reasserts only a chip already classified, after re-reading its data's flags.
+ * bind's data. A media flag does not force the native gradient: Samsung's index may describe a
+ * different item from the one displayed when its media list changes. Unknown data and automation
+ * still stay native. A setChipBg outside a bind (recolour) reasserts only a classified chip.
  */
 final class LiveChipHooks {
     static final String ADAPTER = "com.android.systemui.statusbar.phone.ongoingactivity.ongoingchip.OngoingChipAdapter";
@@ -82,7 +83,7 @@ final class LiveChipHooks {
         if (f == null) return;
         // The data the holder itself keeps, when it keeps one, is the item actually shown: it
         // wins over the helper index (whose list may hold items the chip adapter does not show,
-        // such as media, shifting the positions).
+        // or may reorder independently while Samsung animates its pill).
         Object held = heldData(holder);
         Object data = held != null ? held : f.data;
         LiveEligibility.Verdict verdict = LiveEligibility.ongoing(data);

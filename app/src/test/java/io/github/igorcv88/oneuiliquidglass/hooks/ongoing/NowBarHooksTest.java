@@ -26,7 +26,7 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.Shadows;
 import org.robolectric.annotation.Config;
 
-/** L3: plugin bootstrap once per classloader, exact ongoing class, media excluded, CardView layering. */
+/** L3: plugin bootstrap once per classloader, exact ongoing class, CardView layering. */
 @RunWith(RobolectricTestRunner.class) @Config(sdk = 34)
 public class NowBarHooksTest {
     private Env env;
@@ -122,7 +122,7 @@ public class NowBarHooksTest {
         assertEquals(0x0000ff00, g.currentTint() & 0x00ffffff);
     }
 
-    @Test public void mediaCardAndMediaItemStayNative() {
+    @Test public void separateMediaCardStaysNativeButOngoingPayloadIsEligible() {
         NowBarMediaCardView media = new NowBarMediaCardView(activity);
         NowBarItem item = new NowBarItem("com.spotify.music", null);
         media.N(item, media.getCardViewContainer(), 1f, 0xff000000);
@@ -134,7 +134,7 @@ public class NowBarHooksTest {
         NowBarItem withMedia = new NowBarItem("com.example", new Object());
         card.d0(withMedia);
         hooks.cardBound(abi, card, withMedia);
-        assertFalse(card.getCardViewContainer().getBackground() instanceof LiveGlassDrawable);
+        assertTrue(card.getCardViewContainer().getBackground() instanceof LiveGlassDrawable);
 
         NowBarOngoingCardView brief = new NowBarOngoingCardView(activity);
         NowBarItem briefing = new NowBarItem("com.samsung.android.app.moments", null);
@@ -143,7 +143,7 @@ public class NowBarHooksTest {
         assertFalse(brief.getCardViewContainer().getBackground() instanceof LiveGlassDrawable);
     }
 
-    @Test public void mediaPayloadArrivingLaterRestoresNative() {
+    @Test public void mediaPayloadArrivingLaterDoesNotRemoveExistingGlass() {
         NowBarOngoingCardView card = new NowBarOngoingCardView(activity);
         NowBarItem item = new NowBarItem("com.example.timer", null);
         card.d0(item);
@@ -152,7 +152,7 @@ public class NowBarHooksTest {
         item.media = new Object();
         card.d0(item);
         hooks.cardBound(abi, card, item);
-        assertFalse(card.getCardViewContainer().getBackground() instanceof LiveGlassDrawable);
+        assertTrue(card.getCardViewContainer().getBackground() instanceof LiveGlassDrawable);
     }
 
     @Test public void stackRefreshReassertsOnlyItsOngoingCards() {
