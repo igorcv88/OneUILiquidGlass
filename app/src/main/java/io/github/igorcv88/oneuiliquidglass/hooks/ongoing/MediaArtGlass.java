@@ -1,9 +1,11 @@
 package io.github.igorcv88.oneuiliquidglass.hooks.ongoing;
 
+import android.graphics.Rect;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.SystemClock;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.ViewParent;
 import android.view.ViewTreeObserver;
 import de.robv.android.xposed.XC_MethodHook;
@@ -43,6 +45,7 @@ import java.util.function.LongSupplier;
  */
 public final class MediaArtGlass implements View.OnAttachStateChangeListener, ViewTreeObserver.OnPreDrawListener {
     public static final String PROPERTY = "debug.oulg.mediaart";
+    public static final String PROBE_PROPERTY = "debug.oulg.mediaart.probe";
     static final float DEFAULT_OPACITY = 0.80f, MIN_OPACITY = 0.50f, MAX_OPACITY = 1.00f, OFF = -1f;
     static final long SESSION_GAP_MS = 1000;
     private static final String ROOT_CLASS = "com.android.systemui.media.QSMediaCornerRoundedView";
@@ -53,14 +56,18 @@ public final class MediaArtGlass implements View.OnAttachStateChangeListener, Vi
 
     /** Resource entry names; tests swap them for framework ids that Robolectric knows. */
     static final class Names {
-        final String root, art, stackHolder;
-        Names(String root, String art, String stackHolder) { this.root = root; this.art = art; this.stackHolder = stackHolder; }
+        final String root, art, stackHolder, overlay;
+        Names(String root, String art, String stackHolder) { this(root, art, stackHolder, "sec_album_art"); }
+        Names(String root, String art, String stackHolder, String overlay) {
+            this.root = root; this.art = art; this.stackHolder = stackHolder; this.overlay = overlay;
+        }
     }
     static final Names DZIF = new Names("media_carousel_layout", "shade_album_art", "stack_expand_contents");
 
     static Names names = DZIF;
     static RowGlass rowGlass = row -> false;
     static PropertySource property = MediaArtGlass::systemProperty;
+    static PropertySource probeProperty = () -> systemProperty(PROBE_PROPERTY);
     static LongSupplier clock = SystemClock::uptimeMillis;
     private static final Map<View, MediaArtGlass> WATCHED = new WeakHashMap<>();
     private static Method getter;
@@ -72,7 +79,13 @@ public final class MediaArtGlass implements View.OnAttachStateChangeListener, Vi
     private Context context = Context.NONE;
     private java.lang.ref.WeakReference<View> anchor;
     private View art;
+    private View overlayView;
     private float opacity = DEFAULT_OPACITY;
+    private int probeMode;
+    private int appliedProbeMode;
+    private View leasedProbeArt, leasedProbeOverlay;
+    private float nativeProbeArtAlpha, nativeProbeOverlayAlpha;
+    private long probeStartMs;
     private long lastFrame = Long.MIN_VALUE / 2;
     private boolean rootChecked, isRoot;
     // Leases: what was changed, on which object, and the native value to hand back.
@@ -127,7 +140,9 @@ public final class MediaArtGlass implements View.OnAttachStateChangeListener, Vi
         // The same carousel may be re-hosted: the context is resolved again on every attach.
         resolveContext(v);
         art = NativeIds.find(v, names.art);
+        overlayView = findOverlaySibling(art);
         opacity = parse(readProperty());
+        probeMode = parseProbe(readProbeProperty());
         lastFrame = clock.getAsLong();
         observer = v.getViewTreeObserver();
         observer.addOnPreDrawListener(this);
@@ -137,6 +152,8 @@ public final class MediaArtGlass implements View.OnAttachStateChangeListener, Vi
         if (observer != null && observer.isAlive()) observer.removeOnPreDrawListener(this);
         observer = null;
         restore("detached", null);
+        restoreProbe("detached");
+        overlayView = null;
         // WATCHED holds this strongly: a child of the root kept here would keep its weak key
         // (the root, through the parent chain) and the whole card alive. Attach finds it again.
         art = null;
@@ -154,9 +171,20 @@ public final class MediaArtGlass implements View.OnAttachStateChangeListener, Vi
         long now = clock.getAsLong();
         if (now - lastFrame > SESSION_GAP_MS) {
             opacity = parse(readProperty());
-            if (art == null || !art.isAttachedToWindow()) art = NativeIds.find(r, names.art);
+            probeMode = parseProbe(readProbeProperty());
+            if (art == null || !art.isAttachedToWindow()) {
+                art = NativeIds.find(r, names.art);
+                overlayView = findOverlaySibling(art);
+            }
         }
         lastFrame = now;
+        if (probeMode != 0) {
+            // Diagnostic-only: isolate the real pixel producer even if glass eligibility flickers.
+            restore("probe", null);
+            applyProbe(probeMode);
+            return;
+        }
+        restoreProbe("disabled");
         if (opacity == OFF) { restore("off", null); return; }
         if (context == Context.NONE) { restore("noContext", null); return; }
         if (art == null) { restore("noArt", null); return; }
@@ -240,6 +268,87 @@ public final class MediaArtGlass implements View.OnAttachStateChangeListener, Vi
         leasedFill = null;
     }
 
+    /**
+     * Opt-in visual isolation. Modes: 1=shade_album_art, 2=sec_album_art, 3=both.
+     * Only cached view references and float comparisons run per frame; logs occur on transitions.
+     * These tests intentionally ignore the glass gate to distinguish compositing from eligibility.
+     */
+    private void applyProbe(int mode) {
+        boolean hideArt = (mode & 1) != 0;
+        boolean hideOverlay = (mode & 2) != 0;
+        boolean entering = appliedProbeMode != mode
+                || (hideArt && leasedProbeArt != art)
+                || (hideOverlay && leasedProbeOverlay != overlayView);
+        if (entering) {
+            restoreProbe("changed");
+            appliedProbeMode = mode;
+            probeStartMs = clock.getAsLong();
+            if (hideArt && art != null) {
+                leasedProbeArt = art;
+                nativeProbeArtAlpha = art.getAlpha();
+            }
+            if (hideOverlay && overlayView != null) {
+                leasedProbeOverlay = overlayView;
+                nativeProbeOverlayAlpha = overlayView.getAlpha();
+            }
+        }
+        // Reassert only if Samsung overwrote our diagnostic alpha; no reflection or allocations.
+        if (leasedProbeArt != null && leasedProbeArt.getAlpha() != 0f) leasedProbeArt.setAlpha(0f);
+        if (leasedProbeOverlay != null && leasedProbeOverlay.getAlpha() != 0f) leasedProbeOverlay.setAlpha(0f);
+        if (entering) {
+            Rect visible = new Rect();
+            boolean onScreen = art != null && art.getGlobalVisibleRect(visible);
+            Probe.log("MEDIA_ART_PROBE", "state=applied mode=" + mode
+                    + " context=" + context.name().toLowerCase(Locale.ROOT)
+                    + " art=" + id(art) + " overlay=" + id(overlayView)
+                    + " artShown=" + (art != null && art.isShown())
+                    + " onScreen=" + onScreen + " rect=" + visible.flattenToString()
+                    + " glassBehind=" + glassBehind()
+                    + " artNativeAlpha=" + (art == null ? "null" : fmt(hideArt ? nativeProbeArtAlpha : art.getAlpha()))
+                    + " overlayNativeAlpha=" + (overlayView == null ? "null" : fmt(hideOverlay ? nativeProbeOverlayAlpha : overlayView.getAlpha()))
+                    + " artAppliedAlpha=" + (art == null ? "null" : fmt(art.getAlpha()))
+                    + " overlayAppliedAlpha=" + (overlayView == null ? "null" : fmt(overlayView.getAlpha())));
+        }
+    }
+
+    private void restoreProbe(String reason) {
+        if (appliedProbeMode == 0) return;
+        if (leasedProbeArt != null && leasedProbeArt.getAlpha() == 0f) {
+            leasedProbeArt.setAlpha(nativeProbeArtAlpha);
+        }
+        if (leasedProbeOverlay != null && leasedProbeOverlay.getAlpha() == 0f) {
+            leasedProbeOverlay.setAlpha(nativeProbeOverlayAlpha);
+        }
+        Probe.log("MEDIA_ART_PROBE", "state=restored mode=" + appliedProbeMode
+                + " context=" + context.name().toLowerCase(Locale.ROOT)
+                + " reason=" + reason + " durationMs=" + (clock.getAsLong() - probeStartMs));
+        leasedProbeArt = null;
+        leasedProbeOverlay = null;
+        appliedProbeMode = 0;
+    }
+
+    private static View findOverlaySibling(View art) {
+        if (art == null || !(art.getParent() instanceof ViewGroup)) return null;
+        ViewGroup g = (ViewGroup) art.getParent();
+        int index = g.indexOfChild(art);
+        for (int i = index + 1; i < g.getChildCount(); i++) {
+            View child = g.getChildAt(i);
+            if (names.overlay.equals(LiveStackExternalProbe.resourceName(child))) return child;
+        }
+        return null;
+    }
+
+    static int parseProbe(String raw) {
+        if (raw == null) return 0;
+        String mode = raw.trim();
+        return ("1".equals(mode) || "2".equals(mode) || "3".equals(mode))
+                ? Integer.parseInt(mode) : 0;
+    }
+
+    private static String readProbeProperty() {
+        try { return probeProperty.get(); } catch (RuntimeException e) { return null; }
+    }
+
     private void resolveContext(View v) {
         context = Context.NONE;
         anchor = null;
@@ -293,10 +402,12 @@ public final class MediaArtGlass implements View.OnAttachStateChangeListener, Vi
         try { return property.get(); } catch (RuntimeException e) { return null; }
     }
 
-    private static String systemProperty() {
+    private static String systemProperty() { return systemProperty(PROPERTY); }
+
+    private static String systemProperty(String name) {
         try {
             if (getter == null) getter = Class.forName("android.os.SystemProperties").getMethod("get", String.class);
-            return (String) getter.invoke(null, PROPERTY);
+            return (String) getter.invoke(null, name);
         } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
             return null;
         }
@@ -312,6 +423,7 @@ public final class MediaArtGlass implements View.OnAttachStateChangeListener, Vi
         names = DZIF;
         rowGlass = row -> false;
         property = MediaArtGlass::systemProperty;
+        probeProperty = () -> systemProperty(PROBE_PROPERTY);
         clock = SystemClock::uptimeMillis;
     }
 }

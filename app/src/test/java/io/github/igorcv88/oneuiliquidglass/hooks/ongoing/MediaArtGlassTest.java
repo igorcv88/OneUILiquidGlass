@@ -31,6 +31,7 @@ public class MediaArtGlassTest {
     private final AtomicLong now = new AtomicLong(10_000);
     private final AtomicInteger reads = new AtomicInteger();
     private volatile String prop;
+    private volatile String probeProp;
     private volatile boolean glass;
     private FrameLayout root, art;
     private ImageView origin, fresh;
@@ -41,9 +42,10 @@ public class MediaArtGlassTest {
         activity = Robolectric.buildActivity(Activity.class).setup().get();
         NativeIds.clearForTest();
         MediaArtGlass.resetForTest();
-        MediaArtGlass.names = new MediaArtGlass.Names("widget_frame", "background", "icon_frame");
+        MediaArtGlass.names = new MediaArtGlass.Names("widget_frame", "background", "icon_frame", "content");
         MediaArtGlass.clock = now::get;
         MediaArtGlass.property = () -> { reads.incrementAndGet(); return prop; };
+        MediaArtGlass.probeProperty = () -> probeProp;
         MediaArtGlass.rowGlass = row -> glass;
     }
 
@@ -203,6 +205,70 @@ public class MediaArtGlassTest {
         MediaArtGlass.watch(art); // not media_carousel_layout
         art.getViewTreeObserver().dispatchOnPreDraw();
         assertEquals(1f, art.getTransitionAlpha(), 0f);
+    }
+
+    private View addOverlay(float alpha) {
+        View overlay = new ImageView(activity);
+        overlay.setId(android.R.id.content);
+        overlay.setAlpha(alpha);
+        root.addView(overlay, 1);
+        return overlay;
+    }
+
+    @Test public void diagnosticProbeHidesAlbumArtWithoutGlassAndRestoresOnDetach() {
+        shade();
+        View overlay = addOverlay(0.65f);
+        glass = false;  // The diagnostic must test the view even when eligibility flickers.
+        probeProp = "1";
+        MediaArtGlass.watch(root);
+        frame();
+        assertEquals(0f, art.getAlpha(), 0f);
+        assertEquals(0.65f, overlay.getAlpha(), 0f);
+        assertEquals(1f, art.getTransitionAlpha(), 0f);
+        assertEquals(255, fill.getAlpha());
+        ((FrameLayout) root.getParent()).removeView(root);
+        assertEquals(1f, art.getAlpha(), 0f);
+        assertEquals(0.65f, overlay.getAlpha(), 0f);
+    }
+
+    @Test public void diagnosticProbeCanHideOverlayOnlyAndRestoreOnPropertyChange() {
+        shade();
+        View overlay = addOverlay(0.65f);
+        probeProp = "2";
+        MediaArtGlass.watch(root);
+        frame();
+        assertEquals(1f, art.getAlpha(), 0f);
+        assertEquals(0f, overlay.getAlpha(), 0f);
+        probeProp = "off";
+        now.addAndGet(MediaArtGlass.SESSION_GAP_MS + 1);
+        frame();
+        assertEquals(1f, art.getAlpha(), 0f);
+        assertEquals(0.65f, overlay.getAlpha(), 0f);
+    }
+
+    @Test public void diagnosticProbeHidesBothLayersAndRestoresNativeAlphas() {
+        shade();
+        View overlay = addOverlay(0.45f);
+        art.setAlpha(0.80f);
+        probeProp = "3";
+        MediaArtGlass.watch(root);
+        frame();
+        assertEquals(0f, art.getAlpha(), 0f);
+        assertEquals(0f, overlay.getAlpha(), 0f);
+        probeProp = "0";
+        now.addAndGet(MediaArtGlass.SESSION_GAP_MS + 1);
+        frame();
+        assertEquals(0.80f, art.getAlpha(), 0f);
+        assertEquals(0.45f, overlay.getAlpha(), 0f);
+    }
+
+    @Test public void probeParsing() {
+        assertEquals(0, MediaArtGlass.parseProbe(null));
+        assertEquals(0, MediaArtGlass.parseProbe("off"));
+        assertEquals(1, MediaArtGlass.parseProbe("1"));
+        assertEquals(2, MediaArtGlass.parseProbe(" 2 "));
+        assertEquals(3, MediaArtGlass.parseProbe("3"));
+        assertEquals(0, MediaArtGlass.parseProbe("4"));
     }
 
     @Test public void opacityParsing() {
