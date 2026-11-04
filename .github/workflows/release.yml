@@ -238,10 +238,37 @@ jobs:
           echo "NOTES_PATH=$NOTES_PATH" >> "$GITHUB_ENV"
 
       - name: Reserve release tag
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           git tag "$RELEASE_TAG" "$RELEASE_ORDER_COMMIT"
-          git push origin "refs/tags/${RELEASE_TAG}"
+          reserved=false
+          for attempt in 1 2 3 4; do
+            if git push origin "refs/tags/${RELEASE_TAG}"; then
+              reserved=true
+              break
+            fi
+
+            # A failing push response does not prove that the remote failed to create the tag.
+            # Verify the exact commit before retrying: never overwrite an existing tag.
+            remote_sha="$(gh api "repos/${APP_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" --jq '.object.sha' 2>/dev/null || true)"
+            if [[ "$remote_sha" == "$RELEASE_ORDER_COMMIT" ]]; then
+              echo "Remote tag exists at the expected commit despite the push error."
+              reserved=true
+              break
+            fi
+            if [[ -n "$remote_sha" ]]; then
+              echo "::error::Remote tag ${RELEASE_TAG} points to ${remote_sha}, not ${RELEASE_ORDER_COMMIT}" >&2
+              exit 1
+            fi
+            if (( attempt == 4 )); then
+              echo "::error::GitHub rejected ${RELEASE_TAG} after four attempts; Git Operations may be degraded." >&2
+              exit 1
+            fi
+            sleep "$(( attempt * 5 ))"
+          done
+          test "$reserved" = true
 
       - name: Publish release
         env:
@@ -267,7 +294,13 @@ jobs:
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             exit 0
           fi
-          git push origin ":refs/tags/${RELEASE_TAG}" || true
+          # Never delete a tag owned by a different run/commit after a transient failure.
+          remote_sha="$(gh api "repos/${APP_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" --jq '.object.sha' 2>/dev/null || true)"
+          if [[ "$remote_sha" == "$RELEASE_ORDER_COMMIT" ]]; then
+            git push origin ":refs/tags/${RELEASE_TAG}" || true
+          elif [[ -n "$remote_sha" ]]; then
+            echo "::warning::Skipping cleanup: ${RELEASE_TAG} points to a different commit."
+          fi
 
       - name: Delete temporary signing key
         if: always()
