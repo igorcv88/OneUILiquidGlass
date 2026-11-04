@@ -4,6 +4,7 @@ import android.content.res.Configuration;
 import android.graphics.Canvas;
 import android.graphics.drawable.Drawable;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.ViewParent;
 import android.view.WindowManager;
 import android.view.ViewTreeObserver;
@@ -279,6 +280,9 @@ public final class HeadsUpHooks {
         WindowSurvey.installWindowHook();
         // Read-only media map (debug.oulg.mediaprobe=1); one property read per second when off.
         io.github.igorcv88.oneuiliquidglass.hooks.ongoing.LiveMediaSurvey.start();
+        // Album art of the shade player and of the stack's media card over our glass (debug.oulg.mediaart).
+        try { io.github.igorcv88.oneuiliquidglass.hooks.ongoing.MediaArtGlass.install(loader, this::rowDrawsGlass); }
+        catch (RuntimeException | LinkageError e) { Probe.error("MEDIA_ART_INSTALL_FAILED", e); }
         installBlurGuard();
         installTouchSignal();
         installTextColorGuard();
@@ -1208,6 +1212,22 @@ public final class HeadsUpHooks {
             Probe.log("BACKGROUND_HOSTLESS", "view=" + bg.getClass().getName() + " chain=" + chain);
         }
         return null;
+    }
+    /**
+     * Whether one of this row's backgrounds draws our glass now (MediaArtGlass, from a pre-draw).
+     * The row's direct children only, no reflection: a state exists only for backgrounds whose
+     * draw was hooked, and lastFallback is null exactly while glass is drawn.
+     */
+    private boolean rowDrawsGlass(View row) {
+        if (!enabled || !(row instanceof ViewGroup)) return false;
+        ViewGroup g = (ViewGroup) row;
+        for (int i = 0; i < g.getChildCount(); i++) {
+            View c = g.getChildAt(i);
+            if (c.getVisibility() != View.VISIBLE) continue;
+            State s = states.get(c);
+            if (s != null && s.glass != null && !s.failed && s.lastFallback == null) return true;
+        }
+        return false;
     }
     private State state(View bg, View row) {
         State existing = states.get(bg);
