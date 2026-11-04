@@ -38,6 +38,10 @@ final class LiveActionFill {
         // DZIF action0 / ongoing_action_text_button: a plain solid white opaque content.
         // Unknown, translucent, patterned or coloured button materials stay native.
         if (color == null || color.getDefaultColor() != 0xffffffff) return;
+        // Inflated buttons can share RippleDrawable.ConstantState. Isolate this instance before
+        // replacing a layer, otherwise a sibling button can inherit our hidden content.
+        if (current.mutate() != current) return;
+        content = current.getDrawable(0);
         HiddenContent replacement = new HiddenContent(content);
         current.setDrawable(0, replacement);
         original = new WeakReference<>(content);

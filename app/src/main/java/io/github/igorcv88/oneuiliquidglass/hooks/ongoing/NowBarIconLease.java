@@ -42,9 +42,10 @@ final class NowBarIconLease {
 
     private void transparentDisc(ImageView target) {
         Object parent = target.getParent();
-        if (!(parent instanceof View) || !NativeShape.cardLike((View) parent)) return;
+        if (!(parent instanceof View)) return;
         View container = (View) parent;
         View saved = disc.get();
+        if (saved != container && !NativeShape.cardLike(container)) return;
         if (saved != null && saved != container) restoreDisc();
         Object color = NativeShape.call(container, "getCardBackgroundColor");
         if (!(color instanceof ColorStateList)) return;

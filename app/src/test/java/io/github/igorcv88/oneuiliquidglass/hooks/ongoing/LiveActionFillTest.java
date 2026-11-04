@@ -79,4 +79,20 @@ public class LiveActionFillTest {
         assertFalse(lease.active());
         assertSame(nativeContent, nativeButton.getDrawable(0));
     }
+
+    @Test public void siblingFromSharedConstantStateDoesNotLoseItsFill() {
+        RippleDrawable template = ripple(0xffffffff, false);
+        assertNotNull(template.getConstantState());
+        RippleDrawable one = (RippleDrawable) template.getConstantState().newDrawable(activity.getResources());
+        RippleDrawable other = (RippleDrawable) template.getConstantState().newDrawable(activity.getResources());
+        Drawable otherContent = other.getDrawable(0);
+        Button button = new Button(activity);
+        button.setBackground(one);
+        LiveActionFill lease = new LiveActionFill();
+        lease.sync(button, true);
+        assertTrue(lease.active());
+        assertSame("only the selected button's content is hidden", otherContent, other.getDrawable(0));
+        lease.restore();
+        assertSame(otherContent, other.getDrawable(0));
+    }
 }
