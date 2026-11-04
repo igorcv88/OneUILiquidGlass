@@ -34,6 +34,12 @@ public abstract class HookSite {
 
     /** Hooks one method; false if it could not be hooked. */
     public abstract boolean hook(Method m, Callback callback);
+    /**
+     * Calls {@code after} once a constructor of {@code type} returned (the new instance in
+     * Param.thisObject, method null). False when unsupported or not hooked; the default site
+     * (tests) does not hook constructors and callers then rely on their other entry points.
+     */
+    public boolean hookConstructors(Class<?> type, Callback callback) { return false; }
     /** Calls the method without the hooks (restoring a value through Samsung's own setter). */
     public abstract Object invokeOriginal(Method m, Object thisObject, Object... args) throws ReflectiveOperationException;
 
