@@ -36,7 +36,7 @@ public class NativeRegionLeaseTest {
         View layer = layer();
         Env.SamsungBlurDrawable old = new Env.SamsungBlurDrawable();
         old.setColor(0xff123456);
-        d.setAlpha(120);
+        old.setAlpha(120);
         layer.setBackground(old);
         NativeRegionLease lease = new NativeRegionLease();
         lease.sync(layer, true);
