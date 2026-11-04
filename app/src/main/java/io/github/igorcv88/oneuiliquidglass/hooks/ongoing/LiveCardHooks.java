@@ -84,6 +84,8 @@ final class LiveCardHooks {
     private final WeakHashMap<View, CompanionSignature> companionTrace = new WeakHashMap<>();
     private final WeakHashMap<Drawable, LiveRenderProbe> tintTrace = new WeakHashMap<>();
     private final LiveGlass glass;
+    /** Independent, opt-in structural telemetry. Does not participate in material ownership. */
+    private final LiveStackTimeline timeline = new LiveStackTimeline();
     private final LiveGlass.NativeBlur nativeBlur;
     private final DataLocator locator = new DataLocator(LiveEligibility.DATA);
     /** DZIF's data helper, used when the adapter exposes no getItem(int) nor data list. */
@@ -113,6 +115,7 @@ final class LiveCardHooks {
             // The view changeCardBg rewrote inside a card is that card's fill, whatever its depth.
             if (fillWriter && target != root && target.getBackground() != null && !blurLayer(target)) writtenFill.put(root, new WeakReference<>(target));
             evaluate(root, roots.get(root));
+            timeline.begin(stackOf(root), fillWriter ? "changeCardBg" : "cardWriter");
             Probe.liveSurfaceLater(root, "CARD", 450);
             return;
         }
@@ -133,6 +136,7 @@ final class LiveCardHooks {
         for (Map.Entry<View, Classification> e : new ArrayList<>(roots.entrySet()))
             if (e.getKey() != null && LiveChipHooks.within(e.getKey(), stack)) evaluate(e.getKey(), e.getValue());
         syncStackFills(stack);
+        timeline.begin(stack, "updateItemBg");
     }
 
     /** Offers the card's fill (and a root that has its own background) with the current verdict. */
@@ -233,6 +237,8 @@ final class LiveCardHooks {
         if (host == null) return;
         // Restore companions even after a fill was reparented or recycled.
         View stack = stackOf(host);
+        CompanionSignature previously = companionTrace.get(host);
+        boolean firstGlass = shown && (previously == null || !previously.shown);
         if (!shown) {
             restoreCompanions(host);
             companionState(host, false);
@@ -283,7 +289,10 @@ final class LiveCardHooks {
             p = layer.getParent();
         }
         companionState(host, true);
-        if (stack != null) syncStackFills(stack);
+        if (stack != null) {
+            syncStackFills(stack);
+            if (firstGlass) timeline.begin(stack, "firstGlassShown");
+        }
     }
     private void companionState(View host, boolean shown) {
         int regions = tinted.containsKey(host) ? tinted.get(host).size() : 0;
