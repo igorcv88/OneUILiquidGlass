@@ -277,6 +277,8 @@ public final class HeadsUpHooks {
             });
         }
         WindowSurvey.installWindowHook();
+        // Read-only media map (debug.oulg.mediaprobe=1); one property read per second when off.
+        io.github.igorcv88.oneuiliquidglass.hooks.ongoing.LiveMediaSurvey.start();
         installBlurGuard();
         installTouchSignal();
         installTextColorGuard();
