@@ -48,6 +48,12 @@ public final class LiveMaterialTrace {
         }
     }
 
+    /** Fast read for the hot draw path: disabled by default, no string allocation. */
+    public static boolean isArmed() {
+        Burst b = active;
+        return b != null && SystemClock.uptimeMillis() - b.started <= MAX_WINDOW_MS;
+    }
+
     /** Called only after LiveStackTimeline has checked the opt-in system property. */
     public static void begin(View stack, int id, long started) {
         if (stack == null) return;
