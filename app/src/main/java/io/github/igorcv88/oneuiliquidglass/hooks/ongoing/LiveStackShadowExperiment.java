@@ -39,7 +39,8 @@ import java.util.function.IntSupplier;
  *   <li>4 suppress both (option B preview);</li>
  *   <li>5 option A2: clip the frame to its own bounds, so only what lies below the card remains;</li>
  *   <li>6 option A: clip each indicator to the part below the frame's top, from its transform;</li>
- *   <li>7 {@code View.setAlpha(0f)} on both indicators, whatever their background;</li>
+ *   <li>7 view alpha 0 on both indicators, whatever their background, through
+ *       {@code View.setTransitionAlpha(0f)} (see {@link AlphaLease});</li>
  *   <li>8 complete suppression: mode 7 plus each indicator's own compositor blur region
  *       (BackgroundBlurDrawable alpha 0, through {@link NativeRegionLease});</li>
  *   <li>9 the indicators' compositor blur regions only, view alpha untouched.</li>
@@ -163,10 +164,13 @@ final class LiveStackShadowExperiment {
             REJECT_NO_CONTENT = "noContentLayer";
 
     /**
-     * A View.setAlpha(0f) this class wrote, with Samsung's latest value to put back. Samsung animates
-     * the indicators' alpha (0 -> 0.5) when it shows them: a value it writes after ours is taken as
-     * the new native value and zeroed again before that frame draws (pre-draw runs after animation
-     * callbacks), once per Samsung write, never on a steady frame.
+     * Final view alpha 0 through {@code View.setTransitionAlpha(0f)}. The RenderNode draws
+     * {@code alpha * transitionAlpha}, so the indicator draws nothing, while {@code getAlpha()}
+     * stays Samsung's: its 0 -> 0.5 fade and a native write of 0 at the end of a fade-out are never
+     * overwritten or lost, and restoring puts back exactly the transition alpha that was there
+     * (normally 1). With {@code setAlpha(0f)} a native write of 0 is indistinguishable from ours
+     * and a restore would reinstate a stale value. A transition alpha someone else writes later is
+     * taken as the new native value and zeroed again, once per write.
      */
     static final class AlphaLease {
         private WeakReference<View> view = new WeakReference<>(null);
@@ -179,24 +183,24 @@ final class LiveStackShadowExperiment {
             if (view.get() != v) {
                 restore();
                 view = new WeakReference<>(v);
-                nativeAlpha = v.getAlpha();
+                nativeAlpha = v.getTransitionAlpha();
                 active = true;
                 rewrites = 0;
-                if (nativeAlpha != 0f) v.setAlpha(0f);
+                if (nativeAlpha != 0f) v.setTransitionAlpha(0f);
                 return true;
             }
-            float a = v.getAlpha();
+            float a = v.getTransitionAlpha();
             if (a != 0f) {
                 nativeAlpha = a;
                 rewrites++;
-                v.setAlpha(0f);
+                v.setTransitionAlpha(0f);
             }
             return true;
         }
 
         void restore() {
             View v = view.get();
-            if (v != null && active && v.getAlpha() == 0f) v.setAlpha(nativeAlpha);
+            if (v != null && active && v.getTransitionAlpha() == 0f) v.setTransitionAlpha(nativeAlpha);
             view.clear();
             active = false;
         }
@@ -442,8 +446,8 @@ final class LiveStackShadowExperiment {
         if (!region) { region1.restore(); region2.restore(); }
         boolean ok1 = a != null, ok2 = b != null;
         if (viewAlpha) {
-            ok1 &= alpha1.apply(a) && a.getAlpha() == 0f;
-            ok2 &= alpha2.apply(b) && b.getAlpha() == 0f;
+            ok1 &= alpha1.apply(a) && a.getTransitionAlpha() == 0f;
+            ok2 &= alpha2.apply(b) && b.getTransitionAlpha() == 0f;
         }
         if (region) {
             ok1 &= region1.apply(a);
@@ -591,7 +595,7 @@ final class LiveStackShadowExperiment {
         if (v == null) return 0;
         Drawable d = v.getBackground();
         return 1 | (v.isShown() ? 2 : 0) | (v.getWidth() > 0 && v.getHeight() > 0 ? 4 : 0)
-                | (v.getAlpha() == 0f ? 8 : 0) | (nativeBlur(d) ? 16 : 0)
+                | (v.getAlpha() * v.getTransitionAlpha() == 0f ? 8 : 0) | (nativeBlur(d) ? 16 : 0)
                 | (d != null && d.getAlpha() == 0 ? 32 : 0) | (v.getVisibility() << 8);
     }
 
@@ -650,6 +654,7 @@ final class LiveStackShadowExperiment {
                 .append(" screenY=").append(xy[1]).append("..").append(xy[1] + Math.round(v.getHeight() * v.getScaleY()))
                 .append(" sy=").append(v.getScaleY()).append(" ty=").append(v.getTranslationY())
                 .append(" alpha=").append(v.getAlpha())
+                .append(" transitionAlpha=").append(v.getTransitionAlpha())
                 .append(" bg=").append(d == null ? "null" : d.getClass().getSimpleName() + "@" + Integer.toHexString(System.identityHashCode(d)))
                 .append(" bgAlpha=").append(d == null ? -1 : d.getAlpha())
                 .append(" filter=").append(filter.active())

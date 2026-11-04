@@ -361,8 +361,8 @@ public class LiveStackShadowExperimentTest {
         CardStackView.NativeBackgroundBlurDrawable b1 = show(shadow1, 0.03f), b2 = show(shadow2, 0.01f);
         preDraw();
         assertTrue(experiment.effective());
-        assertEquals(0f, shadow1.getAlpha(), 0f);
-        assertEquals(0f, shadow2.getAlpha(), 0f);
+        assertEquals(0f, shadow1.getTransitionAlpha(), 0f);
+        assertEquals(0f, shadow2.getTransitionAlpha(), 0f);
         assertEquals(0, b1.getAlpha());
         assertEquals(0, b2.getAlpha());
 
@@ -371,15 +371,19 @@ public class LiveStackShadowExperimentTest {
         shadow2.setAlpha(0.3f); b2.setAlpha(76);
         preDraw();
         assertTrue(experiment.effective());
-        assertEquals(0f, shadow1.getAlpha(), 0f);
+        assertEquals(0f, shadow1.getTransitionAlpha(), 0f);
         assertEquals(0, b1.getAlpha());
 
         // Steady: no further writes.
         preDraw();
         assertTrue(experiment.effective());
 
+        // Samsung's own alpha was never overwritten.
+        assertEquals(0.5f, shadow1.getAlpha(), 0f);
         mode.set(LiveStackShadowExperiment.MODE_OFF);
         preDraw();
+        assertEquals(1f, shadow1.getTransitionAlpha(), 0f);
+        assertEquals(1f, shadow2.getTransitionAlpha(), 0f);
         assertEquals(0.5f, shadow1.getAlpha(), 0f);
         assertEquals(0.3f, shadow2.getAlpha(), 0f);
         assertEquals(127, b1.getAlpha());
@@ -392,7 +396,7 @@ public class LiveStackShadowExperimentTest {
         mode.set(LiveStackShadowExperiment.MODE_ALPHA);
         experiment.sync(stack, true);
         assertTrue(experiment.effective());
-        assertEquals(0f, shadow1.getAlpha(), 0f);
+        assertEquals(0f, shadow1.getTransitionAlpha(), 0f);
         assertEquals(127, b1.getAlpha());
 
         mode.set(LiveStackShadowExperiment.MODE_REGION);
@@ -427,7 +431,7 @@ public class LiveStackShadowExperimentTest {
         layoutAll();
         preDraw();
         assertTrue(experiment.effective());
-        assertEquals(0f, a.getAlpha(), 0f);
+        assertEquals(0f, a.getTransitionAlpha(), 0f);
     }
 
     @Test public void replacedBlurBackgroundIsRestoredAndTheNewOneSuppressed() {
@@ -450,16 +454,17 @@ public class LiveStackShadowExperimentTest {
         show(shadow2, 0.3f);
         mode.set(LiveStackShadowExperiment.MODE_ALPHA);
         experiment.sync(stack, true);
-        assertEquals(0f, shadow1.getAlpha(), 0f);
+        assertEquals(0f, shadow1.getTransitionAlpha(), 0f);
         View oldA = shadow1;
         layout.removeView(frame);
         CountingFrame fresh = newFrame();
         layout.addView(fresh, 1, new LinearLayout.LayoutParams(1340, 216));
         layoutAll();
         preDraw();
-        assertEquals("old indicator restored", 0.5f, oldA.getAlpha(), 0f);
-        assertEquals(0f, fresh.getChildAt(0).getAlpha(), 0f);
-        assertEquals(0f, fresh.getChildAt(1).getAlpha(), 0f);
+        assertEquals("old indicator restored", 1f, oldA.getTransitionAlpha(), 0f);
+        assertEquals(0.5f, oldA.getAlpha(), 0f);
+        assertEquals(0f, fresh.getChildAt(0).getTransitionAlpha(), 0f);
+        assertEquals(0f, fresh.getChildAt(1).getTransitionAlpha(), 0f);
         assertTrue(experiment.effective());
     }
 
@@ -470,6 +475,7 @@ public class LiveStackShadowExperimentTest {
         experiment.sync(stack, true);
         assertTrue(experiment.effective());
         activity.setContentView(new FrameLayout(activity));
+        assertEquals(1f, shadow1.getTransitionAlpha(), 0f);
         assertEquals(0.5f, shadow1.getAlpha(), 0f);
         assertEquals(127, b1.getAlpha());
         assertFalse(experiment.effective());
@@ -477,7 +483,7 @@ public class LiveStackShadowExperimentTest {
         layoutAll();
         preDraw();
         assertTrue(experiment.effective());
-        assertEquals(0f, shadow1.getAlpha(), 0f);
+        assertEquals(0f, shadow1.getTransitionAlpha(), 0f);
         assertEquals(0, b1.getAlpha());
     }
 
@@ -486,10 +492,26 @@ public class LiveStackShadowExperimentTest {
         show(shadow2, 0.3f);
         mode.set(LiveStackShadowExperiment.MODE_ALPHA);
         experiment.sync(stack, true);
-        assertEquals(0f, shadow1.getAlpha(), 0f);
+        assertEquals(0f, shadow1.getTransitionAlpha(), 0f);
         experiment.sync(stack, false);
+        assertEquals(1f, shadow1.getTransitionAlpha(), 0f);
+        assertEquals(1f, shadow2.getTransitionAlpha(), 0f);
         assertEquals(0.5f, shadow1.getAlpha(), 0f);
         assertEquals(0.3f, shadow2.getAlpha(), 0f);
+    }
+
+    @Test public void nativeWriteOfZeroDuringSuppressionSurvivesTheRestore() {
+        show(shadow1, 0.5f);
+        show(shadow2, 0.3f);
+        mode.set(LiveStackShadowExperiment.MODE_ALPHA);
+        experiment.sync(stack, true);
+        assertEquals(0f, shadow1.getTransitionAlpha(), 0f);
+        // End of Samsung's fade-out while we suppress.
+        shadow1.setAlpha(0f);
+        preDraw();
+        experiment.restore("test");
+        assertEquals("native 0 kept", 0f, shadow1.getAlpha(), 0f);
+        assertEquals(1f, shadow1.getTransitionAlpha(), 0f);
     }
 
     @Test public void degenerateGeometryKeepsNativeClip() {
