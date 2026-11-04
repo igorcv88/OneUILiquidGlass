@@ -62,7 +62,8 @@ final class NativeIds {
 
     private static View firstWithId(View v, int depth) {
         if (v == null || depth > 6) return null;
-        if (v.getId() != View.NO_ID && v.getId() > 0) return v;
+        // A generated (non-resource) id makes getResourcePackageName throw; packageOf handles it.
+        if (v.getId() != View.NO_ID) return v;
         if (v instanceof ViewGroup) {
             ViewGroup g = (ViewGroup) v;
             for (int i = 0; i < g.getChildCount(); i++) {
