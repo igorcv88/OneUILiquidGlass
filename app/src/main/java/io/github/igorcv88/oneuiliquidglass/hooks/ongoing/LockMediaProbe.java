@@ -16,20 +16,19 @@ import java.util.WeakHashMap;
  * Temporary, opt-in visual isolation for the *lockscreen* NowBar media card.
  *
  * <p>Unlike shade media, NowBarMediaCardView is supplied by the AOD plugin and contains two
- * separate CardView paints. This probe hides only the CardViews' background drawables, preserving
- * the ViewGroups, circular album artwork, controllers and WaveView. It is not the glass feature:
- * it only identifies which native paint obscures a future glass layer. Modes 1 and 2 isolate the
- * inner and outer backgrounds separately; mode 3 hides both. Zero or an unset property restores
- * all native drawable alphas. The existing one-second LiveMediaSurvey scheduler calls this only
- * while explicitly enabled; no per-frame or hot-path hooks are added.</p>
+ * separate CardView paints. Only the compact capsule is probed: changing expanded-card paints
+ * was observed to expose an intermittent black fallback in the AOD plugin. Samsung's aod.m96
+ * drawable ignored setAlpha(0) (readback remained 255), so a reversible background removal is
+ * used instead. The original Drawable object is kept intact and restored only if Samsung has not
+ * installed a newer background. Artwork, controllers and WaveView are untouched. Modes 1 and 2
+ * isolate inner and outer compact backgrounds; mode 3 removes both. The existing one-second
+ * LiveMediaSurvey scheduler calls this only while enabled; there are no per-frame hooks.</p>
  */
 final class LockMediaProbe {
     static final String PROPERTY = "debug.oulg.lockmediaprobe";
     static final String MEDIA_CLASS = "com.samsung.android.app.facewidget.presentation.NowBarMediaCardView";
     private static final String COMPACT_INNER = "stack_background_cardview";
     private static final String COMPACT_OUTER = "nowbar_cardview_background";
-    private static final String EXPANDED_INNER = "nowbar_expandview_background";
-    private static final String EXPANDED_OUTER = "expand_content_rootview";
     private static final int MAX_NODES = 140;
     private static final int MAX_DEPTH = 20;
     private static final WeakHashMap<View, Session> sessions = new WeakHashMap<>();
@@ -68,12 +67,12 @@ final class LockMediaProbe {
 
         // Capture the exact views, not a guessed path. Expanded and compact subtrees coexist;
         // Samsung switches their visibility and geometry during expansion.
-        Map<String, View> found = new HashMap<>(4);
+        Map<String, View> found = new HashMap<>(2);
         IdentityHashMap<Drawable, Integer> refs = new IdentityHashMap<>();
         find(root, found, refs, new int[] {MAX_NODES}, 0);
         boolean expanded = root.getHeight() > root.getWidth();
-        String inner = expanded ? EXPANDED_INNER : COMPACT_INNER;
-        String outer = expanded ? EXPANDED_OUTER : COMPACT_OUTER;
+        String inner = COMPACT_INNER;
+        String outer = COMPACT_OUTER;
         boolean changed = state.mode != mode || state.expanded != expanded;
 
         // A lease is tied to its exact Drawable instance. Samsung can replace a background
@@ -82,8 +81,9 @@ final class LockMediaProbe {
             Map.Entry<String, Lease> entry = it.next();
             String name = entry.getKey();
             View view = found.get(name);
-            boolean desired = (name.equals(inner) && hideInner(mode))
-                    || (name.equals(outer) && hideOuter(mode));
+            boolean desired = shouldProbe(expanded, mode)
+                    && ((name.equals(inner) && hideInner(mode))
+                    || (name.equals(outer) && hideOuter(mode)));
             if (!desired || view == null || !entry.getValue().matches(view)) {
                 entry.getValue().restore();
                 it.remove();
@@ -91,23 +91,22 @@ final class LockMediaProbe {
         }
 
         for (String name : new String[] {inner, outer}) {
-            if (!(name.equals(inner) ? hideInner(mode) : hideOuter(mode))) continue;
+            if (!shouldProbe(expanded, mode)
+                    || !(name.equals(inner) ? hideInner(mode) : hideOuter(mode))) continue;
             View view = found.get(name);
             if (view == null) continue;
-            Drawable d = view.getBackground();
-            // A shared Drawable could also draw elsewhere; leave it untouched rather than
-            // hiding a sibling, artwork, or controls indirectly.
-            if (d == null || refs.getOrDefault(d, 0) != 1) continue;
             Lease lease = state.leases.get(name);
             if (lease == null) {
+                Drawable d = view.getBackground();
+                // Do not remove a drawable that is referenced by another view.
+                if (d == null || refs.getOrDefault(d, 0) != 1) continue;
                 lease = new Lease(view);
                 if (!lease.valid()) continue;
                 if (!lease.hide()) continue;
                 state.leases.put(name, lease);
-                Probe.log("LOCK_MEDIA_PROBE_LAYER", "action=hide mode=" + mode + " layout="
-                        + (expanded ? "expanded" : "compact") + " target=" + name
+                Probe.log("LOCK_MEDIA_PROBE_LAYER", "action=remove mode=" + mode + " layout=compact target=" + name
                         + " drawable=" + d.getClass().getName() + " nativeAlpha=" + lease.nativeAlpha()
-                        + " readbackAlpha=" + d.getAlpha());
+                        + " backgroundRemoved=" + (view.getBackground() == null));
             } else {
                 lease.hide();
             }
@@ -119,7 +118,7 @@ final class LockMediaProbe {
             Probe.log("LOCK_MEDIA_PROBE", "state=active mode=" + mode
                     + " layout=" + (expanded ? "expanded" : "compact")
                     + " root=" + Integer.toHexString(System.identityHashCode(root))
-                    + " window=" + window + " hidden=" + state.leases.keySet()
+                    + " window=" + window + " removed=" + state.leases.keySet()
                     + " retainedArt=true retainedControls=true retainedWave=true");
         }
     }
@@ -139,6 +138,7 @@ final class LockMediaProbe {
 
     static boolean hideInner(int mode) { return mode == 1 || mode == 3; }
     static boolean hideOuter(int mode) { return mode == 2 || mode == 3; }
+    static boolean shouldProbe(boolean expanded, int mode) { return !expanded && mode != 0; }
 
     private static void find(View v, Map<String, View> found,
                              IdentityHashMap<Drawable, Integer> refs, int[] budget, int depth) {
@@ -146,8 +146,7 @@ final class LockMediaProbe {
         Drawable bg = v.getBackground();
         if (bg != null) refs.put(bg, refs.getOrDefault(bg, 0) + 1);
         String name = LiveStackExternalProbe.resourceName(v);
-        if (COMPACT_INNER.equals(name) || COMPACT_OUTER.equals(name)
-                || EXPANDED_INNER.equals(name) || EXPANDED_OUTER.equals(name)) found.put(name, v);
+        if (COMPACT_INNER.equals(name) || COMPACT_OUTER.equals(name)) found.put(name, v);
         if (!(v instanceof ViewGroup)) return;
         ViewGroup g = (ViewGroup) v;
         for (int i = 0; i < g.getChildCount() && budget[0] > 0; i++)
@@ -161,51 +160,59 @@ final class LockMediaProbe {
         final Map<String, Lease> leases = new HashMap<>();
     }
 
-    /** A reversible change to one Drawable; never touches the owning View's alpha or children. */
+    /** A reversible background removal; never changes alpha on the View or native Drawable. */
     static final class Lease {
         private final WeakReference<View> view;
-        private final WeakReference<Drawable> drawable;
-        private int nativeAlpha;
+        // Strongly hold the removed native object so it remains restorable after GC.
+        private final Drawable drawable;
+        private final int nativeAlpha;
         private boolean hidden;
         private boolean failed;
 
         Lease(View view) {
             this.view = new WeakReference<>(view);
             Drawable bg = view == null ? null : view.getBackground();
-            this.drawable = new WeakReference<>(bg);
+            this.drawable = bg;
             this.nativeAlpha = bg == null ? 255 : bg.getAlpha();
         }
 
-        boolean valid() { return drawable.get() != null; }
+        boolean valid() { return drawable != null; }
         int nativeAlpha() { return nativeAlpha; }
 
         boolean matches(View candidate) {
-            return view.get() == candidate && drawable.get() != null
-                    && candidate.getBackground() == drawable.get();
+            // Native updates during the probe are retained rather than overwritten.
+            return view.get() == candidate && drawable != null
+                    && candidate.getBackground() == null;
         }
 
         boolean hide() {
-            Drawable d = drawable.get();
-            if (d == null || failed) return false;
-            // The same instance may be written by Samsung after our previous tick.
-            // Suppress it again without emitting another log or allocating per frame.
+            View v = view.get();
+            if (v == null || drawable == null || failed) return false;
+            if (hidden) return v.getBackground() == null;
+            if (v.getBackground() != drawable) return false;
             try {
-                int current = d.getAlpha();
-                if (hidden && current != 0) nativeAlpha = current;
-                if (current != 0 || !hidden) d.setAlpha(0);
-                hidden = true;
-                return true;
+                v.setBackground(null);
+                hidden = v.getBackground() == null;
+                if (!hidden) {
+                    failed = true;
+                    Probe.log("LOCK_MEDIA_PROBE_ERROR", "action=remove-rejected background="
+                            + v.getBackground().getClass().getName());
+                }
+                return hidden;
             } catch (RuntimeException | LinkageError e) {
                 failed = true;
-                Probe.log("LOCK_MEDIA_PROBE_ERROR", "action=hide type=" + e.getClass().getSimpleName());
+                if (v.getBackground() == null) {
+                    try { v.setBackground(drawable); } catch (RuntimeException | LinkageError ignored) { }
+                }
+                Probe.log("LOCK_MEDIA_PROBE_ERROR", "action=remove type=" + e.getClass().getSimpleName());
                 return false;
             }
         }
 
         void restore() {
-            Drawable d = drawable.get();
-            if (d != null && hidden) {
-                try { d.setAlpha(nativeAlpha); }
+            View v = view.get();
+            if (v != null && drawable != null && hidden && v.getBackground() == null) {
+                try { v.setBackground(drawable); }
                 catch (RuntimeException | LinkageError e) {
                     Probe.log("LOCK_MEDIA_PROBE_ERROR", "action=restore type=" + e.getClass().getSimpleName());
                 }
