@@ -160,8 +160,17 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
     private boolean regionless;
     private java.util.function.BooleanSupplier nativeRegionActive = () -> true;
     public void setNativeRegionActive(java.util.function.BooleanSupplier active) { nativeRegionActive = active; }
-    public void setRegionless(boolean on) { if (regionless != on) { regionless = on; if (on) setBlur(null); invalidateSelf(); } }
+    public void setRegionless(boolean on) {
+        if (regionless != on) {
+            regionless = on;
+            if (on) setBlur(null);
+            traceMaterial(on ? "REGIONLESS_ENABLED" : "REGIONLESS_DISABLED", null);
+            invalidateSelf();
+        }
+    }
     public boolean regionless() { return regionless; }
+    /** Last successfully submitted blur radius; purely observational. */
+    public int blurRadiusForTrace() { return lastPx; }
     /** Effective compositor-region fade, exposed read-only to the optional draw probe. */
     public float regionFadeForTrace() { return regionFade; }
     /** Whether the glass is what would be drawn now. */
@@ -230,6 +239,7 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
             try {
                 blur.update(spec.blurPx, tint, clamped);
                 lastTint = tint; lastPx = spec.blurPx; System.arraycopy(clamped, 0, lastRadii, 0, 8);
+                traceMaterial("BLUR_UPDATED", canvas);
             } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
                 // The region cannot be built on this firmware: native from now on, never a bare pane.
                 setBlur(null);
