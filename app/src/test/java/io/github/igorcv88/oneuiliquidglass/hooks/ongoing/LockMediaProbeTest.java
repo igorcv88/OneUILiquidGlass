@@ -76,6 +76,20 @@ public class LockMediaProbeTest {
         assertEquals(147, replacement.getAlpha());
     }
 
+    @Test public void nativeAlphaWrittenDuringProbeIsRestored() {
+        View card = new View(activity);
+        ColorDrawable nativeBackground = new ColorDrawable(Color.BLUE);
+        nativeBackground.setAlpha(190);
+        card.setBackground(nativeBackground);
+        LockMediaProbe.Lease lease = new LockMediaProbe.Lease(card);
+        lease.hide();
+        nativeBackground.setAlpha(207); // Samsung rewrites the drawable while the probe is active.
+        lease.hide();
+        assertEquals(0, nativeBackground.getAlpha());
+        lease.restore();
+        assertEquals(207, nativeBackground.getAlpha());
+    }
+
     @Test public void nullBackgroundIsNotProbed() {
         View card = new View(activity);
         LockMediaProbe.Lease lease = new LockMediaProbe.Lease(card);
