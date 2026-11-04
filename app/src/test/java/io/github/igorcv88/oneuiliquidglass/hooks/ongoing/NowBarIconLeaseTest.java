@@ -63,4 +63,29 @@ public class NowBarIconLeaseTest {
         assertSame(vector, icon.getDrawable());
         assertEquals(nativeColor, disc.getCardBackgroundColor().getDefaultColor());
     }
+
+    @Test public void tintedAdaptiveGlyphFollowsContrastAndRestoresNativeTint() {
+        FakeCardView disc = new FakeCardView(activity);
+        ImageView icon = new ImageView(activity);
+        disc.addView(icon);
+        icon.setImageResource(R.drawable.oulg_launcher);
+        Drawable original = icon.getDrawable();
+        android.content.res.ColorStateList tint = android.content.res.ColorStateList.valueOf(0xff5566cc);
+        icon.setImageTintList(tint);
+        NowBarIconLease lease = new NowBarIconLease();
+        lease.sync(icon, true);
+        assertNotSame(original, icon.getDrawable());
+        assertNull(icon.getImageTintList());
+        lease.applyTone(true);
+        assertEquals(android.graphics.Color.BLACK,
+                ((android.graphics.PorterDuffColorFilter) icon.getDrawable().getColorFilter()).getColor());
+        lease.sync(icon, true);
+        lease.applyTone(false);
+        assertEquals(android.graphics.Color.WHITE,
+                ((android.graphics.PorterDuffColorFilter) icon.getDrawable().getColorFilter()).getColor());
+        lease.restore();
+        assertSame(original, icon.getDrawable());
+        assertSame(tint, icon.getImageTintList());
+    }
 }
+

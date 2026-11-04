@@ -42,6 +42,11 @@ public class LiveActionFillTest {
             assertSame(background, button.getBackground());
             assertNotSame(content, background.getDrawable(0));
             assertEquals(android.graphics.PixelFormat.OPAQUE, background.getDrawable(0).getOpacity());
+            background.setBounds(0, 0, 300, 84);
+            android.graphics.Outline outline = new android.graphics.Outline();
+            background.getDrawable(0).getOutline(outline);
+            assertFalse("geometry remains available for native clipping", outline.isEmpty());
+            assertEquals("hidden fill must not cast a capsule shadow", 0f, outline.getAlpha(), 0f);
             // RippleDrawable.mutate() may clone its content; the native material to restore is
             // the content *after* mutation, when this instance no longer shares ConstantState.
             Drawable isolatedContent = ((android.graphics.drawable.DrawableWrapper) background.getDrawable(0)).getDrawable();
@@ -100,3 +105,4 @@ public class LiveActionFillTest {
         assertSame(otherContent, other.getDrawable(0));
     }
 }
+

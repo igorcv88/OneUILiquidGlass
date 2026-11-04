@@ -62,6 +62,12 @@ final class LiveCardHooks {
     private final WeakHashMap<View, List<WeakReference<View>>> covered = new WeakHashMap<>();
     /** Exact Samsung action buttons within each classified card, not arbitrary notification UI. */
     private final WeakHashMap<View, List<WeakReference<View>>> actionButtons = new WeakHashMap<>();
+    private static final class StackLease {
+        final WeakReference<View> layer;
+        final LiveStackFill fill = new LiveStackFill();
+        StackLease(View v) { layer = new WeakReference<>(v); }
+    }
+    private final WeakHashMap<View, List<StackLease>> stackFills = new WeakHashMap<>();
     private final WeakHashMap<View, LiveActionFill> actionFills = new WeakHashMap<>();
     private static final class TintedRegion {
         final WeakReference<View> layer;
@@ -230,6 +236,13 @@ final class LiveCardHooks {
             return;
         }
         syncActions(host);
+        List<StackLease> stackLeases = stackFills.computeIfAbsent(host, ignored -> new ArrayList<>());
+        stackLeases.removeIf(lease -> {
+            View frame = lease.layer.get();
+            if (frame != null && LiveChipHooks.within(host, frame)) return false;
+            lease.fill.restore();
+            return true;
+        });
         List<TintedRegion> prior = tinted.get(host);
         if (prior != null) prior.removeIf(r -> {
             View layer = r.layer.get();
@@ -250,6 +263,12 @@ final class LiveCardHooks {
             View layer = (View) p;
             if (STACK.equals(layer.getClass().getName())) break;
             Drawable d = layer.getBackground();
+            if (d instanceof android.graphics.drawable.RippleDrawable && stackFrame(layer)) {
+                StackLease lease = null;
+                for (StackLease kept : stackLeases) if (kept.layer.get() == layer) { lease = kept; break; }
+                if (lease == null) { lease = new StackLease(layer); stackLeases.add(lease); }
+                lease.fill.sync(layer);
+            }
             if (d != null && d.getClass().getName().contains("BlurDrawable")) {
                 tintRegion(layer, d, true);
                 List<TintedRegion> list = tinted.computeIfAbsent(host, k -> new ArrayList<>());
@@ -289,7 +308,14 @@ final class LiveCardHooks {
         for (WeakReference<View> ref : list) if (ref.get() == layer) return;
         list.add(new WeakReference<>(layer));
     }
+    private static boolean stackFrame(View view) {
+        if (view.isClickable() || view.getId() == View.NO_ID) return false;
+        try { return "stack_pip_layout".equals(view.getResources().getResourceEntryName(view.getId())); }
+        catch (android.content.res.Resources.NotFoundException e) { return false; }
+    }
     private void restoreCompanions(View host) {
+        List<StackLease> stack = stackFills.remove(host);
+        if (stack != null) for (StackLease lease : stack) lease.fill.restore();
         List<WeakReference<View>> buttons = actionButtons.remove(host);
         if (buttons != null) for (WeakReference<View> ref : buttons) {
             View button = ref.get();
@@ -476,4 +502,5 @@ final class LiveCardHooks {
         return null;
     }
 }
+
 

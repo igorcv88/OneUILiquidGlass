@@ -18,6 +18,7 @@ import java.lang.ref.WeakReference;
  * build an implicit mask from a deliberately empty draw() call.
  */
 final class LiveActionFill {
+    private WeakReference<View> owner = new WeakReference<>(null);
     private WeakReference<RippleDrawable> ripple = new WeakReference<>(null);
     private WeakReference<Drawable> original = new WeakReference<>(null);
     private WeakReference<HiddenContent> hidden = new WeakReference<>(null);
@@ -47,6 +48,8 @@ final class LiveActionFill {
         original = new WeakReference<>(content);
         hidden = new WeakReference<>(replacement);
         ripple = new WeakReference<>(current);
+        owner = new WeakReference<>(button);
+        button.invalidateOutline();
     }
 
     void restore() {
@@ -56,6 +59,9 @@ final class LiveActionFill {
         original.clear();
         hidden.clear();
         ripple.clear();
+        View button = owner.get();
+        if (button != null && button.getBackground() == r) button.invalidateOutline();
+        owner.clear();
     }
 
     boolean active() { return hidden.get() != null && ripple.get() != null; }
@@ -63,6 +69,10 @@ final class LiveActionFill {
     private static final class HiddenContent extends DrawableWrapper {
         HiddenContent(Drawable nativeContent) { super(nativeContent); }
         @Override public void draw(Canvas canvas) { }
+        @Override public void getOutline(android.graphics.Outline outline) {
+            super.getOutline(outline);
+            outline.setAlpha(0f);
+        }
         // AOSP RippleDrawable uses the content layer's opacity to select its implicit mask.
         // Keep the native outline and use its normal opaque-content clipping path.
         @Override public int getOpacity() { return PixelFormat.OPAQUE; }
@@ -70,3 +80,4 @@ final class LiveActionFill {
         @Override public ConstantState getConstantState() { return null; }
     }
 }
+
