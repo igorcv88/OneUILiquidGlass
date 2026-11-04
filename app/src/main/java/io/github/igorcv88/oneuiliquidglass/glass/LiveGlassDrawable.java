@@ -162,6 +162,8 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
     public void setNativeRegionActive(java.util.function.BooleanSupplier active) { nativeRegionActive = active; }
     public void setRegionless(boolean on) { if (regionless != on) { regionless = on; if (on) setBlur(null); invalidateSelf(); } }
     public boolean regionless() { return regionless; }
+    /** Effective compositor-region fade, exposed read-only to the optional draw probe. */
+    public float regionFadeForTrace() { return regionFade; }
     /** Whether the glass is what would be drawn now. */
     public boolean showsGlass() { return glass && (blur != null || regionless); }
     /** Ancestor alpha, which fades the view but not the compositor region. True if it changed. */
