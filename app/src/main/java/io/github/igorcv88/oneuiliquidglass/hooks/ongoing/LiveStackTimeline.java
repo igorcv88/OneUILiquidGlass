@@ -103,8 +103,16 @@ final class LiveStackTimeline {
                     + " actualMs=" + elapsed + " children=" + stack.getChildCount()
                     + " topIndex=" + top + " stack=" + id(v));
             int n = Math.min(MAX_CARDS, stack.getChildCount());
-            for (int i = 0; i < n && remaining[0] > 0; i++)
-                walk(stack.getChildAt(i), "card" + i, 0, burst, remaining);
+            // Per-card quotas keep the incoming and outgoing cards visible in the same sample.
+            // One large subtree must never exhaust the budget before the second card is visited.
+            for (int i = 0; i < n && remaining[0] > 0; i++) {
+                int[] local = {Math.max(1, MAX_VISITS / n),
+                        Math.max(1, MAX_LINES_PER_SAMPLE / n), 0};
+                walk(stack.getChildAt(i), "card" + i, 0, burst, local);
+                remaining[0] -= MAX_VISITS / n - local[0];
+                remaining[1] -= MAX_LINES_PER_SAMPLE / n - local[1];
+                remaining[2] += local[2];
+            }
             Probe.log("LIVE_STACK_TIMELINE_END_TICK", "burst=" + burst.id + " ms=" + elapsed
                     + " nodes=" + remaining[2] + " left=" + remaining[0]
                     + " emitted=" + (MAX_LINES_PER_SAMPLE - remaining[1]));
