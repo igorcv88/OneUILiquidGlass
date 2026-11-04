@@ -137,6 +137,41 @@ public class ToastHooksTest {
         assertEquals("region released with the window", 0, env.regions.get(0).radius);
     }
 
+    @Test public void backgroundReplacedAfterAttachIsRecoveredBeforeDrawAndRestoredOnDetach() {
+        View root = hooks.created(toast("Copied"));
+        LiveGlassDrawable g = (LiveGlassDrawable) root.getBackground();
+        FrameLayout w = window();
+        w.addView(root);
+        Drawable samsung = new Env.SamsungBlurDrawable();
+        root.setBackground(samsung); // DZIF: replacement after factory/attach
+        root.getViewTreeObserver().dispatchOnPreDraw();
+        assertSame(g, root.getBackground());
+        root.setAlpha(1f);
+        root.getViewTreeObserver().dispatchOnPreDraw();
+        g.setBounds(0, 0, 400, 120);
+        g.draw(new TestCanvas(400, 120));
+        assertTrue(env.regions.get(0).draws > 0);
+        assertEquals(255, env.regions.get(0).alpha);
+        w.removeView(root);
+        assertSame(samsung, root.getBackground());
+        assertFalse(glass.tracked(root));
+    }
+
+    @Test public void repeatedBackgroundReplacementHasABoundedNativeFallback() {
+        View root = hooks.created(toast("Copied"));
+        FrameLayout w = window();
+        w.addView(root);
+        Drawable latest = null;
+        for (int i = 0; i < 4; i++) {
+            latest = new Env.SamsungBlurDrawable();
+            root.setBackground(latest);
+            root.getViewTreeObserver().dispatchOnPreDraw();
+        }
+        assertSame(latest, root.getBackground());
+        assertFalse(glass.tracked(root));
+        assertEquals(0, env.regions.get(0).radius);
+    }
+
     @Test public void fourCopiesInARowEachGetTheirOwnGlass() {
         FrameLayout w = window();
         for (int i = 0; i < 4; i++) {
@@ -196,3 +231,4 @@ public class ToastHooksTest {
         assertTrue(((ViewGroup) root).getChildAt(0).getBackground() instanceof LiveGlassDrawable);
     }
 }
+

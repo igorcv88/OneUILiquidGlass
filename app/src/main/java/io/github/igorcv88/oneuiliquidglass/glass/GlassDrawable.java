@@ -256,6 +256,28 @@ public final class GlassDrawable extends Drawable {
             nativeDrawable.setBounds(getBounds()); nativeDrawable.draw(canvas);
         }
     }
+    /** Shared edge material for a live surface which owns and draws its blur separately. */
+    public boolean drawOptics(Canvas canvas, Rect bounds, float[] shape, int opacity) {
+        if (shader == null) return false;
+        System.arraycopy(shape, 0, radii, 0, 8);
+        paint.setAlpha(opacity);
+        int save = canvas.save();
+        try {
+            rect.set(bounds);
+            clip.reset();
+            clip.addRoundRect(rect, radii, Path.Direction.CW);
+            canvas.clipPath(clip);
+            edgeUniforms(shader, bounds);
+            canvas.drawRect(rect, paint);
+            return true;
+        } catch (RuntimeException e) {
+            // Optional optics must not release the caller's working compositor region.
+            shader = null;
+            paint.setShader(null);
+            return false;
+        } finally { canvas.restoreToCount(save); }
+    }
+
     private void drawPressed(Canvas canvas) {
         if (!pressed) return;
         fill.setColor(PRESSED_WASH);
@@ -395,3 +417,4 @@ public final class GlassDrawable extends Drawable {
         if (node != null) { node.discardDisplayList(); node = null; }
     }
 }
+

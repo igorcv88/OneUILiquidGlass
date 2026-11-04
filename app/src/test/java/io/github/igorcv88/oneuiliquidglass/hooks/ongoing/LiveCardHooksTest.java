@@ -26,8 +26,8 @@ import org.robolectric.annotation.Config;
 
 /**
  * L2 on DZIF's real layering: CardItemView root without background, opaque GradientDrawable fill
- * below it, Samsung's blur region on an ancestor frame. The fill becomes translucent over that
- * blur (no second region); Samsung's blur and ripple frames are never touched; media stays native.
+ * below it, Samsung's blur region on an ancestor frame. One owned material region stays through
+ * expansion; the competing native region is suspended and restored. Media stays native.
  */
 @RunWith(RobolectricTestRunner.class) @Config(sdk = 34)
 public class LiveCardHooksTest {
@@ -115,45 +115,30 @@ public class LiveCardHooksTest {
         return state.toString();
     }
 
-    @Test public void inactiveNativeRegionTakesAnOwnRegionAndSwitchesOnPreDraw() {
+    @Test public void expansionKeepsOneRegionDespiteNativeGeometryAndRadiusChanges() {
         adapter.mList.add(new OngoingActivityData("com.samsung.android.health", false));
         CardItemView root = card(0);
         View fill = root.fill();
         LiveGlassDrawable g = (LiveGlassDrawable) fill.getBackground();
+        Object region = g.blur();
+        int created = env.regions.size();
         CardStackView.NativeBackgroundBlurDrawable nativeRegion =
                 (CardStackView.NativeBackgroundBlurDrawable) ((View) root.getParent()).getBackground();
-        assertTrue(nativeRegionState(root), g.regionless());
-        nativeRegion.setBlurRadius(0); // no adapter writer: Samsung's expansion animation
-        fill.getViewTreeObserver().dispatchOnPreDraw();
-        assertFalse("class exists, but its blur is inactive", g.regionless());
-        assertNotNull(g.blur());
-        assertTrue(g.showsGlass());
-        FakeBlurDrawable own = env.regions.get(env.regions.size() - 1);
-        g.setBounds(0, 0, 1340, 288);
-        g.draw(new TestCanvas(1340, 288));
-        assertEquals(LiveSurface.CARD.spec.blurPx, own.radius);
-        nativeRegion.setBlurRadius(80);
-        fill.getViewTreeObserver().dispatchOnPreDraw();
-        assertTrue(g.regionless());
-        assertNull(g.blur());
-        assertEquals("own region released at the mode switch", 0, own.radius);
-        nativeRegion.setAlpha(0);
-        fill.getViewTreeObserver().dispatchOnPreDraw();
-        assertFalse(g.regionless());
-        assertNotNull(g.blur());
-        nativeRegion.setAlpha(255);
-        nativeRegion.setBounds(0, 0, 20, 20);
-        fill.getViewTreeObserver().dispatchOnPreDraw();
-        assertFalse("region must cover the fill during expansion", g.regionless());
-        nativeRegion.setBounds(0, 0, 1340, 288);
-        fill.getViewTreeObserver().dispatchOnPreDraw();
-        assertTrue(g.regionless());
-        nativeRegion.mRect.setEmpty();
-        fill.getViewTreeObserver().dispatchOnPreDraw();
-        assertFalse("position lost on RenderThread", g.regionless());
-        nativeRegion.mRect.set(0, 0, 1340, 288);
-        fill.getViewTreeObserver().dispatchOnPreDraw();
-        assertTrue(g.regionless());
+        for (int width : new int[]{185, 363, 659, 1039, 1353, 1340, 659, 185}) {
+            fill.layout(0, 0, width, 288);
+            nativeRegion.setBounds(0, 0, Math.max(1, width - 50), 288);
+            nativeRegion.setBlurRadius(width % 2 == 0 ? 0 : 80);
+            nativeRegion.setAlpha(255);
+            fill.getViewTreeObserver().dispatchOnPreDraw();
+            assertFalse(g.regionless());
+            assertSame(region, g.blur());
+            assertEquals(0, nativeRegion.getAlpha());
+            assertEquals(created, env.regions.size());
+        }
+        env.on.remove(LiveSurface.CARD);
+        glass.refresh(LiveSurface.CARD);
+        assertEquals(255, nativeRegion.getAlpha());
+        assertEquals(0xe6141428, nativeRegion.color());
     }
 
     @Test public void heldSemInfoWithoutAnActiveDrawableDoesNotProveBlur() {
@@ -167,49 +152,38 @@ public class LiveCardHooksTest {
         assertNotNull(g.blur());
     }
 
-    @Test public void hiddenNativeRegionUsesOwnBlurUntilVisibleAgain() {
+    @Test public void nativeVisibilityNeverChangesMaterialOwnership() {
         adapter.mList.add(new OngoingActivityData("com.samsung.android.health", false));
         CardItemView root = card(0);
-        View fill = root.fill();
         Drawable nativeRegion = ((View) root.getParent()).getBackground();
-        LiveGlassDrawable g = (LiveGlassDrawable) fill.getBackground();
-        assertTrue(nativeRegionState(root), g.regionless());
-        nativeRegion.setVisible(false, false);
-        fill.getViewTreeObserver().dispatchOnPreDraw();
-        assertFalse("a hidden drawable cannot provide native blur", g.regionless());
-        assertNotNull(g.blur());
-        assertFalse("the controller must not force Samsung's region visible", nativeRegion.isVisible());
-        FakeBlurDrawable own = env.regions.get(env.regions.size() - 1);
-        g.setBounds(0, 0, fill.getWidth(), fill.getHeight());
-        g.draw(new TestCanvas(1340, 288));
-        assertEquals(LiveSurface.CARD.spec.blurPx, own.radius);
-        nativeRegion.setVisible(true, false);
-        fill.getViewTreeObserver().dispatchOnPreDraw();
-        assertTrue(nativeRegionState(root), g.regionless());
-        assertNull(g.blur());
-        assertEquals("the replacement region is released", 0, own.radius);
+        LiveGlassDrawable g = (LiveGlassDrawable) root.fill().getBackground();
+        Object own = g.blur();
+        for (boolean visible : new boolean[]{false, true, false, true}) {
+            nativeRegion.setVisible(visible, false);
+            root.fill().getViewTreeObserver().dispatchOnPreDraw();
+            assertSame(own, g.blur());
+            assertFalse(g.regionless());
+            assertEquals(visible, nativeRegion.isVisible());
+        }
     }
 
-    @Test public void detachAndFailedOwnRegionNeverLeaveARegionlessPane() {
+    @Test public void failedOwnRegionRestoresAncestorsWithoutRetryingEveryFrame() {
         adapter.mList.add(new OngoingActivityData("com.samsung.android.health", false));
+        env.failUpdate = true;
         CardItemView root = card(0);
         View fill = root.fill();
         LiveGlassDrawable g = (LiveGlassDrawable) fill.getBackground();
-        assertTrue("requires active native region before testing its loss: " + nativeRegionState(root), g.regionless());
         CardStackView.NativeBackgroundBlurDrawable nativeRegion =
                 (CardStackView.NativeBackgroundBlurDrawable) ((View) root.getParent()).getBackground();
-        nativeRegion.setBlurRadius(0);
-        env.failCreate = true;
-        fill.getViewTreeObserver().dispatchOnPreDraw();
-        assertFalse(g.regionless());
+        g.setBounds(0, 0, 1340, 288);
+        g.draw(new TestCanvas(1340, 288));
         assertFalse(g.showsGlass());
-        assertEquals("native overlay restored with fallback", 0xe6141428, nativeRegion.color());
+        assertEquals(255, nativeRegion.getAlpha());
+        assertEquals(0xe6141428, nativeRegion.color());
         int count = env.regions.size();
-        env.failCreate = false;
         for (int i = 0; i < 10; i++) fill.getViewTreeObserver().dispatchOnPreDraw();
-        assertEquals("no create retry loop", count, env.regions.size());
+        assertEquals(count, env.regions.size());
         root.removeView(fill);
-        assertFalse(g.regionless());
         assertFalse(g.showsGlass());
     }
 
@@ -257,15 +231,15 @@ public class LiveCardHooksTest {
         assertEquals(0x00141428, ((CardStackView.NativeBackgroundBlurDrawable) layer.getBackground()).color());
     }
 
-    @Test public void fillOverSamsungsBlurBecomesTranslucentWithoutASecondRegion() {
+    @Test public void fillOwnsMaterialWhileSamsungRegionIsSuspended() {
         adapter.mList.add(new OngoingActivityData("com.samsung.android.health", false));
         CardItemView root = card(0);
         assertNull("the root keeps no background", root.getBackground());
         LiveGlassDrawable g = (LiveGlassDrawable) root.fill().getBackground();
-        assertTrue(nativeRegionState(root), g.regionless());
+        assertFalse(nativeRegionState(root), g.regionless());
         assertTrue(g.showsGlass());
-        assertNull("no region of ours: Samsung's blur is the region", g.blur());
-        for (FakeBlurDrawable r : env.regions) assertEquals("any earlier region released", 0, r.radius);
+        assertNotNull(g.blur());
+        assertEquals(0, ((View) root.getParent()).getBackground().getAlpha());
         View blurFrame = (View) root.getParent();
         assertTrue("Samsung's blur frame untouched", nativeBlur(blurFrame.getBackground()));
         assertTrue(((View) blurFrame.getParent()).getBackground() instanceof RippleDrawable);
@@ -296,7 +270,7 @@ public class LiveCardHooksTest {
         assertEquals(1, glass.hosts(LiveSurface.CARD).size());
     }
 
-    /** Samsung's region keeps its blur; only its dark colour overlay is cleared while glass shows. */
+    /** Samsung's region is suspended; its original overlay returns with the native fallback. */
     @Test public void nativeRegionColourIsClearedWhileGlassShowsAndRestoredExactly() {
         adapter.mList.add(new OngoingActivityData("com.samsung.android.health", false));
         CardItemView root = card(0);
@@ -407,7 +381,7 @@ public class LiveCardHooksTest {
         assertFalse(g.regionless());
         assertTrue(g.showsGlass());
         assertEquals(1, env.regions.size());
-        // Samsung adds its blur afterwards (setBlurBG on an ancestor): ours is dropped, no double blur.
+        // Samsung adds its blur afterwards: suspend it and keep our material.
         FrameLayout blur = new FrameLayout(stack.getContext());
         stack.removeView(root);
         blur.addView(root);
@@ -415,8 +389,9 @@ public class LiveCardHooksTest {
         stack.setBlurBG(blur, 0);
         layoutNativeRegion(blur);
         hooks.cardWriter(blur, false);
-        assertTrue(nativeRegionState(root), g.regionless());
-        assertNull(g.blur());
+        assertFalse(nativeRegionState(root), g.regionless());
+        assertNotNull(g.blur());
+        assertEquals(0, blur.getBackground().getAlpha());
     }
 
     @Test public void batterySaverKeepsTheOpaqueNativeFill() {
@@ -484,3 +459,4 @@ public class LiveCardHooksTest {
         assertEquals("translucency was draw-only", 255, nativeFill.getAlpha());
     }
 }
+

@@ -28,11 +28,9 @@ import io.github.igorcv88.oneuiliquidglass.diagnostics.Probe;
  *        └ CardItemView (no background)        root returned by the adapter
  *           └ FrameLayout (GradientDrawable)   the opaque card fill (changeCardBg)
  * </pre>
- * The blur already exists; what hides it is the opaque fill. So the glass here adds <b>no region
- * of its own</b> while a native blur layer sits behind: the fill is wrapped and drawn at the glass
- * alpha (RGB intact) with the rim, and Samsung's blur, ripple, RemoteViews and controls are never
- * touched. Without a native blur layer behind (not seen on DZIF) the fill takes its own region,
- * as the other hosts do.
+ * Each eligible fill owns a stable material region. Samsung's ancestor region is suspended
+ * while that material is enabled and restored on fallback, detach or gate changes. Geometry
+ * updates never switch the card to an unconfigured native region.
  *
  * <p>Ownership: getView/bindView classify the root with the data at that position and Samsung's
  * isMediaView(View). The fill is found structurally (a GradientDrawable host that covers the root,
@@ -66,6 +64,7 @@ final class LiveCardHooks {
     private static final class TintedRegion {
         final WeakReference<View> layer;
         final WeakReference<Drawable> drawable;
+        final NativeRegionLease lease = new NativeRegionLease();
         TintedRegion(View v, Drawable d) { layer = new WeakReference<>(v); drawable = new WeakReference<>(d); }
     }
     private final WeakHashMap<View, List<TintedRegion>> tinted = new WeakHashMap<>();
@@ -136,7 +135,8 @@ final class LiveCardHooks {
         LiveEligibility.Verdict verdict = data == null ? LiveEligibility.Verdict.NO_DATA
                 : c.verdict.ok() ? LiveEligibility.ongoing(data) : c.verdict;
         LiveGlass.Options options = new LiveGlass.Options();
-        options.nativeRegion = nativeBlurBehind;
+        // Keep one material region through expansion, including the settled frame.
+        // Samsung's structural region is suspended by the companion lease below.
         options.onShown = this::regionTint;
         options.onSync = this::regionTint;
         List<View> targets = fills(root);
@@ -216,10 +216,9 @@ final class LiveCardHooks {
     }
 
     /**
-     * While the glass is drawn over Samsung's blur, that region's own colour overlay (dark and
-     * almost opaque on DZIF: the expanded card stayed navy over a colourful wallpaper) is made
-     * transparent; the blur itself, its radius, shape and alpha are untouched. Its colour comes
-     * back exactly when the glass is not drawn. A region whose colour cannot be read is left alone.
+     * While our material owns the region, suspend Samsung's competing ancestor region and clear
+     * its colour overlay. Restore the saved alpha and colour on fallback or detach; never change
+     * its radius, curve or shape. Unknown colour setters are left alone.
      */
     void regionTint(View host, boolean shown) {
         if (host == null) return;
@@ -234,7 +233,7 @@ final class LiveCardHooks {
             View layer = r.layer.get();
             Drawable d = r.drawable.get();
             boolean stale = layer == null || d == null || layer.getBackground() != d || !LiveChipHooks.within(host, layer);
-            if (stale && layer != null && d != null) tintRegion(layer, d, false);
+            if (stale) { r.lease.restore(); if (layer != null && d != null) tintRegion(layer, d, false); }
             return stale;
         });
         List<WeakReference<View>> oldFills = covered.get(host);
@@ -252,9 +251,10 @@ final class LiveCardHooks {
             if (d != null && d.getClass().getName().contains("BlurDrawable")) {
                 tintRegion(layer, d, true);
                 List<TintedRegion> list = tinted.computeIfAbsent(host, k -> new ArrayList<>());
-                boolean known = false;
-                for (TintedRegion r : list) if (r.drawable.get() == d) { known = true; break; }
-                if (!known) list.add(new TintedRegion(layer, d));
+                TintedRegion entry = null;
+                for (TintedRegion r : list) if (r.drawable.get() == d) { entry = r; break; }
+                if (entry == null) { entry = new TintedRegion(layer, d); list.add(entry); }
+                entry.lease.sync(layer, true);
             } else if (d != null && layer instanceof ViewGroup && !(d instanceof CoveredFill)
                     && (NativeShape.unwrap(d) instanceof GradientDrawable || NativeShape.unwrap(d) instanceof ColorDrawable)
                     && !NativeShape.interactive(d) && !NativeShape.cardLike(layer)) {
@@ -297,6 +297,7 @@ final class LiveCardHooks {
         if (regions != null) for (TintedRegion ref : regions) {
             View layer = ref.layer.get();
             Drawable d = ref.drawable.get();
+            ref.lease.restore();
             if (layer != null && d != null) tintRegion(layer, d, false);
         }
     }
@@ -435,3 +436,4 @@ final class LiveCardHooks {
         return null;
     }
 }
+
