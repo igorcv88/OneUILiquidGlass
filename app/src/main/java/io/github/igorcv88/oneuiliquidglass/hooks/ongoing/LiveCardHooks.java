@@ -114,8 +114,10 @@ final class LiveCardHooks {
         if (root != null) {
             // The view changeCardBg rewrote inside a card is that card's fill, whatever its depth.
             if (fillWriter && target != root && target.getBackground() != null && !blurLayer(target)) writtenFill.put(root, new WeakReference<>(target));
+            // Start the capture BEFORE re-evaluating the fill, so initial blur assignment
+            // is not missed when the Samsung writer directly triggers first-glass creation.
+            timeline.begin(stackOf(root), fillWriter ? "beforeChangeCardBg" : "beforeCardWriter");
             evaluate(root, roots.get(root));
-            timeline.begin(stackOf(root), fillWriter ? "changeCardBg" : "cardWriter");
             Probe.liveSurfaceLater(root, "CARD", 450);
             return;
         }
@@ -133,10 +135,10 @@ final class LiveCardHooks {
     /** After CardStackView.updateItemBg(): every classified card of that stack, nothing else. */
     void stackUpdated(View stack) {
         if (stack == null || glass.writing()) return;
+        timeline.begin(stack, "beforeUpdateItemBg");
         for (Map.Entry<View, Classification> e : new ArrayList<>(roots.entrySet()))
             if (e.getKey() != null && LiveChipHooks.within(e.getKey(), stack)) evaluate(e.getKey(), e.getValue());
         syncStackFills(stack);
-        timeline.begin(stack, "updateItemBg");
     }
 
     /** Offers the card's fill (and a root that has its own background) with the current verdict. */
