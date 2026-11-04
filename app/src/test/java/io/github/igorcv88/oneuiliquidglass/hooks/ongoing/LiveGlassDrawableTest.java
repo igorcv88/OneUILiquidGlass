@@ -156,6 +156,53 @@ public class LiveGlassDrawableTest {
         assertEquals(16f, o.getRadius(), 0f);
     }
 
+    private static int[] countInvalidations(LiveGlassDrawable d) {
+        int[] invalidations = {0};
+        d.setCallback(new android.graphics.drawable.Drawable.Callback() {
+            @Override public void invalidateDrawable(android.graphics.drawable.Drawable who) { invalidations[0]++; }
+            @Override public void scheduleDrawable(android.graphics.drawable.Drawable who, Runnable what, long when) { }
+            @Override public void unscheduleDrawable(android.graphics.drawable.Drawable who, Runnable what) { }
+        });
+        return invalidations;
+    }
+
+    /**
+     * DZIF 04/11: a card was drawn behind the stack with region alpha 0, faded in to 255 without
+     * a redraw and stayed transparent until the next draw. A fade that reveals a region last drawn
+     * invisible must redraw the host exactly once.
+     */
+    @Test public void revealingARegionLastDrawnInvisibleRedrawsTheHostOnce() throws Exception {
+        LiveGlassDrawable d = new LiveGlassDrawable(new ColorDrawable(0xff123456), NativeShape.uniform(20f),
+                0xff123456, LiveSurface.CARD.spec, 1f);
+        d.setBlur(BackgroundBlurBridge.of(new FakeBlurDrawable()));
+        d.setBounds(0, 0, 400, 120);
+        d.setRegionFade(0f);
+        d.draw(new TestCanvas(400, 120));
+        assertTrue(d.drawnHiddenForTrace());
+        int[] invalidations = countInvalidations(d);
+
+        assertTrue(d.setRegionFade(0.3f));
+        assertEquals("reveal re-records the region", 1, invalidations[0]);
+        assertFalse(d.drawnHiddenForTrace());
+        d.setRegionFade(0.6f);
+        d.setRegionFade(1f);
+        assertEquals("ordinary fades stay redraw-free", 1, invalidations[0]);
+    }
+
+    @Test public void fadesOfARegionDrawnVisibleNeverRedraw() throws Exception {
+        LiveGlassDrawable d = new LiveGlassDrawable(new ColorDrawable(0xff123456), NativeShape.uniform(20f),
+                0xff123456, LiveSurface.CARD.spec, 1f);
+        d.setBlur(BackgroundBlurBridge.of(new FakeBlurDrawable()));
+        d.setBounds(0, 0, 400, 120);
+        d.setRegionFade(0.02f); // alpha 5: drawn, positioned
+        d.draw(new TestCanvas(400, 120));
+        assertFalse(d.drawnHiddenForTrace());
+        int[] invalidations = countInvalidations(d);
+        d.setRegionFade(0f);
+        d.setRegionFade(1f);
+        assertEquals(0, invalidations[0]);
+    }
+
     @Test public void regionFollowsAncestorAlpha() throws Exception {
         LiveGlassDrawable d = new LiveGlassDrawable(new ColorDrawable(), NativeShape.uniform(4f), null, LiveSurface.CHIP.spec, 1f);
         FakeBlurDrawable region = new FakeBlurDrawable();

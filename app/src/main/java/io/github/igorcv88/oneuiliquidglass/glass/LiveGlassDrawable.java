@@ -67,6 +67,15 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
     private boolean glass = true;
     private int alpha = 255;
     private float regionFade = 1f;
+    /**
+     * The last recording drew the region while its alpha was 0. AOSP BackgroundBlurDrawable.draw()
+     * returns before drawRenderNode when its alpha is 0, so that recording holds no region node, no
+     * RenderThread position and no tint. Raising the fade later goes through the blur drawable's
+     * setAlpha, which has no callback to redraw the host: the card stays transparent until something
+     * else redraws it (DZIF capture 04/11 16:11: every transparent episode ended at the next
+     * DRAW_OWN_REGION with regionAlpha=255, ~0.3 s later).
+     */
+    private boolean drawnHidden;
     private final Paint rim = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Path rimPath = new Path();
     private final RectF rimRect = new RectF();
@@ -137,6 +146,7 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
         if (blur == b) return;
         if (blur != null) blur.release();
         blur = b;
+        drawnHidden = false;
         optics = null;
         lastPx = -1;
         if (b != null) b.setRegionFade(regionFade);
@@ -182,8 +192,18 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
         regionFade = f;
         boolean changed = blur != null && blur.setRegionFade(f);
         traceMaterial("REGION_FADE", null);
+        // Re-record once when a region last drawn invisible becomes visible; never on other fades.
+        if (changed && drawnHidden && regionAlpha(f) > 0) {
+            drawnHidden = false;
+            traceMaterial("REGION_REVEAL_REDRAW", null);
+            invalidateSelf();
+        }
         return changed;
     }
+    /** The alpha BackgroundBlurBridge sends for a fade (its base alpha is 255). */
+    private static int regionAlpha(float fade) { return Math.round(255f * fade); }
+    /** Read-only, for tests and the material trace. */
+    public boolean drawnHiddenForTrace() { return drawnHidden; }
     /** Drops the region and unlinks the native drawable, which the host is about to take back. */
     public void release() {
         setBlur(null);
@@ -250,6 +270,7 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
                 return;
             }
         }
+        drawnHidden = regionAlpha(regionFade) == 0;
         try { blur.draw(canvas, b); }
         catch (RuntimeException | LinkageError e) {
             setBlur(null);

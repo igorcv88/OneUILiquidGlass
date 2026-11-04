@@ -350,8 +350,9 @@ final class LiveCardHooks {
             }
         }
 
-        // E2 / option A (debug.oulg.stackshadow, default 0 = untouched): the bottom stack
-        // indicator outside CardStackView. Restored as soon as no glass card is shown here.
+        // Bottom stack indicator outside CardStackView: its own blur region is suspended while a
+        // glass card is shown (debug.oulg.stackshadow unset = mode 9, 0 = off). Restored as soon as
+        // no glass card is shown here.
         LiveStackShadowExperiment experiment = shadowExperiments.get(stack);
         if (experiment == null && glassPresent && LiveStackShadowExperiment.propertyMode() != LiveStackShadowExperiment.MODE_OFF) {
             experiment = new LiveStackShadowExperiment();
