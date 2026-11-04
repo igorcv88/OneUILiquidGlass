@@ -201,6 +201,7 @@ final class LiveStackShadowExperiment {
     // Last logged state, compared field by field so a steady frame builds no string.
     private int loggedMode = -1, loggedFrame, loggedW = -1, loggedH = -1, loggedLeases = -1;
     private String loggedState, loggedPending;
+    private final Rect loggedFrameClip = new Rect(), loggedClip1 = new Rect(), loggedClip2 = new Rect();
 
     private final ViewTreeObserver.OnPreDrawListener preDraw = () -> { onPreDraw(); return true; };
     private final View.OnAttachStateChangeListener attach = new View.OnAttachStateChangeListener() {
@@ -449,10 +450,18 @@ final class LiveStackShadowExperiment {
         int fid = f == null ? 0 : System.identityHashCode(f);
         int w = f == null ? -1 : f.getWidth(), h = f == null ? -1 : f.getHeight();
         int bits = leaseBits();
+        // Installed clip geometry too: mode 6 recomputes clips from transforms that can change
+        // while sizes, leases and state stay the same.
         if (mode == loggedMode && fid == loggedFrame && w == loggedW && h == loggedH && bits == loggedLeases
-                && state.equals(loggedState) && pending.equals(loggedPending)) return;
+                && state.equals(loggedState) && pending.equals(loggedPending)
+                && (!frameClip.active || frameClip.installed.equals(loggedFrameClip))
+                && (!clip1.active || clip1.installed.equals(loggedClip1))
+                && (!clip2.active || clip2.installed.equals(loggedClip2))) return;
         loggedMode = mode; loggedFrame = fid; loggedW = w; loggedH = h; loggedLeases = bits;
         loggedState = state; loggedPending = pending;
+        loggedFrameClip.set(frameClip.installed);
+        loggedClip1.set(clip1.installed);
+        loggedClip2.set(clip2.installed);
         Probe.log("LIVE_STACK_SHADOW_E2", "mode=" + mode + " state=" + state + " pending=" + pending
                 + " frame=" + id(f) + " frameWh=" + (f == null ? "-" : w + "x" + h)
                 + " frameVis=" + (f == null ? "-" : String.valueOf(f.getVisibility()))
