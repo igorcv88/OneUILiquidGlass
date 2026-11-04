@@ -105,6 +105,64 @@ public class LockMediaProbeTest {
         assertEquals(null, card.getBackground());
     }
 
+    @Test public void foregroundRemovalRestoresExactDrawableAndDoesNotHideChildren() {
+        FrameLayout decorative = new FrameLayout(activity);
+        GradientDrawable nativeForeground = new GradientDrawable();
+        decorative.setForeground(nativeForeground);
+        View control = new View(activity);
+        decorative.addView(control);
+
+        LockMediaProbe.ForegroundLease lease = new LockMediaProbe.ForegroundLease(decorative);
+        assertTrue(lease.hide());
+        assertEquals(null, decorative.getForeground());
+        assertEquals(View.VISIBLE, decorative.getVisibility());
+        assertEquals(View.VISIBLE, control.getVisibility());
+        assertTrue(lease.matches(decorative));
+        lease.restore();
+        assertTrue(decorative.getForeground() == nativeForeground);
+        lease.restore();
+        assertTrue(decorative.getForeground() == nativeForeground);
+    }
+
+    @Test public void foregroundProbeDoesNotOverwriteNewNativeForeground() {
+        View decorative = new View(activity);
+        GradientDrawable first = new GradientDrawable();
+        GradientDrawable replacement = new GradientDrawable();
+        decorative.setForeground(first);
+        LockMediaProbe.ForegroundLease lease = new LockMediaProbe.ForegroundLease(decorative);
+        assertTrue(lease.hide());
+        decorative.setForeground(replacement);
+        assertFalse(lease.matches(decorative));
+        lease.restore();
+        assertTrue(decorative.getForeground() == replacement);
+    }
+
+    @Test public void decorativeVisibilityKeepsLayoutAndRestoresNativeState() {
+        View decorative = new View(activity);
+        decorative.setVisibility(View.VISIBLE);
+        LockMediaProbe.VisibilityLease lease = new LockMediaProbe.VisibilityLease(decorative);
+        assertTrue(lease.hide());
+        assertEquals(View.INVISIBLE, decorative.getVisibility());
+        assertTrue(lease.matches(decorative));
+        lease.restore();
+        assertEquals(View.VISIBLE, decorative.getVisibility());
+
+        decorative.setVisibility(View.GONE);
+        LockMediaProbe.VisibilityLease hiddenNatively = new LockMediaProbe.VisibilityLease(decorative);
+        assertFalse(hiddenNatively.hide());
+        assertEquals(View.GONE, decorative.getVisibility());
+    }
+
+    @Test public void decorativeVisibilityPreservesLaterNativeUpdate() {
+        View decorative = new View(activity);
+        LockMediaProbe.VisibilityLease lease = new LockMediaProbe.VisibilityLease(decorative);
+        assertTrue(lease.hide());
+        decorative.setVisibility(View.GONE);
+        assertFalse(lease.matches(decorative));
+        lease.restore();
+        assertEquals(View.GONE, decorative.getVisibility());
+    }
+
     @Test public void modesIsolateIndependentNativeLayers() {
         assertTrue(LockMediaProbe.hideInner(1));
         assertFalse(LockMediaProbe.hideOuter(1));
@@ -114,12 +172,21 @@ public class LockMediaProbeTest {
         assertTrue(LockMediaProbe.hideOuter(3));
         assertFalse(LockMediaProbe.hideInner(0));
         assertFalse(LockMediaProbe.hideOuter(0));
+        assertTrue(LockMediaProbe.hideOuter(6));
+        assertTrue(LockMediaProbe.hideOuter(7));
+        assertFalse(LockMediaProbe.hideInner(6));
+        assertFalse(LockMediaProbe.hideInner(7));
         assertTrue(LockMediaProbe.shouldProbe(false, 1));
         assertTrue(LockMediaProbe.shouldProbe(false, 2));
         assertTrue(LockMediaProbe.shouldProbe(false, 3));
+        assertTrue(LockMediaProbe.shouldProbe(false, 4));
+        assertTrue(LockMediaProbe.shouldProbe(false, 5));
+        assertTrue(LockMediaProbe.shouldProbe(false, 6));
+        assertTrue(LockMediaProbe.shouldProbe(false, 7));
         assertFalse(LockMediaProbe.shouldProbe(false, 0));
         assertFalse(LockMediaProbe.shouldProbe(true, 1));
         assertFalse(LockMediaProbe.shouldProbe(true, 2));
         assertFalse(LockMediaProbe.shouldProbe(true, 3));
+        assertFalse(LockMediaProbe.shouldProbe(true, 7));
     }
 }
