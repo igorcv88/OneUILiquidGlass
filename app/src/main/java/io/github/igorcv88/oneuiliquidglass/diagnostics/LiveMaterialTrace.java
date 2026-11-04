@@ -94,7 +94,6 @@ public final class LiveMaterialTrace {
                 BackgroundBlurBridge region = material.blur();
                 Drawable blurDrawable = region == null ? null : region.drawable;
                 Rect bounds = material.getBounds();
-                int topIndex = -1;
                 int stackIndex = -1;
                 try {
                     View stackChild = directChild(host, stack);
@@ -112,6 +111,7 @@ public final class LiveMaterialTrace {
                         + " nativeHostBg=" + (host.getBackground() == material)
                         + " glass=" + material.showsGlass()
                         + " regionless=" + material.regionless()
+                        + " fade=" + material.regionFadeForTrace()
                         + " region=" + id(region)
                         + " regionDrawable=" + id(blurDrawable)
                         + " regionAlpha=" + (blurDrawable == null ? -1 : blurDrawable.getAlpha())
