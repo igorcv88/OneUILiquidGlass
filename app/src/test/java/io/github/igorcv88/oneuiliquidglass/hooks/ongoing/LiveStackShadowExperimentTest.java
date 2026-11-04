@@ -326,7 +326,8 @@ public class LiveStackShadowExperimentTest {
     /** What Samsung does when it shows the indicator: VISIBLE, blur background, alpha fade start. */
     private static CardStackView.NativeBackgroundBlurDrawable show(View indicator, float alpha) {
         CardStackView.NativeBackgroundBlurDrawable blur = new CardStackView.NativeBackgroundBlurDrawable();
-        blur.setAlpha(Math.round(alpha * 255));
+        // Truncated like an int alpha written from a float fade (0.5f -> 127), not rounded (128).
+        blur.setAlpha((int) (alpha * 255));
         indicator.setBackground(blur);
         indicator.setAlpha(alpha);
         return blur;
