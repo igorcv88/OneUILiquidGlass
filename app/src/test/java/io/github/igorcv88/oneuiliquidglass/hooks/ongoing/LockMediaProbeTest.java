@@ -26,7 +26,7 @@ public class LockMediaProbeTest {
 
     @Before public void setup() { activity = Robolectric.buildActivity(Activity.class).setup().get(); }
 
-    @Test public void drawableAlphaRestoredWithoutTouchingCardOrArt() {
+    @Test public void nativeBackgroundRestoredWithoutTouchingCardOrArt() {
         FrameLayout card = new FrameLayout(activity);
         ColorDrawable nativeBackground = new ColorDrawable(Color.rgb(34, 56, 78));
         nativeBackground.setAlpha(183);
@@ -40,8 +40,9 @@ public class LockMediaProbeTest {
         LockMediaProbe.Lease lease = new LockMediaProbe.Lease(card);
         assertTrue(lease.valid());
         assertEquals(183, lease.nativeAlpha());
-        lease.hide();
-        assertEquals(0, nativeBackground.getAlpha());
+        assertTrue(lease.hide());
+        assertEquals(null, card.getBackground());
+        assertEquals(183, nativeBackground.getAlpha());
         assertEquals(0.76f, card.getAlpha(), 0f);
         assertEquals(1f, circularArt.getAlpha(), 0f);
         assertEquals(1f, waveform.getAlpha(), 0f);
@@ -60,34 +61,39 @@ public class LockMediaProbeTest {
         original.setAlpha(221);
         card.setBackground(original);
         LockMediaProbe.Lease old = new LockMediaProbe.Lease(card);
-        old.hide();
+        assertTrue(old.hide());
+        assertEquals(null, card.getBackground());
         ColorDrawable replacement = new ColorDrawable(Color.MAGENTA);
         replacement.setAlpha(147);
         card.setBackground(replacement);
         assertFalse(old.matches(card));
         old.restore();
         assertEquals(221, original.getAlpha());
+        assertTrue(card.getBackground() == replacement);
         assertEquals(147, replacement.getAlpha());
 
         LockMediaProbe.Lease next = new LockMediaProbe.Lease(card);
-        next.hide();
-        assertEquals(0, replacement.getAlpha());
+        assertTrue(next.hide());
+        assertEquals(null, card.getBackground());
+        assertEquals(147, replacement.getAlpha());
         next.restore();
         assertEquals(147, replacement.getAlpha());
+        assertTrue(card.getBackground() == replacement);
     }
 
-    @Test public void nativeAlphaWrittenDuringProbeIsRestored() {
+    @Test public void nativeDrawableIsUntouchedWhileRemoved() {
         View card = new View(activity);
         ColorDrawable nativeBackground = new ColorDrawable(Color.BLUE);
         nativeBackground.setAlpha(190);
         card.setBackground(nativeBackground);
         LockMediaProbe.Lease lease = new LockMediaProbe.Lease(card);
-        lease.hide();
-        nativeBackground.setAlpha(207); // Samsung rewrites the drawable while the probe is active.
-        lease.hide();
-        assertEquals(0, nativeBackground.getAlpha());
+        assertTrue(lease.hide());
+        nativeBackground.setAlpha(207);
+        assertTrue(lease.hide());
+        assertEquals(null, card.getBackground());
         lease.restore();
         assertEquals(207, nativeBackground.getAlpha());
+        assertTrue(card.getBackground() == nativeBackground);
     }
 
     @Test public void nullBackgroundIsNotProbed() {
@@ -108,5 +114,12 @@ public class LockMediaProbeTest {
         assertTrue(LockMediaProbe.hideOuter(3));
         assertFalse(LockMediaProbe.hideInner(0));
         assertFalse(LockMediaProbe.hideOuter(0));
+        assertTrue(LockMediaProbe.shouldProbe(false, 1));
+        assertTrue(LockMediaProbe.shouldProbe(false, 2));
+        assertTrue(LockMediaProbe.shouldProbe(false, 3));
+        assertFalse(LockMediaProbe.shouldProbe(false, 0));
+        assertFalse(LockMediaProbe.shouldProbe(true, 1));
+        assertFalse(LockMediaProbe.shouldProbe(true, 2));
+        assertFalse(LockMediaProbe.shouldProbe(true, 3));
     }
 }
