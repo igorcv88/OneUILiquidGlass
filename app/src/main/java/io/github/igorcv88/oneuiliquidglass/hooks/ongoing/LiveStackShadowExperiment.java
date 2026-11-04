@@ -55,8 +55,9 @@ final class LiveStackShadowExperiment {
     static final int MODE_OFF = 0, MODE_TINT = 1, MODE_HIDE_1 = 2, MODE_HIDE_2 = 3,
             MODE_HIDE_BOTH = 4, MODE_CLIP_FRAME = 5, MODE_CLIP_VIEWS = 6;
     static final int ATTRIBUTION_COLOR = 0xffff00ff;
-    private static final ColorFilter MAGENTA = new PorterDuffColorFilter(ATTRIBUTION_COLOR, PorterDuff.Mode.SRC_IN);
-    private static final ColorFilter CLEAR = new PorterDuffColorFilter(Color.TRANSPARENT, PorterDuff.Mode.SRC_IN);
+    /** Package-visible so tests compare by identity (PorterDuffColorFilter.getColor is hidden API). */
+    static final ColorFilter MAGENTA = new PorterDuffColorFilter(ATTRIBUTION_COLOR, PorterDuff.Mode.SRC_IN);
+    static final ColorFilter CLEAR = new PorterDuffColorFilter(Color.TRANSPARENT, PorterDuff.Mode.SRC_IN);
     private static final long PROPERTY_TTL_MS = 750;
 
     private final Function<View, String> names;
