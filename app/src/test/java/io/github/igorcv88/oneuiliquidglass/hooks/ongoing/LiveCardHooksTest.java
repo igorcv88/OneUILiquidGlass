@@ -128,6 +128,10 @@ public class LiveCardHooksTest {
             hooks.syncStackBackgrounds(stack);
             assertFalse(g.stackBackgroundOccluded());
         }
+        // An unrelated decorative child is not a second ongoing notification.
+        stack.addView(new FrameLayout(stack.getContext()));
+        hooks.syncStackBackgrounds(stack);
+        assertFalse(g.stackBackgroundOccluded());
     }
 
     @Test public void twoCardStackRendersOnlyTheFrontGlassBackgroundWithoutHidingContent() {
