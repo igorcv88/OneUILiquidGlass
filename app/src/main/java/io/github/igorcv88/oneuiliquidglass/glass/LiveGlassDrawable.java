@@ -139,7 +139,17 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
     }
     public BackgroundBlurBridge blur() { return blur; }
     /** false: draw the native drawable even with a blur (policy gate, e.g. doze). */
-    public void setGlass(boolean on) { if (glass != on) { glass = on; invalidateSelf(); } }
+    public void setGlass(boolean on) {
+        boolean changed = glass != on;
+        glass = on;
+        // A secondary card can be hidden only while it really draws glass. A policy fallback,
+        // brief detach or native ownership must never retain that occlusion flag.
+        if (!on && stackBackgroundOccluded) {
+            stackBackgroundOccluded = false;
+            changed = true;
+        }
+        if (changed) invalidateSelf();
+    }
     /**
      * The blur comes from a native layer behind this host (Samsung's own BackgroundBlurDrawable on
      * an ancestor, L2): no region of ours, the native fill is drawn translucent over it, RGB intact.
@@ -166,6 +176,7 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
     }
     /** Drops the region and unlinks the native drawable, which the host is about to take back. */
     public void release() {
+        setStackBackgroundOccluded(false);
         setBlur(null);
         Drawable d = nativeDrawable;
         nativeDrawable = null;

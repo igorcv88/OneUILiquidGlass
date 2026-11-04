@@ -26,6 +26,24 @@ import org.robolectric.annotation.Config;
 /** Material and geometry fidelity of the wrapper, and the classification rules. */
 @RunWith(RobolectricTestRunner.class) @Config(sdk = 34)
 public class LiveGlassDrawableTest {
+    @Test public void secondaryStackBackgroundCannotStayHiddenAfterNativeFallback() throws Exception {
+        ColorDrawable nativeBg = new ColorDrawable(0xff334455);
+        LiveGlassDrawable d = new LiveGlassDrawable(nativeBg,
+                NativeShape.uniform(20f), 0xff334455, LiveSurface.CARD.spec, 1f);
+        d.setBlur(BackgroundBlurBridge.of(new FakeBlurDrawable()));
+        d.setStackBackgroundOccluded(true);
+        assertTrue(d.stackBackgroundOccluded());
+        d.setGlass(false);
+        assertFalse("native fallback must clear secondary-card occlusion",
+                d.stackBackgroundOccluded());
+
+        d.setGlass(true);
+        d.setStackBackgroundOccluded(true);
+        d.release();
+        assertFalse("releasing the old compositor host must not leave stale occlusion",
+                d.stackBackgroundOccluded());
+    }
+
     @Test public void softwareCanvasRestoresNativeInsteadOfDrawingATransparentRegion() throws Exception {
         int[] draws = {0}, failures = {0};
         ColorDrawable nativeBg = new ColorDrawable(0xff123456) {
