@@ -115,6 +115,60 @@ public class LiveCardHooksTest {
         return state.toString();
     }
 
+    @Test public void oneLiveCardAlwaysKeepsItsBackgroundOnFirstExpansion() {
+        adapter.mList.add(new OngoingActivityData("com.samsung.android.health", false));
+        CardItemView only = card(0);
+        hooks.stackUpdated(stack);
+        LiveGlassDrawable g = glass.glassOf(only.fill());
+        assertNotNull(g);
+        assertTrue(g.showsGlass());
+        assertFalse("one notification cannot have the lower capsule", g.stackBackgroundOccluded());
+        for (int i = 0; i < 4; i++) {
+            only.fill().getViewTreeObserver().dispatchOnPreDraw();
+            hooks.syncStackBackgrounds(stack);
+            assertFalse(g.stackBackgroundOccluded());
+        }
+    }
+
+    @Test public void twoCardStackRendersOnlyTheFrontGlassBackgroundWithoutHidingContent() {
+        adapter.mList.add(new OngoingActivityData("com.samsung.android.health", false));
+        adapter.mList.add(new OngoingActivityData("com.sec.android.app.clockpackage", false));
+        CardItemView back = card(0);
+        CardItemView front = card(1);
+        LiveGlassDrawable backGlass = glass.glassOf(back.fill());
+        LiveGlassDrawable frontGlass = glass.glassOf(front.fill());
+        assertNotNull(backGlass);
+        assertNotNull(frontGlass);
+        assertTrue(backGlass.showsGlass());
+        assertTrue(frontGlass.showsGlass());
+
+        hooks.stackUpdated(stack);
+        assertTrue("second glass background must not peek behind front card actions",
+                backGlass.stackBackgroundOccluded());
+        assertFalse(frontGlass.stackBackgroundOccluded());
+        assertEquals(View.VISIBLE, back.getVisibility());
+        assertEquals(View.VISIBLE, front.getVisibility());
+        assertSame(backGlass, back.fill().getBackground());
+        assertSame(frontGlass, front.fill().getBackground());
+        // Samsung changes the drawn top by reordering children without rebuilding card data.
+        View oldBackSlot = (View) back.getParent().getParent();
+        stack.bringChildToFront(oldBackSlot);
+        for (int swipe = 0; swipe < 4; swipe++) {
+            hooks.syncStackBackgrounds(stack);
+            assertFalse(backGlass.stackBackgroundOccluded());
+            assertTrue(frontGlass.stackBackgroundOccluded());
+            assertSame(backGlass, back.fill().getBackground());
+            assertSame(frontGlass, front.fill().getBackground());
+            assertEquals(View.VISIBLE, front.getVisibility());
+        }
+
+        env.on.remove(LiveSurface.CARD);
+        glass.refresh(LiveSurface.CARD);
+        hooks.syncStackBackgrounds(stack);
+        assertFalse("native fallback cannot be hidden", backGlass.stackBackgroundOccluded());
+        assertFalse("native fallback cannot be hidden", frontGlass.stackBackgroundOccluded());
+    }
+
     @Test public void expansionKeepsOneRegionDespiteNativeGeometryAndRadiusChanges() {
         adapter.mList.add(new OngoingActivityData("com.samsung.android.health", false));
         CardItemView root = card(0);
