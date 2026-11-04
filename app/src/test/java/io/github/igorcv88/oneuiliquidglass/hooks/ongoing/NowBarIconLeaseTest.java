@@ -19,6 +19,43 @@ import org.robolectric.annotation.Config;
 public class NowBarIconLeaseTest {
     private final Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
 
+    @Test public void expandedDiscIsClearedWithoutTouchingTheNativeIcon() {
+        FakeCardView expanded = new FakeCardView(activity);
+        ImageView icon = new ImageView(activity);
+        icon.setImageResource(R.drawable.oulg_launcher);
+        expanded.addView(icon);
+        Drawable originalIcon = icon.getDrawable();
+        int originalColor = expanded.getCardBackgroundColor().getDefaultColor();
+        NowBarIconLease lease = new NowBarIconLease();
+
+        lease.syncExpandedDisc(expanded, true);
+        assertEquals(0, expanded.getCardBackgroundColor().getDefaultColor());
+        assertSame("expanded image contents are not replaced", originalIcon, icon.getDrawable());
+        int firstWrites = expanded.colorWrites;
+        for (int i = 0; i < 20; i++) lease.syncExpandedDisc(expanded, true);
+        assertEquals("steady frames cannot rewrite CardView colours", firstWrites, expanded.colorWrites);
+
+        // AODService may recolour the expanded disc after a mode transition.
+        expanded.setCardBackgroundColor(0xff5b26ab);
+        lease.syncExpandedDisc(expanded, true);
+        assertEquals(0, expanded.getCardBackgroundColor().getDefaultColor());
+        lease.restore();
+        assertEquals("the latest Samsung colour must return", 0xff5b26ab,
+                expanded.getCardBackgroundColor().getDefaultColor());
+        assertSame(originalIcon, icon.getDrawable());
+        assertNotEquals(0, originalColor);
+    }
+
+    @Test public void expandedDiscRestoresImmediatelyOnGlassGateOff() {
+        FakeCardView expanded = new FakeCardView(activity);
+        NowBarIconLease lease = new NowBarIconLease();
+        int nativeColor = expanded.getCardBackgroundColor().getDefaultColor();
+        lease.syncExpandedDisc(expanded, true);
+        assertEquals(0, expanded.getCardBackgroundColor().getDefaultColor());
+        lease.syncExpandedDisc(expanded, false);
+        assertEquals(nativeColor, expanded.getCardBackgroundColor().getDefaultColor());
+    }
+
     @Test public void nativeMonochromeGlyphReplacesAdaptiveIconAndRestoresExactly() {
         FakeCardView disc = new FakeCardView(activity);
         ImageView icon = new ImageView(activity);
