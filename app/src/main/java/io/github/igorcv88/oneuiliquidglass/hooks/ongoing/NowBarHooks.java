@@ -109,8 +109,11 @@ final class NowBarHooks {
         WeakReference<Object> item = new WeakReference<>(null);
         WeakReference<View> host = new WeakReference<>(null), container = new WeakReference<>(null), gradient = new WeakReference<>(null);
         ColorStateList nativeCardColor;
+        final NativeRegionLease nativeRegion = new NativeRegionLease();
         Float nativeElevation;
         boolean gradientHidden;
+        WeakReference<View> hiddenGradient = new WeakReference<>(null);
+        Integer nativeGradientVisibility;
         Abi abi;
         /** The glass layer added inside the CardView container (DZIF), or none. */
         WeakReference<GlassLayer> layer = new WeakReference<>(null);
@@ -197,6 +200,7 @@ final class NowBarHooks {
         LiveGlass.Options options = new LiveGlass.Options();
         options.allowEmptyNative = emptyNative;
         options.onShown = (v, shown) -> { View k = weakCard.get(); if (k != null) companions(k, fc, shown); };
+        options.onSync = options.onShown;
         options.shapeSource = emptyNative ? container : null;
         glass.offer(host, LiveSurface.NOWBAR, it, verdict, i -> { View k = weakCard.get(); return k != null && LiveEligibility.nowBar(k, i).ok(); }, options);
         c.lastNative = null;
@@ -216,16 +220,45 @@ final class NowBarHooks {
     /** Before setGradientBackgroundVisible(z): returns the value to use (hidden under glass). */
     boolean gradientVisible(View gradient, boolean requested) {
         gradientRequested.put(gradient, requested);
-        for (Card c : cards.values()) if (c.gradient.get() == gradient && c.gradientHidden) return false;
+        for (Card c : cards.values()) if (c.gradient.get() == gradient && c.gradientHidden
+                && c.nativeGradientVisibility == null) return false;
         return requested;
     }
 
     private void companions(View card, Card c, boolean shown) {
         View container = c.container.get();
+        c.nativeRegion.sync(container, shown && c.host.get() != container);
         if (container != null && NativeShape.cardLike(container) && c.host.get() != container) cardTransparent(container, c, shown);
         View gradient = c.gradient.get();
+        View hidden = c.hiddenGradient.get();
+        if (c.nativeGradientVisibility != null && (!shown || hidden != gradient)) {
+            if (hidden != null && hidden.getVisibility() == View.INVISIBLE)
+                hidden.setVisibility(c.nativeGradientVisibility);
+            c.nativeGradientVisibility = null;
+            c.hiddenGradient.clear();
+            c.gradientHidden = false;
+        }
         Method setter = c.abi == null ? null : c.abi.gradientVisible;
-        if (gradient == null || setter == null || gradient.getClass() != c.abi.gradient) { c.gradientHidden = false; return; }
+        if (gradient == null || c.abi == null || gradient.getClass() != c.abi.gradient) { c.gradientHidden = false; return; }
+        // Some plugin ABIs have the writer but no readable gradient flag. The exact dedicated
+        // gradient view can still be hidden reversibly; do not guess its private boolean fields.
+        if (shown && (setter == null || gradientState(gradient) == null)
+                && !gradientRequested.containsKey(gradient)) {
+            if (c.nativeGradientVisibility == null || gradient.getVisibility() != View.INVISIBLE)
+                c.nativeGradientVisibility = gradient.getVisibility();
+            c.hiddenGradient = new WeakReference<>(gradient);
+            c.gradientHidden = true;
+            if (gradient.getVisibility() != View.INVISIBLE) gradient.setVisibility(View.INVISIBLE);
+            return;
+        }
+        if (c.nativeGradientVisibility != null && shown) {
+            if (gradient.getVisibility() != View.INVISIBLE) {
+                c.nativeGradientVisibility = gradient.getVisibility();
+                gradient.setVisibility(View.INVISIBLE);
+            }
+            return;
+        }
+        if (setter == null) return;
         if (shown == c.gradientHidden) return;
         c.gradientHidden = shown;
         Boolean asked = gradientRequested.get(gradient);
@@ -328,3 +361,4 @@ final class NowBarHooks {
         catch (ReflectiveOperationException | RuntimeException e) { return null; }
     }
 }
+

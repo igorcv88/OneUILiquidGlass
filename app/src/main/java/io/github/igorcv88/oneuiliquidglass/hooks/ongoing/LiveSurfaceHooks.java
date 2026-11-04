@@ -282,7 +282,14 @@ public final class LiveSurfaceHooks {
      * background, never a translucent pane without blur.
      */
     static final class CompositorBlur implements LiveGlass.Blur {
-        @Override public BackgroundBlurBridge create(View host) throws ReflectiveOperationException { return BackgroundBlurBridge.create(host); }
+        @Override public BackgroundBlurBridge create(View host) throws ReflectiveOperationException {
+            return create(host, LiveSurface.CARD);
+        }
+        @Override public BackgroundBlurBridge create(View host, LiveSurface surface) throws ReflectiveOperationException {
+            BackgroundBlurBridge region = BackgroundBlurBridge.create(host, true);
+            region.setOptics(surface == LiveSurface.NOWBAR, true);
+            return region;
+        }
         @Override public boolean enabled(View host) {
             Context c = host.getContext();
             boolean saver = false;
@@ -301,3 +308,4 @@ public final class LiveSurfaceHooks {
         return !powerSave && !"1".equals(disableWindowBlurs);
     }
 }
+

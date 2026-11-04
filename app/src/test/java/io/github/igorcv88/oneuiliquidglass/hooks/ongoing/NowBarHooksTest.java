@@ -238,6 +238,47 @@ public class NowBarHooksTest {
     }
 
     /** The Now Bar rebinds dozens of times per second: the CardView is written once, not per call. */
+    @Test public void samsungCardBlurIsSuspendedAcrossReplacementAndRestoredOnGateOff() {
+        NowBarOngoingCardView card = layeredCard();
+        View container = card.getCardViewContainer();
+        Env.SamsungBlurDrawable first = new Env.SamsungBlurDrawable();
+        first.setColor(0xff123456);
+        first.setAlpha(180);
+        container.setBackground(first);
+        NowBarItem item = new NowBarItem("com.example.timer", null);
+        hooks.cardBound(abi, card, item);
+        GlassLayer layer = layerOf(container);
+        assertNotNull(layer);
+        assertEquals(0, first.getAlpha());
+        Env.SamsungBlurDrawable next = new Env.SamsungBlurDrawable();
+        next.setColor(0xff123456);
+        next.setAlpha(210);
+        container.setBackground(next);
+        layer.getViewTreeObserver().dispatchOnPreDraw();
+        assertEquals(180, first.getAlpha());
+        assertEquals(0, next.getAlpha());
+        env.on.remove(LiveSurface.NOWBAR);
+        glass.refresh(LiveSurface.NOWBAR);
+        assertEquals(210, next.getAlpha());
+        assertSame(next, container.getBackground());
+    }
+
+    @Test public void unreadableGradientFlagUsesReversibleViewVisibility() {
+        NowBarOngoingCardView card = layeredCard();
+        com.samsung.android.app.facewidget.presentation.NowBarCardGradientView gradient = gradient(card);
+        gradient.readable = false;
+        gradient.setVisibility(View.VISIBLE);
+        hooks.cardBound(abi, card, new NowBarItem("com.example.timer", null));
+        assertEquals(View.INVISIBLE, gradient.getVisibility());
+        assertTrue("native flag is not guessed or overwritten", gradient.gradientVisible);
+        assertTrue("native writer remains free to update its flag", hooks.gradientVisible(gradient, true));
+        layerOf(card.getCardViewContainer()).getViewTreeObserver().dispatchOnPreDraw();
+        assertEquals(View.INVISIBLE, gradient.getVisibility());
+        env.on.remove(LiveSurface.NOWBAR);
+        glass.refresh(LiveSurface.NOWBAR);
+        assertEquals(View.VISIBLE, gradient.getVisibility());
+    }
+
     @Test public void repeatedBindsDoNotRewriteTheCardView() {
         NowBarOngoingCardView card = layeredCard();
         FakeCardView container = (FakeCardView) card.getCardViewContainer();
@@ -351,3 +392,4 @@ public class NowBarHooksTest {
         assertNotNull("config on: the known card gets its layer without waiting for a writer", layerOf(card.getCardViewContainer()));
     }
 }
+

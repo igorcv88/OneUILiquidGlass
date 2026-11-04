@@ -60,6 +60,7 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
     /** Colour of the native fill (GradientDrawable/CardView), null if unknown. */
     private Integer nativeColor;
     private BackgroundBlurBridge blur;
+    private GlassDrawable optics;
     private boolean glass = true;
     private int alpha = 255;
     private float regionFade = 1f;
@@ -124,6 +125,7 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
         if (blur == b) return;
         if (blur != null) blur.release();
         blur = b;
+        optics = null;
         lastPx = -1;
         if (b != null) b.setRegionFade(regionFade);
         invalidateSelf();
@@ -222,7 +224,9 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
             if (nativeDrawable != null) { nativeDrawable.setBounds(b); nativeDrawable.draw(canvas); }
             return;
         }
-        drawRim(canvas, b);
+        // The same shader/optical model as the approved notification material; no extra fill.
+        if (optics == null) optics = new GlassDrawable(blur, density, new GlassSpec());
+        if (!optics.drawOptics(canvas, b, clamped, alpha)) drawRim(canvas, b);
         drawReport("OWN_REGION", canvas, b, "blurDrawReturned");
     }
     private void drawReport(String mode, Canvas canvas, Rect b, String reason) {
@@ -339,3 +343,4 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
     @Override public void scheduleDrawable(Drawable who, Runnable what, long when) { scheduleSelf(what, when); }
     @Override public void unscheduleDrawable(Drawable who, Runnable what) { unscheduleSelf(what); }
 }
+
