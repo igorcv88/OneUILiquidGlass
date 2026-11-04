@@ -118,6 +118,8 @@ final class NowBarHooks {
 
     private final LiveGlass glass;
     private final HookSite site;
+    /** Lockscreen media capsule (NowBarMediaCardView), compact only: its own lens path. */
+    final LockMediaGlass media;
     private final Map<ClassLoader, Abi> loaders = Collections.synchronizedMap(new WeakHashMap<>());
     private final WeakHashMap<View, Card> cards = new WeakHashMap<>();
     /** Last visibility each gradient view was asked for (only those inside a tracked card matter). */
@@ -126,7 +128,7 @@ final class NowBarHooks {
     interface Installer { void install(Abi abi); }
     private Installer installer;
 
-    NowBarHooks(LiveGlass glass, HookSite site) { this.glass = glass; this.site = site; }
+    NowBarHooks(LiveGlass glass, HookSite site) { this.glass = glass; this.site = site; this.media = new LockMediaGlass(glass); }
     void setInstaller(Installer i) { installer = i; }
 
     /**
@@ -375,6 +377,7 @@ final class NowBarHooks {
     void refreshAll() {
         for (Map.Entry<View, Card> e : new java.util.ArrayList<>(cards.entrySet()))
             if (e.getKey() != null && e.getValue().abi != null) cardBound(e.getValue().abi, e.getKey(), null);
+        media.refreshAll();
     }
 
     private static View view(Method getter, Object card) {

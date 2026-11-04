@@ -1,0 +1,237 @@
+package io.github.igorcv88.oneuiliquidglass.hooks.ongoing;
+
+import android.view.View;
+import android.view.ViewGroup;
+import android.view.ViewParent;
+import android.view.ViewTreeObserver;
+import io.github.igorcv88.oneuiliquidglass.diagnostics.Probe;
+import java.lang.ref.WeakReference;
+import java.util.ArrayList;
+import java.util.Map;
+import java.util.WeakHashMap;
+
+/**
+ * Lens on the lockscreen Now Bar media capsule (NowBarMediaCardView), compact layout only.
+ *
+ * <p>Evidence (LockMediaProbe, DZIF, 04/11/2026): removing the backgrounds of
+ * nowbar_cardview_background and stack_background_cardview (#163) changed nothing on screen;
+ * hiding the decoration CardView stack_background_cardview (#164 mode 5) removed the opaque fill,
+ * and hiding nowbar_card_border_stroke_view as well (mode 7) also removed Samsung's border. Those
+ * two views hold no art, text, controls or WaveView. Removing only the foreground (mode 4) left a
+ * black fill and is not used.</p>
+ *
+ * <p>Applied: a {@link GlassLayer} inside nowbar_cardview_background (the CardView that clips to
+ * the capsule outline and sits under the content), offered to {@link LiveGlass} with the CardView
+ * as shape source, as the ongoing Now Bar card does; its background (aod.m96) and colour setters
+ * are left alone (setCardBackgroundColor casts a background it does not own). The fill and the
+ * stroke are made INVISIBLE (layout slot kept) exactly while the lens is drawn, from the glass's
+ * own shown/sync callbacks, so the native capsule is never removed without a lens and the doze
+ * policy (native on AOD) keeps working. Entry is the card's constructor: the layer is added on
+ * attach and synced from the card's pre-draw, before its first visible frame, not from the
+ * one-second diagnostic scan.</p>
+ *
+ * <p>Expanded (the stack's setExpandedCardState(true) or a card taller than wide) stays native:
+ * the layer is removed and both views get their visibility back. Per frame: geometry and
+ * reference checks on cached views; the views are resolved by id once per attach.</p>
+ */
+final class LockMediaGlass {
+    static final String MEDIA = NowBarHooks.PRESENTATION + "NowBarMediaCardView";
+    // Resource entry names on DZIF; not final only so tests can use framework ids Robolectric knows.
+    static String CONTAINER = "nowbar_cardview_background";
+    static String FILL = "stack_background_cardview";
+    static String STROKE = "nowbar_card_border_stroke_view";
+
+    private final LiveGlass glass;
+    private final WeakHashMap<View, Card> cards = new WeakHashMap<>();
+    /** Last setExpandedCardState of each Now Bar stack. */
+    private final WeakHashMap<View, Boolean> expandedStacks = new WeakHashMap<>();
+
+    LockMediaGlass(LiveGlass glass) { this.glass = glass; }
+
+    static boolean media(Object view) { return view != null && MEDIA.equals(view.getClass().getName()); }
+
+    /** From the card's constructor (or any later writer): idempotent. */
+    void watch(View card) {
+        if (!media(card) || cards.containsKey(card)) return;
+        Card c = new Card(card);
+        cards.put(card, c);
+        card.addOnAttachStateChangeListener(c);
+        if (card.isAttachedToWindow()) c.onViewAttachedToWindow(card);
+    }
+
+    /** After NowBarCardStackView.setExpandedCardState(expanded). */
+    void expandedState(View stack, boolean expanded) {
+        if (stack == null) return;
+        expandedStacks.put(stack, expanded);
+        for (Card c : new ArrayList<>(cards.values())) if (c.stack.get() == stack) c.sync();
+    }
+
+    /** Gate or config changed. */
+    void refreshAll() { for (Card c : new ArrayList<>(cards.values())) c.sync(); }
+
+    int tracked() { return cards.size(); }
+
+    /** Per card. Only weak references: the value of a weak map keyed by the card. */
+    final class Card implements View.OnAttachStateChangeListener, ViewTreeObserver.OnPreDrawListener {
+        final WeakReference<View> card;
+        WeakReference<View> stack = new WeakReference<>(null);
+        WeakReference<View> container = new WeakReference<>(null);
+        WeakReference<GlassLayer> layer = new WeakReference<>(null);
+        final Hide fill = new Hide(), stroke = new Hide();
+        ViewTreeObserver observer;
+        String lastNative;
+        boolean lastShown;
+
+        Card(View card) { this.card = new WeakReference<>(card); }
+
+        @Override public void onViewAttachedToWindow(View v) {
+            stack = new WeakReference<>(findStack(v));
+            container = new WeakReference<>(NativeIds.find(v, CONTAINER));
+            fill.target = new WeakReference<>(NativeIds.find(v, FILL));
+            stroke.target = new WeakReference<>(NativeIds.find(v, STROKE));
+            observer = v.getViewTreeObserver();
+            observer.addOnPreDrawListener(this);
+            // Before the first traversal: the layer is laid out with the card in its first frame.
+            sync();
+        }
+
+        @Override public void onViewDetachedFromWindow(View v) {
+            if (observer != null && observer.isAlive()) observer.removeOnPreDrawListener(this);
+            observer = null;
+            release("detached");
+        }
+
+        @Override public boolean onPreDraw() {
+            try { sync(); }
+            catch (RuntimeException | LinkageError e) { release("error"); Probe.error("LOCK_MEDIA_GLASS_FAILED", e); }
+            return true;
+        }
+
+        void sync() {
+            View k = card.get();
+            if (k == null) return;
+            if (expanded(k)) { release("expanded"); return; }
+            if (!glass.allows(LiveSurface.NOWBAR)) { release("gate"); return; }
+            View c = container.get();
+            if (c == null || !c.isAttachedToWindow()) {
+                c = NativeIds.find(k, CONTAINER);
+                container = new WeakReference<>(c);
+            }
+            if (!(c instanceof ViewGroup) || !NativeShape.cardLike(c)) { release("noContainer"); return; }
+            GlassLayer l = layer(this, (ViewGroup) c);
+            if (!glass.tracked(l)) offer(k, c, l);
+        }
+
+        private void offer(View k, View c, GlassLayer l) {
+            final WeakReference<Card> self = new WeakReference<>(this);
+            LiveGlass.Options options = new LiveGlass.Options();
+            options.allowEmptyNative = true;
+            options.shapeSource = c;
+            options.onShown = (v, shown) -> { Card me = self.get(); if (me != null) me.decorations(shown); };
+            options.onSync = options.onShown;
+            LiveGlass.Outcome o = glass.offer(l, LiveSurface.NOWBAR, k, LiveEligibility.Verdict.OK, owner -> {
+                Card me = self.get();
+                View card = me == null ? null : me.card.get();
+                return card != null && card == owner && !expanded(card);
+            }, options);
+            lastNative = null;
+            Probe.log("LOCK_MEDIA_GLASS", "state=offered outcome=" + o + " card=" + id(k) + " container=" + id(c));
+            if (!glass.applied(l)) decorations(false);
+        }
+
+        /** Fill and stroke hidden exactly while the lens is drawn. */
+        void decorations(boolean shown) {
+            View k = card.get();
+            boolean on = shown && k != null && !expanded(k);
+            boolean changed = fill.sync(on) | stroke.sync(on);
+            if (changed || on != lastShown) {
+                lastShown = on;
+                Probe.log("LOCK_MEDIA_GLASS", "state=" + (on ? "lens" : "native") + " fillHidden=" + fill.hidden
+                        + " strokeHidden=" + stroke.hidden + " card=" + id(k));
+            }
+        }
+
+        void release(String reason) {
+            GlassLayer l = layer.get();
+            boolean had = l != null || fill.hidden || stroke.hidden;
+            if (l != null) {
+                glass.forget(l, reason);
+                if (l.getParent() instanceof ViewGroup) ((ViewGroup) l.getParent()).removeView(l);
+                layer = new WeakReference<>(null);
+            }
+            fill.sync(false);
+            stroke.sync(false);
+            lastShown = false;
+            if (had || !reason.equals(lastNative)) {
+                lastNative = reason;
+                Probe.log("LOCK_MEDIA_GLASS", "state=native reason=" + reason + " card=" + id(card.get()));
+            }
+        }
+
+        private boolean expanded(View k) {
+            Boolean s = expandedStacks.get(stack.get());
+            if (Boolean.TRUE.equals(s)) return true;
+            return k.getWidth() > 0 && k.getHeight() > k.getWidth();
+        }
+    }
+
+    /** INVISIBLE while held; the native visibility comes back only if ours is still in place. */
+    static final class Hide {
+        WeakReference<View> target = new WeakReference<>(null);
+        private WeakReference<View> held = new WeakReference<>(null);
+        private int nativeVisibility = View.VISIBLE;
+        boolean hidden;
+
+        /** True when something was written. */
+        boolean sync(boolean on) {
+            View v = target.get();
+            View h = held.get();
+            if (hidden && (!on || h != v)) {
+                if (h != null && h.getVisibility() == View.INVISIBLE) h.setVisibility(nativeVisibility);
+                hidden = false;
+                held = new WeakReference<>(null);
+                if (!on || v == null) return true;
+            }
+            if (!on || v == null) return false;
+            if (!hidden) {
+                // A view Samsung itself hides (GONE/INVISIBLE) is left as it is.
+                if (v.getVisibility() != View.VISIBLE) return false;
+                nativeVisibility = View.VISIBLE;
+                held = new WeakReference<>(v);
+                hidden = true;
+                v.setVisibility(View.INVISIBLE);
+                return true;
+            }
+            if (v.getVisibility() == View.VISIBLE) {
+                // Samsung showed it again while the lens is on: hide it again.
+                v.setVisibility(View.INVISIBLE);
+                return true;
+            }
+            return false;
+        }
+    }
+
+    /** The layer inside the capsule CardView, added once and re-added if Samsung dropped it. */
+    private static GlassLayer layer(Card c, ViewGroup container) {
+        GlassLayer l = c.layer.get();
+        if (l == null) { l = new GlassLayer(container.getContext()); c.layer = new WeakReference<>(l); }
+        if (l.getParent() != container) {
+            if (l.getParent() instanceof ViewGroup) ((ViewGroup) l.getParent()).removeView(l);
+            container.addView(l, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        }
+        return l;
+    }
+
+    private static View findStack(View card) {
+        ViewParent p = card.getParent();
+        for (int i = 0; i < 4 && p instanceof View; i++, p = p.getParent())
+            if (NowBarHooks.STACK.equals(p.getClass().getName())) return (View) p;
+        return null;
+    }
+
+    private static String id(View v) { return v == null ? "null" : Integer.toHexString(System.identityHashCode(v)); }
+
+    // Tests.
+    Card cardForTest(View card) { return cards.get(card); }
+    Map<View, Boolean> expandedForTest() { return expandedStacks; }
+}

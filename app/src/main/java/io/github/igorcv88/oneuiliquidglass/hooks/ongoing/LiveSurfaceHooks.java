@@ -176,6 +176,8 @@ public final class LiveSurfaceHooks {
     /** The hooks of one verified plugin ABI; every callback filters the exact ongoing class first. */
     void installPlugin(NowBarHooks.Abi abi) {
         HookSite.Callback bound = after(LiveSurface.NOWBAR, p -> {
+            // N/U also run on the media card (shared base): a second entry if its constructor was missed.
+            if (p.thisObject instanceof View && LockMediaGlass.media(p.thisObject)) { ensure((View) p.thisObject); nowBar.media.watch((View) p.thisObject); }
             if (p.thisObject instanceof View && p.thisObject.getClass() == abi.ongoing) {
                 ensure((View) p.thisObject);
                 nowBar.cardBound(abi, (View) p.thisObject, p.args.length > 0 && abi.item.isInstance(p.args[0]) ? p.args[0] : null);
@@ -184,7 +186,12 @@ public final class LiveSurfaceHooks {
         HookSite.Callback restyled = after(LiveSurface.NOWBAR, p -> {
             if (p.thisObject instanceof View && p.thisObject.getClass() == abi.ongoing) nowBar.cardBound(abi, (View) p.thisObject, null);
         });
-        HookSite.Callback stack = after(LiveSurface.NOWBAR, p -> { if (p.thisObject instanceof View) nowBar.stackChanged((View) p.thisObject); });
+        HookSite.Callback stack = after(LiveSurface.NOWBAR, p -> {
+            if (!(p.thisObject instanceof View)) return;
+            if (p.method == abi.expandedState && p.args.length == 1 && p.args[0] instanceof Boolean)
+                nowBar.media.expandedState((View) p.thisObject, (Boolean) p.args[0]);
+            nowBar.stackChanged((View) p.thisObject);
+        });
         for (Method m : new Method[]{abi.d0, abi.e0, abi.n, abi.u}) if (m != null) site.hook(m, bound);
         for (Method m : new Method[]{abi.viewMode, abi.expandedColor}) if (m != null) site.hook(m, restyled);
         for (Method m : new Method[]{abi.stackRefresh, abi.expandedState}) if (m != null) site.hook(m, stack);
@@ -194,6 +201,12 @@ public final class LiveSurfaceHooks {
                 guard(LiveSurface.NOWBAR, () -> p.args[0] = nowBar.gradientVisible((View) p.thisObject, (Boolean) p.args[0]));
             }
         });
+        // Lockscreen media capsule: caught at construction, before its first frame.
+        Class<?> media = HookSite.type(LockMediaGlass.MEDIA, abi.loader);
+        boolean constructors = site.hookConstructors(media, after(LiveSurface.NOWBAR, p -> {
+            if (p.thisObject instanceof View) { ensure((View) p.thisObject); nowBar.media.watch((View) p.thisObject); }
+        }));
+        Probe.log("LOCK_MEDIA_GLASS", "install media=" + (media != null) + " constructors=" + constructors);
         main.post(() -> guard(LiveSurface.NOWBAR, () -> glass.refresh(LiveSurface.NOWBAR)));
     }
 

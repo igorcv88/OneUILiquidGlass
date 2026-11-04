@@ -32,6 +32,26 @@ final class XposedHookSite extends HookSite {
         }
     }
 
+    private final java.util.Set<Class<?>> constructed = java.util.Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<>());
+
+    @Override public boolean hookConstructors(Class<?> type, Callback callback) {
+        if (type == null || !constructed.add(type)) return false;
+        try {
+            XposedBridge.hookAllConstructors(type, new XC_MethodHook() {
+                @Override protected void afterHookedMethod(MethodHookParam p) {
+                    if (p.hasThrowable()) return;
+                    callback.after(new HookSite.Param(null, p.thisObject, p.args, null, false));
+                }
+            });
+            Probe.log("LIVE_HOOK", "constructors=" + type.getName());
+            return true;
+        } catch (RuntimeException | LinkageError e) {
+            constructed.remove(type);
+            Probe.error("LIVE_HOOK_FAILED", "<init>", e);
+            return false;
+        }
+    }
+
     @Override public Object invokeOriginal(Method m, Object thisObject, Object... args) throws ReflectiveOperationException {
         try { return XposedBridge.invokeOriginalMethod(m, thisObject, args); }
         catch (InvocationTargetException e) { throw e; }
