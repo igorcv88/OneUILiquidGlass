@@ -190,9 +190,7 @@ public class LiveCardHooksTest {
                 material.setBounds(0, 0, 1340, 288);
                 FakeBlurDrawable region = (FakeBlurDrawable) material.blur().drawable;
                 int before = region.draws;
-                material.draw(new android.graphics.Canvas() {
-                    @Override public boolean isHardwareAccelerated() { return true; }
-                });
+                material.draw(new TestCanvas(1340, 288));
                 assertEquals("incoming and outgoing cards both submit glass", before + 1, region.draws);
             }
         }
