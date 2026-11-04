@@ -90,9 +90,9 @@ public class LiveStackShadowExperimentTest {
         return LiveStackShadowExperiment.contentLayer((RippleDrawable) v.getBackground());
     }
 
-    private static boolean filterColor(Drawable d, int color) {
-        ColorFilter f = d.getColorFilter();
-        return f instanceof PorterDuffColorFilter && ((PorterDuffColorFilter) f).getColor() == color;
+    /** By identity: PorterDuffColorFilter.getColor() is not public SDK API. */
+    private static boolean filterIs(Drawable d, ColorFilter expected) {
+        return d.getColorFilter() == expected;
     }
 
     @Test public void modeZeroTouchesNothing() {
@@ -108,8 +108,8 @@ public class LiveStackShadowExperimentTest {
     @Test public void attributionTintsOnlyBothContentLayersAndRestores() {
         mode.set(LiveStackShadowExperiment.MODE_TINT);
         experiment.sync(stack, true);
-        assertTrue(filterColor(content(shadow1), LiveStackShadowExperiment.ATTRIBUTION_COLOR));
-        assertTrue(filterColor(content(shadow2), LiveStackShadowExperiment.ATTRIBUTION_COLOR));
+        assertTrue(filterIs(content(shadow1), LiveStackShadowExperiment.MAGENTA));
+        assertTrue(filterIs(content(shadow2), LiveStackShadowExperiment.MAGENTA));
         // Mask, alpha, visibility, transform and the background instance stay native.
         assertSame(ripple1, shadow1.getBackground());
         assertNull(ripple1.getDrawable(1).getColorFilter());
@@ -126,18 +126,18 @@ public class LiveStackShadowExperimentTest {
     @Test public void eachSuppressionModeIsolatesOneIndicator() {
         mode.set(LiveStackShadowExperiment.MODE_HIDE_1);
         experiment.sync(stack, true);
-        assertTrue(filterColor(content(shadow1), Color.TRANSPARENT));
+        assertTrue(filterIs(content(shadow1), LiveStackShadowExperiment.CLEAR));
         assertNull(content(shadow2).getColorFilter());
 
         mode.set(LiveStackShadowExperiment.MODE_HIDE_2);
         experiment.sync(stack, true);
         assertNull(content(shadow1).getColorFilter());
-        assertTrue(filterColor(content(shadow2), Color.TRANSPARENT));
+        assertTrue(filterIs(content(shadow2), LiveStackShadowExperiment.CLEAR));
 
         mode.set(LiveStackShadowExperiment.MODE_HIDE_BOTH);
         experiment.sync(stack, true);
-        assertTrue(filterColor(content(shadow1), Color.TRANSPARENT));
-        assertTrue(filterColor(content(shadow2), Color.TRANSPARENT));
+        assertTrue(filterIs(content(shadow1), LiveStackShadowExperiment.CLEAR));
+        assertTrue(filterIs(content(shadow2), LiveStackShadowExperiment.CLEAR));
 
         mode.set(LiveStackShadowExperiment.MODE_OFF);
         experiment.sync(stack, true);
@@ -151,7 +151,7 @@ public class LiveStackShadowExperimentTest {
         content(shadow1).setColorFilter(samsung);
         mode.set(LiveStackShadowExperiment.MODE_HIDE_1);
         experiment.sync(stack, true);
-        assertTrue(filterColor(content(shadow1), Color.TRANSPARENT));
+        assertTrue(filterIs(content(shadow1), LiveStackShadowExperiment.CLEAR));
         experiment.restore("test");
         assertSame(samsung, content(shadow1).getColorFilter());
     }
@@ -200,7 +200,7 @@ public class LiveStackShadowExperimentTest {
     @Test public void detachRestores() {
         mode.set(LiveStackShadowExperiment.MODE_HIDE_BOTH);
         experiment.sync(stack, true);
-        assertTrue(filterColor(content(shadow1), Color.TRANSPARENT));
+        assertTrue(filterIs(content(shadow1), LiveStackShadowExperiment.CLEAR));
         ((LinearLayout) frame.getParent()).removeView(frame);
         assertNull(content(shadow1).getColorFilter());
         assertNull(content(shadow2).getColorFilter());
