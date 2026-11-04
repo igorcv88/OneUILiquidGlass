@@ -193,12 +193,6 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
 
     @Override public void draw(Canvas canvas) {
         Rect b = getBounds();
-        // Hidden sibling: drop ONLY the second glass background, never its View, children or
-        // native fallback. The foreground card keeps its full composited glass.
-        if (stackBackgroundOccluded && showsGlass()) {
-            drawReport("STACK_BACKGROUND_OCCLUDED", canvas, b, "secondaryCard");
-            return;
-        }
         // BackgroundBlurDrawable needs drawRenderNode. A software layer/capture cannot submit a
         // region; drawing only its transparent colour and the rim would look like missing glass.
         if (showsGlass() && !canvas.isHardwareAccelerated()) {
@@ -206,6 +200,12 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
             setGlass(false);
             drawReport("SOFTWARE_FALLBACK", canvas, b, "noHardwareCanvas");
             if (onRegionFailed != null) onRegionFailed.run();
+        }
+        // Hidden sibling: drop ONLY its second glass background, never the View, children
+        // or native fallback. Evaluate after the hardware gate to preserve safe fallback.
+        if (stackBackgroundOccluded && showsGlass()) {
+            drawReport("STACK_BACKGROUND_OCCLUDED", canvas, b, "secondaryCard");
+            return;
         }
         if (!showsGlass() || b.isEmpty()
                 || (regionless && !nativeRegionActive.getAsBoolean())) {
