@@ -42,6 +42,14 @@ public class LiveStackFillTest {
         frame.setBackground(ripple);
         frame.layout(0, 0, 600, 120);
         ripple.setBounds(0, 0, 600, 120);
+        // Capture the original native outline before glass changes any drawing filters.
+        // Robolectric's RippleDrawable may return a nonempty outline with alpha=0 even
+        // when its content layers remain opaque; do not assume positive outline alpha.
+        ripple.mutate();
+        Outline nativeOutline = new Outline();
+        ripple.getOutline(nativeOutline);
+        assertFalse("native ripple must provide a clipping shape", nativeOutline.isEmpty());
+        float originalOutlineAlpha = nativeOutline.getAlpha();
 
         LiveStackFill lease = new LiveStackFill();
         lease.sync(frame);
@@ -54,11 +62,11 @@ public class LiveStackFillTest {
         assertSame(ripple, frame.getBackground());
         assertEquals(255, white.getAlpha());
         assertEquals(255, grey.getAlpha());
-        Outline before = new Outline();
-        ripple.getOutline(before);
-        assertFalse(before.isEmpty());
-        float originalOutlineAlpha = before.getAlpha();
-        assertTrue("native outline must stay opaque for clipping", originalOutlineAlpha > 0f);
+        Outline afterInitialSync = new Outline();
+        ripple.getOutline(afterInitialSync);
+        assertFalse("glass must preserve the native clipping shape", afterInitialSync.isEmpty());
+        assertEquals("glass must not change the native outline alpha",
+                originalOutlineAlpha, afterInitialSync.getAlpha(), 0f);
 
         for (int swipe = 0; swipe < 4; swipe++) {
             // Samsung can replace a filter on rebind without changing the Drawable identity.
