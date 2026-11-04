@@ -86,6 +86,8 @@ final class LiveCardHooks {
     private final LiveGlass glass;
     /** Independent, opt-in structural telemetry. Does not participate in material ownership. */
     private final LiveStackTimeline timeline = new LiveStackTimeline();
+    /** Flag-gated experiment on the native bottom stack indicator; replaceable by tests. */
+    LiveStackShadowExperiment shadowExperiment = new LiveStackShadowExperiment();
     private final LiveGlass.NativeBlur nativeBlur;
     private final DataLocator locator = new DataLocator(LiveEligibility.DATA);
     /** DZIF's data helper, used when the adapter exposes no getItem(int) nor data list. */
@@ -343,6 +345,10 @@ final class LiveCardHooks {
                 if (!supported.contains(frame)) supported.add(frame);
             }
         }
+
+        // E2 / option A (debug.oulg.stackshadow, default 0 = untouched): the bottom stack
+        // indicator outside CardStackView. Restored as soon as no glass card is shown here.
+        shadowExperiment.sync(stack, glassPresent);
 
         final boolean keepVisible = glassPresent;
         List<StackLease> leases = stackFills.get(stack);
