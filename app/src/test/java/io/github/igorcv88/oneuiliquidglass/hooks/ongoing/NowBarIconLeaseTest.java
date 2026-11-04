@@ -78,14 +78,50 @@ public class NowBarIconLeaseTest {
         assertNull(icon.getImageTintList());
         lease.applyTone(true);
         assertEquals(android.graphics.Color.BLACK,
-                ((android.graphics.PorterDuffColorFilter) icon.getDrawable().getColorFilter()).getColor());
+                ((org.robolectric.shadows.ShadowPorterDuffColorFilter) org.robolectric.shadow.api.Shadow.extract(icon.getDrawable().getColorFilter())).getColor());
         lease.sync(icon, true);
         lease.applyTone(false);
         assertEquals(android.graphics.Color.WHITE,
-                ((android.graphics.PorterDuffColorFilter) icon.getDrawable().getColorFilter()).getColor());
+                ((org.robolectric.shadows.ShadowPorterDuffColorFilter) org.robolectric.shadow.api.Shadow.extract(icon.getDrawable().getColorFilter())).getColor());
         lease.restore();
         assertSame(original, icon.getDrawable());
         assertSame(tint, icon.getImageTintList());
     }
-}
 
+    @Test public void replacingDrawableRestoresViewTintWithoutRestoringOldDrawable() {
+        for (boolean adaptive : new boolean[]{false, true}) {
+            ImageView icon = new ImageView(activity);
+            icon.setImageResource(R.drawable.oulg_launcher);
+            android.content.res.ColorStateList tint = android.content.res.ColorStateList.valueOf(0xff5566cc);
+            icon.setImageTintList(tint);
+            NowBarIconLease lease = new NowBarIconLease();
+            lease.sync(icon, true);
+            if (adaptive) icon.setImageResource(R.drawable.oulg_launcher);
+            else icon.setImageDrawable(new VectorDrawable());
+            Drawable replacement = icon.getDrawable();
+            lease.sync(icon, true);
+            if (!adaptive) {
+                assertSame(replacement, icon.getDrawable());
+                assertSame(tint, icon.getImageTintList());
+            }
+            lease.restore();
+            assertSame(replacement, icon.getDrawable());
+            assertSame(tint, icon.getImageTintList());
+        }
+    }
+
+    @Test public void newerPluginTintSurvivesRestorationAfterDrawableReplacement() {
+        ImageView icon = new ImageView(activity);
+        icon.setImageResource(R.drawable.oulg_launcher);
+        icon.setImageTintList(android.content.res.ColorStateList.valueOf(0xff5566cc));
+        NowBarIconLease lease = new NowBarIconLease();
+        lease.sync(icon, true);
+        Drawable replacement = new VectorDrawable();
+        icon.setImageDrawable(replacement);
+        android.content.res.ColorStateList newer = android.content.res.ColorStateList.valueOf(0xff22aa44);
+        icon.setImageTintList(newer);
+        lease.restore();
+        assertSame(replacement, icon.getDrawable());
+        assertSame(newer, icon.getImageTintList());
+    }
+}

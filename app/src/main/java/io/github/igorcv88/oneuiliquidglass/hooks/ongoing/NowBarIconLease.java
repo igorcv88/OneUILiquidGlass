@@ -103,8 +103,9 @@ final class NowBarIconLease {
         ImageView target = image.get();
         if (target != null && target.getDrawable() == applied.get() && original != null) {
             target.setImageDrawable(original);
-            if (target.getImageTintList() == null) target.setImageTintList(nativeTint);
         }
+        // Tint belongs to the ImageView even if Samsung replaced its drawable.
+        if (target != null && target.getImageTintList() == null) target.setImageTintList(nativeTint);
         nativeTint = null;
         restoreDisc();
         image.clear();
@@ -128,4 +129,3 @@ final class NowBarIconLease {
         catch (ReflectiveOperationException | RuntimeException ignored) { }
     }
 }
-
