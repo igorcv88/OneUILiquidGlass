@@ -43,7 +43,5 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y glslang-tools
           sh sfhook/tools/check.sh
-      - uses: actions/upload-artifact@v4
-        with:
-          name: controls-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+      # The APK is compiled and checked on this ephemeral runner only.
+      # Signed distributable APKs are published by the manual release workflow.
