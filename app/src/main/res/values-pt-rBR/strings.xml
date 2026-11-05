@@ -113,4 +113,10 @@
     <string name="home_review">Revisar</string>
     <string name="settings_recovery_help">Se as notificações travarem, desative o módulo no LSPosed e reinicie o aparelho. Reiniciar o aparelho volta ao compositor original.</string>
     <string name="now_bar">Now Bar</string>
+    <string name="search_title">Buscar ajuste</string>
+    <string name="search_technical_desc">Lista completa, incluindo ajustes técnicos e de diagnóstico.</string>
+    <string name="search_filter">Filtrar por nome ou propriedade</string>
+    <string name="search_hint">Nome, efeito ou propriedade</string>
+    <string name="search_prompt">Digite para buscar entre todos os ajustes dos três ambientes.</string>
+    <string name="search_no_results">Nada encontrado.</string>
 </resources>

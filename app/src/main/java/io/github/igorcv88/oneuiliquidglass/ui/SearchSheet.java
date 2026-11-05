@@ -5,6 +5,7 @@ import android.view.*;
 import android.widget.*;
 
 import io.github.igorcv88.oneuiliquidglass.config.*;
+import io.github.igorcv88.oneuiliquidglass.R;
 import io.github.igorcv88.oneuiliquidglass.ui.kit.*;
 
 import java.text.Normalizer;
@@ -26,13 +27,13 @@ final class SearchSheet extends Sheet {
     }
 
     SearchSheet(Host host, Controls.Surface surface, boolean technical) {
-        super(host.activity(), host.theme(), technical ? "Todos os parâmetros" : "Buscar ajuste");
+        super(host.activity(), host.theme(), host.activity().getString(technical ? R.string.all_parameters : R.string.search_title));
         this.host = host;
         this.surface = surface;
         this.technical = technical;
-        if (technical) subtitle("Lista completa, incluindo ajustes técnicos e de diagnóstico.");
+        if (technical) subtitle(activity.getString(R.string.search_technical_desc));
         query = new EditText(activity);
-        query.setHint(technical ? "Filtrar por nome ou propriedade" : "Nome, efeito ou propriedade");
+        query.setHint(activity.getString(technical ? R.string.search_filter : R.string.search_hint));
         query.setSingleLine(true);
         query.setTextColor(t.ink);
         query.setHintTextColor(t.inkFaint);
@@ -67,7 +68,7 @@ final class SearchSheet extends Sheet {
         results.removeAllViews();
         String q = fold(query.getText().toString().trim());
         if (!technical && q.isEmpty()) {
-            results.addView(hint("Digite para buscar entre todos os ajustes dos três ambientes."));
+            results.addView(hint(activity.getString(R.string.search_prompt)));
             return;
         }
         ControlState st = host.model().state();
@@ -80,7 +81,7 @@ final class SearchSheet extends Sheet {
             groups.computeIfAbsent(c.section, k -> new ArrayList<>()).add(c);
         }
         if (groups.isEmpty()) {
-            results.addView(hint("Nada encontrado."));
+            results.addView(hint(activity.getString(R.string.search_no_results)));
             return;
         }
         for (Map.Entry<Controls.Section, List<Controls.Control>> g : groups.entrySet()) {

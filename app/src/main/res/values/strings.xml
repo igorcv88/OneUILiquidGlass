@@ -113,4 +113,10 @@
     <string name="home_review">Review</string>
     <string name="settings_recovery_help">If notifications stop responding, disable the module in LSPosed and restart the device. Restarting the device restores the original compositor.</string>
     <string name="now_bar">Now Bar</string>
+    <string name="search_title">Search settings</string>
+    <string name="search_technical_desc">All settings, including technical and diagnostic parameters.</string>
+    <string name="search_filter">Filter by name or property</string>
+    <string name="search_hint">Name, effect, or property</string>
+    <string name="search_prompt">Type to search settings across all three surfaces.</string>
+    <string name="search_no_results">No results.</string>
 </resources>
