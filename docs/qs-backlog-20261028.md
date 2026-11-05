@@ -54,8 +54,9 @@ notificações personalizadas, live updates ou traduções.
   🔧 curva neutra, fill estável e região do L2 sem cor sobreposta; ☐ repetir no Galaxy.
 - 🔧 Mídia na central, na pilha de Live Updates e na cápsula compacta da Now Bar
   implementada; ☐ validar as transições e os gates no Galaxy S25 Ultra DZIF.
-  O player ativo de Quick Settings e a mídia expandida da tela de bloqueio
-  permanecem fora desse escopo.
+  A mídia expandida da tela de bloqueio permanece nativa. O player ativo de
+  Quick Settings usa hook experimental separado, com propriedade própria de
+  depuração e validação visual pendente; o controle de capa do app não o altera.
 
 ### Central de Controle / Quick Settings
 

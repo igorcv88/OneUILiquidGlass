@@ -23,7 +23,7 @@ One UI Liquid Glass is an independent **LSPosed module** for Samsung's notificat
 
 An **experimental, opt-in Quick Settings surface** recolours One UI 9's Compose Quick Settings (tiles, circles, tile group, sliders, empty media card) with a translucent veil and a basal light rim on the outer containers, over Samsung's own panel blur. It keeps Samsung's layout and interactions and is **off by default** pending physical validation on One UI 9. See [Quick Settings implementation and validation](docs/quick-settings-glass.md).
 
-Media artwork opacity is implemented for eligible glass-backed players in the notification shade and media cards in the Live Updates stack. The artwork setting ranges from 5% to 100%, defaults to 25%, and also offers native artwork. The Now Bar opt-in includes the compact lockscreen media capsule; expanded lockscreen media and AOD remain native. These paths require further validation on the Galaxy S25 Ultra DZIF. The active Quick Settings media player is not covered by these hooks.
+Media artwork opacity is implemented for eligible glass-backed players in the notification shade and media cards in the Live Updates stack. The app offers native artwork or 50%–100% opacity, with 50% as the default; existing lower property values remain readable. Native artwork restores its original presentation without disabling glass. The Now Bar opt-in includes the compact lockscreen media capsule; expanded lockscreen media and AOD remain native. These paths require further validation on the Galaxy S25 Ultra DZIF. A separate experimental hook handles Quick Settings artwork and is not controlled by this app setting; its visible result still needs device validation.
 
 The release is a single APK:
 
