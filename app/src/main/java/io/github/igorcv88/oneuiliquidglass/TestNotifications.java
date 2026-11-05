@@ -37,9 +37,10 @@ public final class TestNotifications {
     private static Runnable scheduled;
 
     public static void channel(Context c) {
+        Context localized = io.github.igorcv88.oneuiliquidglass.i18n.AppLanguage.wrap(c);
         NotificationChannel ch =
-                new NotificationChannel(CHANNEL, "Testes de vidro", NotificationManager.IMPORTANCE_HIGH);
-        ch.setDescription("Notificações de teste do One UI Liquid Glass");
+                new NotificationChannel(CHANNEL, localized.getString(R.string.test_channel_name), NotificationManager.IMPORTANCE_HIGH);
+        ch.setDescription(localized.getString(R.string.test_channel_description));
         c.getSystemService(NotificationManager.class).createNotificationChannel(ch);
     }
 
@@ -58,6 +59,7 @@ public final class TestNotifications {
 
     @android.annotation.SuppressLint("MissingPermission")
     public static Outcome post(Context c, int count, boolean expanded) {
+        c = io.github.igorcv88.oneuiliquidglass.i18n.AppLanguage.wrap(c);
         Outcome ready = readiness(c);
         if (ready == Outcome.BLOCKED_APP || ready == Outcome.BLOCKED_CHANNEL) return ready;
         try {
@@ -76,17 +78,17 @@ public final class TestNotifications {
                 Notification.Builder b = new Notification.Builder(c, CHANNEL)
                         .setSmallIcon(R.drawable.oulg_notification)
                         .setLargeIcon(brand(c))
-                        .setContentTitle(TestNotificationModel.TITLE)
-                        .setContentText(TestNotificationModel.SUMMARY)
+                        .setContentTitle(TestNotificationModel.title(c))
+                        .setContentText(TestNotificationModel.summary(c))
                         .setWhen(System.currentTimeMillis())
                         .setShowWhen(true)
                         .setContentIntent(content)
                         .setAutoCancel(true)
                         .setCategory(Notification.CATEGORY_STATUS)
                         .setTimeoutAfter(10 * 60 * 1000L)
-                        .addAction(new Notification.Action.Builder(null, TestNotificationModel.OPEN, content).build())
-                        .addAction(new Notification.Action.Builder(null, TestNotificationModel.DISMISS, dismiss).build());
-                if (expanded) b.setStyle(new Notification.BigTextStyle().bigText(TestNotificationModel.BODY));
+                        .addAction(new Notification.Action.Builder(null, TestNotificationModel.open(c), content).build())
+                        .addAction(new Notification.Action.Builder(null, TestNotificationModel.dismiss(c), dismiss).build());
+                if (expanded) b.setStyle(new Notification.BigTextStyle().bigText(TestNotificationModel.body(c)));
                 c.getSystemService(NotificationManager.class).notify(id, b.build());
             }
             return ready;
@@ -140,16 +142,18 @@ public final class TestNotifications {
     }
 
     /** Short, true sentence for the result of a test. */
-    public static String describe(Outcome o) {
-        switch (o) {
-            case POSTED: return "Enviada. Se o pop-up não aparecer, abra a central.";
-            case POSTED_DND: return "Enviada, mas o Não perturbe pode esconder o pop-up.";
-            case POSTED_QUIET: return "Enviada sem pop-up: o canal de teste está silencioso.";
-            case BLOCKED_APP: return "As notificações do app estão desativadas.";
-            case BLOCKED_CHANNEL: return "O canal de teste está desativado.";
-            case SCHEDULED: return "Chega em 5 segundos. Saia do app para ver o pop-up.";
-            default: return "Não foi possível enviar a notificação.";
+    public static String describe(Context context, Outcome outcome) {
+        int id;
+        switch (outcome) {
+            case POSTED: id = R.string.test_result_posted; break;
+            case POSTED_DND: id = R.string.test_result_dnd; break;
+            case POSTED_QUIET: id = R.string.test_result_quiet; break;
+            case BLOCKED_APP: id = R.string.test_result_app_blocked; break;
+            case BLOCKED_CHANNEL: id = R.string.test_result_channel_blocked; break;
+            case SCHEDULED: id = R.string.test_result_scheduled; break;
+            default: id = R.string.test_result_failed;
         }
+        return context.getString(id);
     }
 
     private TestNotifications() {}

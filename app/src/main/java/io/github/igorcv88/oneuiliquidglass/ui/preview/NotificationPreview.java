@@ -6,6 +6,7 @@ import android.view.MotionEvent;
 import android.view.View;
 
 import io.github.igorcv88.oneuiliquidglass.TestNotificationModel;
+import io.github.igorcv88.oneuiliquidglass.R;
 import io.github.igorcv88.oneuiliquidglass.config.Controls;
 import io.github.igorcv88.oneuiliquidglass.ui.kit.Lens;
 
@@ -36,7 +37,9 @@ public final class NotificationPreview extends View {
     private boolean comparing, holdToCompare = true;
     private Controls.Channel focus = Controls.Channel.NONE;
     private boolean zoomOnly;
-    private String badge = "Simulação";
+    private String badge;
+    private final String previewBefore, previewNow, previewHold, sampleTime, sampleCompare,
+            sampleTitle, sampleSummary, sampleOpen, sampleDismiss, sampleDateLong, sampleDateShort;
 
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint text = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -52,6 +55,18 @@ public final class NotificationPreview extends View {
     public NotificationPreview(Context c) {
         super(c);
         density = c.getResources().getDisplayMetrics().density;
+        badge = c.getString(R.string.preview_simulation);
+        previewBefore = c.getString(R.string.preview_before);
+        previewNow = c.getString(R.string.preview_now);
+        previewHold = c.getString(R.string.preview_hold);
+        sampleTime = c.getString(R.string.preview_sample_time);
+        sampleCompare = c.getString(R.string.preview_sample_comparison);
+        sampleTitle = TestNotificationModel.title(c);
+        sampleSummary = TestNotificationModel.summary(c);
+        sampleOpen = TestNotificationModel.open(c);
+        sampleDismiss = TestNotificationModel.dismiss(c);
+        sampleDateLong = c.getString(R.string.preview_date_long);
+        sampleDateShort = c.getString(R.string.preview_date_short);
         text.setTypeface(Typeface.create("sans-serif", Typeface.NORMAL));
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_YES);
         describe();
@@ -116,8 +131,9 @@ public final class NotificationPreview extends View {
     }
 
     private void describe() {
-        setContentDescription("Simulação de " + surface.label.toLowerCase(java.util.Locale.ROOT)
-                + " com o material atual. Toque e segure para comparar com antes.");
+        int name = surface == Controls.Surface.HEADSUP ? R.string.surface_popup
+                : surface == Controls.Surface.KEYGUARD ? R.string.surface_lock : R.string.surface_shade;
+        setContentDescription(getContext().getString(R.string.preview_description, getContext().getString(name)));
     }
 
     float sceneHeight() {
@@ -153,7 +169,7 @@ public final class NotificationPreview extends View {
                 if (!comparing && e.getActionMasked() == MotionEvent.ACTION_UP) performClick();
                 if (comparing) {
                     comparing(false);
-                    announceForAccessibility("Agora");
+                    announceForAccessibility(previewNow);
                 }
                 return true;
         }
@@ -168,7 +184,7 @@ public final class NotificationPreview extends View {
     private final Runnable holdStart = () -> {
         comparing(true);
         performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
-        announceForAccessibility("Antes");
+        announceForAccessibility(previewBefore);
     };
 
     // ---------------------------------------------------------------- backdrops
@@ -273,7 +289,7 @@ public final class NotificationPreview extends View {
         canvas.drawRenderNode(scene);
         if (focus != Controls.Channel.NONE && !comparing) magnifier(canvas, sw, shPx, scale);
         canvas.restore();
-        chip(canvas, comparing ? "Antes" : before != null && holdToCompare ? "Simulação · segure para comparar" : badge, w, h, comparing);
+        chip(canvas, comparing ? previewBefore : before != null && holdToCompare ? previewHold : badge, w, h, comparing);
     }
 
     private void chip(Canvas c, String label, int w, int h, boolean strong) {
@@ -392,7 +408,7 @@ public final class NotificationPreview extends View {
         switch (surface) {
             case KEYGUARD: {
                 text(c, "12:30", 24, 74, 50, 0xfff7fbff, true, true);
-                text(c, "segunda-feira, 27 de outubro", 26, 98, 12.5f, 0xeef7fbff, false, true);
+                text(c, sampleDateLong, 26, 98, 12.5f, 0xeef7fbff, false, true);
                 PreviewParams p = params(f, cardRect(0));
                 card(c, cardRect(0), p, effects, scale, false, fg, fgMuted);
                 pill(c, p, effects, scale);
@@ -402,7 +418,7 @@ public final class NotificationPreview extends View {
                 PreviewParams p0 = params(f, cardRect(0));
                 shadePanel(c, p0, effects, scale);
                 text(c, "12:30", 16, 34, 22, fg(p0, true), true, false);
-                text(c, "seg., 27 de out.", 84, 34, 12, fg(p0, false), false, false);
+                text(c, sampleDateShort, 84, 34, 12, fg(p0, false), false, false);
                 for (int i = 0; i < 4; i++) {
                     float cx = 40 + i * 80;
                     paint.setColor(i == 0 ? 0xff80dfe9 : lightTheme ? 0x33102030 : 0x33ffffff);
@@ -714,22 +730,22 @@ public final class NotificationPreview extends View {
         float x = r.left + 16, y = r.top + 22;
         paint.setColor(0xff7fdfe9);
         c.drawRoundRect(x, y - 10, x + 13, y + 3, 4, 4, paint);
-        text(c, "Liquid Glass · agora", x + 20, y, 11.5f, muted, false, false);
+        text(c, sampleTime, x + 20, y, 11.5f, muted, false, false);
         if (collapsed) {
-            text(c, TestNotificationModel.TITLE, x, y + 19, 14, ink, true, false);
+            text(c, sampleTitle, x, y + 19, 14, ink, true, false);
             return;
         }
         float gap = surface == Controls.Surface.KEYGUARD ? 0 : p.headerGapDp;
         y += 22 + gap;
-        text(c, TestNotificationModel.TITLE, x, y, 15.5f, ink, true, false);
+        text(c, sampleTitle, x, y, 15.5f, ink, true, false);
         y += 19;
-        text(c, "Teste expandido de vidro — expanda para comparar.", x, y, 12.5f, muted, false, false);
+        text(c, sampleSummary, x, y, 12.5f, muted, false, false);
         if (surface == Controls.Surface.KEYGUARD) return;
         y += 17;
-        text(c, "Compare desfoque, bordas e contraste.", x, y, 12.5f, muted, false, false);
+        text(c, sampleCompare, x, y, 12.5f, muted, false, false);
         y += 30;
-        text(c, TestNotificationModel.OPEN, x, y, 13, action, true, false);
-        text(c, TestNotificationModel.DISMISS, x + 120, y, 13, action, true, false);
+        text(c, sampleOpen, x, y, 13, action, true, false);
+        text(c, sampleDismiss, x + 120, y, 13, action, true, false);
     }
 
     private void text(Canvas c, String s, float x, float y, float size, int color, boolean medium, boolean shadow) {

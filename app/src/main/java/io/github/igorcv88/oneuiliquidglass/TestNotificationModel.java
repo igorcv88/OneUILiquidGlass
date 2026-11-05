@@ -1,15 +1,13 @@
 package io.github.igorcv88.oneuiliquidglass;
 
+import android.content.Context;
+
 /** Shared by offline samples and real NotificationManager payloads. */
 public final class TestNotificationModel {
-    public static final String TITLE = "Notificação de teste";
-    public static final String SUMMARY = "Teste expandido de vidro — expanda para comparar.";
-    public static final String BODY =
-            "Teste expandido de vidro.\n"
-                    + "Deslize o pop-up, expanda a notificação e abra a central.\n"
-                    + "Compare blur, refração, contraste e bordas sobre fundos diferentes.\n"
-                    + "Este conteúdo é sintético e foi criado pelo One UI Liquid Glass.";
-    public static final String OPEN = "Abrir ajustes", DISMISS = "Dispensar";
-
+    public static String title(Context c) { return c.getString(R.string.test_notification_title); }
+    public static String summary(Context c) { return c.getString(R.string.test_notification_summary); }
+    public static String body(Context c) { return c.getString(R.string.test_notification_body); }
+    public static String open(Context c) { return c.getString(R.string.test_notification_open); }
+    public static String dismiss(Context c) { return c.getString(R.string.test_notification_dismiss); }
     private TestNotificationModel() {}
 }
