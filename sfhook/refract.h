@@ -229,7 +229,7 @@
 #define OULG_FS_LENS_FMT \
     "mediump vec4 oulg_material(mediump vec4 c) {\n" \
     "  if (oulg_pf < 0.5) return c;\n" \
-    "  mediump float body = clamp(oulg_bw * %.2f, 0.0, 1.0);\n" \
+    "  mediump float body = clamp(max(oulg_bw, %.2f) * %.2f, 0.0, 1.0);\n" \
     "  mediump float lbody = clamp(oulg_lw * %.2f, 0.0, 1.0);\n" \
     "  mediump float a = max(c.a, 1e-3);\n" \
     "  mediump vec3 rgb = c.rgb / a;\n" \
@@ -703,7 +703,13 @@ static int oulg_lib(char *out, size_t cap, int external, const struct oulg_profi
     double cr = 1.0 - 0.06 * p[1].cool, cg = 1.0 - 0.01 * p[1].cool, cb = 1.0 + 0.08 * p[1].cool;
     double cl = 0.2126 * cr + 0.7152 * cg + 0.0722 * cb;
     double coreOn = p[1].core > 0.001f ? 1.0 : 0.0;
-    if (!external && !oulg_append(out, cap, &at, OULG_FS_LENS_FMT, coreOn, coreOn,
+    // One material across the card when the blur is one radius too (kgedgeblur >= the core's
+    // effective radius): the body weight (saturation, highlight knee, flattening, core dim) is then 1
+    // from the outline to the middle. DZIF 04/11/2026: with the blur already uniform at 48 px, the
+    // depth-weighted material still drew the "miolo" band. Otherwise the v0.23 depth weight.
+    float coreR = p[1].core < p[1].ccap ? p[1].core : p[1].ccap;
+    double uniformBody = p[1].edge + 0.001f >= coreR ? 1.0 : 0.0;
+    if (!external && !oulg_append(out, cap, &at, OULG_FS_LENS_FMT, uniformBody, coreOn, coreOn,
                                   (double) p[1].sat, (double) p[1].tone, (double) p[1].flat, (double) p[1].fcap, (double) p[1].level, (double) p[1].cdim,
                                   cr / cl, cg / cl, cb / cl, (double) p[1].glow, (double) p[1].rim, (double) p[1].tilt, (double) p[1].line,
                                   (double) p[1].spec)) return 0;

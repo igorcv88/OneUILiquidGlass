@@ -21,5 +21,8 @@ has 'oulg_br *= oulg_pf < 0.5 ? 0.650 : 0.800;' "$tmp/tuned"
 # Lockscreen default: one blur radius from the outline to the middle (edge = core cap = 48 px).
 has 'oulg_br = mix(48.00, min(80.00, 48.00), oulg_bw);' "$tmp/base"
 has 'oulg_br = mix(12.00, min(80.00, 48.00), oulg_bw);' "$tmp/tuned"
+# Uniform blur (default) also makes the body material uniform; a clearer rim (kgedge=12) keeps the depth weight.
+has 'body = clamp(max(oulg_bw, 1.00) * 1.00, 0.0, 1.0);' "$tmp/base"
+has 'body = clamp(max(oulg_bw, 0.00) * 1.00, 0.0, 1.0);' "$tmp/tuned"
 has 'band1 <= 0.0 && 12.00 > 0.0' "$tmp/tuned"
 echo 'material controls: defaults and six tuned fields reached the GLSL'
