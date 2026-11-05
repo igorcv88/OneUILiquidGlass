@@ -85,7 +85,7 @@ Gerada por `ControlMatrixTest` a partir de `SettingsRegistry`, `Controls`, `Appl
 | `panelnativegray` | Véu cinza da Samsung | Central | Cor e contraste · standard | boolean · 0 | hooks/HeadsUpHooks | ao vivo | ativo | ativo | ativo |  | behavior | CM |
 | `panelcolor` | Cor do fundo da central | Central | Cor e contraste · standard | rgb · 00000000 | hooks/HeadsUpHooks | ao vivo | ativo | ativo | ativo |  | behavior | CM |
 | `headergap` | Espaço acima do título | Pop-up, Bloqueio, Central | Comportamento · advanced | float · 0–8 · 4 | hooks/HeaderGapHooks | ao vivo | ativo | ativo | ativo |  | faithful · header_gap | CM, SC, PT |
-| `mediaart` | Opacidade da capa de mídia | Central | Vidro e desfoque · standard | float · 0–1 · 0.25 | hooks/ongoing/MediaArtGlass | ao vivo | ativo | ativo | ativo |  | behavior | CM, SC |
+| `mediaart` | Opacidade da capa de mídia | Central | Vidro e desfoque · standard | float · 0–1 · 0.50 | hooks/QsMediaArtworkHooks, hooks/ongoing/MediaArtGlass | ao vivo | ativo | ativo | ativo |  | behavior | CM, SC |
 | `sf.optics` | Versão óptica anunciada | Pop-up, Bloqueio, Central | Técnico · internal | readonly · 0 | sfhook/oulg_sf.c, hooks/HeadsUpHooks, hooks/QuickSettingsEdgeLight | leitura | leitura | leitura | leitura |  | none | CM, CV |
 | `perf` | Medir tempo dos ganchos | Pop-up, Bloqueio, Central | Técnico · technical | boolean · 0 | diagnostics/Perf | ao vivo | ativo | ativo | ativo |  | none | CM |
 | `trace` | Registro detalhado de janelas | Pop-up, Bloqueio, Central | Técnico · technical | boolean · 0 | diagnostics/Probe | ao vivo | ativo | ativo | ativo |  | none | CM |
@@ -109,12 +109,12 @@ Gerada por `ControlMatrixTest` a partir de `SettingsRegistry`, `Controls`, `Appl
 | `sf.kgcool` | Tom frio | Bloqueio | Lente dinâmica · advanced | float · 0–1 · 0.50 | sfhook/oulg_sf.c | reinício | inativo: Usado com a lente dinâmica | ao reiniciar | inativo: Usado com a lente dinâmica |  | didactic · cool | CM, CV, LH, SC, PT |
 | `sf.kgtilt` | Direção da luz | Bloqueio | Lente dinâmica · advanced | float · 0–3.141593 · 1.42 | sfhook/oulg_sf.c | reinício | inativo: Usado com a lente dinâmica | ao reiniciar | inativo: Usado com a lente dinâmica |  | didactic · light_angle | CM, CV, LH, SC, PT |
 | `sf.kgline` | Contorno | Bloqueio | Lente dinâmica · advanced | float · 0–2 · 0.62 | sfhook/oulg_sf.c | reinício | inativo: Usado com a lente dinâmica | ao reiniciar | inativo: Usado com a lente dinâmica |  | didactic · rim | CM, CV, LH, SC, PT |
-| `sf.kgcorecap` | Teto do desfoque interno | Bloqueio | Lente dinâmica · advanced | float · 0–128 · 52 | sfhook/oulg_sf.c | reinício | inativo: Usado com a lente dinâmica | ao reiniciar | inativo: Usado com a lente dinâmica |  | none | CM, CV, LH, SC |
+| `sf.kgcorecap` | Teto do desfoque interno | Bloqueio | Lente dinâmica · advanced | float · 0–128 · 48 | sfhook/oulg_sf.c | reinício | inativo: Usado com a lente dinâmica | ao reiniciar | inativo: Usado com a lente dinâmica |  | none | CM, CV, LH, SC |
 | `sf.kggradient` | Transição vidro-miolo | Bloqueio | Técnico · technical | float · 0–1 · 1 | sfhook/oulg_sf.c | reinício | inativo: Usado com a lente dinâmica | ao reiniciar | inativo: Usado com a lente dinâmica |  | none | CM, CV, LH, SC |
 | `sf.kgband` | Largura da transição óptica | Bloqueio | Lente dinâmica · advanced | float · 0–1 · 0.85 | sfhook/oulg_sf.c | reinício | inativo: Usado com a lente dinâmica | ao reiniciar | inativo: Usado com a lente dinâmica |  | none | CM, CV, LH, SC |
 | `sf.kgbodylens` | Refração difusa do miolo | Bloqueio | Lente dinâmica · advanced | float · 0–0.15 · 0.05 | sfhook/oulg_sf.c | reinício | inativo: Usado com a lente dinâmica | ao reiniciar | inativo: Usado com a lente dinâmica |  | none | CM, CV, LH, SC |
 | `sf.kgblurexp` | Curva do desfoque na transição | Bloqueio | Técnico · technical | float · 1–4 · 2 | sfhook/oulg_sf.c | reinício | inativo: Usado com a lente dinâmica | ao reiniciar | inativo: Usado com a lente dinâmica |  | none | CM, CV, LH, SC |
-| `sf.kgedgeblur` | Desfoque no contorno | Bloqueio | Lente dinâmica · advanced | float · 0–48 · 0 | sfhook/oulg_sf.c | reinício | inativo: Usado com a lente dinâmica | ao reiniciar | inativo: Usado com a lente dinâmica |  | none | CM, CV, LH, SC |
+| `sf.kgedgeblur` | Desfoque no contorno | Bloqueio | Lente dinâmica · advanced | float · 0–48 · 48 | sfhook/oulg_sf.c | reinício | inativo: Usado com a lente dinâmica | ao reiniciar | inativo: Usado com a lente dinâmica |  | none | CM, CV, LH, SC |
 | `sf.kgblur` | Desfoque de toda a lente | Bloqueio | Lente dinâmica · advanced | float · 0–2 · 1 | sfhook/oulg_sf.c | reinício | inativo: Usado com a lente dinâmica | ao reiniciar | inativo: Usado com a lente dinâmica |  | none | CM, CV, LH, SC |
 | `sf.kgrefract` | Refração de toda a lente | Bloqueio | Lente dinâmica · advanced | float · 0–1.2 · 1 | sfhook/oulg_sf.c | reinício | inativo: Usado com a lente dinâmica | ao reiniciar | inativo: Usado com a lente dinâmica |  | none | CM, CV, LH, SC |
 | `sf.kgflatcap` | Limite da uniformidade | Bloqueio | Técnico · technical | float · 0–1 · 0.22 | sfhook/oulg_sf.c | reinício | inativo: Usado com a lente dinâmica | ao reiniciar | inativo: Usado com a lente dinâmica |  | didactic · flatten | CM, CV, LH, SC, PT |
@@ -187,8 +187,8 @@ Guardados em `glass` SharedPreferences, entregues ao SystemUI pelo `ConfigProvid
 | `surface.shade.feature.tonemap.enabled` | hooks/HeadsUpHooks (`feature("tonemap")`) | Central: camada Proteção de contraste desligada | ativo | ativo | ativo |
 | `surface.shade.feature.per_card_blur.enabled` | hooks/HeadsUpHooks (`feature("per_card_blur")`) | Central: camada Desfoque por cartão desligada | ativo | ativo | ativo |
 | `surface.quicksettings.enabled` | hooks/QuickSettingsHooks (`enabled`) | Central de controle volta ao visual nativo | inativo (opt-in) | ativo | ativo |
-| `surface.liveactivity.enabled` | hooks/ongoing/LiveSurfaceHooks (`allows`) | pílula e cartão da atividade ao vivo (sem mídia) voltam ao fundo nativo | inativo (opt-in) | ativo | ativo |
-| `surface.nowbar.enabled` | hooks/ongoing/LiveSurfaceHooks (`allows`) | cartão da Now Bar (sem mídia) volta ao fundo nativo | inativo (opt-in) | ativo | ativo |
+| `surface.liveactivity.enabled` | hooks/ongoing/LiveSurfaceHooks (`allows`) | pílula e cartões de atividades ao vivo e mídia voltam ao fundo nativo | inativo (opt-in) | ativo | ativo |
+| `surface.nowbar.enabled` | hooks/ongoing/LiveSurfaceHooks (`allows`) | cartão da Now Bar e cápsula compacta de mídia voltam ao fundo nativo; mídia expandida e AOD permanecem nativos | inativo (opt-in) | ativo | ativo |
 | `surface.toast.enabled` | hooks/ongoing/LiveSurfaceHooks (`allows`) | toasts voltam ao fundo nativo | inativo (opt-in) | ativo | ativo |
 
 ## Funções sem propriedade
