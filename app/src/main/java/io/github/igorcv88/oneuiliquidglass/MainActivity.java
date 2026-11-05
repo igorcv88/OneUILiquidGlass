@@ -12,6 +12,7 @@ import android.view.*;
 import android.widget.*;
 
 import io.github.igorcv88.oneuiliquidglass.config.*;
+import io.github.igorcv88.oneuiliquidglass.i18n.AppLanguage;
 import io.github.igorcv88.oneuiliquidglass.live.CompositorValues;
 import io.github.igorcv88.oneuiliquidglass.ui.*;
 import io.github.igorcv88.oneuiliquidglass.ui.kit.*;
@@ -23,6 +24,10 @@ import io.github.igorcv88.oneuiliquidglass.ui.kit.*;
  * the destination, surface and scroll positions.
  */
 public final class MainActivity extends Activity implements Host {
+    @Override
+    protected void attachBaseContext(Context base) {
+        super.attachBaseContext(AppLanguage.wrap(base));
+    }
     private static final int REQ_NOTIFY = 71, REQ_EXPORT = 91, REQ_IMPORT = 92;
     private final java.util.concurrent.ExecutorService io = java.util.concurrent.Executors.newSingleThreadExecutor();
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -157,6 +162,17 @@ public final class MainActivity extends Activity implements Host {
     public void rebuild() {
         Bundle ui = saveUi();
         model.clearDrafts();
+        build(ui);
+    }
+
+    @Override
+    @SuppressWarnings("deprecation")
+    public void changeLanguage(String language) {
+        Bundle ui = saveUi();
+        AppLanguage.set(this, language);
+        Configuration configuration = new Configuration(getResources().getConfiguration());
+        configuration.setLocales(new android.os.LocaleList(java.util.Locale.forLanguageTag(AppLanguage.get(this))));
+        getResources().updateConfiguration(configuration, getResources().getDisplayMetrics());
         build(ui);
     }
 
