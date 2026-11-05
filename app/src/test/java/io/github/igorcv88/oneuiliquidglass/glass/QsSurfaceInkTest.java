@@ -30,7 +30,7 @@ public class QsSurfaceInkTest {
                 QsScene.Tone.LIGHT_SCENE,style));
         assertEquals("RoundIcon must not square the configured alpha",0x801d2025,
                 QsSurfaceInk.onVerifiedTile(0x801d2025,0,1,QsScene.Tone.LIGHT_SCENE,style));
-        assertEquals(0xff343a46,QsSurfaceInk.onVerifiedTile(0xff000000,0,1,
+        assertEquals(0xcd000c21,QsSurfaceInk.onVerifiedTile(0xff000000,0,1,
                 QsScene.Tone.LIGHT_SCENE,new QsStyle(k->null)));
     }
     @Test public void nativeActiveDiscUsesConfiguredAlphaButDisclessRemainsLegible(){

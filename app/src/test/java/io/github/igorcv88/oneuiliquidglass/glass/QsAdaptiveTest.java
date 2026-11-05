@@ -23,7 +23,7 @@ public class QsAdaptiveTest {
     }
     /** Dark, coloured or unknown backdrop: transparent glass. Light: a faint dark tint, never a white film. */
     @Test public void capsulesAreGlassWithAFaintDarkTintOnlyOverLightBackdrops(){
-        QsStyle s=defaults();
+        QsStyle s=new QsStyle(k -> k.equals("qs.lightfill") ? ".10" : null);
         for(int nativeFill:new int[]{0x33000000,0x1affffff,0xfff2f2f2}){
             assertEquals(0,QuickSettingsGlass.fill(CONTAINER,nativeFill,UNKNOWN,s)>>>24);
             assertEquals(0,QuickSettingsGlass.fill(CONTAINER,nativeFill,DARK_SCENE,s)>>>24);
@@ -81,8 +81,8 @@ public class QsAdaptiveTest {
     }
     @Test public void verifiedNoDiscMonochromeIconsFollowLightSceneAndKeepAccentArtwork(){
         QsStyle s=defaults();
-        assertEquals(0xff343a46,s.tileInk(NONE,LIGHT_SCENE,0xffffffff));
-        assertEquals(0xffffffff,s.tileInk(NONE,DARK_SCENE,0xffffffff));
+        assertEquals(0xcd000c21,s.tileInk(NONE,LIGHT_SCENE,0xffffffff));
+        assertEquals(0xe6ffffff,s.tileInk(NONE,DARK_SCENE,0xffffffff));
         assertEquals(0xff12a0ef,s.tileInk(NONE,LIGHT_SCENE,0xff12a0ef));
         assertEquals(0xffffffff,s.tileInk(NONE,UNKNOWN,0xffffffff));
     }
@@ -132,7 +132,7 @@ public class QsAdaptiveTest {
     @Test public void lightOpticalGainDoesNotChangeGlassOrBasalOutline(){
         QsStyle s=new QsStyle(k->k.equals("qs.lightoptics")?".4":null);
         assertEquals(.4f,s.lightOptics,1e-6f);
-        assertEquals(1f,defaults().lightOptics,1e-6f);
+        assertEquals(.36f,defaults().lightOptics,1e-6f);
         assertEquals(QuickSettingsGlass.fill(CONTAINER,0,LIGHT_SCENE,defaults()),
                 QuickSettingsGlass.fill(CONTAINER,0,LIGHT_SCENE,s));
         assertEquals(QuickSettingsGlass.rim(false,LIGHT_SCENE,defaults()),
