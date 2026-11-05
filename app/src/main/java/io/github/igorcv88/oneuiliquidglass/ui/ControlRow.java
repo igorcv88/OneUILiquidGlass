@@ -169,7 +169,7 @@ public final class ControlRow extends LinearLayout {
         }
     }
 
-    private static String followed(String key, ControlState st) {
+    private String followed(String key, ControlState st) {
         String v = st.shown(key);
         Controls.Control c = Controls.get(key);
         if (!ValueFormat.isAuto(c, v)) return ValueFormat.display(c, v, host.activity().getResources().getConfiguration().getLocales().get(0));
