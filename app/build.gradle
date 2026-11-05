@@ -16,6 +16,9 @@ android {
     testOptions {
         unitTests.includeAndroidResources = true
         unitTests.all {
+            // Robolectric resolves instrumented Android jars separately from Gradle repositories.
+            // Use the canonical Maven Central endpoint when repo1 rate-limits shared runners.
+            systemProperty 'robolectric.dependency.repo.url', 'https://repo.maven.apache.org/maven2'
             // Keep the failed assertion's message and cause in the Actions console as well as
             // the HTML report (the runner's local report is unavailable after a failed release).
             testLogging {
