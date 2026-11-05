@@ -85,7 +85,7 @@ final class SearchSheet extends Sheet {
             return;
         }
         for (Map.Entry<Controls.Section, List<Controls.Control>> g : groups.entrySet()) {
-            results.addView(Ui.section(activity, t, g.getKey().label));
+            results.addView(Ui.section(activity, t, UiLabels.section(activity, g.getKey())));
             LinearLayout card = Ui.card(activity, t);
             for (Controls.Control c : g.getValue()) {
                 if (card.getChildCount() > 0) card.addView(Ui.divider(activity, t, t.dp(20)));

@@ -137,7 +137,7 @@ final class PresetsSheet extends Sheet {
             String[] p = key.split("\\.");
             Controls.Surface s = Controls.Surface.of(p.length > 1 ? p[1] : "");
             if (p.length == 3) return context.getString(R.string.preset_glass_surface, HomePage.surfaceLabel(context, s));
-            String layer = p.length > 3 ? Controls.layers(s).getOrDefault(p[3], p[3]) : key;
+            String layer = p.length > 3 ? UiLabels.layer(context, p[3]) : key;
             return context.getString(R.string.preset_layer, HomePage.surfaceLabel(context, s), layer);
         }
     }
