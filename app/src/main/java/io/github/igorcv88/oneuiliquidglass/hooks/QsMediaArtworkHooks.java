@@ -4,23 +4,21 @@ import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
 import io.github.igorcv88.oneuiliquidglass.diagnostics.Probe;
 import io.github.igorcv88.oneuiliquidglass.glass.Tuning;
-import java.lang.reflect.Field;
-import java.util.Collections;
 import java.util.HashSet;
-import java.util.Map;
 import java.util.Set;
-import java.util.WeakHashMap;
 import java.util.function.BooleanSupplier;
 
 /**
  * The One UI 9 QS media page draws its artwork in Compose, not in the shade's
  * QSMediaCornerRoundedView. Keep the native painter and its transition intact; lower only its
- * draw-time alpha so the existing transparent media container and QS backdrop can show through.
+ * construction-time alpha so the QS media container can show through if the layers below are
+ * transparent. The actual background composition still needs a visual check on DZIF.
  *
  * <p>The selection is strict: a BitmapPainter created by OneUI90MediaPlayerPageKt. This does not
  * affect notification media, Now Bar, the QS buttons or the app icon rendered by other owners.
- * The node's native alpha is restored after each draw, including when the module is disabled:
- * there is no persistent mutation to clean up at detach or when SystemUI reuses a node.</p>
+ * The value is changed only in the canonical PainterElement constructor; Compose copies it into
+ * the PainterNode on create/update. No draw or node callbacks, maps, or per-frame lookups. A new
+ * composition (including a new media page or track) reads the current module setting.</p>
  */
 final class QsMediaArtworkHooks {
     static final String PAGE = "media.components.OneUI90MediaPlayerPageKt";
@@ -28,10 +26,7 @@ final class QsMediaArtworkHooks {
     private final ClassLoader loader;
     private final QsContentHooks content;
     private final BooleanSupplier enabled;
-    private final Map<Object, Boolean> elements = Collections.synchronizedMap(new WeakHashMap<>());
-    private final Map<Object, Boolean> nodes = Collections.synchronizedMap(new WeakHashMap<>());
     private final Set<String> candidatePainters = new HashSet<>();
-    private Field nodeAlpha;
     private boolean loggedApplied;
 
     QsMediaArtworkHooks(ClassLoader loader, QsContentHooks content, BooleanSupplier enabled) {
@@ -44,6 +39,11 @@ final class QsMediaArtworkHooks {
         return PAGE.equals(owner) && BITMAP_PAINTER.equals(painterClass);
     }
 
+    /** The primary PainterElement constructor has six parameters, alpha being the fifth. */
+    static boolean alphaSlot(Object[] args) {
+        return args != null && args.length == 6 && args[4] instanceof Float;
+    }
+
     static float opacity(float nativeAlpha, float artOpacity, boolean enabled) {
         if (!enabled || !Float.isFinite(artOpacity) || artOpacity <= Tuning.MEDIA_ART_NATIVE
                 || !Float.isFinite(nativeAlpha))
@@ -54,16 +54,8 @@ final class QsMediaArtworkHooks {
     void install() {
         try {
             Class<?> element = Class.forName("androidx.compose.ui.draw.PainterElement", false, loader);
-            Class<?> node = Class.forName("androidx.compose.ui.draw.PainterNode", false, loader);
-            Class<?> scope = Class.forName("androidx.compose.ui.graphics.drawscope.ContentDrawScope", false, loader);
-            QsNodeAbi abi = QsNodeAbi.resolve(element, node, scope);
-            Field alpha = node.getDeclaredField("alpha");
-            if (alpha.getType() != float.class) throw new NoSuchFieldException("PainterNode.alpha isn't float");
-            alpha.setAccessible(true);
-            nodeAlpha = alpha;
-
             XposedBridge.hookAllConstructors(element, new XC_MethodHook() {
-                @Override protected void afterHookedMethod(MethodHookParam p) {
+                @Override protected void beforeHookedMethod(MethodHookParam p) {
                     QsContentHooks.Frame frame = content.current();
                     if (frame == null || !PAGE.equals(frame.owner) || p.args.length == 0 || p.args[0] == null)
                         return;
@@ -71,39 +63,20 @@ final class QsMediaArtworkHooks {
                     if (candidatePainters.size() < 8 && candidatePainters.add(painter)) {
                         Probe.log("QS_MEDIA_ART_CANDIDATE", "owner=" + frame.owner + " painter=" + painter);
                     }
-                    if (matches(frame.owner, painter)) elements.put(p.thisObject, Boolean.TRUE);
-                }
-            });
-
-            XC_MethodHook bind = new XC_MethodHook() {
-                @Override protected void afterHookedMethod(MethodHookParam p) {
-                    Object target = p.args.length == 0 ? p.getResult() : p.args[0];
-                    if (target == null) return;
-                    if (Boolean.TRUE.equals(elements.get(p.thisObject))) nodes.put(target, Boolean.TRUE);
-                    else nodes.remove(target);
-                }
-            };
-            XposedBridge.hookMethod(abi.create, bind);
-            XposedBridge.hookMethod(abi.update, bind);
-            XposedBridge.hookMethod(abi.draw, new XC_MethodHook() {
-                @Override protected void beforeHookedMethod(MethodHookParam p) throws Throwable {
-                    if (!Boolean.TRUE.equals(nodes.get(p.thisObject))) return;
-                    float original = nodeAlpha.getFloat(p.thisObject);
+                    // Synthetic default-argument constructors delegate to the six-argument
+                    // constructor. Touch only the primary one to avoid multiplying twice.
+                    if (!matches(frame.owner, painter) || !alphaSlot(p.args)) return;
+                    float original = (Float) p.args[4];
                     float adjusted = opacity(original, Tuning.get().mediaArt, enabled.getAsBoolean());
                     if (adjusted == original) return;
-                    p.setObjectExtra("oulgQsMediaNativeAlpha", original);
-                    nodeAlpha.setFloat(p.thisObject, adjusted);
+                    p.args[4] = adjusted;
                     if (!loggedApplied) {
                         loggedApplied = true;
                         Probe.log("QS_MEDIA_ART_APPLIED", "native=" + original + " applied=" + adjusted);
                     }
                 }
-                @Override protected void afterHookedMethod(MethodHookParam p) throws Throwable {
-                    Object original = p.getObjectExtra("oulgQsMediaNativeAlpha");
-                    if (original instanceof Float) nodeAlpha.setFloat(p.thisObject, (Float) original);
-                }
             });
-            Probe.log("QS_MEDIA_ART_HOOK", "installed=true painter=BitmapPainter scope=OneUI90MediaPlayerPageKt");
+            Probe.log("QS_MEDIA_ART_HOOK", "installed=true painter=BitmapPainter scope=OneUI90MediaPlayerPageKt phase=constructor");
         } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
             Probe.log("QS_MEDIA_ART_HOOK", "installed=false reason=" + e.getClass().getSimpleName());
         }

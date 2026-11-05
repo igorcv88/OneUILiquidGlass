@@ -17,6 +17,16 @@ public class QsMediaArtworkHooksTest {
                 QsMediaArtworkHooks.BITMAP_PAINTER));
     }
 
+    @Test public void canonicalConstructorOnlyAvoidsDoubleScalingFromSyntheticOverloads() {
+        assertTrue(QsMediaArtworkHooks.alphaSlot(new Object[]{new Object(), true,
+                new Object(), new Object(), 1f, null}));
+        assertFalse(QsMediaArtworkHooks.alphaSlot(new Object[]{new Object(), true,
+                new Object(), new Object(), 1f, null, 0, null}));
+        assertFalse(QsMediaArtworkHooks.alphaSlot(new Object[]{new Object(), true,
+                new Object(), new Object(), "1", null}));
+        assertFalse(QsMediaArtworkHooks.alphaSlot(null));
+    }
+
     @Test public void nativeAlphaIsMultipliedWithoutTouchingOtherControls() {
         assertEquals(0.45f, QsMediaArtworkHooks.opacity(1f, 0.45f, true), 0.0001f);
         assertEquals(0.27f, QsMediaArtworkHooks.opacity(0.6f, 0.45f, true), 0.0001f);
