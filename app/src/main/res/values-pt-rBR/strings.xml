@@ -389,4 +389,20 @@
     <string name="preview_sample_comparison">Compare desfoque, bordas e contraste.</string>
     <string name="preview_date_long">segunda-feira, 27 de outubro</string>
     <string name="preview_date_short">seg., 27 de out.</string>
+    <string name="color_plane">Mapa de cor: horizontal é saturação, vertical é brilho</string>
+    <string name="color_hue">Matiz</string>
+    <string name="color_hue_desc">Matiz, de vermelho a violeta</string>
+    <string name="color_opacity">Opacidade</string>
+    <string name="color_opacity_desc">Opacidade da cor, de transparente a sólida</string>
+    <string name="color_alpha_help">O alpha preserva o RGB. Quanto menor a opacidade, mais o fundo altera a cor vista.</string>
+    <string name="color_preview">Prévia: fundo claro  /  fundo escuro</string>
+    <string name="color_swatch">Cor selecionada sobre branco à esquerda e escuro à direita</string>
+    <string name="error_not_editable">Não editável</string>
+    <string name="error_conflict">Alterado fora do app. Revise antes de salvar.</string>
+    <string name="report_glass">Vidro: %1$s · modo: %2$s · sistema: %3$s</string>
+    <string name="report_properties">Leitura de propriedades: %1$s · preferências LSPosed: %2$s</string>
+    <string name="report_unavailable">indisponível</string>
+    <string name="report_lens">Lente: %1$s</string>
+    <string name="report_values">\u0020padrão=%1$s salvo=%2$s aparelho=%3$s em_uso=%4$s</string>
+    <string name="report_pending">\u0020pendente</string>
 </resources>

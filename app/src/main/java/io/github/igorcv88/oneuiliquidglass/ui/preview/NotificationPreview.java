@@ -67,6 +67,11 @@ public final class NotificationPreview extends View {
         sampleDismiss = TestNotificationModel.dismiss(c);
         sampleDateLong = c.getString(R.string.preview_date_long);
         sampleDateShort = c.getString(R.string.preview_date_short);
+        holdStart = () -> {
+            comparing(true);
+            performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
+            announceForAccessibility(previewBefore);
+        };
         text.setTypeface(Typeface.create("sans-serif", Typeface.NORMAL));
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_YES);
         describe();
@@ -181,11 +186,7 @@ public final class NotificationPreview extends View {
         return super.performClick();
     }
 
-    private final Runnable holdStart = () -> {
-        comparing(true);
-        performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
-        announceForAccessibility(previewBefore);
-    };
+    private final Runnable holdStart;
 
     // ---------------------------------------------------------------- backdrops
 

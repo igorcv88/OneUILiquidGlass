@@ -154,19 +154,18 @@ public final class SettingsPage implements Page {
         ControlState st = m.state();
         StringBuilder r = new StringBuilder("One UI Liquid Glass ").append(versionName(host.activity()))
                 .append('\n').append(PresetsSheet.device())
-                .append("\nVidro: ").append(st.enabled ? "ligado" : "desligado")
-                .append(" · modo: ").append(st.applicability().mode.label)
-                .append(" · sistema: ").append(m.sync())
-                .append(" · leitura de propriedades: ").append(m.observedAvailable() ? "ok" : "indisponível")
-                .append(" · preferências LSPosed: ").append(Config.lsposedPrefs)
-                .append("\nLente: ").append(SfLive.state(m.lens.model().status)).append('\n');
+                .append('\n').append(host.activity().getString(R.string.report_glass,
+                        host.activity().getString(st.enabled ? R.string.switch_on : R.string.switch_off),
+                        HomePage.modeLabel(host.activity(), st.applicability().mode), m.sync()))
+                .append('\n').append(host.activity().getString(R.string.report_properties,
+                        m.observedAvailable() ? "ok" : host.activity().getString(R.string.report_unavailable), Config.lsposedPrefs))
+                .append('\n').append(host.activity().getString(R.string.report_lens, SfLive.state(m.lens.model().status))).append('\n');
         for (SettingSpec s : SettingsRegistry.all()) {
             String saved = st.saved.get(s.key), observed = st.observed.get(s.key);
-            r.append(s.fullKey()).append(" padrão=").append(s.defaultValue)
-                    .append(" salvo=").append(saved == null ? "-" : saved)
-                    .append(" aparelho=").append(observed == null || observed.isEmpty() ? "-" : observed)
-                    .append(" em_uso=").append(st.device(s.key))
-                    .append(s.applyMode == SettingSpec.ApplyMode.SF_RECOMPILE && st.pendingRestart(s.key) ? " pendente" : "")
+            r.append(s.fullKey()).append(host.activity().getString(R.string.report_values,
+                            s.defaultValue, saved == null ? "-" : saved,
+                            observed == null || observed.isEmpty() ? "-" : observed, st.device(s.key)))
+                    .append(s.applyMode == SettingSpec.ApplyMode.SF_RECOMPILE && st.pendingRestart(s.key) ? host.activity().getString(R.string.report_pending) : "")
                     .append('\n');
         }
         for (java.util.Map.Entry<String, String> e : st.shownMap().entrySet())

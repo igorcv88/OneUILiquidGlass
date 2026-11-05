@@ -13,6 +13,7 @@ import android.widget.TextView;
 
 import java.util.function.Consumer;
 import io.github.igorcv88.oneuiliquidglass.config.Rgba;
+import io.github.igorcv88.oneuiliquidglass.R;
 
 /** HSV square, hue strip and alpha strip used by every user-editable colour. */
 public final class ColorPicker extends LinearLayout {
@@ -28,31 +29,31 @@ public final class ColorPicker extends LinearLayout {
         setOrientation(VERTICAL);
         setPadding(0, theme.dp(8), theme.dp(8), 0);
         plane = new Plane(context);
-        plane.setContentDescription("Mapa de cor: horizontal é saturação, vertical é brilho");
+        plane.setContentDescription(context.getString(R.string.color_plane));
         addView(plane, new LayoutParams(-1, theme.dp(220)));
-        TextView hueLabel = Ui.text(context,theme,"Matiz",Theme.CAPTION,theme.inkMuted,false);
+        TextView hueLabel = Ui.text(context,theme,context.getString(R.string.color_hue),Theme.CAPTION,theme.inkMuted,false);
         hueLabel.setPadding(0,theme.dp(14),0,theme.dp(4));
         addView(hueLabel);
         hue = new Bar(context,true);
-        hue.setContentDescription("Matiz, de vermelho a violeta");
+        hue.setContentDescription(context.getString(R.string.color_hue_desc));
         addView(hue,new LayoutParams(-1,theme.dp(32)));
-        TextView alphaLabel=Ui.text(context,theme,"Opacidade",Theme.CAPTION,theme.inkMuted,false);
+        TextView alphaLabel=Ui.text(context,theme,context.getString(R.string.color_opacity),Theme.CAPTION,theme.inkMuted,false);
         alphaLabel.setPadding(0,theme.dp(12),0,theme.dp(4));
         addView(alphaLabel);
         opacity=new Bar(context,false);
-        opacity.setContentDescription("Opacidade da cor, de transparente a sólida");
+        opacity.setContentDescription(context.getString(R.string.color_opacity_desc));
         addView(opacity,new LayoutParams(-1,theme.dp(32)));
         TextView alphaHint = Ui.text(context,theme,
-                "O alpha preserva o RGB. Quanto menor a opacidade, mais o fundo altera a cor vista.",
+                context.getString(R.string.color_alpha_help),
                 Theme.CAPTION,theme.inkMuted,false);
         alphaHint.setPadding(0,theme.dp(8),0,0);
         addView(alphaHint);
-        TextView previewLabel = Ui.text(context,theme,"Prévia: fundo claro  /  fundo escuro",
+        TextView previewLabel = Ui.text(context,theme,context.getString(R.string.color_preview),
                 Theme.CAPTION,theme.inkMuted,false);
         previewLabel.setPadding(0,theme.dp(10),0,0);
         addView(previewLabel);
         swatch=new PreviewSwatch(context);
-        swatch.setContentDescription("Cor selecionada sobre branco à esquerda e escuro à direita");
+        swatch.setContentDescription(context.getString(R.string.color_swatch));
         LayoutParams p=new LayoutParams(-1,theme.dp(32));
         p.topMargin=theme.dp(12);
         addView(swatch,p);

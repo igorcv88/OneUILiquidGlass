@@ -389,4 +389,20 @@
     <string name="preview_sample_comparison">Compare blur, edges, and contrast.</string>
     <string name="preview_date_long">Monday, October 27</string>
     <string name="preview_date_short">Mon, Oct 27</string>
+    <string name="color_plane">Color map: horizontal is saturation, vertical is brightness</string>
+    <string name="color_hue">Hue</string>
+    <string name="color_hue_desc">Hue, from red to violet</string>
+    <string name="color_opacity">Opacity</string>
+    <string name="color_opacity_desc">Color opacity, from transparent to solid</string>
+    <string name="color_alpha_help">Alpha preserves RGB. Lower opacity lets the background change the visible color.</string>
+    <string name="color_preview">Preview: light background / dark background</string>
+    <string name="color_swatch">Selected color over white on the left and dark on the right</string>
+    <string name="error_not_editable">Not editable</string>
+    <string name="error_conflict">Changed outside the app. Review before saving.</string>
+    <string name="report_glass">Glass: %1$s · mode: %2$s · system: %3$s</string>
+    <string name="report_properties">Property reads: %1$s · LSPosed preferences: %2$s</string>
+    <string name="report_unavailable">unavailable</string>
+    <string name="report_lens">Lens: %1$s</string>
+    <string name="report_values">\u0020default=%1$s saved=%2$s device=%3$s in_use=%4$s</string>
+    <string name="report_pending">\u0020pending</string>
 </resources>

@@ -188,7 +188,7 @@ public final class HomePage implements Page {
         }
     }
 
-    private static String modeLabel(android.content.Context c, Mode mode) {
+    static String modeLabel(android.content.Context c, Mode mode) {
         switch (mode) {
             case DYNAMIC_LENS: return c.getString(R.string.mode_dynamic);
             case CAPTURE: return c.getString(R.string.mode_capture);
