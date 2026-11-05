@@ -18,6 +18,8 @@ has 'oulg_br *= oulg_pf < 0.5 ? 1.000 : 1.000;' "$tmp/base"
 has 's -= 0.0800 * q' "$tmp/tuned"
 has 's *= oulg_pf < 0.5 ? 1.100 : 1.150;' "$tmp/tuned"
 has 'oulg_br *= oulg_pf < 0.5 ? 0.650 : 0.800;' "$tmp/tuned"
-has 'oulg_br = mix(12.00, min(80.00, 52.00), oulg_bw);' "$tmp/tuned"
+# Lockscreen default: one blur radius from the outline to the middle (edge = core cap = 48 px).
+has 'oulg_br = mix(48.00, min(80.00, 48.00), oulg_bw);' "$tmp/base"
+has 'oulg_br = mix(12.00, min(80.00, 48.00), oulg_bw);' "$tmp/tuned"
 has 'band1 <= 0.0 && 12.00 > 0.0' "$tmp/tuned"
 echo 'material controls: defaults and six tuned fields reached the GLSL'
