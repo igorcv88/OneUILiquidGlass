@@ -132,4 +132,22 @@ public class SettingsRegistryTest {
         assertFalse(ProductFlags.known("surface.unknown.enabled"));
         assertNull(SettingsRegistry.get("surface.headsup.enabled"));
     }
+
+    @Test
+    public void mediaArtOpacityDomain() {
+        SettingSpec s = SettingsRegistry.get("mediaart");
+        assertEquals(SettingSpec.ApplyMode.LIVE, s.applyMode);
+        assertEquals("0.25", s.defaultValue);
+        assertEquals(0.05, s.step, 1e-9);
+        assertEquals("0", s.validate("0"));
+        assertEquals("0.05", s.validate("0.05"));
+        assertEquals("1", s.validate("1"));
+        for (String bad : new String[] {"1.05", "-0.1", "NaN", "off"}) {
+            try {
+                s.validate(bad);
+                fail(bad);
+            } catch (IllegalArgumentException expected) {
+            }
+        }
+    }
 }

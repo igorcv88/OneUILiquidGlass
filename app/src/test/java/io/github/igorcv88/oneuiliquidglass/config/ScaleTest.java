@@ -39,4 +39,17 @@ public class ScaleTest {
         assertEquals(401, kgblur.steps); // automatic + 0..400 px
         assertFalse(Scale.of(Controls.get("liveradius")).auto);
     }
+
+    @Test
+    public void mediaArtOpacityMovesInFivePercentStepsWithNativeAtZero() {
+        Scale s = Scale.of(Controls.get("mediaart"));
+        assertFalse(s.auto);
+        assertEquals(20, s.steps);
+        assertEquals("0", s.value(0));
+        assertEquals("0.05", s.value(1));
+        assertEquals("0.25", s.value(5));
+        assertEquals("1", s.value(20));
+        assertEquals(5, s.index("0.25"));
+        assertEquals(5, s.index(SettingsRegistry.get("mediaart").defaultValue));
+    }
 }

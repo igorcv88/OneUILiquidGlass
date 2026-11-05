@@ -45,7 +45,7 @@ public class MediaArtGlassTest {
         MediaArtGlass.resetForTest();
         MediaArtGlass.names = new MediaArtGlass.Names("widget_frame", "background", "icon_frame", "content");
         MediaArtGlass.clock = now::get;
-        MediaArtGlass.property = () -> { reads.incrementAndGet(); return prop; };
+        MediaArtGlass.opacitySource = () -> { reads.incrementAndGet(); return MediaArtGlass.parse(prop); };
         MediaArtGlass.probeProperty = () -> probeProp;
         MediaArtGlass.alphaProperty = () -> alphaProp;
         MediaArtGlass.rowGlass = row -> glass;
@@ -81,7 +81,7 @@ public class MediaArtGlassTest {
         MediaArtGlass m = MediaArtGlass.watch(root);
         assertEquals(MediaArtGlass.Context.SHADE, m.contextForTest());
         frame();
-        assertEquals(0.50f, art.getTransitionAlpha(), 0f);
+        assertEquals(0.25f, art.getTransitionAlpha(), 0f);
         assertEquals("Samsung's alpha is untouched", 1f, art.getAlpha(), 0f);
         assertEquals("the opaque fill no longer hides the glass", 0, fill.getAlpha());
         assertSame(fill, art.getBackground());
@@ -274,14 +274,34 @@ public class MediaArtGlassTest {
     }
 
     @Test public void opacityParsing() {
-        assertEquals(0.50f, MediaArtGlass.parse(null), 0f);
-        assertEquals(0.50f, MediaArtGlass.parse(""), 0f);
-        assertEquals(MediaArtGlass.OFF, MediaArtGlass.parse("0"), 0f);
+        assertEquals("unset: experimental default", 0.25f, MediaArtGlass.parse(null), 0f);
+        assertEquals(0.25f, MediaArtGlass.parse(""), 0f);
+        assertEquals(0.25f, MediaArtGlass.parse("abc"), 0f);
+        assertEquals(0.25f, MediaArtGlass.parse("NaN"), 0f);
+        assertEquals("0 restores the native art", MediaArtGlass.OFF, MediaArtGlass.parse("0"), 0f);
+        assertEquals(MediaArtGlass.OFF, MediaArtGlass.parse("0.0"), 0f);
         assertEquals(MediaArtGlass.OFF, MediaArtGlass.parse("off"), 0f);
-        assertEquals(0.50f, MediaArtGlass.parse("0.3"), 0f);
-        assertEquals(1.00f, MediaArtGlass.parse("1.4"), 0f);
+        assertEquals(MediaArtGlass.OFF, MediaArtGlass.parse(" OFF "), 0f);
+        assertEquals(MediaArtGlass.OFF, MediaArtGlass.parse("-0.3"), 0f);
+        assertEquals("lower limit 5%", 0.05f, MediaArtGlass.parse("0.02"), 0f);
+        assertEquals(0.05f, MediaArtGlass.parse("0.05"), 0f);
+        assertEquals(0.30f, MediaArtGlass.parse("0.3"), 0f);
         assertEquals(0.65f, MediaArtGlass.parse("0.65"), 0f);
-        assertEquals(0.50f, MediaArtGlass.parse("abc"), 0f);
+        assertEquals(1.00f, MediaArtGlass.parse("1"), 0f);
+        assertEquals("upper limit 100%", 1.00f, MediaArtGlass.parse("1.4"), 0f);
+    }
+
+    @Test public void theLowestOpacityStillHidesTheFilmAndTheFill() {
+        shade();
+        View overlay = addOverlay(1f);
+        prop = "0.05";
+        glass = true;
+        MediaArtGlass.watch(root);
+        frame();
+        assertEquals(0.05f, art.getTransitionAlpha(), 0f);
+        assertEquals(0f, overlay.getTransitionAlpha(), 0f);
+        assertEquals(0, fill.getAlpha());
+        assertEquals(1f, controls.getTransitionAlpha(), 0f);
     }
 
     // --- Both occluding layers (#159: hiding shade_album_art alone left sec_album_art's film).
@@ -292,7 +312,7 @@ public class MediaArtGlassTest {
         glass = true;
         MediaArtGlass.watch(root);
         frame();
-        assertEquals(0.50f, art.getTransitionAlpha(), 0f);
+        assertEquals(0.25f, art.getTransitionAlpha(), 0f);
         assertEquals(0, fill.getAlpha());
         assertEquals("the film goes in the same frame", 0f, overlay.getTransitionAlpha(), 0f);
         assertEquals("Samsung's alpha fields stay untouched", 1f, overlay.getAlpha(), 0f);
@@ -333,7 +353,7 @@ public class MediaArtGlassTest {
         assertEquals(255, fill.getAlpha());
         row.addView(root);
         frame();
-        assertEquals(0.50f, art.getTransitionAlpha(), 0f);
+        assertEquals(0.25f, art.getTransitionAlpha(), 0f);
         assertEquals(0f, overlay.getTransitionAlpha(), 0f);
     }
 
@@ -345,7 +365,7 @@ public class MediaArtGlassTest {
         glass = true;
         MediaArtGlass.watch(root);
         frame();
-        assertEquals(0.40f, art.getAlpha(), 1e-6f);
+        assertEquals(0.20f, art.getAlpha(), 1e-6f);
         assertEquals(0f, overlay.getAlpha(), 0f);
         assertEquals("transition alpha untouched in this mode", 1f, art.getTransitionAlpha(), 0f);
         assertEquals(1f, overlay.getTransitionAlpha(), 0f);
@@ -365,7 +385,7 @@ public class MediaArtGlassTest {
         art.setAlpha(0.60f);   // Samsung animates the art while we hold it
         overlay.setAlpha(0.70f);
         frame();
-        assertEquals(0.30f, art.getAlpha(), 1e-6f);
+        assertEquals(0.15f, art.getAlpha(), 1e-6f);
         assertEquals(0f, overlay.getAlpha(), 0f);
         glass = false;
         frame();
@@ -384,7 +404,7 @@ public class MediaArtGlassTest {
         frame();
         assertEquals(1f, art.getTransitionAlpha(), 0f);
         assertEquals(1f, overlay.getTransitionAlpha(), 0f);
-        assertEquals(0.50f, art.getAlpha(), 0f);
+        assertEquals(0.25f, art.getAlpha(), 0f);
         assertEquals(0f, overlay.getAlpha(), 0f);
     }
 
@@ -418,7 +438,7 @@ public class MediaArtGlassTest {
         fresh.setImageDrawable(new ColorDrawable(0xff654321));
         fill.setColor(0xff222222);
         frame();
-        assertEquals(0.50f, art.getTransitionAlpha(), 0f);
+        assertEquals(0.25f, art.getTransitionAlpha(), 0f);
         assertEquals(0, fill.getAlpha());
         assertEquals(1f, origin.getAlpha(), 0f);
         assertEquals(1f, origin.getTransitionAlpha(), 0f);

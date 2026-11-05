@@ -287,6 +287,12 @@ public final class Tuning {
     public final float panelDim;
     /** Upper bound of Samsung's shade window blur (-1 follows native). */
     public final int panelBlurCap;
+    /**
+     * Album-art opacity over the glass in the shade player and the Live Updates media card
+     * (hooks.ongoing.MediaArtGlass): 0.05-1, or {@link #MEDIA_ART_NATIVE} for the native art.
+     */
+    public final float mediaArt;
+    public static final float MEDIA_ART_NATIVE = -1f, MEDIA_ART_DEFAULT = 0.25f, MEDIA_ART_MIN = 0.05f;
     /** Keep Samsung's gray BGColorAdjustment over the blur. */
     public final boolean panelNativeGray;
     /** Optional RGBA overlay on the shade window blur, unrelated to card tint. */
@@ -420,6 +426,7 @@ public final class Tuning {
         shadeLocal = number("shadelocal", 0f) >= 1f;
         panelDim = clamp(number("paneldim", 0.12f), 0f, 0.4f);
         panelBlurCap = Math.round(clamp(number("panelblurcap", 52f), -1f, 400f));
+        mediaArt = mediaArtOpacity(prop("mediaart", ""));
         panelNativeGray = number("panelnativegray", 0f) >= 1f;
         int selectedPanelColor;
         try {
@@ -528,6 +535,22 @@ public final class Tuning {
         catch (IllegalArgumentException e) { return fallback; }
     }
     private static float clamp(float v, float lo, float hi) { return Float.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : lo; }
+
+    /**
+     * debug.oulg.mediaart / app setting: empty or unreadable = 0.25; "0", "off", "false" or any
+     * value not above 0 = native art; otherwise clamped to [0.05, 1].
+     */
+    public static float mediaArtOpacity(String raw) {
+        if (raw == null) return MEDIA_ART_DEFAULT;
+        String s = raw.trim().toLowerCase(java.util.Locale.ROOT);
+        if (s.isEmpty()) return MEDIA_ART_DEFAULT;
+        if (s.equals("off") || s.equals("false")) return MEDIA_ART_NATIVE;
+        float f;
+        try { f = Float.parseFloat(s); } catch (NumberFormatException e) { return MEDIA_ART_DEFAULT; }
+        if (Float.isNaN(f)) return MEDIA_ART_DEFAULT;
+        if (f <= 0f) return MEDIA_ART_NATIVE;
+        return Math.max(MEDIA_ART_MIN, Math.min(1f, f));
+    }
 
     private static float number(String key, float fallback) {
         String v = prop(key, "");

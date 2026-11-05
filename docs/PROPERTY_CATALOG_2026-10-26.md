@@ -103,6 +103,7 @@ O interruptor `sfrefract` **não comprova** que o binário nativo foi carregado:
 | `panelnativegray` | 0 | booleano | Preserva o ajuste cinza nativo da Samsung no painel quando ligado; desligado por padrão |
 | `panelcolor` | 00000000 | RGBA hexadecimal | Tinta RGBA adicional sobre o fundo da janela da central, independente das notificações |
 | `headergap` | 4 | 0–8 dp | Espaço extra entre cabeçalho e título expandido; 0 nativo |
+| `mediaart` | 0.25 | 0–1 | Opacidade da capa de mídia sobre o vidro na central e no cartão de mídia das atividades ao vivo (5–100%); 0 restaura a capa nativa |
 
 Observar que as propriedades `lightglass` e `shadelightglass` se aplicam a superfícies distintas. Não unificar os sliders. Os nomes `kgrim` (Java) e `sf.kgrim` (compositor) são **parâmetros diferentes**.
 

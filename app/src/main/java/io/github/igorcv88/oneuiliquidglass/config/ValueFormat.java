@@ -33,9 +33,20 @@ public final class ValueFormat {
         }
     }
 
+    /** A control whose 0 means "native" (mediaart) shows its own label there. */
+    public static boolean isOff(Controls.Control c, String raw) {
+        if (c.offLabel == null || raw == null) return false;
+        try {
+            return Double.parseDouble(raw) == 0;
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
     public static String display(Controls.Control c, String raw) {
         if (raw == null) return "";
         if (isAuto(c, raw)) return c.autoLabel;
+        if (isOff(c, raw)) return c.offLabel;
         switch (c.format) {
             case TOGGLE:
                 return "1".equals(raw) ? "Ligado" : "Desligado";
