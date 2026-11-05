@@ -318,6 +318,11 @@ public final class SurfacesPage implements Page {
         for (String k : Controls.primary(surface, mode)) if (!placed.contains(k)) primary.add(k);
         list.addView(card(primary, placed), Ui.match());
 
+        if (surface == Controls.Surface.SHADE && !placed.contains("mediaart")) {
+            list.addView(Ui.section(a, t, "Mídia"));
+            list.addView(card(Collections.singletonList("mediaart"), placed), Ui.match());
+        }
+
         list.addView(Ui.section(a, t, "Camadas do efeito"));
         LinearLayout layers = Ui.card(a, t);
         boolean first = true;
