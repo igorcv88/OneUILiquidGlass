@@ -1,6 +1,7 @@
 package io.github.igorcv88.oneuiliquidglass.ui.kit;
 
 import android.app.Activity;
+import io.github.igorcv88.oneuiliquidglass.R;
 import android.app.Dialog;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
@@ -51,7 +52,7 @@ public class Sheet extends Dialog {
         };
         handleArea.addView(handle, new FrameLayout.LayoutParams(t.dp(36), t.dp(4), Gravity.CENTER));
         handleArea.setMinimumHeight(t.dp(24));
-        handleArea.setContentDescription("Fechar");
+        handleArea.setContentDescription(a.getString(R.string.action_close));
         handleArea.setOnClickListener(v -> dismiss());
         handleArea.setOnTouchListener(this::drag);
         panel.addView(handleArea, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, t.dp(24)));

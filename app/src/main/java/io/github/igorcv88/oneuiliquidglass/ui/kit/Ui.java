@@ -2,6 +2,7 @@ package io.github.igorcv88.oneuiliquidglass.ui.kit;
 
 import android.animation.ValueAnimator;
 import android.content.Context;
+import io.github.igorcv88.oneuiliquidglass.R;
 import android.content.res.ColorStateList;
 import android.graphics.*;
 import android.graphics.drawable.*;
@@ -362,10 +363,10 @@ public final class Ui {
             rot.setDuration(t.ms(Theme.STANDARD_MS));
             rot.addUpdateListener(a -> chevron.glyphRotation((float) a.getAnimatedValue()));
             rot.start();
-            header.setStateDescription(now ? "Expandido" : "Recolhido");
+            header.setStateDescription(c.getString(now ? R.string.a11y_expanded : R.string.a11y_collapsed));
             if (changed != null) changed.accept(now);
         });
-        header.setStateDescription(open ? "Expandido" : "Recolhido");
+        header.setStateDescription(c.getString(open ? R.string.a11y_expanded : R.string.a11y_collapsed));
         return new View[] {header, body};
     }
 

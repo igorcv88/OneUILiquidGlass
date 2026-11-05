@@ -445,4 +445,6 @@
     <string name="sf_failure_not_ready">Binaries changed or self-test is missing. Prepare again before restarting.</string>
     <string name="sf_failure_restart">Restart start was not confirmed.</string>
     <string name="sf_failure_command">%1$s rejected (%2$s)</string>
+    <string name="a11y_expanded">Expanded</string>
+    <string name="a11y_collapsed">Collapsed</string>
 </resources>

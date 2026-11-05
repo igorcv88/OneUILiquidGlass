@@ -445,4 +445,6 @@
     <string name="sf_failure_not_ready">Binários mudaram ou selftest ausente. Prepare novamente antes de reiniciar.</string>
     <string name="sf_failure_restart">Início do reinício não confirmado.</string>
     <string name="sf_failure_command">%1$s recusado (%2$s)</string>
+    <string name="a11y_expanded">Expandido</string>
+    <string name="a11y_collapsed">Recolhido</string>
 </resources>
