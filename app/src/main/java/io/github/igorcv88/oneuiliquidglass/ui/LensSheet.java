@@ -180,7 +180,7 @@ final class LensSheet extends Sheet {
             for (Map.Entry<String, String> e : pending.entrySet()) {
                 Controls.Control c = Controls.get(e.getKey());
                 if (c == null) continue;
-                b.append(b.length() == 0 ? "" : "\n").append(c.title).append(" · ").append(SearchSheet.surfaces(c))
+                b.append(b.length() == 0 ? "" : "\n").append(ControlTitles.title(host.activity(), c)).append(" · ").append(SearchSheet.surfaces(c))
                         .append(": ").append(ValueFormat.display(c, from(e.getKey(), st), host.activity().getResources().getConfiguration().getLocales().get(0))).append(" → ")
                         .append(ValueFormat.display(c, e.getValue(), host.activity().getResources().getConfiguration().getLocales().get(0)));
             }

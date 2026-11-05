@@ -25,6 +25,8 @@ jobs:
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;35.0.0" "ndk;$NDK_VERSION"
       - name: Registry generation and distribution contracts
         run: |
+          python3 tools/generate-control-titles.py
+          git diff --exit-code -- app/src/main/java/io/github/igorcv88/oneuiliquidglass/ui/ControlTitles.java app/src/main/res/values/control_titles.xml app/src/main/res/values-pt-rBR/control_titles.xml
           python3 tools/generate-settings.py
           git diff --exit-code -- app/src/main/java/io/github/igorcv88/oneuiliquidglass/config/SettingsRegistry.java
           python3 tools/test-distribution.py

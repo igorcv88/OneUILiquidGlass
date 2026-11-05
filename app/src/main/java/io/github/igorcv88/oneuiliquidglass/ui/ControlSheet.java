@@ -31,7 +31,7 @@ final class ControlSheet extends Sheet {
     private Scale scale;
 
     ControlSheet(Host host, String key, Controls.Surface surface) {
-        super(host.activity(), host.theme(), Controls.get(key).title);
+        super(host.activity(), host.theme(), ControlTitles.title(host.activity(), Controls.get(key)));
         this.host = host;
         this.c = Controls.get(key);
         this.surface = surface == null || !c.on(surface) ? c.surfaces.iterator().next() : surface;
@@ -142,7 +142,7 @@ final class ControlSheet extends Sheet {
         p.zoomOnly(c.channel, label);
         p.setClipToOutline(true);
         p.setBackground(Ui.rounded(t.surfaceLow, t.dpf(16)));
-        p.setContentDescription(activity.getString(R.string.control_preview_a11y, label, c.title));
+        p.setContentDescription(activity.getString(R.string.control_preview_a11y, label, ControlTitles.title(activity, c)));
         return p;
     }
 
@@ -156,7 +156,7 @@ final class ControlSheet extends Sheet {
             case TOGGLE: {
                 Toggle tg = new Toggle(activity, t);
                 tg.set("1".equals(working), false);
-                LinearLayout r = Ui.switchRow(activity, t, null, c.title, null, tg);
+                LinearLayout r = Ui.switchRow(activity, t, null, ControlTitles.title(activity, c), null, tg);
                 r.setPadding(0, 0, t.dp(8), 0);
                 tg.listener((x, on) -> {
                     working = on ? "1" : "0";
@@ -205,7 +205,7 @@ final class ControlSheet extends Sheet {
         slider = new Slider(activity, t);
         slider.configure(scale.steps, scale.index(s.defaultValue), scale.auto);
         slider.set(scale.index(working));
-        slider.describe(c.title, i -> ValueFormat.display(c, scale.value(i), host.activity().getResources().getConfiguration().getLocales().get(0)));
+        slider.describe(ControlTitles.title(activity, c), i -> ValueFormat.display(c, scale.value(i), host.activity().getResources().getConfiguration().getLocales().get(0)));
         slider.listener(new Slider.Listener() {
             @Override public void start() {}
             @Override public void change(int index, boolean fromUser) { setWorking(scale.value(index), false); }

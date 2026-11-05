@@ -2,6 +2,7 @@ package io.github.igorcv88.oneuiliquidglass.ui;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertNotEquals;
 
 import android.content.Context;
 import io.github.igorcv88.oneuiliquidglass.config.Controls;
@@ -27,6 +28,12 @@ public class UiLabelsTest {
         assertEquals("2 settings", UiLabels.count(en, 2));
         assertEquals("Default: 50 %", en.getString(R.string.control_default, "50 %"));
         assertEquals("Saved in app: 50 %", en.getString(R.string.control_saved_in_app, "50 %"));
+        for (Controls.Control control : Controls.all()) {
+            assertNotEquals("Missing title resource for " + control.key, 0, ControlTitles.resource(control));
+        }
+        assertEquals("Blur", ControlTitles.title(en, Controls.get("liveradius")));
+        assertEquals("Media artwork opacity", ControlTitles.title(en, Controls.get("mediaart")));
+        assertTrue(SearchSheet.matchesControl(en, Controls.get("mediaart"), "artwork opacity"));
         assertTrue(SearchSheet.matchesControl(en, Controls.get("liveradius"), "glass and blur"));
         assertTrue(SearchSheet.matchesControl(en, Controls.get("liveradius"), "LIVERADIUS"));
         AppLanguage.set(base, AppLanguage.PORTUGUESE);
@@ -37,6 +44,9 @@ public class UiLabelsTest {
         assertEquals("2 ajustes", UiLabels.count(pt, 2));
         assertEquals("Padrão: 50 %", pt.getString(R.string.control_default, "50 %"));
         assertEquals("Salvo no aplicativo: 50 %", pt.getString(R.string.control_saved_in_app, "50 %"));
+        assertEquals("Desfoque", ControlTitles.title(pt, Controls.get("liveradius")));
+        assertEquals("Opacidade da capa de mídia", ControlTitles.title(pt, Controls.get("mediaart")));
+        assertTrue(SearchSheet.matchesControl(pt, Controls.get("mediaart"), "capa de midia"));
         assertTrue(SearchSheet.matchesControl(pt, Controls.get("liveradius"), "VIDRO E DESFOQUE"));
         assertTrue(SearchSheet.matchesControl(pt, Controls.get("liveradius"), "DESFOQUE"));
     }

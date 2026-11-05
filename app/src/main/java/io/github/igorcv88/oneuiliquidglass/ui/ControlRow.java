@@ -5,6 +5,7 @@ import android.view.*;
 import android.widget.*;
 
 import io.github.igorcv88.oneuiliquidglass.config.*;
+import io.github.igorcv88.oneuiliquidglass.R;
 import io.github.igorcv88.oneuiliquidglass.ui.kit.*;
 
 /**
@@ -38,7 +39,7 @@ public final class ControlRow extends LinearLayout {
                 || control.format == Controls.Format.CHOICE || control.format == Controls.Format.COLOR ? 12 : 2));
         LinearLayout line = Ui.row(c);
         LinearLayout texts = Ui.column(c);
-        title = Ui.text(c, t, control.title, Theme.BODY, t.ink, false);
+        title = Ui.text(c, t, ControlTitles.title(host.activity(), control), Theme.BODY, t.ink, false);
         texts.addView(title);
         status = Ui.text(c, t, "", Theme.CAPTION, t.inkMuted, false);
         status.setVisibility(GONE);
@@ -46,7 +47,7 @@ public final class ControlRow extends LinearLayout {
         line.addView(texts, new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1));
         value = Ui.text(c, t, "", Theme.LABEL, t.inkMuted, true);
         value.setPadding(t.dp(8), 0, t.dp(4), 0);
-        reset = Ui.iconButton(c, t, Icon.RESET, t.inkFaint, "Restaurar padrão de " + control.title);
+        reset = Ui.iconButton(c, t, Icon.RESET, t.inkFaint, host.activity().getString(R.string.control_reset_a11y, ControlTitles.title(host.activity(), control)));
         reset.setOnClickListener(v -> resetToDefault());
         reset.setVisibility(INVISIBLE);
         SettingSpec spec = control.spec();
@@ -79,7 +80,7 @@ public final class ControlRow extends LinearLayout {
                 scale = Scale.of(control);
                 slider = new Slider(c, t);
                 slider.configure(scale.steps, scale.index(spec.defaultValue), scale.auto);
-                slider.describe(control.title, i -> ValueFormat.display(control, scale.value(i), host.activity().getResources().getConfiguration().getLocales().get(0)));
+                slider.describe(ControlTitles.title(host.activity(), control), i -> ValueFormat.display(control, scale.value(i), host.activity().getResources().getConfiguration().getLocales().get(0)));
                 slider.listener(new Slider.Listener() {
                     @Override
                     public void start() {
@@ -149,7 +150,7 @@ public final class ControlRow extends LinearLayout {
         String def = control.spec().defaultValue;
         commit(def);
         performHapticFeedback(HapticFeedbackConstants.CONFIRM);
-        announceForAccessibility(control.title + " restaurado");
+        announceForAccessibility(host.activity().getString(R.string.control_reset_done, ControlTitles.title(host.activity(), control)));
     }
 
     /** What an automatic value resolves to now, as the readers resolve it. */

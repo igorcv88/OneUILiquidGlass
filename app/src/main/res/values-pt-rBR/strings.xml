@@ -245,4 +245,6 @@
     <string name="control_compositor">biblioteca do compositor, ao compilar</string>
     <string name="control_systemui">SystemUI, ao vivo pela ponte do app</string>
     <string name="control_applies">Vale em: %1$s</string>
+    <string name="control_reset_a11y">Restaurar padrão de %1$s</string>
+    <string name="control_reset_done">%1$s restaurado</string>
 </resources>

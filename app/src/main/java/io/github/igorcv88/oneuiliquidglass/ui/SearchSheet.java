@@ -65,7 +65,7 @@ final class SearchSheet extends Sheet {
     }
 
     static boolean matchesControl(android.content.Context context, Controls.Control c, String query) {
-        String hay = fold(c.title + " " + c.hint + " " + c.help + " " + c.spec().fullKey()
+        String hay = fold(ControlTitles.title(context, c) + " " + c.title + " " + c.hint + " " + c.help + " " + c.spec().fullKey()
                 + " " + c.section.label + " " + UiLabels.section(context, c.section));
         return hay.contains(fold(query == null ? "" : query.trim()));
     }
@@ -99,7 +99,7 @@ final class SearchSheet extends Sheet {
                 String value = ValueFormat.display(c, st.shown(c.key), host.activity().getResources().getConfiguration().getLocales().get(0));
                 String sub = surfaces(c) + " · " + value + (a.usable() || a.kind == Applicability.Kind.READ_ONLY ? "" : " · " + a.reason);
                 if (technical) sub += "\n" + c.spec().fullKey();
-                LinearLayout r = Ui.listRow(activity, t, null, c.title, sub, Controls.editable(c.key) ? Ui.chevron(activity, t) : null);
+                LinearLayout r = Ui.listRow(activity, t, null, ControlTitles.title(activity, c), sub, Controls.editable(c.key) ? Ui.chevron(activity, t) : null);
                 if (Controls.editable(c.key)) r.setOnClickListener(v -> {
                     dismiss();
                     host.openControl(c.key, where);
