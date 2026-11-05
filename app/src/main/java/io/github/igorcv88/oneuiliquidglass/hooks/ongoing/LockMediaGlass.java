@@ -5,6 +5,7 @@ import android.view.ViewGroup;
 import android.view.ViewParent;
 import android.view.ViewTreeObserver;
 import io.github.igorcv88.oneuiliquidglass.diagnostics.Probe;
+import io.github.igorcv88.oneuiliquidglass.glass.LiveGlassDrawable;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Map;
@@ -34,9 +35,11 @@ import java.util.WeakHashMap;
  * expand/collapse removed the layer and built a new one, whose first draw was EMPTY 0x0): the
  * same layer and LiveGlass state are kept, the layer is parked INVISIBLE (its accumulated alpha
  * is 0, so its blur region is not drawn) and fill and stroke get their visibility back. Collapse
- * follows Samsung's setExpandedCardState(false) at once, before the card's geometry shrinks;
- * expansion keeps the lens until the card is really taller than wide. Without a stack flag the
- * geometry alone decides. A card that is not attached is never synced. The layer is removed only
+ * follows Samsung's setExpandedCardState(false) at once. A full-size blur region during this
+ * animation left a trailing oversized bubble on DZIF, so the layer remains parked until the
+ * card approaches its last measured compact height. During collapse the native fill and stroke
+ * are hidden if glass is available, avoiding an opaque intermediate frame without making a
+ * full-height blur region. A card that is not attached is never synced. The layer is removed only
  * for gate off, detach, a missing container or an error. Per frame: geometry and reference
  * checks on cached views; the views are resolved by id once per attach.</p>
  */
@@ -87,10 +90,13 @@ final class LockMediaGlass {
         ViewTreeObserver observer;
         String lastNative;
         boolean lastShown;
+        /** Measured in the compact state, never guessed from the expanded CardView. */
+        int compactHeight;
 
         Card(View card) { this.card = new WeakReference<>(card); }
 
         @Override public void onViewAttachedToWindow(View v) {
+            compactHeight = 0;
             stack = new WeakReference<>(findStack(v));
             container = new WeakReference<>(NativeIds.find(v, CONTAINER));
             fill.target = new WeakReference<>(NativeIds.find(v, FILL));
@@ -125,19 +131,24 @@ final class LockMediaGlass {
             }
             if (!(c instanceof ViewGroup) || !NativeShape.cardLike(c)) { release("noContainer"); return; }
             GlassLayer l = layer(this, (ViewGroup) c);
-            boolean expanded = expanded(k);
-            park(l, expanded);
+            boolean compact = compact(k);
+            boolean collapsing = collapsing(k) && !compact;
+            park(l, !compact);
             if (!glass.tracked(l)) offer(k, c, l);
-            // The glass's own sync gives the shown state; expanded is native whatever it says.
-            if (expanded) decorations(false);
+            // During collapse hide Samsung's opaque shell while the (still parked) lens awaits
+            // compact bounds. On expanded/unknown tall cards leave the shell native.
+            if (collapsing) {
+                LiveGlassDrawable g = glass.glassOf(l);
+                decorations(g != null && g.showsGlass());
+            } else if (!compact) decorations(false);
         }
 
-        /** Expanded: the lens is kept but not drawn. Compact: drawn again in this same frame. */
-        private void park(GlassLayer l, boolean expanded) {
-            int want = expanded ? View.INVISIBLE : View.VISIBLE;
+        /** The expensive region is drawn only when its geometry is capsule-sized. */
+        private void park(GlassLayer l, boolean parked) {
+            int want = parked ? View.INVISIBLE : View.VISIBLE;
             if (l.getVisibility() == want) return;
             l.setVisibility(want);
-            Probe.log("LOCK_MEDIA_GLASS", "state=" + (expanded ? "parked" : "unparked") + " card=" + id(card.get()));
+            Probe.log("LOCK_MEDIA_GLASS", "state=" + (parked ? "parked" : "unparked") + " card=" + id(card.get()));
         }
 
         private void offer(View k, View c, GlassLayer l) {
@@ -150,7 +161,9 @@ final class LockMediaGlass {
             LiveGlass.Outcome o = glass.offer(l, LiveSurface.NOWBAR, k, LiveEligibility.Verdict.OK, owner -> {
                 Card me = self.get();
                 View card = me == null ? null : me.card.get();
-                return card != null && card == owner && !expanded(card);
+                // Expanded is parked, not ineligible: LiveGlass.refresh must not tear down the
+                // drawable that will be reused when the compact card returns.
+                return card != null && card == owner && card.isAttachedToWindow();
             }, options);
             lastNative = null;
             Probe.log("LOCK_MEDIA_GLASS", "state=offered outcome=" + o + " card=" + id(k) + " container=" + id(c));
@@ -160,7 +173,7 @@ final class LockMediaGlass {
         /** Fill and stroke hidden exactly while the lens is drawn. */
         void decorations(boolean shown) {
             View k = card.get();
-            boolean on = shown && k != null && !expanded(k);
+            boolean on = shown && k != null && (compact(k) || collapsing(k));
             boolean changed = fill.sync(on) | stroke.sync(on);
             if (changed || on != lastShown) {
                 lastShown = on;
@@ -186,8 +199,18 @@ final class LockMediaGlass {
             }
         }
 
-        private boolean expanded(View k) {
-            return LockMediaGlass.expanded(expandedStacks.get(stack.get()), k.getWidth(), k.getHeight());
+        private boolean collapsing(View k) {
+            return k != null && Boolean.FALSE.equals(expandedStacks.get(stack.get()));
+        }
+
+        private boolean compact(View k) {
+            if (k == null) return false;
+            int w = k.getWidth(), h = k.getHeight();
+            boolean close = compactEnough(w, h, compactHeight);
+            // Save a real capsule size, including on the first attach. Never learn from the
+            // expanded animation, or the next collapse would redraw its oversized blur region.
+            if (close && w > 0 && h > 0 && (compactHeight == 0 || h < compactHeight)) compactHeight = h;
+            return close;
         }
     }
 
@@ -238,13 +261,13 @@ final class LockMediaGlass {
         return l;
     }
 
-    /**
-     * flag: the stack's last setExpandedCardState, or null. Collapse (false) is trusted at once,
-     * before the geometry shrinks; expansion (true) only once the card is taller than wide.
-     */
-    static boolean expanded(Boolean flag, int width, int height) {
-        boolean tall = width > 0 && height > width;
-        return flag == null ? tall : flag && tall;
+    /** An optical region outside this envelope would form a large trailing blur bubble. */
+    static boolean compactEnough(int width, int height, int lastCompactHeight) {
+        if (width <= 0 || height <= 0) return true; // first layout will measure before drawing
+        int maxHeight = lastCompactHeight > 0
+                ? Math.max(lastCompactHeight + 12, Math.round(lastCompactHeight * 1.14f))
+                : Math.round(width * 0.34f);
+        return height <= Math.min(Math.round(width * 0.42f), maxHeight);
     }
 
     private static View findStack(View card) {
