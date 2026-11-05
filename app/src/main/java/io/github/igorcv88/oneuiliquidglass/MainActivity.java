@@ -103,7 +103,7 @@ public final class MainActivity extends Activity implements Host {
         };
         Bundle surfaceState = ui.getBundle("surfaces");
         if (surfaceState != null) surfaces.restore(surfaceState);
-        nav = new GlassNav(this, theme, new String[] {"Início", "Superfícies", "Ajustes"},
+        nav = new GlassNav(this, theme, new String[] {getString(R.string.nav_home), getString(R.string.nav_surfaces), getString(R.string.settings)},
                 new Icon[] {Icon.HOME, Icon.LAYERS, Icon.SETTINGS}, tab, this::go);
         FrameLayout.LayoutParams np = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
         root.addView(nav, np);
