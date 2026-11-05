@@ -575,8 +575,10 @@ public final class Controls {
                 .help("Multiplica a refração do aro e do centro; para refratar o miolo,"
                         + " ative a largura da transição óptica." + restart));
         put(c("sf.kgedgeblur", "Desfoque no contorno").fmt(Format.PX).in(LENS, ADV).on(KG)
-                .help("Desfoque independente da borda do bloqueio; 0 mantém o contorno"
-                        + " atual. O miolo segue o teto de desfoque interno." + restart));
+                .help("Desfoque da borda dos cartões do bloqueio. Igual ao teto do desfoque"
+                        + " interno (padrão 48 px), o cartão inteiro tem o mesmo desfoque, sem uma"
+                        + " faixa mais borrada no meio; 0 volta à borda nítida com o miolo mais"
+                        + " desfocado." + restart));
         put(c("sf.kgsat", "Saturação").fmt(Format.GAIN).in(LENS, ADV).on(KG)
                 .help("Vivacidade das cores através do vidro do bloqueio." + restart)
                 .show(DIDACTIC, Channel.SATURATION));

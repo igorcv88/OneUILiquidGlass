@@ -417,7 +417,10 @@ struct oulg_profile { float core; int taps; float ramp; float sat; float tone; f
 // to the core at ramp bevels. Off by default until it is validated on the device.
 #define OULG_HU_EDGE_DEFAULT 0.0f
 #define OULG_HU_BODYLENS_DEFAULT 0.0f
-#define OULG_KG_EDGE_DEFAULT 0.0f
+// Lockscreen extra blur at the outline: equal to the core cap, so the card has one blur radius from
+// the outline to the middle (DZIF 04/11/2026: with 0 the body past the band read as a sharper-edged
+// "miolo" that grew with the card). 0 restores the v0.23 clear rim with the core in the middle.
+#define OULG_KG_EDGE_DEFAULT 48.0f
 #define OULG_GLOBAL_BLUR_DEFAULT 1.0f
 #define OULG_GLOBAL_REFRACT_DEFAULT 1.0f
 #define OULG_TAPS_DEFAULT 24
@@ -429,7 +432,9 @@ struct oulg_profile { float core; int taps; float ramp; float sat; float tone; f
 #define OULG_KG_RAMP_DEFAULT 1.5f
 // Lockscreen effective core: 62 -> 52 px for a modest reduction in blur. In gradient
 // mode this is the smooth endpoint rather than a hard clamp on an 80 px curve.
-#define OULG_KG_CCAP_DEFAULT 52.0f
+// 52 -> 48 px (04/11/2026): kgedgeblur tops out at 48, and a cap above it leaves the core 4 px
+// stronger than the rim.
+#define OULG_KG_CCAP_DEFAULT 48.0f
 #define OULG_KG_GRADIENT_DEFAULT 1.0f
 // Continuous field (v0.23): on the device (v0.22) the refraction ended at the 0.42 r bevel while the
 // blur kept rising to 1.5 bevels, so the refraction that was left sat under 10-38 px of blur and only

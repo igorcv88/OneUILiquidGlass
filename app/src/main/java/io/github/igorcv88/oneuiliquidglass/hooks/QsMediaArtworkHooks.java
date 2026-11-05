@@ -27,6 +27,18 @@ final class QsMediaArtworkHooks {
     private final QsContentHooks content;
     private final BooleanSupplier enabled;
     private final Set<String> candidatePainters = new HashSet<>();
+    /**
+     * Opt-in source map ({@code debug.oulg.qsmediaprobe=1}, read once at install; SystemUI must
+     * restart): OULG_MEDIA_REPRO (DZIF 04/11/2026) shows no QS_MEDIA_ART_CANDIDATE at all, i.e. no
+     * PainterElement is built inside the OneUI90MediaPlayerPageKt frame. docs/quick-settings-glass.md
+     * describes the active player's artwork as a draw block (art and gradients), and a pager page
+     * is composed outside that frame. With the probe on, the constructors of the draw-modifier
+     * elements and of PainterElement report, once per distinct class, the lambda or painter class
+     * and the frame owner, so the block that draws the artwork is named before anything is changed.
+     */
+    static final String PROBE = "debug.oulg.qsmediaprobe";
+    private static final int PROBE_BUDGET = 32;
+    private final Set<String> probed = new HashSet<>();
     private boolean loggedApplied;
 
     QsMediaArtworkHooks(ClassLoader loader, QsContentHooks content, BooleanSupplier enabled) {
@@ -49,6 +61,60 @@ final class QsMediaArtworkHooks {
                 || !Float.isFinite(nativeAlpha))
             return nativeAlpha;
         return nativeAlpha * Math.min(1f, Math.max(Tuning.MEDIA_ART_MIN, artOpacity));
+    }
+
+    /** Read-only: logs which element classes the QS media code builds; changes nothing. */
+    private void installProbe(Class<?> painterElement) {
+        int hooked = 0;
+        for (String name : new String[] {"androidx.compose.ui.draw.DrawBehindElement",
+                "androidx.compose.ui.draw.DrawWithCacheElement", "androidx.compose.ui.draw.DrawWithContentElement"}) {
+            Class<?> c;
+            try { c = Class.forName(name, false, loader); } catch (ClassNotFoundException | LinkageError e) { continue; }
+            final String element = c.getSimpleName();
+            XposedBridge.hookAllConstructors(c, new XC_MethodHook() {
+                @Override protected void afterHookedMethod(MethodHookParam p) {
+                    if (p.args.length == 0 || p.args[0] == null) return;
+                    QsContentHooks.Frame frame = content.current();
+                    String lambda = p.args[0].getClass().getName();
+                    if (!mediaSource(lambda, frame == null ? null : frame.owner)) return;
+                    report("QS_MEDIA_DRAW_SOURCE", element + "|" + lambda, "element=" + element + " lambda=" + lambda
+                            + " frame=" + (frame == null ? "none" : frame.owner));
+                }
+            });
+            hooked++;
+        }
+        XposedBridge.hookAllConstructors(painterElement, new XC_MethodHook() {
+            @Override protected void afterHookedMethod(MethodHookParam p) {
+                if (p.args.length == 0 || p.args[0] == null) return;
+                QsContentHooks.Frame frame = content.current();
+                String owner = frame == null ? null : frame.owner;
+                String painter = p.args[0].getClass().getName();
+                // Every media frame, and bitmaps built with no frame at all (a pager page composes
+                // after its owner returned); vector icons outside media are not interesting.
+                if (!(owner != null && owner.startsWith("media.")) && !(owner == null && painter.equals(BITMAP_PAINTER))) return;
+                report("QS_MEDIA_PAINTER_SOURCE", painter + "|" + owner, "painter=" + painter + " frame=" + (owner == null ? "none" : owner)
+                        + " args=" + p.args.length);
+            }
+        });
+        Probe.log("QS_MEDIA_PROBE", "installed=true drawElements=" + hooked);
+    }
+
+    /** A draw lambda from the QS media package, or one built while a media composable runs. */
+    static boolean mediaSource(String lambdaClass, String frameOwner) {
+        return (lambdaClass != null && lambdaClass.contains("quicksetting.ui.media"))
+                || (frameOwner != null && frameOwner.startsWith("media."));
+    }
+
+    private void report(String event, String key, String detail) {
+        synchronized (probed) {
+            if (probed.size() >= PROBE_BUDGET || !probed.add(key)) return;
+        }
+        Probe.log(event, detail);
+    }
+
+    private static String property(String name) {
+        try { return (String) Class.forName("android.os.SystemProperties").getMethod("get", String.class).invoke(null, name); }
+        catch (ReflectiveOperationException | RuntimeException | LinkageError e) { return null; }
     }
 
     void install() {
@@ -77,6 +143,7 @@ final class QsMediaArtworkHooks {
                 }
             });
             Probe.log("QS_MEDIA_ART_HOOK", "installed=true painter=BitmapPainter scope=OneUI90MediaPlayerPageKt phase=constructor");
+            if ("1".equals(property(PROBE))) installProbe(element);
         } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
             Probe.log("QS_MEDIA_ART_HOOK", "installed=false reason=" + e.getClass().getSimpleName());
         }
