@@ -42,7 +42,8 @@ public final class LiveEligibility {
     static final String ONGOING_CARD = "com.samsung.android.app.facewidget.presentation.NowBarOngoingCardView";
     /**
      * L3: the exact NowBarOngoingCardView class (never the shared base or NowBarMediaCardView),
-     * a package and not a briefing item. Media payloads do not change the card's class.
+     * a package and a supported item. The DZIF Now Brief package is an ongoing card as well;
+     * other briefing/suggestion providers stay native until their layouts are verified.
      */
     public static Verdict nowBar(Object card, Object item) {
         if (card == null || !ONGOING_CARD.equals(card.getClass().getName())) return Verdict.WRONG_CLASS;
@@ -51,10 +52,14 @@ public final class LiveEligibility {
         Object pkg = null;
         try { if (pkgGetter != null) pkg = pkgGetter.invoke(item); } catch (ReflectiveOperationException | RuntimeException ignored) { }
         if (!(pkg instanceof String) || ((String) pkg).isEmpty()) return Verdict.NO_PACKAGE;
-        if (briefing((String) pkg)) return Verdict.BRIEF;
+        if (briefing((String) pkg) && !nowBrief((String) pkg)) return Verdict.BRIEF;
         return Verdict.OK;
     }
-    /** Now Brief and smart-suggestion feeds keep their native card. */
+    /** Exact DZIF Now Brief package; do not widen this to other unverified briefing cards. */
+    static boolean nowBrief(String pkg) {
+        return "com.samsung.android.app.moments".equalsIgnoreCase(pkg);
+    }
+    /** Unverified briefing and smart-suggestion feeds keep their native card. */
     static boolean briefing(String pkg) {
         String p = pkg.toLowerCase(Locale.ROOT);
         return p.contains("brief") || p.contains("moments") || p.contains("smartsuggestion");
