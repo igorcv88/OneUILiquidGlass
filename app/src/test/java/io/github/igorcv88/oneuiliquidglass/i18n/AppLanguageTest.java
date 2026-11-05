@@ -6,7 +6,6 @@ import android.content.Context;
 import io.github.igorcv88.oneuiliquidglass.R;
 import android.content.res.Configuration;
 import io.github.igorcv88.oneuiliquidglass.MainActivity;
-import io.github.igorcv88.oneuiliquidglass.Config;
 import org.robolectric.Robolectric;
 import org.robolectric.android.controller.ActivityController;
 import android.os.LocaleList;
@@ -65,7 +64,7 @@ public class AppLanguageTest {
     @Test public void activityRecreationKeepsLanguageAndUnrelatedPreferences() {
         context.getSharedPreferences("ui", Context.MODE_PRIVATE).edit()
                 .putBoolean("reduceMotion", true).putBoolean("favorite.liveradius", true).commit();
-        android.content.SharedPreferences config = Config.open(context);
+        android.content.SharedPreferences config = io.github.igorcv88.oneuiliquidglass.Config.open(context);
         String previousMedia = config.getString("desired.mediaart", null);
         config.edit().putString("desired.mediaart", "0.75").commit();
         ActivityController<MainActivity> controller = Robolectric.buildActivity(MainActivity.class).setup();
@@ -78,12 +77,12 @@ public class AppLanguageTest {
             assertEquals("pt-BR", recreated.getResources().getConfiguration().getLocales().get(0).toLanguageTag());
             assertEquals(true, recreated.getSharedPreferences("ui", Context.MODE_PRIVATE).getBoolean("reduceMotion", false));
             assertEquals(true, recreated.getSharedPreferences("ui", Context.MODE_PRIVATE).getBoolean("favorite.liveradius", false));
-            assertEquals("0.75", Config.open(recreated).getString("desired.mediaart", null));
+            assertEquals("0.75", io.github.igorcv88.oneuiliquidglass.Config.open(recreated).getString("desired.mediaart", null));
             recreated.changeLanguage(AppLanguage.ENGLISH);
             assertEquals("en", recreated.getResources().getConfiguration().getLocales().get(0).toLanguageTag());
             assertEquals(true, recreated.getSharedPreferences("ui", Context.MODE_PRIVATE).getBoolean("reduceMotion", false));
             assertEquals(true, recreated.getSharedPreferences("ui", Context.MODE_PRIVATE).getBoolean("favorite.liveradius", false));
-            assertEquals("0.75", Config.open(recreated).getString("desired.mediaart", null));
+            assertEquals("0.75", io.github.igorcv88.oneuiliquidglass.Config.open(recreated).getString("desired.mediaart", null));
         } finally {
             controller.pause().stop().destroy();
             if (previousMedia == null) config.edit().remove("desired.mediaart").commit();
