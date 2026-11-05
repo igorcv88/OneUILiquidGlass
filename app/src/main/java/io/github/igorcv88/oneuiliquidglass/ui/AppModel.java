@@ -143,7 +143,7 @@ public final class AppModel {
             return new Result(true, false, "");
         } catch (IllegalArgumentException e) {
             notifyChanged();
-            return new Result(false, false, activity.getString(R.string.error_invalid_value));
+            return new Result(false, false, activity.getString(R.string.error_invalid_setting, key));
         }
     }
 

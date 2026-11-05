@@ -86,7 +86,7 @@ final class PresetsSheet extends Sheet {
             try {
                 parsed = PresetCodec.parse(json);
             } catch (Exception e) {
-                host.feedback(host.activity().getString(R.string.preset_invalid));
+                host.feedback(importError(host.activity(), e));
                 return;
             }
             AppModel m = host.model();
@@ -120,6 +120,19 @@ final class PresetsSheet extends Sheet {
                 s.dismiss();
             });
             s.show();
+        }
+
+        static String importError(android.content.Context context, Exception error) {
+            if (error instanceof PresetCodec.InvalidPreset) {
+                PresetCodec.InvalidPreset invalid = (PresetCodec.InvalidPreset) error;
+                switch (invalid.error) {
+                    case TOO_LARGE: return context.getString(R.string.preset_error_size);
+                    case VERSION: return context.getString(R.string.preset_error_version);
+                    case TYPE: return context.getString(R.string.preset_error_type, invalid.key);
+                    case VALUE: return context.getString(R.string.preset_error_value, invalid.key);
+                }
+            }
+            return context.getString(R.string.preset_invalid);
         }
 
         private static String surfaces(android.content.Context context, Controls.Control c) {

@@ -447,4 +447,9 @@
     <string name="sf_failure_command">%1$s rejected (%2$s)</string>
     <string name="a11y_expanded">Expanded</string>
     <string name="a11y_collapsed">Collapsed</string>
+    <string name="preset_error_size">The preset file is too large.</string>
+    <string name="preset_error_version">This preset version is incompatible.</string>
+    <string name="preset_error_type">The value for %1$s must be text.</string>
+    <string name="preset_error_value">The value for %1$s is invalid.</string>
+    <string name="error_invalid_setting">The value for %1$s could not be validated or saved.</string>
 </resources>
