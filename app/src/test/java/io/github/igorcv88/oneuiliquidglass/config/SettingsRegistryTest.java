@@ -113,7 +113,7 @@ public class SettingsRegistryTest {
                     .000001);
         }
         assertEquals("80", SettingsRegistry.get("liveradius").defaultValue);
-        assertEquals("120", SettingsRegistry.get("liveshaderadius").defaultValue);
+        assertEquals("60", SettingsRegistry.get("liveshaderadius").defaultValue);
     }
 
     @Test
@@ -137,7 +137,7 @@ public class SettingsRegistryTest {
     public void mediaArtOpacityDomain() {
         SettingSpec s = SettingsRegistry.get("mediaart");
         assertEquals(SettingSpec.ApplyMode.LIVE, s.applyMode);
-        assertEquals("0.25", s.defaultValue);
+        assertEquals("0.50", s.defaultValue);
         assertEquals(0.05, s.step, 1e-9);
         assertEquals("0", s.validate("0"));
         assertEquals("0.05", s.validate("0.05"));
@@ -149,5 +149,57 @@ public class SettingsRegistryTest {
             } catch (IllegalArgumentException expected) {
             }
         }
+    }
+    @Test
+    public void approvedDefaultsMatchTheCatalog() {
+        String[][] expected = {
+            {"mediaart", "0.50"},
+            {"sf.kgflat", "0.50"},
+            {"sf.kglevel", "0.85"},
+            {"sf.kgtone", "0"},
+            {"sf.kgcoredim", "0"},
+            {"sf.kglight", "0.50"},
+            {"kgblurradius", "12"},
+            {"kgdarkfill", "5"},
+            {"sf.kgsat", "0.95"},
+            {"sf.kgspec", "0.17"},
+            {"liveshaderadius", "60"},
+            {"shadeglint", "0.22"},
+            {"semradius", "0"},
+            {"semradiuslens", "14"},
+            {"sflens", "0.55"},
+            {"semalpha", "0"},
+            {"shadelightglass", "0.18"},
+            {"livedarkfill", "0"},
+            {"headertone", "0"},
+            {"paneldim", "0.08"},
+            {"panelblurcap", "70"},
+            {"headergap", "7"},
+            {"sf.core", "56"},
+            {"sf.taps", "48"},
+            {"sf.ramp", "1"},
+            {"sf.edgeblur", "8"},
+            {"sf.hubodylens", "0.06"},
+            {"qs.lightfill", "0"},
+            {"qs.lightcolor", "ffffffff"},
+            {"qs.lightoptics", "0.36"},
+            {"qs.sliderlightcolor", "000c2189"},
+            {"qs.sliderdarkcolor", "f1f7ffe0"},
+            {"qs.tilelighton", "000c21cd"},
+            {"qs.tilelightoff", "24324666"},
+            {"qs.tilelightonink", "ffffffeb"},
+            {"qs.tilelightoffink", "000c21cd"},
+            {"qs.tiledark", "1"},
+            {"qs.tiledarkon", "ffffffd9"},
+            {"qs.tiledarkoff", "e6f0ff40"},
+            {"qs.tiledarkonink", "17202ff2"},
+            {"qs.tiledarkoffink", "ffffffe6"},
+            {"qs.darkrim", "0.28"},
+            {"qs.edgeblur", "6"},
+        };
+        for (String[] pair : expected)
+            assertEquals(pair[0], pair[1], SettingsRegistry.get(pair[0]).defaultValue);
+        assertEquals("2 %", ValueFormat.display(Controls.get("kgdarkfill"), "5"));
+        assertEquals("5", ValueFormat.fromEdit(Controls.get("kgdarkfill"), "2"));
     }
 }

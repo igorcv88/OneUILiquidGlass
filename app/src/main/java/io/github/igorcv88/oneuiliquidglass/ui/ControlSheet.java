@@ -6,6 +6,7 @@ import android.view.inputmethod.EditorInfo;
 import android.widget.*;
 
 import io.github.igorcv88.oneuiliquidglass.config.*;
+import io.github.igorcv88.oneuiliquidglass.R;
 import io.github.igorcv88.oneuiliquidglass.ui.kit.*;
 import io.github.igorcv88.oneuiliquidglass.ui.preview.NotificationPreview;
 
@@ -14,7 +15,7 @@ import java.util.function.Function;
 /**
  * Editor for one control. Shows what changes (less / now / more samples focused on the part it
  * affects, or an honest "no visual sample"), the value with a numeric field, the default, why it
- * is inactive, and the technical name only inside "Detalhes técnicos".
+ * is inactive, and the technical name only inside the technical details section.
  */
 final class ControlSheet extends Sheet {
     private final Host host;
@@ -30,7 +31,7 @@ final class ControlSheet extends Sheet {
     private Scale scale;
 
     ControlSheet(Host host, String key, Controls.Surface surface) {
-        super(host.activity(), host.theme(), Controls.get(key).title);
+        super(host.activity(), host.theme(), ControlTitles.title(host.activity(), Controls.get(key)));
         this.host = host;
         this.c = Controls.get(key);
         this.surface = surface == null || !c.on(surface) ? c.surfaces.iterator().next() : surface;
@@ -47,36 +48,37 @@ final class ControlSheet extends Sheet {
         ControlState st = model.state();
         Applicability.Result a = st.applicability().on(c.key, surface);
         LinearLayout body = body();
-        if (!c.hint.isEmpty()) subtitle(c.hint);
+        String hint = ControlDescriptions.hint(activity, c);
+        if (!hint.isEmpty()) subtitle(hint);
         if (a.kind == Applicability.Kind.INACTIVE || a.kind == Applicability.Kind.OFF) {
             LinearLayout n = Ui.notice(activity, t, Ui.Tone.INFO,
-                    a.reason + ". O valor fica salvo e passa a valer quando a condição for atendida.", null, null);
+                    ControlReasons.text(activity, a.reason) + ". " + activity.getString(R.string.control_inactive_suffix), null, null);
             body.addView(n, Ui.match(0, t.dp(12)));
         } else if (a.kind == Applicability.Kind.NEEDS_RESTART) {
             body.addView(Ui.notice(activity, t, Ui.Tone.WARN,
-                    "Este ajuste da lente dinâmica só entra em vigor quando o userspace é reiniciado.",
-                    "Aplicar", () -> {
+                    activity.getString(R.string.control_restart_needed),
+                    activity.getString(R.string.home_apply), () -> {
                         dismiss();
                         host.openLens();
                     }), Ui.match(0, t.dp(12)));
         }
         samples(body);
         editor(body);
-        TextView help = Ui.text(activity, t, c.help, Theme.LABEL, t.inkMuted, false);
+        TextView help = Ui.text(activity, t, ControlDescriptions.help(activity, c), Theme.LABEL, t.inkMuted, false);
         help.setPadding(t.dp(8), t.dp(14), t.dp(8), t.dp(4));
         body.addView(help);
         values(body, st);
         technical(body);
-        action(model.ui.getBoolean("favorite." + c.key, false) ? "Remover dos favoritos" : "Favoritar",
+        action(model.ui.getBoolean("favorite." + c.key, false) ? activity.getString(R.string.control_favorite_remove) : activity.getString(R.string.control_favorite_add),
                 Ui.ButtonStyle.OUTLINED, () -> {
                     boolean fav = !model.ui.getBoolean("favorite." + c.key, false);
                     model.ui.edit().putBoolean("favorite." + c.key, fav).apply();
-                    host.feedback(fav ? "Adicionado aos favoritos" : "Removido dos favoritos");
+                    host.feedback(fav ? activity.getString(R.string.control_favorite_added) : activity.getString(R.string.control_favorite_removed));
                     model.notifyChanged();
                     dismiss();
                 });
         if (c.format != Controls.Format.CHOICE && c.format != Controls.Format.TOGGLE)
-            action("Salvar", Ui.ButtonStyle.FILLED, this::saveAndClose);
+            action(activity.getString(R.string.action_save), Ui.ButtonStyle.FILLED, this::saveAndClose);
         onClosed(() -> {
             model.draft(c.key, null);
             host.endPreview();
@@ -91,9 +93,9 @@ final class ControlSheet extends Sheet {
         if (!visual) {
             LinearLayout n = Ui.notice(activity, t, Ui.Tone.INFO,
                     c.preview == Controls.Preview.BEHAVIOR
-                            ? "Sem prévia visual: este ajuste muda tempo ou comportamento. Teste com uma notificação real."
-                            : "Sem prévia visual para este ajuste.",
-                    c.preview == Controls.Preview.BEHAVIOR ? "Testar" : null, host::testNotification);
+                            ? activity.getString(R.string.control_no_preview_behavior)
+                            : activity.getString(R.string.control_no_preview),
+                    c.preview == Controls.Preview.BEHAVIOR ? activity.getString(R.string.action_test) : null, host::testNotification);
             body.addView(n, Ui.match(0, t.dp(8)));
             return;
         }
@@ -110,14 +112,14 @@ final class ControlSheet extends Sheet {
         Function<String, String> base = model.state()::shown;
         boolean light = host.model().ui.getBoolean("preview.light", !th().dark);
         NotificationPreview.Backdrop b = NotificationPreview.Backdrop.values()[model.ui.getInt("preview.backdrop", 2)];
-        if (lo != null) row.addView(tile(override(base, lo), s.type == SettingSpec.Type.BOOLEAN ? "Desligado" : "Menos", light, b), weight());
-        now = tile(k -> k.equals(c.key) ? working : base.apply(k), "Atual", light, b);
+        if (lo != null) row.addView(tile(override(base, lo), s.type == SettingSpec.Type.BOOLEAN ? activity.getString(R.string.switch_off) : activity.getString(R.string.control_less), light, b), weight());
+        now = tile(k -> k.equals(c.key) ? working : base.apply(k), activity.getString(R.string.control_current), light, b);
         row.addView(now, weight());
-        if (hi != null) row.addView(tile(override(base, hi), s.type == SettingSpec.Type.BOOLEAN ? "Ligado" : "Mais", light, b), weight());
+        if (hi != null) row.addView(tile(override(base, hi), s.type == SettingSpec.Type.BOOLEAN ? activity.getString(R.string.switch_on) : activity.getString(R.string.control_more), light, b), weight());
         body.addView(row, Ui.match(0, t.dp(4)));
         TextView note = Ui.text(activity, t, c.preview == Controls.Preview.DIDACTIC
-                ? "Simulação didática: mostra a direção do efeito, não o resultado exato."
-                : "Simulação aproximada sobre um fundo sintético.", Theme.SMALL, t.inkFaint, false);
+                ? activity.getString(R.string.control_preview_didactic)
+                : activity.getString(R.string.control_preview_approx), Theme.SMALL, t.inkFaint, false);
         note.setPadding(t.dp(8), t.dp(6), t.dp(8), 0);
         body.addView(note);
     }
@@ -141,7 +143,7 @@ final class ControlSheet extends Sheet {
         p.zoomOnly(c.channel, label);
         p.setClipToOutline(true);
         p.setBackground(Ui.rounded(t.surfaceLow, t.dpf(16)));
-        p.setContentDescription(label + ": simulação de " + c.title);
+        p.setContentDescription(activity.getString(R.string.control_preview_a11y, label, ControlTitles.title(activity, c)));
         return p;
     }
 
@@ -155,7 +157,7 @@ final class ControlSheet extends Sheet {
             case TOGGLE: {
                 Toggle tg = new Toggle(activity, t);
                 tg.set("1".equals(working), false);
-                LinearLayout r = Ui.switchRow(activity, t, null, c.title, null, tg);
+                LinearLayout r = Ui.switchRow(activity, t, null, ControlTitles.title(activity, c), null, tg);
                 r.setPadding(0, 0, t.dp(8), 0);
                 tg.listener((x, on) -> {
                     working = on ? "1" : "0";
@@ -169,7 +171,7 @@ final class ControlSheet extends Sheet {
                 String[][] options = new String[c.choices.size()][];
                 int i = 0;
                 for (java.util.Map.Entry<String, String[]> e : c.choices.entrySet())
-                    options[i++] = new String[] {e.getKey(), e.getValue()[0], e.getValue()[1]};
+                    options[i++] = new String[] {e.getKey(), ControlOptions.text(activity, e.getValue()[0]), ControlOptions.text(activity, e.getValue()[1])};
                 box.setPadding(t.dp(4), t.dp(4), t.dp(4), t.dp(4));
                 LinearLayout holder = Ui.column(activity);
                 box.addView(holder);
@@ -180,7 +182,7 @@ final class ControlSheet extends Sheet {
                 colorPicker = new ColorPicker(activity, t);
                 colorPicker.setColor(working);
                 box.addView(colorPicker, Ui.match());
-                field = field("Hexadecimal · RRGGBB ou RRGGBBAA", working, InputType.TYPE_CLASS_TEXT);
+                field = field(activity.getString(R.string.control_hex_hint), working, InputType.TYPE_CLASS_TEXT);
                 box.addView(field);
                 colorPicker.listener(hex -> {
                     working = hex;
@@ -193,18 +195,18 @@ final class ControlSheet extends Sheet {
             default:
                 break;
         }
-        scale = Scale.of(c);
+        scale = Scale.of(c, working);
         LinearLayout top = Ui.row(activity);
-        valueText = Ui.text(activity, t, ValueFormat.display(c, working), Theme.TITLE, t.ink, true);
+        valueText = Ui.text(activity, t, ControlValues.display(host.activity(), c, working), Theme.TITLE, t.ink, true);
         top.addView(valueText, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-        TextView def = Ui.button(activity, t, "Padrão: " + ValueFormat.display(c, s.defaultValue), Icon.RESET, Ui.ButtonStyle.TEXT, true);
+        TextView def = Ui.button(activity, t, activity.getString(R.string.control_default, ControlValues.display(host.activity(), c, s.defaultValue)), Icon.RESET, Ui.ButtonStyle.TEXT, true);
         def.setOnClickListener(v -> setWorking(s.defaultValue, true));
         top.addView(def);
         box.addView(top);
         slider = new Slider(activity, t);
         slider.configure(scale.steps, scale.index(s.defaultValue), scale.auto);
         slider.set(scale.index(working));
-        slider.describe(c.title, i -> ValueFormat.display(c, scale.value(i)));
+        slider.describe(ControlTitles.title(activity, c), i -> ControlValues.display(host.activity(), c, scale.value(i)));
         slider.listener(new Slider.Listener() {
             @Override public void start() {}
             @Override public void change(int index, boolean fromUser) { setWorking(scale.value(index), false); }
@@ -212,11 +214,11 @@ final class ControlSheet extends Sheet {
         });
         box.addView(slider, Ui.match());
         String unit = ValueFormat.editUnit(c);
-        TextView exact = Ui.text(activity, t, "Valor exato" + (unit.isEmpty() ? "" : " (" + unit + ")"), Theme.CAPTION, t.inkMuted, false);
+        TextView exact = Ui.text(activity, t, activity.getString(R.string.control_exact_value) + (unit.isEmpty() ? "" : " (" + unit + ")"), Theme.CAPTION, t.inkMuted, false);
         exact.setPadding(t.dp(4), t.dp(8), 0, 0);
         box.addView(exact);
-        field = field("Valor" + (unit.isEmpty() ? "" : " (" + unit + ")") + (scale.auto ? " · use -1 para " + c.autoLabel.toLowerCase(java.util.Locale.ROOT) : ""),
-                ValueFormat.isAuto(c, working) ? "-1" : ValueFormat.toEdit(c, working),
+        field = field(activity.getString(R.string.control_value) + (unit.isEmpty() ? "" : " (" + unit + ")") + (scale.auto ? activity.getString(R.string.control_auto_suffix) : ""),
+                ValueFormat.isAuto(c, working) ? "-1" : ValueFormat.isOff(c, working) ? "0" : ValueFormat.toEdit(c, working, host.activity().getResources().getConfiguration().getLocales().get(0)),
                 InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL | InputType.TYPE_NUMBER_FLAG_SIGNED);
         field.setOnEditorActionListener((v, id, e) -> {
             if (id == EditorInfo.IME_ACTION_DONE) {
@@ -284,11 +286,15 @@ final class ControlSheet extends Sheet {
 
     private void setWorking(String raw, boolean syncSlider) {
         working = raw;
-        if (valueText != null) valueText.setText(ValueFormat.display(c, raw));
-        if (slider != null && syncSlider) slider.set(scale.index(raw));
+        if (valueText != null) valueText.setText(ControlValues.display(host.activity(), c, raw));
+        if (slider != null && syncSlider) {
+            scale = Scale.of(c, raw);
+            slider.configure(scale.steps, scale.index(c.spec().defaultValue), scale.auto);
+            slider.set(scale.index(raw));
+        }
         if (colorPicker != null) colorPicker.setColor(raw);
         if (field != null) {
-            String edit = scale == null ? raw : ValueFormat.isAuto(c, raw) ? "-1" : ValueFormat.toEdit(c, raw);
+            String edit = scale == null ? raw : ValueFormat.isAuto(c, raw) ? "-1" : ValueFormat.isOff(c, raw) ? "0" : ValueFormat.toEdit(c, raw, host.activity().getResources().getConfiguration().getLocales().get(0));
             if (!edit.equals(field.getText().toString())) field.setText(edit);
             field.setError(null);
         }
@@ -308,6 +314,8 @@ final class ControlSheet extends Sheet {
         if (field == null) return true;
         String text = field.getText().toString().trim();
         try {
+            // Preserve a legacy opacity below 50% unless the user changes it.
+            if (c.key.equals("mediaart") && text.equals(ValueFormat.toEdit(c, working, host.activity().getResources().getConfiguration().getLocales().get(0)))) return true;
             String raw;
             if (c.format == Controls.Format.COLOR) raw = c.spec().validate(text);
             else if (scale.auto && text.equals("-1")) raw = c.spec().validate("-1");
@@ -315,7 +323,16 @@ final class ControlSheet extends Sheet {
             setWorking(raw, true);
             return true;
         } catch (IllegalArgumentException e) {
-            field.setError(e.getMessage());
+            String message = e.getMessage();
+            if (c.format == Controls.Format.COLOR) message = activity.getString(R.string.error_color);
+            else if ("Digite um número".equals(message)) message = activity.getString(R.string.error_number);
+            else if (message != null && message.startsWith("Use 0%")) message = activity.getString(R.string.error_media_range);
+            else if (message != null && message.startsWith("Use de "))
+                message = activity.getString(R.string.error_value_range,
+                        ControlValues.display(activity, c, ValueFormat.plain(c.spec().min)),
+                        ControlValues.display(activity, c, ValueFormat.plain(c.spec().max)));
+            else message = activity.getString(R.string.error_invalid_value);
+            field.setError(message);
             return false;
         }
     }
@@ -328,7 +345,7 @@ final class ControlSheet extends Sheet {
     private boolean commit(String raw) {
         AppModel.Result r = model.save(c.key, raw);
         if (r.ok) {
-            host.feedback(c.needsRestart() ? "Salvo · aplicado ao reiniciar o userspace" : "Salvo");
+            host.feedback(c.needsRestart() ? activity.getString(R.string.control_saved_restart) : activity.getString(R.string.control_saved));
             return true;
         }
         if (r.conflict) {
@@ -343,19 +360,18 @@ final class ControlSheet extends Sheet {
     private void values(LinearLayout body, ControlState st) {
         String saved = st.saved.get(c.key), device = st.device(c.key);
         StringBuilder b = new StringBuilder();
-        if (saved != null) b.append("Salvo no aplicativo: ").append(ValueFormat.display(c, saved));
+        if (saved != null) b.append(activity.getString(R.string.control_saved_in_app, ControlValues.display(host.activity(), c, saved)));
         if (model.observedAvailable()) {
             String o = st.observed.get(c.key);
             if (o != null && !o.isEmpty()) {
-                b.append(b.length() == 0 ? "" : "\n").append("Propriedade do sistema: ")
-                        .append(ValueFormat.display(c, o));
+                b.append(b.length() == 0 ? "" : "\n").append(activity.getString(R.string.control_system_property, ControlValues.display(host.activity(), c, o)));
                 if (saved != null && c.spec().applyMode == SettingSpec.ApplyMode.LIVE
                         && !c.spec().helperOwned() && !saved.equals(o))
-                    b.append("\nO valor do aplicativo tem prioridade; o valor do sistema pode permanecer diferente.");
+                    b.append("\n").append(activity.getString(R.string.control_app_priority));
             }
         }
         if (c.needsRestart())
-            b.append(b.length() == 0 ? "" : "\n").append("Em uso pela lente: ").append(ValueFormat.display(c, device));
+            b.append(b.length() == 0 ? "" : "\n").append(activity.getString(R.string.control_lens_value, ControlValues.display(host.activity(), c, device)));
         if (b.length() == 0) return;
         TextView v = Ui.text(activity, t, b, Theme.CAPTION, t.inkMuted, false);
         v.setPadding(t.dp(8), t.dp(10), t.dp(8), t.dp(4));
@@ -364,17 +380,16 @@ final class ControlSheet extends Sheet {
 
     private void technical(LinearLayout body) {
         SettingSpec s = c.spec();
-        View[] d = Ui.disclosure(activity, t, null, "Detalhes técnicos", null, false, null);
+        View[] d = Ui.disclosure(activity, t, null, activity.getString(R.string.control_technical), null, false, null);
         LinearLayout card = Ui.card(activity, t);
         card.addView(d[0]);
         TextView text = Ui.text(activity, t,
-                "Propriedade: " + s.fullKey()
-                        + "\nTipo: " + s.type.name().toLowerCase(java.util.Locale.ROOT)
+                activity.getString(R.string.control_property, s.fullKey())
+                        + "\n" + activity.getString(R.string.control_type, s.type.name().toLowerCase(java.util.Locale.ROOT))
                         + (s.type == SettingSpec.Type.FLOAT || s.type == SettingSpec.Type.INT
-                                ? " · " + ValueFormat.plain(s.min) + " a " + ValueFormat.plain(s.max) : "")
-                        + "\nLeitura: " + (c.needsRestart() ? "biblioteca do compositor, ao compilar"
-                                : "SystemUI, ao vivo pela ponte do app")
-                        + "\nVale em: " + surfaces(), Theme.CAPTION, t.inkMuted, false);
+                                ? " · " + activity.getString(R.string.control_range, ValueFormat.plain(s.min), ValueFormat.plain(s.max)) : "")
+                        + "\n" + activity.getString(R.string.control_reading, activity.getString(c.needsRestart() ? R.string.control_compositor : R.string.control_systemui))
+                        + "\n" + activity.getString(R.string.control_applies, surfaces()), Theme.CAPTION, t.inkMuted, false);
         text.setTextIsSelectable(true);
         text.setPadding(t.dp(18), 0, t.dp(18), t.dp(14));
         ((LinearLayout) d[1]).addView(text);
@@ -384,7 +399,7 @@ final class ControlSheet extends Sheet {
 
     private String surfaces() {
         StringBuilder b = new StringBuilder();
-        for (Controls.Surface s : c.surfaces) b.append(b.length() == 0 ? "" : ", ").append(s.label);
+        for (Controls.Surface s : c.surfaces) b.append(b.length() == 0 ? "" : ", ").append(HomePage.surfaceLabel(activity, s));
         return b.toString();
     }
 }

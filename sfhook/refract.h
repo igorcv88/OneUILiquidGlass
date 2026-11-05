@@ -410,13 +410,13 @@ struct oulg_profile { float core; int taps; float ramp; float sat; float tone; f
                       float flat; float level; float cool; float tilt; float line; float ccap; float fcap; float cdim; float glow; float bloom; float gradient;
                       float band; float lensbody; float blurexp; float edge; float blur; float refract;
                       float light; float lwidth; float lfloor; float lcap; float lens; float body; };
-#define OULG_CORE_DEFAULT 48.0f
+#define OULG_CORE_DEFAULT 56.0f
 #define OULG_HU_BLOOM_DEFAULT 0.0f
 // Heads-up edge blur (v0.24): 0 keeps the v0.7 curve, a radius of 0 up to 0.25 bevel then a C1
 // smoothstep to the core (see the field). Above 0, one quintic curve from this radius at the outline
-// to the core at ramp bevels. Off by default until it is validated on the device.
-#define OULG_HU_EDGE_DEFAULT 0.0f
-#define OULG_HU_BODYLENS_DEFAULT 0.0f
+// to the core at ramp bevels. The configured default remains subject to device validation.
+#define OULG_HU_EDGE_DEFAULT 8.0f
+#define OULG_HU_BODYLENS_DEFAULT 0.06f
 // Lockscreen extra blur at the outline: equal to the core cap, so the card has one blur radius from
 // the outline to the middle (DZIF 04/11/2026: with 0 the body past the band read as a sharper-edged
 // "miolo" that grew with the card). 0 restores the v0.23 clear rim with the core in the middle.
@@ -424,7 +424,9 @@ struct oulg_profile { float core; int taps; float ramp; float sat; float tone; f
 #define OULG_GLOBAL_BLUR_DEFAULT 1.0f
 #define OULG_GLOBAL_REFRACT_DEFAULT 1.0f
 #define OULG_TAPS_DEFAULT 24
+#define OULG_HU_TAPS_DEFAULT 48
 #define OULG_RAMP_DEFAULT 1.5f
+#define OULG_HU_RAMP_DEFAULT 1.0f
 // Lockscreen: a wide body blur, so a large dark object behind the card no longer shows as a blotch
 // (render_check structure 1.61 at 56 px / 40 taps, 0.90 at 80 px / 48 taps; grain 0.45 -> 0.54).
 #define OULG_KG_CORE_DEFAULT 80.0f
@@ -455,9 +457,9 @@ struct oulg_profile { float core; int taps; float ramp; float sat; float tone; f
 // (dark); v0.17 (cap 0.5) +0.103/+0.132 and +0.025/+0.072. The flattening cap alone could not close
 // it on dark backdrops (the core's wider blur mixes in the brighter surroundings): a cap of 0.22 plus
 // a 4 % gain on the deep core only (body 0.5 -> 1, past the rim band), which keeps the core dynamic.
-#define OULG_KG_CDIM_DEFAULT 0.04f
-#define OULG_KG_SAT_DEFAULT 1.25f
-#define OULG_KG_TONE_DEFAULT 0.15f
+#define OULG_KG_CDIM_DEFAULT 0.0f
+#define OULG_KG_SAT_DEFAULT 0.95f
+#define OULG_KG_TONE_DEFAULT 0.0f
 // Rim glow (v0.19): on device the Fresnel and the specular band spread a lit band ~28 px inward from
 // the contour (card over the jacket: 0.59 at the outline to 0.17 at 28 px), a lit rim rather than a
 // reflection on the glass surface. Both are drawn 30 % narrower (`glow` 0.7: the band coordinate is
@@ -465,10 +467,10 @@ struct oulg_profile { float core; int taps; float ramp; float sat; float tone; f
 // loses 33-43 % of its lift on the host, the 15-30 px band about half); the fine
 // contour line (`line`) keeps its width and strength. glow 1, rim 1, spec 0.30 restore v0.11.
 #define OULG_KG_RIM_DEFAULT 0.72f
-#define OULG_KG_SPEC_DEFAULT 0.19f
+#define OULG_KG_SPEC_DEFAULT 0.17f
 #define OULG_KG_GLOW_DEFAULT 0.70f
 #define OULG_KG_FLAT_DEFAULT 0.50f
-#define OULG_KG_LEVEL_DEFAULT 0.40f
+#define OULG_KG_LEVEL_DEFAULT 0.85f
 #define OULG_KG_COOL_DEFAULT 0.5f
 #define OULG_KG_TILT_DEFAULT 1.42f
 // Contour (v0.19): the module's hairline is no longer drawn over compositor-lit cards; it peaked
@@ -494,7 +496,7 @@ struct oulg_profile { float core; int taps; float ramp; float sat; float tone; f
 // already draw a rim (profile 1's contour and Fresnel, the module's edge optics on profile 0) and
 // carry text (profile 2). Gain 0 restores v0.26 exactly for that profile (no code is emitted).
 #define OULG_HU_LIGHT_DEFAULT 0.40f
-#define OULG_KG_LIGHT_DEFAULT 0.35f
+#define OULG_KG_LIGHT_DEFAULT 0.50f
 #define OULG_SHADE_LIGHT_DEFAULT 0.30f
 #define OULG_EDGE_LDEPTH_DEFAULT 12.0f
 #define OULG_EDGE_LFLOOR_DEFAULT 0.10f
@@ -506,7 +508,7 @@ struct oulg_profile { float core; int taps; float ramp; float sat; float tone; f
 // 11: profile 3 refraction and the edge light on every profile.
 #define OULG_OPTICS_VERSION "11"
 static const struct oulg_profile OULG_PROFILES_DEFAULT[OULG_PROFILES] = {
-    {OULG_CORE_DEFAULT, OULG_TAPS_DEFAULT, OULG_RAMP_DEFAULT, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 400.0f, 1.0f, 0.0f, 1.0f,
+    {OULG_CORE_DEFAULT, OULG_HU_TAPS_DEFAULT, OULG_HU_RAMP_DEFAULT, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 400.0f, 1.0f, 0.0f, 1.0f,
      OULG_HU_BLOOM_DEFAULT, 0.0f, 0.0f, OULG_HU_BODYLENS_DEFAULT, 1.0f, OULG_HU_EDGE_DEFAULT,
      OULG_GLOBAL_BLUR_DEFAULT, OULG_GLOBAL_REFRACT_DEFAULT,
      OULG_HU_LIGHT_DEFAULT, OULG_EDGE_LDEPTH_DEFAULT, OULG_EDGE_LFLOOR_DEFAULT, OULG_EDGE_LCAP_DEFAULT, 0.0f, 0.0f},

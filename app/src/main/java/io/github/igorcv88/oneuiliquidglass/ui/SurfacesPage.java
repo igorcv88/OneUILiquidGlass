@@ -5,6 +5,7 @@ import android.view.*;
 import android.widget.*;
 
 import io.github.igorcv88.oneuiliquidglass.config.*;
+import io.github.igorcv88.oneuiliquidglass.R;
 import io.github.igorcv88.oneuiliquidglass.ui.kit.*;
 import io.github.igorcv88.oneuiliquidglass.ui.preview.NotificationPreview;
 
@@ -68,7 +69,7 @@ public final class SurfacesPage implements Page {
         header = Ui.column(a);
         header.setBackgroundColor(t.bg);
         header.setClickable(true);
-        tabs = new Segmented(a, t, new String[] {"Pop-up", "Bloqueio", "Central"}, 0);
+        tabs = new Segmented(a, t, new String[] {HomePage.surfaceLabel(a, Controls.Surface.HEADSUP), HomePage.surfaceLabel(a, Controls.Surface.KEYGUARD), HomePage.surfaceLabel(a, Controls.Surface.SHADE)}, 0);
         tabs.listener(i -> show(Controls.Surface.values()[i]));
         header.addView(tabs, Ui.match());
         preview = new NotificationPreview(a);
@@ -82,26 +83,26 @@ public final class SurfacesPage implements Page {
         NotificationPreview.Backdrop[] backdrops = NotificationPreview.Backdrop.values();
         for (int i = 0; i < backdrops.length; i++) {
             final int index = i;
-            TextView chip = Ui.text(a, t, backdrops[i].label, Theme.CAPTION, t.inkMuted, true);
+            TextView chip = Ui.text(a, t, UiLabels.backdrop(a, backdrops[i]), Theme.CAPTION, t.inkMuted, true);
             chip.setGravity(Gravity.CENTER);
             chip.setMinHeight(t.dp(36));
             chip.setPadding(t.dp(12), 0, t.dp(12), 0);
             chip.setOnClickListener(v -> backdrop(index));
-            chip.setContentDescription("Fundo " + backdrops[i].label);
+            chip.setContentDescription(a.getString(R.string.preview_backdrop, UiLabels.backdrop(a, backdrops[i])));
             LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, t.dp(44));
             p.setMarginEnd(t.dp(4));
             tools.addView(chip, p);
             backdropChips[i] = chip;
         }
         tools.addView(new View(a), new LinearLayout.LayoutParams(0, 1, 1));
-        FrameLayout theme = Ui.iconButton(a, t, Icon.MOON, t.inkMuted, "Tema da amostra");
+        FrameLayout theme = Ui.iconButton(a, t, Icon.MOON, t.inkMuted, a.getString(R.string.preview_theme));
         themeIcon = (Icon.View) theme.getTag();
         theme.setOnClickListener(v -> {
             boolean light = !preview.lightTheme();
             host.model().ui.edit().putBoolean("preview.light", light).apply();
             preview.lightTheme(light);
             paintTools();
-            host.feedback(light ? "Amostra em tema claro" : "Amostra em tema escuro");
+            host.feedback(a.getString(light ? R.string.preview_theme_light : R.string.preview_theme_dark));
         });
         tools.addView(theme);
         header.addView(tools, Ui.match());
@@ -273,7 +274,7 @@ public final class SurfacesPage implements Page {
         boolean surfaceOn = app.surfaceOn(surface);
         surfaceToggle.set(surfaceOn, true);
         Ui.enable(surfaceRow, st.enabled);
-        Ui.setSubtitle(surfaceRow, !st.enabled ? "O vidro está desligado nas notificações" : surfaceOn ? "Ligado" : "Visual original do sistema");
+        Ui.setSubtitle(surfaceRow, !st.enabled ? host.activity().getString(R.string.surface_master_off) : surfaceOn ? host.activity().getString(R.string.switch_on) : host.activity().getString(R.string.surface_original));
         offNotice.setVisibility(st.enabled ? View.GONE : View.VISIBLE);
         for (ControlRow r : rows) r.bind(st, app);
         for (Map.Entry<String, LinearLayout> e : layerRows.entrySet()) {
@@ -282,7 +283,7 @@ public final class SurfacesPage implements Page {
             tg.set(app.layerOn(surface, e.getKey()), true);
             boolean usable = res.usable();
             Ui.enable(e.getValue(), usable);
-            Ui.setSubtitle(e.getValue(), usable ? null : res.reason);
+            Ui.setSubtitle(e.getValue(), usable ? null : ControlReasons.text(host.activity(), res.reason));
         }
         preview.values(st::shown, baseline::get);
     }
@@ -296,13 +297,13 @@ public final class SurfacesPage implements Page {
         layerRows.clear();
         list.removeAllViews();
 
-        offNotice = Ui.notice(a, t, Ui.Tone.INFO, "O vidro está desligado nas notificações.", "Ligar", () -> host.model().master(true));
+        offNotice = Ui.notice(a, t, Ui.Tone.INFO, a.getString(R.string.surface_master_off_notice), a.getString(R.string.action_enable), () -> host.model().master(true));
         list.addView(offNotice, Ui.match(0, t.dp(10)));
 
         LinearLayout gate = Ui.card(a, t);
         surfaceToggle = new Toggle(a, t);
         Icon icon = surface == Controls.Surface.HEADSUP ? Icon.POPUP : surface == Controls.Surface.KEYGUARD ? Icon.LOCK : Icon.SHADE;
-        surfaceRow = Ui.switchRow(a, t, icon, "Vidro " + (surface == Controls.Surface.HEADSUP ? "no pop-up" : surface == Controls.Surface.KEYGUARD ? "no bloqueio" : "na central"), "", surfaceToggle);
+        surfaceRow = Ui.switchRow(a, t, icon, a.getString(R.string.home_surface_glass, HomePage.surfaceLabel(a, surface)), "", surfaceToggle);
         Controls.Surface s = surface;
         surfaceToggle.listener((x, on) -> host.model().flag("surface." + s.id + ".enabled", on));
         gate.addView(surfaceRow);
@@ -310,21 +311,26 @@ public final class SurfacesPage implements Page {
 
         Set<String> placed = new HashSet<>();
         if (!fav.isEmpty()) {
-            list.addView(Ui.section(a, t, "Favoritos"));
+            list.addView(Ui.section(a, t, a.getString(R.string.surface_favorites)));
             list.addView(card(new ArrayList<>(fav), placed), Ui.match());
         }
-        list.addView(Ui.section(a, t, "Principais"));
+        list.addView(Ui.section(a, t, a.getString(R.string.surface_main)));
         List<String> primary = new ArrayList<>();
         for (String k : Controls.primary(surface, mode)) if (!placed.contains(k)) primary.add(k);
         list.addView(card(primary, placed), Ui.match());
 
-        list.addView(Ui.section(a, t, "Camadas do efeito"));
+        if (surface == Controls.Surface.SHADE && !placed.contains("mediaart")) {
+            list.addView(Ui.section(a, t, a.getString(R.string.surface_media)));
+            list.addView(card(Collections.singletonList("mediaart"), placed), Ui.match());
+        }
+
+        list.addView(Ui.section(a, t, a.getString(R.string.surface_layers)));
         LinearLayout layers = Ui.card(a, t);
         boolean first = true;
         for (Map.Entry<String, String> e : Controls.layers(surface).entrySet()) {
             String key = "surface." + surface.id + ".feature." + e.getKey() + ".enabled";
             Toggle tg = new Toggle(a, t);
-            LinearLayout r = Ui.switchRow(a, t, null, e.getValue(), null, tg);
+            LinearLayout r = Ui.switchRow(a, t, null, UiLabels.layer(a, e.getKey()), null, tg);
             tg.listener((x, on) -> host.model().flag(key, on));
             if (!first) layers.addView(Ui.divider(a, t, t.dp(18)));
             first = false;
@@ -337,7 +343,7 @@ public final class SurfacesPage implements Page {
         qsRow = null;
         if (surface == Controls.Surface.SHADE) quickSettings(a, placed);
 
-        list.addView(Ui.section(a, t, "Mais ajustes"));
+        list.addView(Ui.section(a, t, a.getString(R.string.surface_more)));
         LinearLayout groups = Ui.card(a, t);
         boolean any = false;
         for (Controls.Section section : Controls.Section.values()) {
@@ -352,7 +358,7 @@ public final class SurfacesPage implements Page {
             if (std.isEmpty() && adv.isEmpty()) continue;
             String id = surface.id + "." + section.name();
             int count = std.size() + adv.size();
-            View[] d = Ui.disclosure(a, t, sectionIcon(section), section.label, count == 1 ? "1 ajuste" : count + " ajustes", open.contains(id), on -> {
+            View[] d = Ui.disclosure(a, t, sectionIcon(section), UiLabels.section(a, section), UiLabels.count(a, count), open.contains(id), on -> {
                 if (on) open.add(id);
                 else open.remove(id);
             });
@@ -363,7 +369,7 @@ public final class SurfacesPage implements Page {
             for (String k : std) addRow(body, k, placed);
             if (!adv.isEmpty()) {
                 if (!std.isEmpty()) {
-                    TextView label = Ui.text(a, t, "Avançado", Theme.CAPTION, t.inkFaint, true);
+                    TextView label = Ui.text(a, t, a.getString(R.string.surface_advanced), Theme.CAPTION, t.inkFaint, true);
                     label.setPadding(t.dp(20), t.dp(14), t.dp(20), t.dp(2));
                     body.addView(label);
                 }
@@ -383,8 +389,8 @@ public final class SurfacesPage implements Page {
                 technical.add(c.key);
         if (!technical.isEmpty()) {
             String id=surface.id + ".technical";
-            View[] d=Ui.disclosure(a,t,Icon.RESTART,"Ajustes técnicos da superfície",
-                    technical.size()+" ajustes",open.contains(id),on->{
+            View[] d=Ui.disclosure(a,t,Icon.RESTART,a.getString(R.string.surface_technical),
+                    UiLabels.count(a, technical.size()),open.contains(id),on->{
                         if(on)open.add(id);else open.remove(id);
                     });
             LinearLayout group=Ui.card(a,t);
@@ -396,11 +402,11 @@ public final class SurfacesPage implements Page {
         }
 
         LinearLayout footer = Ui.row(a);
-        TextView search = Ui.button(a, t, "Buscar ajuste", Icon.SEARCH, Ui.ButtonStyle.OUTLINED, true);
+        TextView search = Ui.button(a, t, a.getString(R.string.search_title), Icon.SEARCH, Ui.ButtonStyle.OUTLINED, true);
         search.setOnClickListener(v -> new SearchSheet(host, surface).show());
         footer.addView(search, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-        TextView reset = Ui.button(a, t, "Restaurar", Icon.RESET, Ui.ButtonStyle.TEXT, true);
-        reset.setContentDescription("Restaurar padrões de " + surface.label);
+        TextView reset = Ui.button(a, t, host.activity().getString(R.string.action_restore), Icon.RESET, Ui.ButtonStyle.TEXT, true);
+        reset.setContentDescription(a.getString(R.string.surface_restore_desc, HomePage.surfaceLabel(a, surface)));
         reset.setOnClickListener(v -> confirmReset());
         footer.addView(reset);
         list.addView(footer, Ui.match(t.dp(18), 0));
@@ -408,47 +414,52 @@ public final class SurfacesPage implements Page {
 
     /** Groups for the Central de controle: same scene splits as the renderer, no hidden palette. */
     private static final Object[][] QS_GROUPS = {
-            {"Discos desligados", "Sem fundo por padrão; permite restaurar e ajustar", Icon.CONTRAST,
+            {"Discos desligados", Icon.CONTRAST,
                     new String[] {"qs.hideoffdiscs"}},
-            {"Discos e ícones · fundo claro", "Cores de cada estado, independentes do fundo colorido", Icon.PALETTE,
+            {"Discos e ícones · fundo claro", Icon.PALETTE,
                     new String[] {"qs.tilelight", "qs.tilelighton", "qs.tilelightoff",
                             "qs.tilelightonink", "qs.tilelightoffink", "qs.tilelightoffalpha"}},
-            {"Discos e ícones · fundo colorido", "Opcional: preservar aparência atual até ativar", Icon.PALETTE,
+            {"Discos e ícones · fundo colorido", Icon.PALETTE,
                     new String[] {"qs.tiledark", "qs.tiledarkon", "qs.tiledarkoff",
                             "qs.tiledarkonink", "qs.tiledarkoffink", "qs.tiledarkoffalpha"}},
-            {"Sliders", "Espessura e cores RGBA para cada fundo", Icon.LAYERS,
+            {"Sliders", Icon.LAYERS,
                     new String[] {"qs.outer", "qs.fill", "qs.sliderlightcolor", "qs.sliderdarkcolor"}},
-            {"Vidro", "Opacidade e tom das cápsulas sobre apps claros", Icon.PALETTE,
+            {"Vidro", Icon.PALETTE,
                     new String[] {"qs.lightglassopacity", "qs.lightglasscolor", "qs.lightfill", "qs.lightcolor"}},
-            {"Contorno", "Linha de luz em volta das cápsulas", Icon.CONTRAST,
+            {"Contorno", Icon.CONTRAST,
                     new String[] {"qs.darkrim", "qs.lightrim", "qs.glint"}},
-            {"Luz e refração", "Lente dinâmica", Icon.LENS,
+            {"Luz e refração", Icon.LENS,
                     new String[] {"qs.lightoptics", "sf.qslight", "sf.qslens", "sf.qsbody", "sf.qsdepth", "qs.edgeblur"}},
     };
 
     /**
      * Central de controle: its own opt-in, then one collapsed group per part, like
-     * "Mais ajustes". The values apply live on the panel; the preview above shows notifications,
+     * More settings. The values apply live on the panel; the preview above shows notifications,
      * so the switch says so instead of a separate notice.
      */
     private void quickSettings(android.app.Activity a, Set<String> placed) {
-        list.addView(Ui.section(a, t, "Central de controle"));
+        list.addView(Ui.section(a, t, a.getString(R.string.section_qs)));
         LinearLayout card = Ui.card(a, t);
         qsToggle = new Toggle(a, t);
-        qsRow = Ui.switchRow(a, t, Icon.SHADE, "Vidro da Central de controle",
-                "As cores dos discos são independentes das notificações; prévia própria pendente", qsToggle);
+        qsRow = Ui.switchRow(a, t, Icon.SHADE, a.getString(R.string.home_qs_glass),
+                a.getString(R.string.qs_summary), qsToggle);
         qsToggle.listener((x, on) -> host.model().flag(ProductFlags.QUICK_SETTINGS, on));
         card.addView(qsRow);
-        for (Object[] g : QS_GROUPS) {
+        int[] qsTitles = {R.string.qs_off_discs, R.string.qs_light_discs, R.string.qs_dark_discs,
+                R.string.qs_sliders, R.string.qs_glass, R.string.qs_outline, R.string.qs_light_refraction};
+        int[] qsHints = {R.string.qs_off_discs_desc, R.string.qs_light_discs_desc, R.string.qs_dark_discs_desc,
+                R.string.qs_sliders_desc, R.string.qs_glass_desc, R.string.qs_outline_desc, R.string.dynamic_lens};
+        for (int groupIndex = 0; groupIndex < QS_GROUPS.length; groupIndex++) {
+            Object[] g = QS_GROUPS[groupIndex];
             List<String> std = new ArrayList<>(), adv = new ArrayList<>();
-            for (String k : (String[]) g[3]) {
+            for (String k : (String[]) g[2]) {
                 Controls.Control c = Controls.get(k);
                 if (c == null || !Controls.editable(k)) continue;
                 (c.tier == Controls.Tier.STANDARD ? std : adv).add(k);
             }
             if (std.isEmpty() && adv.isEmpty()) continue;
             String id = surface.id + ".qs." + g[0];
-            View[] d = Ui.disclosure(a, t, (Icon) g[2], (String) g[0], (String) g[1], open.contains(id), on -> {
+            View[] d = Ui.disclosure(a, t, (Icon) g[1], a.getString(qsTitles[groupIndex]), a.getString(qsHints[groupIndex]), open.contains(id), on -> {
                 if (on) open.add(id);
                 else open.remove(id);
             });
@@ -457,7 +468,7 @@ public final class SurfacesPage implements Page {
             LinearLayout body = (LinearLayout) d[1];
             for (String k : std) addRow(body, k, placed);
             if (!adv.isEmpty() && !std.isEmpty()) {
-                TextView label = Ui.text(a, t, "Avançado", Theme.CAPTION, t.inkFaint, true);
+                TextView label = Ui.text(a, t, a.getString(R.string.surface_advanced), Theme.CAPTION, t.inkFaint, true);
                 label.setPadding(t.dp(20), t.dp(14), t.dp(20), t.dp(2));
                 body.addView(label);
             }
@@ -474,8 +485,8 @@ public final class SurfacesPage implements Page {
                     && Controls.editable(c.key) && !placed.contains(c.key)) remaining.add(c.key);
         if (!remaining.isEmpty()) {
             String id = surface.id + ".qs.remaining";
-            View[] d = Ui.disclosure(a, t, Icon.SHADE, "Outros ajustes atuais",
-                    remaining.size() + " ajustes", open.contains(id), on -> {
+            View[] d = Ui.disclosure(a, t, Icon.SHADE, a.getString(R.string.surface_other_settings),
+                    UiLabels.count(a, remaining.size()), open.contains(id), on -> {
                         if (on) open.add(id);
                         else open.remove(id);
                     });
@@ -525,13 +536,13 @@ public final class SurfacesPage implements Page {
                 keys.add(c.key);
                 shared |= c.surfaces.size() > 1;
             }
-        Sheet sheet = new Sheet(host.activity(), t, "Restaurar " + surface.label.toLowerCase(Locale.ROOT) + "?");
-        sheet.text("Os ajustes deste ambiente voltam ao padrão. Você pode desfazer em Estilos."
-                + (shared ? " Ajustes que valem também em outros ambientes mudam lá também." : ""));
-        sheet.action("Cancelar", Ui.ButtonStyle.OUTLINED, sheet::dismiss);
-        sheet.action("Restaurar", Ui.ButtonStyle.FILLED, () -> {
+        Sheet sheet = new Sheet(host.activity(), t, host.activity().getString(R.string.surface_reset_question, HomePage.surfaceLabel(host.activity(), surface)));
+        sheet.text(host.activity().getString(R.string.surface_reset_warning)
+                + (shared ? host.activity().getString(R.string.surface_reset_shared) : ""));
+        sheet.action(host.activity().getString(R.string.action_cancel), Ui.ButtonStyle.OUTLINED, sheet::dismiss);
+        sheet.action(host.activity().getString(R.string.action_restore), Ui.ButtonStyle.FILLED, () -> {
             host.model().reset(keys);
-            host.feedback("Padrões restaurados");
+            host.feedback(host.activity().getString(R.string.preset_restored));
             sheet.dismiss();
         });
         sheet.show();

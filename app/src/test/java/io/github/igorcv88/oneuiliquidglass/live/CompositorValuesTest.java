@@ -45,7 +45,7 @@ public final class CompositorValuesTest {
                 CompositorValues.pending(Collections.emptyMap(), terminal, compiled));
         assertTrue(CompositorValues.pending(Collections.emptyMap(), compiled, compiled).isEmpty());
         // An explicit property clear is another change, back to the built-in default.
-        assertEquals(Collections.singletonMap("sf.core", "48"),
+        assertEquals(Collections.singletonMap("sf.core", "56"),
                 CompositorValues.pending(Collections.emptyMap(), Collections.emptyMap(),
                         Collections.singletonMap("sf.core", "72")));
     }

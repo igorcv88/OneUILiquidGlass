@@ -12,7 +12,7 @@ mkdir -p "$tmp/base" "$tmp/tuned"
     'hubodylens=0.08,hublur=0.65,hurefract=1.10,kgedge=12,kgblur=0.8,kgrefract=1.15' >/dev/null
 
 has() { grep -Fq "$1" "$2"/mod_*.frag || { echo "FAIL: missing shader field: $1"; exit 1; }; }
-has 's -= 0.0000 * q' "$tmp/base"
+has 's -= 0.0600 * q' "$tmp/base"
 has 's *= oulg_pf < 0.5 ? 1.000 : 1.000;' "$tmp/base"
 has 'oulg_br *= oulg_pf < 0.5 ? 1.000 : 1.000;' "$tmp/base"
 has 's -= 0.0800 * q' "$tmp/tuned"

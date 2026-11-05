@@ -31,30 +31,30 @@ public final class QsStyle {
     public QsStyle(Function<String, String> values) {
         this.values = values;
         lightFill = Math.min(QuickSettingsGlass.MAX_LIGHT_FILL, number("qs.lightfill", QuickSettingsGlass.LIGHT_FILL))
-                * QuickSettingsGlass.alpha(color("qs.lightcolor", 0xff141823));
+                * QuickSettingsGlass.alpha(color("qs.lightcolor", Rgba.argb("ffffffff")));
         // Only a dark tint: an old light or white qs.lightcolor falls back to the default.
-        lightColor = QuickSettingsGlass.darkTint(color("qs.lightcolor", 0xff000000 | QuickSettingsGlass.LIGHT_TINT));
+        lightColor = QuickSettingsGlass.darkTint(color("qs.lightcolor", Rgba.argb("ffffffff")));
         lightGlassOpacity = number("qs.lightglassopacity", 0f);
         lightGlassColor = color("qs.lightglasscolor", 0xffffffff);
-        lightOptics = number("qs.lightoptics", 1f);
-        darkRim = number("qs.darkrim", .26f); lightRim = number("qs.lightrim", .18f);
-        edgeBlur = Math.round(number("qs.edgeblur", 8));
+        lightOptics = number("qs.lightoptics", .36f);
+        darkRim = number("qs.darkrim", .28f); lightRim = number("qs.lightrim", .18f);
+        edgeBlur = Math.round(number("qs.edgeblur", 6));
         outer = number("qs.outer", 1);
         fill = number("qs.fill", QuickSettingsGlass.SLIDER_FILL);
         tileLight = number("qs.tilelight", 1) >= .5f;
-        tileDark = number("qs.tiledark", 0) >= .5f;
+        tileDark = number("qs.tiledark", 1) >= .5f;
         hideOffDiscs = number("qs.hideoffdiscs", 1) >= .5f;
-        tileLightOn = color("qs.tilelighton", 0xffcdd7e5);
-        tileLightOff = color("qs.tilelightoff", 0xff202c3c);
-        tileLightOnInk = color("qs.tilelightonink", 0xff20242e);
-        tileLightOffInk = color("qs.tilelightoffink", 0xff343a46);
+        tileLightOn = color("qs.tilelighton", Rgba.argb("000c21cd"));
+        tileLightOff = color("qs.tilelightoff", Rgba.argb("24324666"));
+        tileLightOnInk = color("qs.tilelightonink", Rgba.argb("ffffffeb"));
+        tileLightOffInk = color("qs.tilelightoffink", Rgba.argb("000c21cd"));
         tileLightOffAlpha = number("qs.tilelightoffalpha", .24f);
-        tileDarkOn = color("qs.tiledarkon", 0xffffffff);
-        tileDarkOff = color("qs.tiledarkoff", 0xffffffff);
-        tileDarkOnInk = color("qs.tiledarkonink", 0xff1d1d1d);
-        tileDarkOffInk = color("qs.tiledarkoffink", 0xffffffff);
-        sliderLightColor = color("qs.sliderlightcolor", 0xffffffff);
-        sliderDarkColor = color("qs.sliderdarkcolor", 0xffffffff);
+        tileDarkOn = color("qs.tiledarkon", Rgba.argb("ffffffd9"));
+        tileDarkOff = color("qs.tiledarkoff", Rgba.argb("e6f0ff40"));
+        tileDarkOnInk = color("qs.tiledarkonink", Rgba.argb("17202ff2"));
+        tileDarkOffInk = color("qs.tiledarkoffink", Rgba.argb("ffffffe6"));
+        sliderLightColor = color("qs.sliderlightcolor", Rgba.argb("000c2189"));
+        sliderDarkColor = color("qs.sliderdarkcolor", Rgba.argb("f1f7ffe0"));
         tileDarkOffAlpha = number("qs.tiledarkoffalpha", .10f);
         // Registered for profile round-trips only: read and discarded, so no stored value can draw.
         prop("qs.darkfill"); prop("qs.darkcolor"); prop("qs.idle"); prop("qs.active");

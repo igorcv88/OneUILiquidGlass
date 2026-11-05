@@ -8,14 +8,14 @@ import static io.github.igorcv88.oneuiliquidglass.glass.QuickSettingsGlass.Kind.
 public class QsTilePaletteTest {
     @Test public void lightBackdropHasSeparateActiveInactiveBackgroundsAndInk() {
         QsStyle style = new QsStyle(key -> null);
-        assertEquals(0xffcdd7e5,style.tileBackground(ACTIVE,LIGHT_SCENE,0xffffffff));
+        assertEquals(0xcd000c21,style.tileBackground(ACTIVE,LIGHT_SCENE,0xffffffff));
         assertEquals(0,style.tileBackground(IDLE,LIGHT_SCENE,0x00234b60));
-        assertEquals(0xff20242e,style.tileInk(ACTIVE,LIGHT_SCENE,0xffffffff));
-        assertEquals(0x80343a46,style.tileInk(IDLE,LIGHT_SCENE,0x80ffffff));
+        assertEquals(0xebffffff,style.tileInk(ACTIVE,LIGHT_SCENE,0xffffffff));
+        assertEquals(0x67000c21,style.tileInk(IDLE,LIGHT_SCENE,0x80ffffff));
     }
 
-    @Test public void darkBackdropAndUnknownRemainNativeByDefault() {
-        QsStyle style = new QsStyle(key -> null);
+    @Test public void darkBackdropAndUnknownRemainNativeWhenPaletteDisabled() {
+        QsStyle style = new QsStyle(key -> key.equals("qs.tiledark") ? "0" : null);
         for (QuickSettingsGlass.Kind kind : QuickSettingsGlass.Kind.values()) {
             assertEquals(kind == IDLE ? 0 : 0x99ffffff,style.tileBackground(kind,DARK_SCENE,0x99ffffff));
             assertEquals(0x99ffffff,style.tileBackground(kind,UNKNOWN,0x99ffffff));
@@ -30,10 +30,10 @@ public class QsTilePaletteTest {
             assertEquals(nativeColor,style.tileBackground(CONTAINER,LIGHT_SCENE,nativeColor));
         }
         // QsTextHooks may call tileInk(NONE) only for a Painter with a bound QuickTile model.
-        assertEquals(0xff343a46,style.tileInk(NONE,LIGHT_SCENE,0xffffffff));
-        assertEquals(0x80343a46,style.tileInk(NONE,LIGHT_SCENE,0x80ffffff));
+        assertEquals(0xcd000c21,style.tileInk(NONE,LIGHT_SCENE,0xffffffff));
+        assertEquals(0x67000c21,style.tileInk(NONE,LIGHT_SCENE,0x80ffffff));
         assertEquals(0xff12a0ef,style.tileInk(NONE,LIGHT_SCENE,0xff12a0ef));
-        assertEquals(0xffffffff,style.tileInk(NONE,DARK_SCENE,0xffffffff));
+        assertEquals(0xe6ffffff,style.tileInk(NONE,DARK_SCENE,0xffffffff));
         assertEquals(0xffffffff,style.tileInk(NONE,UNKNOWN,0xffffffff));
         assertEquals(0xffffffff,new QsStyle(k -> k.equals("qs.tilelight") ? "0" : null)
                 .tileInk(NONE,LIGHT_SCENE,0xffffffff));
@@ -67,6 +67,7 @@ public class QsTilePaletteTest {
     }
     @Test public void blackActiveDiscDoesNotForceItsMonochromeIconToRemainBlack() {
         QsStyle style = new QsStyle(k -> {
+            if (k.equals("qs.tiledark")) return "0";
             if (k.equals("qs.tilelighton")) return "000000";
             if (k.equals("qs.tilelightonink")) return "ffffff";
             return null;
@@ -102,6 +103,8 @@ public class QsTilePaletteTest {
         QsStyle style = new QsStyle(k -> {
             switch (k) {
                 case "qs.hideoffdiscs": return "0";
+                case "qs.tilelightoff": return "202c3c";
+                case "qs.tiledarkoff": return "ffffff";
                 case "qs.tilelightoffalpha": return ".40";
                 case "qs.tiledark": return "1";
                 case "qs.tiledarkoffalpha": return ".20";

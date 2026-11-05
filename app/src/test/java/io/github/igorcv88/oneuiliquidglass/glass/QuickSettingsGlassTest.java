@@ -29,7 +29,7 @@ public final class QuickSettingsGlassTest {
             assertEquals(0, QuickSettingsGlass.fill(Kind.CONTAINER, nativeFill) >>> 24);
     }
     @Test public void qsGlassAndDiscsInterpolateWithoutAWhiteVeil(){
-        QsStyle style=new QsStyle(k->k.equals("qs.tilelighton")?"000c21cc":
+        QsStyle style=new QsStyle(k->k.equals("qs.lightfill")?"0.1":k.equals("qs.tilelighton")?"000c21cc":
                 k.equals("qs.tiledarkon")?"ffffffdd":
                 k.equals("qs.tiledark")?"1":null);
         int midway=QuickSettingsGlass.fill(Kind.CONTAINER,0x66000000,

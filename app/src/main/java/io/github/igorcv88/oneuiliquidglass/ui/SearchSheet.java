@@ -5,6 +5,7 @@ import android.view.*;
 import android.widget.*;
 
 import io.github.igorcv88.oneuiliquidglass.config.*;
+import io.github.igorcv88.oneuiliquidglass.R;
 import io.github.igorcv88.oneuiliquidglass.ui.kit.*;
 
 import java.text.Normalizer;
@@ -26,13 +27,13 @@ final class SearchSheet extends Sheet {
     }
 
     SearchSheet(Host host, Controls.Surface surface, boolean technical) {
-        super(host.activity(), host.theme(), technical ? "Todos os parâmetros" : "Buscar ajuste");
+        super(host.activity(), host.theme(), host.activity().getString(technical ? R.string.all_parameters : R.string.search_title));
         this.host = host;
         this.surface = surface;
         this.technical = technical;
-        if (technical) subtitle("Lista completa, incluindo ajustes técnicos e de diagnóstico.");
+        if (technical) subtitle(activity.getString(R.string.search_technical_desc));
         query = new EditText(activity);
-        query.setHint(technical ? "Filtrar por nome ou propriedade" : "Nome, efeito ou propriedade");
+        query.setHint(activity.getString(technical ? R.string.search_filter : R.string.search_hint));
         query.setSingleLine(true);
         query.setTextColor(t.ink);
         query.setHintTextColor(t.inkFaint);
@@ -63,11 +64,17 @@ final class SearchSheet extends Sheet {
         return Normalizer.normalize(s, Normalizer.Form.NFD).replaceAll("\\p{M}", "").toLowerCase(Locale.ROOT);
     }
 
+    static boolean matchesControl(android.content.Context context, Controls.Control c, String query) {
+        String hay = fold(ControlTitles.title(context, c) + " " + c.title + " " + ControlDescriptions.hint(context, c) + " " + ControlDescriptions.help(context, c) + " " + c.hint + " " + c.help + " " + c.spec().fullKey()
+                + " " + c.section.label + " " + UiLabels.section(context, c.section));
+        return hay.contains(fold(query == null ? "" : query.trim()));
+    }
+
     private void render() {
         results.removeAllViews();
         String q = fold(query.getText().toString().trim());
         if (!technical && q.isEmpty()) {
-            results.addView(hint("Digite para buscar entre todos os ajustes dos três ambientes."));
+            results.addView(hint(activity.getString(R.string.search_prompt)));
             return;
         }
         ControlState st = host.model().state();
@@ -75,25 +82,24 @@ final class SearchSheet extends Sheet {
         Map<Controls.Section, List<Controls.Control>> groups = new EnumMap<>(Controls.Section.class);
         for (Controls.Control c : Controls.all()) {
             if (!technical && c.tier == Controls.Tier.INTERNAL) continue;
-            String hay = fold(c.title + " " + c.hint + " " + c.help + " " + c.spec().fullKey() + " " + c.section.label);
-            if (!q.isEmpty() && !hay.contains(q)) continue;
+            if (!matchesControl(activity, c, q)) continue;
             groups.computeIfAbsent(c.section, k -> new ArrayList<>()).add(c);
         }
         if (groups.isEmpty()) {
-            results.addView(hint("Nada encontrado."));
+            results.addView(hint(activity.getString(R.string.search_no_results)));
             return;
         }
         for (Map.Entry<Controls.Section, List<Controls.Control>> g : groups.entrySet()) {
-            results.addView(Ui.section(activity, t, g.getKey().label));
+            results.addView(Ui.section(activity, t, UiLabels.section(activity, g.getKey())));
             LinearLayout card = Ui.card(activity, t);
             for (Controls.Control c : g.getValue()) {
                 if (card.getChildCount() > 0) card.addView(Ui.divider(activity, t, t.dp(20)));
                 Controls.Surface where = c.on(surface) ? surface : c.surfaces.iterator().next();
                 Applicability.Result a = app.on(c.key, where);
-                String value = ValueFormat.display(c, st.shown(c.key));
-                String sub = surfaces(c) + " · " + value + (a.usable() || a.kind == Applicability.Kind.READ_ONLY ? "" : " · " + a.reason);
+                String value = ControlValues.display(host.activity(), c, st.shown(c.key));
+                String sub = surfaces(activity, c) + " · " + value + (a.usable() || a.kind == Applicability.Kind.READ_ONLY ? "" : " · " + ControlReasons.text(activity, a.reason));
                 if (technical) sub += "\n" + c.spec().fullKey();
-                LinearLayout r = Ui.listRow(activity, t, null, c.title, sub, Controls.editable(c.key) ? Ui.chevron(activity, t) : null);
+                LinearLayout r = Ui.listRow(activity, t, null, ControlTitles.title(activity, c), sub, Controls.editable(c.key) ? Ui.chevron(activity, t) : null);
                 if (Controls.editable(c.key)) r.setOnClickListener(v -> {
                     dismiss();
                     host.openControl(c.key, where);
@@ -111,10 +117,13 @@ final class SearchSheet extends Sheet {
         return v;
     }
 
-    static String surfaces(Controls.Control c) {
-        if (c.surfaces.size() == 3) return "Todos os ambientes";
-        StringBuilder b = new StringBuilder();
-        for (Controls.Surface s : c.surfaces) b.append(b.length() == 0 ? "" : " e ").append(s.label);
-        return b.toString();
+    static String surfaces(android.content.Context context, Controls.Control c) {
+        if (c.surfaces.size() == 3) return context.getString(R.string.search_all_surfaces);
+        String out = "";
+        for (Controls.Surface s : c.surfaces) {
+            String name = HomePage.surfaceLabel(context, s);
+            out = out.isEmpty() ? name : context.getString(R.string.search_surfaces_join, out, name);
+        }
+        return out;
     }
 }

@@ -48,6 +48,15 @@ public class QsMediaArtworkHooksTest {
                 "com.android.systemui.samsung.quicksetting.ui.tiles.QuickTileKt$1", "tiles.QuickTileKt"));
         assertFalse(QsMediaArtworkHooks.mediaSource("androidx.compose.Foo$1", null));
     }
+    @Test public void qsKeepsLegacyDefaultAndPropertyValues() {
+        assertEquals(.25f, io.github.igorcv88.oneuiliquidglass.glass.Tuning.qsMediaArtOpacity(null), 0f);
+        assertEquals(.25f, io.github.igorcv88.oneuiliquidglass.glass.Tuning.qsMediaArtOpacity("bad"), 0f);
+        assertEquals(.65f, io.github.igorcv88.oneuiliquidglass.glass.Tuning.qsMediaArtOpacity("0.65"), 0f);
+        assertEquals(io.github.igorcv88.oneuiliquidglass.glass.Tuning.MEDIA_ART_NATIVE,
+                io.github.igorcv88.oneuiliquidglass.glass.Tuning.qsMediaArtOpacity("off"), 0f);
+        assertEquals(.50f, io.github.igorcv88.oneuiliquidglass.glass.Tuning.mediaArtOpacity(null), 0f);
+    }
+
 
     @Test public void theLoadedArtworkPainterIsEligible() {
         assertTrue(QsMediaArtworkHooks.matches(QsMediaArtworkHooks.PAGE, QsMediaArtworkHooks.DRAWABLE_PAINTER));

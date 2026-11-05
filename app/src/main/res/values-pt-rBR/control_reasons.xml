@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="control_reason_e07dc8a3703f">A central não usa lente</string>
+    <string name="control_reason_d4bd84227eae">Aplicado ao reiniciar o userspace</string>
+    <string name="control_reason_a3e7e0b76d4e">Ative Central de controle</string>
+    <string name="control_reason_c7b014969049">Ative Discos adaptativos no fundo claro</string>
+    <string name="control_reason_1a7887363bcf">Ative Personalizar discos no fundo colorido</string>
+    <string name="control_reason_68b4e7a148ca">Ative a faixa de lente no pop-up</string>
+    <string name="control_reason_0bb90a8a05fd">Ative o contraste medido no pop-up</string>
+    <string name="control_reason_f9fe4db0d83c">Ative o desfoque próprio por cartão</string>
+    <string name="control_reason_d39cd5584b3f">Ative o texto adaptativo</string>
+    <string name="control_reason_4feba1d07807">Ative o vidro no resumo de ícones</string>
+    <string name="control_reason_72a5beb4b605">Com o material do pop-up, vale a refração do pop-up</string>
+    <string name="control_reason_37d1bfc3168b">Desative Discos desligados sem fundo</string>
+    <string name="control_reason_e061dd5d8ae0">Estado lido do aparelho</string>
+    <string name="control_reason_17236c820833">Exige o desfoque desenhado no cartão</string>
+    <string name="control_reason_79d513d51655">Legado sem efeito visual</string>
+    <string name="control_reason_61e39f9c26d3">O vidro está desligado</string>
+    <string name="control_reason_317c7653bd1b">O vidro está desligado onde este ajuste vale</string>
+    <string name="control_reason_b7d2e9ae3d5f">Sem efeito na proteção Adaptativa</string>
+    <string name="control_reason_65e66e7ee1c0">Sem efeito no vidro padrão</string>
+    <string name="control_reason_d819d244b0d8">Usado com a lente dinâmica</string>
+    <string name="control_reason_d390f2b8bbe0">Usado com o modelo Física</string>
+    <string name="control_reason_02be17ba5336">Usado com o modelo Lente suave</string>
+    <string name="control_reason_f27398911a67">Usado no modo de captura</string>
+    <string name="control_reason_7d2a689e3b24">Usado no vidro padrão</string>
+    <string name="control_reason_f3bf628a079b">Usado no vidro padrão com a faixa de lente</string>
+    <string name="control_reason_01bce8dcfea3">Usado no vidro padrão ou com a lente dinâmica</string>
+    <string name="control_reason_67e88d51c693">Usado no vidro padrão ou na captura</string>
+    <string name="control_reason_75fc35286ab7">Use a proteção Adaptativa</string>
+    <string name="control_reason_3184fcb1d60f">Use o mapa de tons da lente na central</string>
+    <string name="control_reason_1ab80b407e46">Use o véu fixo ou o mapa de tons da lente</string>
+</resources>

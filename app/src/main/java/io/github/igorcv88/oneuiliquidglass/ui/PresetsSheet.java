@@ -4,6 +4,7 @@ import android.os.Build;
 import android.widget.LinearLayout;
 
 import io.github.igorcv88.oneuiliquidglass.config.*;
+import io.github.igorcv88.oneuiliquidglass.R;
 import io.github.igorcv88.oneuiliquidglass.ui.kit.*;
 
 import java.util.*;
@@ -16,25 +17,25 @@ final class PresetsSheet extends Sheet {
     private final Host host;
 
     PresetsSheet(Host host) {
-        super(host.activity(), host.theme(), "Estilos");
+        super(host.activity(), host.theme(), host.activity().getString(R.string.styles));
         this.host = host;
         AppModel m = host.model();
         LinearLayout card = Ui.card(activity, t);
         String saved = m.repo.preferences().getString("preset.custom", null);
-        LinearLayout save = Ui.listRow(activity, t, Icon.STAR, "Salvar estilo atual", saved == null ? "Guarda todos os ajustes deste app" : "Substitui o estilo salvo", null);
+        LinearLayout save = Ui.listRow(activity, t, Icon.STAR, activity.getString(R.string.preset_save), saved == null ? activity.getString(R.string.preset_save_desc) : activity.getString(R.string.preset_replace_desc), null);
         save.setOnClickListener(v -> {
             try {
                 m.repo.preferences().edit().putString("preset.custom",
                         PresetCodec.encode(m.repo.overrides(), m.state().enabled, device())).apply();
-                host.feedback("Estilo salvo");
+                host.feedback(activity.getString(R.string.preset_saved));
                 dismiss();
             } catch (Exception e) {
-                host.feedback("Não foi possível salvar o estilo");
+                host.feedback(activity.getString(R.string.preset_save_error));
             }
         });
         card.addView(save);
         card.addView(Ui.divider(activity, t, t.dp(72)));
-        LinearLayout load = Ui.listRow(activity, t, Icon.BACKUP, "Usar estilo salvo", saved == null ? "Nenhum estilo salvo ainda" : "Revise as diferenças antes de usar", null);
+        LinearLayout load = Ui.listRow(activity, t, Icon.BACKUP, activity.getString(R.string.preset_use_saved), saved == null ? activity.getString(R.string.preset_none_saved) : activity.getString(R.string.preset_review_before), null);
         Ui.enable(load, saved != null);
         load.setOnClickListener(v -> {
             dismiss();
@@ -42,14 +43,14 @@ final class PresetsSheet extends Sheet {
         });
         card.addView(load);
         card.addView(Ui.divider(activity, t, t.dp(72)));
-        LinearLayout defaults = Ui.listRow(activity, t, Icon.RESET, "Voltar ao padrão", "Todos os ambientes e camadas", null);
+        LinearLayout defaults = Ui.listRow(activity, t, Icon.RESET, activity.getString(R.string.preset_reset), activity.getString(R.string.preset_all_surfaces), null);
         defaults.setOnClickListener(v -> confirmDefaults());
         card.addView(defaults);
         card.addView(Ui.divider(activity, t, t.dp(72)));
-        LinearLayout undo = Ui.listRow(activity, t, Icon.UNDO, "Desfazer última alteração", m.repo.canUndo() ? "Volta ao estado anterior à última mudança" : "Nada para desfazer", null);
+        LinearLayout undo = Ui.listRow(activity, t, Icon.UNDO, activity.getString(R.string.preset_undo), m.repo.canUndo() ? activity.getString(R.string.preset_undo_desc) : activity.getString(R.string.preset_nothing_undo), null);
         Ui.enable(undo, m.repo.canUndo());
         undo.setOnClickListener(v -> {
-            host.feedback(m.undo() ? "Alteração desfeita" : "Nada para desfazer");
+            host.feedback(m.undo() ? activity.getString(R.string.preset_undone) : activity.getString(R.string.preset_nothing_undo));
             dismiss();
         });
         card.addView(undo);
@@ -58,17 +59,16 @@ final class PresetsSheet extends Sheet {
 
     private void confirmDefaults() {
         dismiss();
-        Sheet s = new Sheet(activity, t, "Voltar ao padrão?");
-        s.text("Todos os ajustes e camadas voltam aos valores originais do app. Valores definidos pelo"
-                + " terminal deixam de valer enquanto o app guardar os seus. Dá para desfazer.");
-        s.action("Cancelar", Ui.ButtonStyle.OUTLINED, s::dismiss);
-        s.action("Voltar ao padrão", Ui.ButtonStyle.FILLED, () -> {
+        Sheet s = new Sheet(activity, t, activity.getString(R.string.preset_reset_question));
+        s.text(activity.getString(R.string.preset_reset_warning));
+        s.action(host.activity().getString(R.string.action_cancel), Ui.ButtonStyle.OUTLINED, s::dismiss);
+        s.action(activity.getString(R.string.preset_reset), Ui.ButtonStyle.FILLED, () -> {
             Map<String, String> m = new LinkedHashMap<>();
             for (SettingSpec spec : SettingsRegistry.all())
                 if (Controls.editable(spec.key)) m.put(spec.key, spec.defaultValue);
             host.model().repo.replace(m, true);
             host.model().notifyChanged();
-            host.feedback("Padrões restaurados");
+            host.feedback(activity.getString(R.string.preset_restored));
             s.dismiss();
         });
         s.show();
@@ -86,12 +86,12 @@ final class PresetsSheet extends Sheet {
             try {
                 parsed = PresetCodec.parse(json);
             } catch (Exception e) {
-                host.feedback("Arquivo de estilo inválido: " + e.getMessage());
+                host.feedback(importError(host.activity(), e));
                 return;
             }
             AppModel m = host.model();
             ControlState st = m.state();
-            Sheet s = new Sheet(host.activity(), t, "Usar este estilo?");
+            Sheet s = new Sheet(host.activity(), t, host.activity().getString(R.string.preset_use_question));
             List<String> lines = new ArrayList<>();
             int compositor = 0;
             for (Map.Entry<String, String> e : parsed.values.entrySet()) {
@@ -99,42 +99,59 @@ final class PresetsSheet extends Sheet {
                 String now = c != null ? st.shown(e.getKey()) : st.shown(e.getKey());
                 if (now != null && now.equals(e.getValue())) continue;
                 if (c != null) {
-                    lines.add(c.title + " · " + surfaces(c) + ": " + ValueFormat.display(c, now) + " → " + ValueFormat.display(c, e.getValue()));
+                    lines.add(ControlTitles.title(host.activity(), c) + " · " + surfaces(host.activity(), c) + ": " + ControlValues.display(host.activity(), c, now) + " → " + ControlValues.display(host.activity(), c, e.getValue()));
                     if (c.needsRestart()) compositor++;
-                } else lines.add(flagName(e.getKey()) + ": " + ("1".equals(e.getValue()) ? "ligado" : "desligado"));
+                } else lines.add(flagName(host.activity(), e.getKey()) + ": " + host.activity().getString("1".equals(e.getValue()) ? R.string.switch_on : R.string.switch_off));
             }
             StringBuilder b = new StringBuilder();
-            if (lines.isEmpty()) b.append("Nenhuma diferença em relação aos ajustes atuais.");
-            else b.append(lines.size() == 1 ? "1 mudança:\n" : lines.size() + " mudanças:\n");
+            if (lines.isEmpty()) b.append(host.activity().getString(R.string.preset_no_changes));
+            else b.append(host.activity().getString(lines.size() == 1 ? R.string.preset_change_one : R.string.preset_change_many, lines.size()) + "\n");
             for (int i = 0; i < Math.min(40, lines.size()); i++) b.append("• ").append(lines.get(i)).append('\n');
-            if (lines.size() > 40) b.append("… e mais ").append(lines.size() - 40).append('\n');
-            if (parsed.enabled != st.enabled) b.append("\nO vidro será ").append(parsed.enabled ? "ligado" : "desligado").append('.');
-            if (compositor > 0) b.append("\nAjustes da lente dinâmica ficam pendentes até você aplicá-los.");
-            if (!parsed.unknown.isEmpty()) b.append("\nIgnorados: ").append(parsed.unknown.size()).append(" itens desconhecidos ou somente leitura.");
+            if (lines.size() > 40) b.append(host.activity().getString(R.string.preset_and_more, lines.size() - 40)).append('\n');
+            if (parsed.enabled != st.enabled) b.append("\n").append(host.activity().getString(parsed.enabled ? R.string.preset_glass_enabled : R.string.preset_glass_disabled));
+            if (compositor > 0) b.append("\n").append(host.activity().getString(R.string.preset_lens_pending));
+            if (!parsed.unknown.isEmpty()) b.append("\n").append(host.activity().getString(R.string.preset_ignored, parsed.unknown.size()));
             s.text(b.toString().trim());
-            s.action("Cancelar", Ui.ButtonStyle.OUTLINED, s::dismiss);
-            s.action("Usar estilo", Ui.ButtonStyle.FILLED, () -> {
+            s.action(host.activity().getString(R.string.action_cancel), Ui.ButtonStyle.OUTLINED, s::dismiss);
+            s.action(host.activity().getString(R.string.preset_use), Ui.ButtonStyle.FILLED, () -> {
                 m.repo.replace(parsed.values, true, parsed.enabled);
                 m.notifyChanged();
-                host.feedback("Estilo aplicado aos ajustes");
+                host.feedback(host.activity().getString(R.string.preset_applied));
                 s.dismiss();
             });
             s.show();
         }
 
-        private static String surfaces(Controls.Control c) {
-            if (c.surfaces.size() == 3) return "todos";
+        static String importError(android.content.Context context, Exception error) {
+            if (error instanceof PresetCodec.InvalidPreset) {
+                PresetCodec.InvalidPreset invalid = (PresetCodec.InvalidPreset) error;
+                switch (invalid.error) {
+                    case TOO_LARGE: return context.getString(R.string.preset_error_size);
+                    case VERSION: return context.getString(R.string.preset_error_version);
+                    case TYPE: return context.getString(R.string.preset_error_type, invalid.key);
+                    case VALUE: return context.getString(R.string.preset_error_value, invalid.key);
+                }
+            }
+            return context.getString(R.string.preset_invalid);
+        }
+
+        private static String surfaces(android.content.Context context, Controls.Control c) {
+            if (c.surfaces.size() == 3) return context.getString(R.string.preset_all);
             StringBuilder b = new StringBuilder();
-            for (Controls.Surface s : c.surfaces) b.append(b.length() == 0 ? "" : "/").append(s.label);
+            for (Controls.Surface s : c.surfaces) b.append(b.length() == 0 ? "" : "/").append(HomePage.surfaceLabel(context, s));
             return b.toString();
         }
 
-        static String flagName(String key) {
+        static String flagName(android.content.Context context, String key) {
+            if (ProductFlags.QUICK_SETTINGS.equals(key)) return context.getString(R.string.home_qs_glass);
+            if (ProductFlags.LIVE_ACTIVITY.equals(key)) return context.getString(R.string.home_surface_glass, context.getString(R.string.home_live_activity));
+            if (ProductFlags.NOW_BAR.equals(key)) return context.getString(R.string.home_surface_glass, context.getString(R.string.now_bar));
+            if (ProductFlags.TOAST.equals(key)) return context.getString(R.string.home_surface_glass, context.getString(R.string.home_toast));
             String[] p = key.split("\\.");
             Controls.Surface s = Controls.Surface.of(p.length > 1 ? p[1] : "");
-            if (p.length == 3) return "Vidro em " + s.label;
-            String layer = p.length > 3 ? Controls.layers(s).getOrDefault(p[3], p[3]) : key;
-            return s.label + " · camada " + layer;
+            if (p.length == 3) return context.getString(R.string.preset_glass_surface, HomePage.surfaceLabel(context, s));
+            String layer = p.length > 3 ? UiLabels.layer(context, p[3]) : key;
+            return context.getString(R.string.preset_layer, HomePage.surfaceLabel(context, s), layer);
         }
     }
 }

@@ -42,23 +42,23 @@ Dependências: `liveblur=1` só ativa `live` se `sfrefract=0` e `backdrop=auto`.
 | `sfrefract` | 0 | booleano | Solicita lente do compositor; serviço KernelSU pode aplicar 1 no boot |
 | `liveblur` | 1 | booleano | Material live APK-only quando compositor desligado |
 | `liveradius` | 80 | inteiro 0–400 px | Blur APK de pop-up e lockscreen |
-| `liveshaderadius` | 120 | inteiro 0–400 px | Blur APK de cartões do shade |
+| `liveshaderadius` | 60 | inteiro 0–400 px | Blur APK de cartões do shade |
 | `liveoptics` | 1 | 0–2 | Ganho geral da iluminação/óptica de borda APK-only |
 | `livesheen` | 0.02 | 0–0.15 | Brilho superior suave |
 | `liveglint` | 0.10 | 0–1 | Reflexo curto na quina do pop-up |
-| `shadeglint` | 0.10 | 0–1 | Reflexo curto da central |
-| `semradius` | -1 | inteiro -1–400 px | Blur Samsung geral; -1 delega ao spec (atualmente 180 px) |
-| `semradiuslens` | 16 | inteiro -1–400 px | Blur de cards marcados para lente; -1 segue `semradius` |
-| `sflens` | 0.45 | 0.1–1.2 | Intensidade da lente compositor, perfil de pop-up |
+| `shadeglint` | 0.22 | 0–1 | Reflexo curto da central |
+| `semradius` | 0 | inteiro -1–400 px | Blur Samsung geral; -1 delega ao spec (atualmente 180 px) |
+| `semradiuslens` | 14 | inteiro -1–400 px | Blur de cards marcados para lente; -1 segue `semradius` |
+| `sflens` | 0.55 | 0.1–1.2 | Intensidade da lente compositor, perfil de pop-up |
 | `semcurve` | `auto` | texto controlado | Curva de cor Samsung (`auto`, `spatial`, `dim`, `ultra`, `none` ou curva explícita validada); caminhos podem falhar por firmware |
-| `semalpha` | -1 | inteiro -1–255 | Véu do blur Samsung; -1 segue o spec |
+| `semalpha` | 0 | inteiro -1–255 | Véu do blur Samsung; -1 segue o spec |
 | `semshape` | `auto` | enum `auto/single/path/four/none` | Geometria da região Samsung |
 | `shadeblur` | 1 | booleano | Blur próprio em cada card expandido |
 | `kgblurpath` | 1 | inteiro 0/1 | Lockscreen: blur desenhado no drawable vs instalado na View |
 | `shadeblurpath` | 1 | inteiro 0/1 | Shade: blur no drawable vs instalado na View |
 | `shadefadecut` | 0.5 | 0–1 | Limite para remover a região de blur ao desaparecer |
 | `kgwinblur` | 0 | booleano | Permite rampas do blur da janela no keyguard ocioso |
-| `kgblurradius` | -1 | inteiro -1–400 px | Override do blur da lockscreen; -1 segue `semradiuslens` |
+| `kgblurradius` | 12 | inteiro -1–400 px | Override do blur da lockscreen; -1 segue `semradiuslens` |
 | `pillglass` | 1 | booleano | Vidro na pill de overflow da lockscreen |
 | `pillblur` | 40 | inteiro 0–400 px | Blur do overflow, sem marca de lente |
 | `kgoptics` | 1 | inteiro 0/1 | Perfil compositor 1 na lockscreen vs perfil 0 |
@@ -79,31 +79,31 @@ O interruptor `sfrefract` **não comprova** que o binário nativo foi carregado:
 | `stylehi` | 0.62 | 0.3–1 | Threshold superior com histerese |
 | `lightglass` | 0.75 | 0–0.95 | Alpha do vidro claro em pop-up/lockscreen |
 | `lighttone` | `ffffff` | RGB hexadecimal de seis dígitos | Cor-base do vidro claro |
-| `shadelightglass` | 0.27 | 0–0.95 | Alpha separado dos cards claros no shade |
+| `shadelightglass` | 0.18 | 0–0.95 | Alpha separado dos cards claros no shade |
 | `shadedarkglass` | 0.14 | 0–0.95 | Opacidade independente dos cartões escuros da central; o padrão mantém os dois alphas anteriores |
 | `lightoutline` | 0.8 | 0–2 | Força do contorno claro |
 | `lightedge` | 1 | 0–4 | Sombra de espessura da borda clara |
 | `livedarkalpha` | 20 | inteiro 0–255 | Alpha branco da região do pop-up escuro |
-| `livedarkfill` | 10 | inteiro 0–255 | Alpha preto do preenchimento do pop-up escuro |
+| `livedarkfill` | 0 | inteiro 0–255 | Alpha preto do preenchimento do pop-up escuro |
 | `liverim` | 2 | 0–4 | Ganho isolado do contorno externo do pop-up |
 | `kgdarkalpha` | 20 | inteiro 0–255 | Alpha branco da região escura da lockscreen |
-| `kgdarkfill` | 14 | inteiro 0–255 | Alpha preto interno da lockscreen |
+| `kgdarkfill` | 5 | inteiro 0–255 | Alpha preto interno da lockscreen |
 | `kgrim` | 2 | 0–4 | Contorno externo da lockscreen (APK) |
 | `kgglint` | 0.10 | 0–1 | Reflexo interno da lockscreen |
 | `textswap` | 1 | booleano | Troca cor do texto em material claro/escuro oposto ao tema |
-| `headertone` | 1 | booleano | Ajusta relógio/data/operadora da central ao fundo |
+| `headertone` | 0 | booleano | Ajusta relógio/data/operadora da central ao fundo |
 | `icontone` | 1 | booleano | Ajusta ícone monocromático da notificação ao texto |
 | `popuplock` | 1 | booleano | Estabiliza o contraste do pop-up: só muda com mudança real do fundo, confirmada por uma segunda leitura |
 | `orphandraw` | 1 | booleano | Aplica o tom das linhas minimizadas já no primeiro desenho da central |
 | `popuptone` | 1 | booleano | Véu medido do backdrop do pop-up APK-only |
 | `shadescaleveil` | 115 | inteiro 0–255 | Véu de fallback quando shade card é escalado |
 | `shadelocal` | 0 | booleano | Mede a faixa de cada card no lugar do fundo inteiro |
-| `paneldim` | 0.12 | 0–0.4 | Escurecimento do painel sobre app claro, no tema escuro |
-| `panelblurcap` | 52 | inteiro -1–400 px | Limite do raio de desfoque do fundo da central; -1 mantém o raio nativo da Samsung |
+| `paneldim` | 0.08 | 0–0.4 | Escurecimento do painel sobre app claro, no tema escuro |
+| `panelblurcap` | 70 | inteiro -1–400 px | Limite do raio de desfoque do fundo da central; -1 mantém o raio nativo da Samsung |
 | `panelnativegray` | 0 | booleano | Preserva o ajuste cinza nativo da Samsung no painel quando ligado; desligado por padrão |
 | `panelcolor` | 00000000 | RGBA hexadecimal | Tinta RGBA adicional sobre o fundo da janela da central, independente das notificações |
-| `headergap` | 4 | 0–8 dp | Espaço extra entre cabeçalho e título expandido; 0 nativo |
-| `mediaart` | 0.25 | 0–1 | Opacidade da capa de mídia sobre o vidro na central e no cartão de mídia das atividades ao vivo (5–100%); 0 restaura a capa nativa |
+| `headergap` | 7 | 0–8 dp | Espaço extra entre cabeçalho e título expandido; 0 nativo |
+| `mediaart` | 0.50 | 0–1 | Opacidade da capa de mídia sobre o vidro na central e no cartão de mídia das atividades ao vivo (interface: 50–100%; valores anteriores de 5–49% continuam aceitos); 0 restaura a capa nativa |
 
 Observar que as propriedades `lightglass` e `shadelightglass` se aplicam a superfícies distintas. Não unificar os sliders. Os nomes `kgrim` (Java) e `sf.kgrim` (compositor) são **parâmetros diferentes**.
 
@@ -121,23 +121,23 @@ Observar que as propriedades `lightglass` e `shadelightglass` se aplicam a super
 
 | Chave (`sf.*`) | Padrão | Perfil / efeito |
 | --- | --- | --- |
-| `sf.core` | 48 | Heads-up: raio do blur do miolo (px; 0 desliga) |
-| `sf.taps` | 24 | Heads-up: amostras por pixel |
-| `sf.ramp` | 1.5 | Heads-up: profundidade em biséis até raio pleno |
+| `sf.core` | 56 | Heads-up: raio do blur do miolo (px; 0 desliga) |
+| `sf.taps` | 48 | Heads-up: amostras por pixel |
+| `sf.ramp` | 1 | Heads-up: profundidade em biséis até raio pleno |
 | `sf.hubloom` | 0 | Heads-up: supressão de amostras claras/bloom; 0 mantém disco simples |
-| `sf.edgeblur` | 0 | Heads-up: raio do blur no contorno em px, uma curva contínua até o miolo (0 restaura v0.7) |
+| `sf.edgeblur` | 8 | Heads-up: raio do blur no contorno em px, uma curva contínua até o miolo (0 restaura v0.7) |
 | `sf.hublur` | 1 | Heads-up: multiplicador do blur adicional na superfície inteira, independente do blur base |
-| `sf.hubodylens` | 0 | Heads-up: refração difusa do miolo e da superfície contínua (0 desliga) |
+| `sf.hubodylens` | 0.06 | Heads-up: refração difusa do miolo e da superfície contínua (0 desliga) |
 | `sf.hurefract` | 1 | Heads-up: multiplicador de toda a refração (aro e miolo) |
 | `sf.kgcore` | 80 | Lockscreen: raio nominal do miolo em px |
 | `sf.kgtaps` | 48 | Lockscreen: amostras por pixel |
 | `sf.kgramp` | 1.5 | Lockscreen: rampa do blur |
-| `sf.kgsat` | 1.25 | Lockscreen: saturação |
-| `sf.kgtone` | 0.15 | Lockscreen: curva de destaque |
+| `sf.kgsat` | 0.95 | Lockscreen: saturação |
+| `sf.kgtone` | 0 | Lockscreen: curva de destaque |
 | `sf.kgrim` | 0.72 | Lockscreen: reflexão do aro **no shader nativo** |
-| `sf.kgspec` | 0.19 | Lockscreen: specular |
+| `sf.kgspec` | 0.17 | Lockscreen: specular |
 | `sf.kgflat` | 0.50 | Lockscreen: achatamento da transmissão |
-| `sf.kglevel` | 0.40 | Lockscreen: luminância-alvo do achatamento |
+| `sf.kglevel` | 0.85 | Lockscreen: luminância-alvo do achatamento |
 | `sf.kgcool` | 0.50 | Lockscreen: matiz fria |
 | `sf.kgtilt` | 1.42 | Lockscreen: inclinação da luz (rad) |
 | `sf.kgline` | 0.62 | Lockscreen: contorno |
@@ -150,12 +150,12 @@ Observar que as propriedades `lightglass` e `shadelightglass` se aplicam a super
 | `sf.kgblur` | 1 | Lockscreen: multiplicador do blur adicional em toda a superfície, independente do blur base |
 | `sf.kgrefract` | 1 | Lockscreen: multiplicador de toda a refração (aro e miolo) |
 | `sf.kgflatcap` | 0.22 | Lockscreen: teto do peso de achatamento |
-| `sf.kgcoredim` | 0.04 | Lockscreen: redução de brilho do miolo |
+| `sf.kgcoredim` | 0 | Lockscreen: redução de brilho do miolo |
 | `sf.kgglow` | 0.70 | Lockscreen: largura do glow do aro |
 | `sf.shadecap` | 0.55 | Perfil 2 shade: teto da luminância para texto claro |
 | `sf.shadelift` | 0.45 | Perfil 2 shade: piso da luminância para texto escuro |
 | `sf.hulight` | 0.40 | Heads-up: luz que entra pelo contorno conforme o fundo ali (0 restaura v0.26) |
-| `sf.kglight` | 0.35 | Lockscreen: luz que entra pelo contorno conforme o fundo ali (0 restaura v0.26) |
+| `sf.kglight` | 0.50 | Lockscreen: luz que entra pelo contorno conforme o fundo ali (0 restaura v0.26) |
 | `sf.shadelight` | 0.30 | Perfil 2 shade: luz que entra pelo contorno conforme o fundo ali (0 restaura v0.26) |
 | `sf.qslens` | 0.30 | Quick Settings: refração do fundo junto ao contorno (0 desliga a refração e o fundo refratado) |
 | `sf.qsbody` | 0.35 | Quick Settings: opacidade do fundo refratado no contorno |
@@ -193,33 +193,33 @@ Controles `qs.*` são lidos pelo snapshot `QsStyle` em callbacks de configuraç�
 | Chave | Padrão | Tipo/domínio do parser | Controle / consequência |
 | --- | --- | --- | --- |
 | `qs.darkfill` | 0 | 0–0.18 | Legado sem efeito visual; o interior das cápsulas é sempre transparente |
-| `qs.lightfill` | .10 | 0–0.18 | Tom escuro das cápsulas sobre apps claros (transparentes sobre fundos escuros/coloridos) |
+| `qs.lightfill` | 0 | 0–0.18 | Tom escuro das cápsulas sobre apps claros (transparentes sobre fundos escuros/coloridos) |
 | `qs.darkcolor` | ffffff | RGB hexadecimal | Legado sem efeito visual; o interior das cápsulas é sempre transparente |
-| `qs.lightcolor` | 141823 | RGB hexadecimal | Cor do tom das cápsulas sobre apps claros |
+| `qs.lightcolor` | ffffffff | RGB hexadecimal | Cor do tom das cápsulas sobre apps claros |
 | `qs.lightglassopacity` | 0 | 0–1 | Opacidade extra do interior das cápsulas sobre fundo claro; zero preserva o material atual |
 | `qs.lightglasscolor` | ffffff | RGBA hexadecimal | Cor do filme claro de opacidade das cápsulas |
-| `qs.lightoptics` | 1 | 0–2 | Intensidade óptica do contorno sobre fundo claro, separada da linha basal e da cena colorida |
+| `qs.lightoptics` | 0.36 | 0–2 | Intensidade óptica do contorno sobre fundo claro, separada da linha basal e da cena colorida |
 | `qs.glint` | 0 | 0–1 | Reflexo especular adicional no canto superior esquerdo das cápsulas; zero elimina brilho duplicado |
-| `qs.sliderlightcolor` | ffffff | RGBA hexadecimal | Preenchimento RGBA de brilho e volume sobre fundo claro |
-| `qs.sliderdarkcolor` | ffffff | RGBA hexadecimal | Preenchimento RGBA de brilho e volume sobre fundo escuro ou colorido |
+| `qs.sliderlightcolor` | 000c2189 | RGBA hexadecimal | Preenchimento RGBA de brilho e volume sobre fundo claro |
+| `qs.sliderdarkcolor` | f1f7ffe0 | RGBA hexadecimal | Preenchimento RGBA de brilho e volume sobre fundo escuro ou colorido |
 | `qs.tilelight` | 1 | booleano | Habilita contraste de discos e ícones sobre fundo claro sem alterar as cápsulas |
 | `qs.hideoffdiscs` | 1 | booleano | Ocultar fundo e aro dos discos desligados, sem ocultar ícones; aplica em cenas claras e coloridas apenas a tiles identificados |
-| `qs.tilelighton` | cdd7e5 | RGB hexadecimal | Disco ligado sobre fundo claro |
-| `qs.tilelightoff` | 202c3c | RGB hexadecimal | Disco desligado sobre fundo claro |
+| `qs.tilelighton` | 000c21cd | RGB hexadecimal | Disco ligado sobre fundo claro |
+| `qs.tilelightoff` | 24324666 | RGB hexadecimal | Disco desligado sobre fundo claro |
 | `qs.tilelightoffalpha` | .24 | 0–1 | Opacidade do disco desligado sobre fundo claro |
-| `qs.tilelightonink` | 20242e | RGB hexadecimal | Ícone monocromático ligado sobre fundo claro |
-| `qs.tilelightoffink` | 343a46 | RGB hexadecimal | Ícone monocromático desligado sobre fundo claro |
-| `qs.tiledark` | 0 | booleano | Habilita paleta personalizada para fundo escuro/colorido (desligado por padrão) |
-| `qs.tiledarkon` | ffffff | RGB hexadecimal | Disco ligado sobre fundo escuro/colorido |
-| `qs.tiledarkoff` | ffffff | RGB hexadecimal | Disco desligado sobre fundo escuro/colorido |
+| `qs.tilelightonink` | ffffffeb | RGB hexadecimal | Ícone monocromático ligado sobre fundo claro |
+| `qs.tilelightoffink` | 000c21cd | RGB hexadecimal | Ícone monocromático desligado sobre fundo claro |
+| `qs.tiledark` | 1 | booleano | Habilita paleta personalizada para fundo escuro/colorido (ligado por padrão) |
+| `qs.tiledarkon` | ffffffd9 | RGB hexadecimal | Disco ligado sobre fundo escuro/colorido |
+| `qs.tiledarkoff` | e6f0ff40 | RGB hexadecimal | Disco desligado sobre fundo escuro/colorido |
 | `qs.tiledarkoffalpha` | .10 | 0–1 | Opacidade do disco desligado sobre fundo escuro/colorido |
-| `qs.tiledarkonink` | 1d1d1d | RGB hexadecimal | Ícone monocromático ligado sobre fundo escuro/colorido |
-| `qs.tiledarkoffink` | ffffff | RGB hexadecimal | Ícone monocromático desligado sobre fundo escuro/colorido |
+| `qs.tiledarkonink` | 17202ff2 | RGB hexadecimal | Ícone monocromático ligado sobre fundo escuro/colorido |
+| `qs.tiledarkoffink` | ffffffe6 | RGB hexadecimal | Ícone monocromático desligado sobre fundo escuro/colorido |
 | `qs.idle` | 0 | 0–0.12 | Legado sem efeito visual; discos desligados são sempre transparentes |
 | `qs.active` | .90 | 0–1 | Legado sem efeito visual; os círculos mantêm as cores da Samsung |
-| `qs.darkrim` | .26 | 0–1 | Intensidade do contorno sobre fundos escuros ou coloridos |
+| `qs.darkrim` | 0.28 | 0–1 | Intensidade do contorno sobre fundos escuros ou coloridos |
 | `qs.lightrim` | .18 | 0–1 | Intensidade do contorno de luz sobre apps claros |
-| `qs.edgeblur` | 8 | inteiro 1–32 px | Desfoque do fundo lido pela lente dinâmica no contorno das cápsulas |
+| `qs.edgeblur` | 6 | inteiro 1–32 px | Desfoque do fundo lido pela lente dinâmica no contorno das cápsulas |
 | `qs.outer` | 1 | 0.50–1 | Espessura da pílula inteira dos sliders (o toque continua na área da Samsung) |
 | `qs.track` | .88 | 0.10–1 | Legado sem efeito visual; preservado para importar e exportar perfis |
 | `qs.fill` | .85 | 0.10–1 | Espessura do preenchimento branco dentro da cápsula; a mesma margem vale nas pontas |

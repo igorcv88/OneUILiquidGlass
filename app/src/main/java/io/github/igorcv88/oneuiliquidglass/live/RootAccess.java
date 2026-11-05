@@ -1,6 +1,7 @@
 package io.github.igorcv88.oneuiliquidglass.live;
 
 import android.app.Activity;
+import io.github.igorcv88.oneuiliquidglass.R;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
@@ -30,12 +31,18 @@ public final class RootAccess {
     private final Activity activity;
     private final ExecutorService worker;
     private boolean granted, busy, closed;
-    private String message = "Root ainda não verificado";
+    private int messageId;
+    private String detail;
+    private static final class RootFailure extends IOException {
+        final int messageId;
+        RootFailure(int messageId) { this.messageId = messageId; }
+    }
     private Runnable listener = () -> {};
 
     public RootAccess(Activity activity, ExecutorService worker) {
         this.activity = activity;
         this.worker = worker;
+        messageId = R.string.root_unchecked;
     }
 
     public boolean granted() {
@@ -47,7 +54,7 @@ public final class RootAccess {
     }
 
     public String message() {
-        return message;
+        return messageId != 0 ? activity.getString(messageId) : detail;
     }
 
     public void listen(Runnable listener) {
@@ -73,7 +80,7 @@ public final class RootAccess {
         if (granted()) execute(Action.SOFT_REBOOT, done);
     }
 
-    private static String run(String fixed) throws Exception {
+    private String run(String fixed) throws Exception {
         Process p = new ProcessBuilder("su", "-c", fixed).redirectErrorStream(true).start();
         ExecutorService reader = Executors.newSingleThreadExecutor();
         Future<String> output =
@@ -83,9 +90,9 @@ public final class RootAccess {
                                         p.getInputStream().readNBytes(8192),
                                         StandardCharsets.UTF_8));
         try {
-            if (!p.waitFor(15, TimeUnit.SECONDS)) throw new IOException("Autorização SU expirou");
+            if (!p.waitFor(15, TimeUnit.SECONDS)) throw new RootFailure(R.string.root_timeout);
             String result = output.get(2, TimeUnit.SECONDS).trim();
-            if (p.exitValue() != 0) throw new IOException("SU recusado ou indisponível");
+            if (p.exitValue() != 0) throw new RootFailure(R.string.root_denied_unavailable);
             return result;
         } finally {
             p.destroy();
@@ -96,43 +103,39 @@ public final class RootAccess {
     private void execute(Action action, Consumer<Boolean> done) {
         if (closed || busy) return;
         busy = true;
-        message =
-                action == Action.SYSTEM_UI
-                        ? "Reiniciando SystemUI…"
-                        : action == Action.SOFT_REBOOT
-                                ? "Reiniciando userspace…"
-                                : "Autorize o acesso SU para este aplicativo…";
+        messageId = action == Action.SYSTEM_UI ? R.string.root_restarting_ui
+                : action == Action.SOFT_REBOOT ? R.string.root_restarting_userspace : R.string.root_authorize;
         listener.run();
         worker.execute(
                 () -> {
                     boolean ok = false;
-                    String result;
+                    int resultId;
+                    String resultDetail = null;
                     try {
                         if (!"0".equals(run("/system/bin/id -u")))
-                            throw new IOException("SU não retornou UID 0");
+                            throw new RootFailure(R.string.root_bad_uid);
                         if (action == Action.SYSTEM_UI)
                             run("/system/bin/killall com.android.systemui");
                         else if (action == Action.SOFT_REBOOT) run(SOFT_REBOOT);
                         ok = true;
-                        result =
-                                action == Action.SYSTEM_UI
-                                        ? "Reinício solicitado. Aguardando nova leitura da"
-                                              + " SystemUI."
-                                        : action == Action.SOFT_REBOOT
-                                                ? "Reinício do userspace solicitado"
-                                                : "Acesso root confirmado";
+                        resultId = action == Action.SYSTEM_UI ? R.string.root_ui_requested
+                                : action == Action.SOFT_REBOOT ? R.string.root_userspace_requested : R.string.root_confirmed;
                     } catch (Exception e) {
-                        result = e.getMessage() == null ? "Root indisponível" : e.getMessage();
+                        resultId = e instanceof RootFailure ? ((RootFailure) e).messageId
+                                : e.getMessage() == null ? R.string.root_unavailable : 0;
+                        resultDetail = e.getMessage();
                     }
                     final boolean success = ok;
-                    final String status = result;
+                    final int statusId = resultId;
+                    final String statusDetail = resultDetail;
                     activity.runOnUiThread(
                             () -> {
                                 if (closed || activity.isFinishing() || activity.isDestroyed())
                                     return;
                                 granted = success;
                                 busy = false;
-                                message = status;
+                                messageId = statusId;
+                                detail = statusDetail;
                                 listener.run();
                                 done.accept(success);
                             });

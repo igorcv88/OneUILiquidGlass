@@ -7,6 +7,12 @@ import java.util.*;
 /** Import parses and validates the entire payload before any write; unknown keys are reported. */
 public final class PresetCodec {
     public static final int MAX_BYTES = 131072;
+    public enum Error { TOO_LARGE, VERSION, TYPE, VALUE }
+    public static final class InvalidPreset extends IllegalArgumentException {
+        public final Error error;
+        public final String key;
+        InvalidPreset(Error error, String key) { this.error = error; this.key = key; }
+    }
 
     public static final class Parsed {
         public final Map<String, String> values = new LinkedHashMap<>();
@@ -45,10 +51,10 @@ public final class PresetCodec {
     }
 
     public static Parsed parse(String input) throws JSONException {
-        if (input.length() > MAX_BYTES) throw new IllegalArgumentException("Arquivo muito grande");
+        if (input.length() > MAX_BYTES) throw new InvalidPreset(Error.TOO_LARGE, null);
         JSONObject json = new JSONObject(input);
         if (json.getInt("schemaVersion") != 1)
-            throw new IllegalArgumentException("Versão de preset incompatível");
+            throw new InvalidPreset(Error.VERSION, null);
         Parsed result = new Parsed();
         result.enabled = json.getBoolean("enabled");
         result.device = json.optString("device");
@@ -58,7 +64,7 @@ public final class PresetCodec {
             String key = keys.next();
             Object raw = values.get(key);
             if (!(raw instanceof String))
-                throw new IllegalArgumentException("O valor deve ser texto: " + key);
+                throw new InvalidPreset(Error.TYPE, key);
             String value = (String) raw;
             SettingSpec spec = SettingsRegistry.get(key);
             if (spec != null) {
@@ -66,7 +72,8 @@ public final class PresetCodec {
                     result.unknown.add(key + " (somente leitura)");
                     continue;
                 }
-                result.values.put(key, spec.validate(value));
+                try { result.values.put(key, spec.validate(value)); }
+                catch (IllegalArgumentException e) { throw new InvalidPreset(Error.VALUE, key); }
             } else if (ProductFlags.known(key) && (value.equals("1") || value.equals("0")))
                 result.values.put(key, value);
             else result.unknown.add(key);

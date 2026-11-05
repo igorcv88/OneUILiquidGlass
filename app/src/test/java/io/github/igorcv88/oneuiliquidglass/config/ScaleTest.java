@@ -44,12 +44,27 @@ public class ScaleTest {
     public void mediaArtOpacityMovesInFivePercentStepsWithNativeAtZero() {
         Scale s = Scale.of(Controls.get("mediaart"));
         assertFalse(s.auto);
-        assertEquals(20, s.steps);
+        assertEquals(11, s.steps);
         assertEquals("0", s.value(0));
-        assertEquals("0.05", s.value(1));
-        assertEquals("0.25", s.value(5));
-        assertEquals("1", s.value(20));
-        assertEquals(5, s.index("0.25"));
-        assertEquals(5, s.index(SettingsRegistry.get("mediaart").defaultValue));
+        assertEquals("0.5", s.value(1));
+        assertEquals("0.7", s.value(5));
+        assertEquals("1", s.value(11));
+        assertEquals(1, s.index("0.25"));
+        assertEquals(1, s.index(SettingsRegistry.get("mediaart").defaultValue));
+    }
+    @Test
+    public void legacyMediaValuesHaveTheirOwnEditablePositions() {
+        Controls.Control c = Controls.get("mediaart");
+        for (String value : new String[] {"0.25", "0.45", "0.27"}) {
+            Scale s = Scale.of(c, value);
+            assertEquals(Double.parseDouble(value), Double.parseDouble(s.value(s.index(value))), 1e-9);
+            assertEquals("0", s.value(0));
+            assertTrue(s.index(value) > 1);
+            assertEquals("0.5", s.value(s.index("0.5")));
+        }
+        for (String value : new String[] {"0", "0.50", "0.75", "1.00"}) {
+            Scale s = Scale.of(c, value);
+            assertEquals(Double.parseDouble(value), Double.parseDouble(s.value(s.index(value))), 1e-9);
+        }
     }
 }

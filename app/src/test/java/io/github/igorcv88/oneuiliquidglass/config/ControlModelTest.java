@@ -312,6 +312,8 @@ public class ControlModelTest {
         assertEquals("25 %", ValueFormat.display(c, "0.25"));
         assertEquals("100 %", ValueFormat.display(c, "1"));
         assertEquals("0.25", ValueFormat.fromEdit(c, "25"));
+        assertEquals("0.5", ValueFormat.fromEdit(c, "50"));
+        assertEquals("0", ValueFormat.fromEdit(c, "0"));
         assertThrows(IllegalArgumentException.class, () -> ValueFormat.fromEdit(c, "105"));
     }
 
@@ -322,6 +324,19 @@ public class ControlModelTest {
         assertEquals("0.15", s.device("mediaart"));
         assertEquals("0.15", s.shown("mediaart"));
         assertFalse("live, no restart", s.pendingRestart("mediaart"));
-        assertEquals("0.25", state(Collections.emptyMap(), Collections.emptyMap()).shown("mediaart"));
+        assertEquals("0.50", state(Collections.emptyMap(), Collections.emptyMap()).shown("mediaart"));
     }
+    @Test
+    public void numbersFollowTheSelectedLocaleWithoutChangingStoredValues() {
+        Controls.Control c = Controls.get("sflens");
+        java.util.Locale pt = java.util.Locale.forLanguageTag("pt-BR");
+        java.util.Locale en = java.util.Locale.ENGLISH;
+        assertEquals("0,45", ValueFormat.display(c, "0.45", pt));
+        assertEquals("0.45", ValueFormat.display(c, "0.45", en));
+        assertEquals("0,45", ValueFormat.toEdit(c, "0.45", pt));
+        assertEquals("0.45", ValueFormat.toEdit(c, "0.45", en));
+        assertEquals("0.45", ValueFormat.fromEdit(c, "0,45"));
+        assertEquals("0.45", ValueFormat.fromEdit(c, "0.45"));
+    }
+
 }

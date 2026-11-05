@@ -28,6 +28,8 @@ public class ControlMatrixTest {
         Matcher m = Pattern.compile("(?m)^\\s*(?:int |String |float )?(\\w+) = [^;]*?(?:number|prop)\\(\"([a-z0-9.]+)\"").matcher(tuning);
         while (m.find()) out.computeIfAbsent(m.group(2), k -> new TreeSet<>()).add(m.group(1));
         // Derived fields read through locals or helpers.
+        // QS reads the same debug property independently of the app override.
+        out.computeIfAbsent("mediaart", k -> new TreeSet<>()).add("qsMediaArt");
         out.put("shadetone", new TreeSet<>(Arrays.asList("shadeTone", "shadeVeil", "shadeAdaptive")));
         out.put("liveblur", new TreeSet<>(Collections.singletonList("live")));
         out.computeIfAbsent("sfrefract", k -> new TreeSet<>()).add("live");
@@ -163,8 +165,8 @@ public class ControlMatrixTest {
             boolean quick = k.equals(ProductFlags.QUICK_SETTINGS);
             assertTrue(k, quick ? qs.contains("ProductFlags.QUICK_SETTINGS") : live.contains("ConfigClient.flag(s.flag)"));
             String effect = quick ? "Central de controle volta ao visual nativo"
-                    : k.equals(ProductFlags.LIVE_ACTIVITY) ? "pílula e cartão da atividade ao vivo (sem mídia) voltam ao fundo nativo"
-                    : k.equals(ProductFlags.NOW_BAR) ? "cartão da Now Bar (sem mídia) volta ao fundo nativo"
+                    : k.equals(ProductFlags.LIVE_ACTIVITY) ? "pílula e cartões de atividades ao vivo e mídia voltam ao fundo nativo"
+                    : k.equals(ProductFlags.NOW_BAR) ? "cartão da Now Bar e cápsula compacta de mídia voltam ao fundo nativo; mídia expandida e AOD permanecem nativos"
                     : "toasts voltam ao fundo nativo";
             b.append("| `").append(k).append("` | ").append(quick ? "hooks/QuickSettingsHooks (`enabled`)" : "hooks/ongoing/LiveSurfaceHooks (`allows`)")
                     .append(" | ").append(effect).append(" | inativo (opt-in) | ativo | ativo |\n");

@@ -81,7 +81,7 @@ public final class Tuning {
     public final int liveRadius;
     /**
      * Blur radius in px of expanded-shade cards in LSPosed-only mode (debug.oulg.liveshaderadius,
-     * default 120). The shade window blurs the whole backdrop already, so a card needs less of its own.
+     * default 60). The shade window blurs the whole backdrop already, so a card needs less of its own.
      */
     public final int liveShadeRadius;
     /** Gain of the LSPosed-only edge optics (debug.oulg.liveoptics, default 1, 0 to 2). */
@@ -95,7 +95,7 @@ public final class Tuning {
      * contour and Fresnel are not affected. Lockscreen cards keep the full glint.
      */
     public final float liveGlint;
-    /** The same gain on expanded-shade cards (debug.oulg.shadeglint, default 0.10): they showed the second arc too. */
+    /** Gain on expanded-shade cards (debug.oulg.shadeglint, default 0.22): they showed the second arc too. */
     public final float shadeGlint;
     /**
      * Captured lens band on LSPosed-only pop-ups (debug.oulg.livelens, default 1). It shows only while
@@ -232,8 +232,7 @@ public final class Tuning {
      * Pop-ups in the dark theme, LSPosed-only mode (lockscreen cards keep liveDarkColor and no fill,
      * their look approved before round 39): white alpha of the region
      * colour (debug.oulg.livedarkalpha, 0-255, default 20) and black alpha of the fill
-     * (debug.oulg.livedarkfill, default 10). These are the values before the dark-theme lift of
-     * 25/10 01:41 UTC (28 and 0), the look of the 24/10 screenshot the user prefers: a clearer,
+     * (debug.oulg.livedarkfill, default 0). These control a clearer,
      * deeper body. 28 and 0 restore the lift.
      */
     public final int liveDarkAlpha, liveDarkFill;
@@ -247,7 +246,7 @@ public final class Tuning {
     public final float liveRim;
     /**
      * Lockscreen cards, dark theme, LSPosed-only mode: region white alpha (debug.oulg.kgdarkalpha,
-     * 0-255, default 20), black fill alpha (kgdarkfill, default 14), outer-line gain (kgrim, default
+     * 0-255, default 20), black fill alpha (kgdarkfill, default 5), outer-line gain (kgrim, default
      * 2) and corner glint (kgglint, default 0.10). 28 / 0 / 1 / 1 is the look before 25/10 evening.
      */
     public final int kgDarkAlpha, kgDarkFill;
@@ -292,7 +291,9 @@ public final class Tuning {
      * (hooks.ongoing.MediaArtGlass): 0.05-1, or {@link #MEDIA_ART_NATIVE} for the native art.
      */
     public final float mediaArt;
-    public static final float MEDIA_ART_NATIVE = -1f, MEDIA_ART_DEFAULT = 0.25f, MEDIA_ART_MIN = 0.05f;
+    /** QS keeps its existing property-only setting and default independently of the app control. */
+    public final float qsMediaArt;
+    public static final float MEDIA_ART_NATIVE = -1f, MEDIA_ART_DEFAULT = 0.50f, MEDIA_ART_MIN = 0.05f;
     /** Keep Samsung's gray BGColorAdjustment over the blur. */
     public final boolean panelNativeGray;
     /** Optional RGBA overlay on the shade window blur, unrelated to card tint. */
@@ -306,7 +307,7 @@ public final class Tuning {
     public final int sfOptics;
     /**
      * Extra gap in dp between the header row and the title of expanded notifications
-     * (debug.oulg.headergap, default 4, 0 turns it off, at most 8). Layout only: it does not touch
+     * (debug.oulg.headergap, default 7, 0 turns it off, at most 8). Layout only: it does not touch
      * the glass. A change shows at the next measure of each notification.
      */
     public final float headerGap;
@@ -358,12 +359,12 @@ public final class Tuning {
         hz = Math.round(clamp(number("hz", 15f), 1f, 120f));
         keyguardHz = Math.round(clamp(number("hzkg", 5f), 1f, 120f));
         tintAlpha = Math.round(clamp(number("tint", -1f), -1f, 255f));
-        semRadius = Math.round(clamp(number("semradius", -1f), -1f, 400f));
-        semRadiusLens = Math.round(clamp(number("semradiuslens", 16f), -1f, 400f));
-        sfLens = clamp(number("sflens", 0.45f), 0.1f, 1.2f);
+        semRadius = Math.round(clamp(number("semradius", 0f), -1f, 400f));
+        semRadiusLens = Math.round(clamp(number("semradiuslens", 14f), -1f, 400f));
+        sfLens = clamp(number("sflens", 0.55f), 0.1f, 1.2f);
         // "spatial" stopped the blur rendering on S938BXXUCZZIC (sharp backdrop in screenshots): off by default.
         semCurve = prop("semcurve", "auto");
-        semAlpha = Math.round(clamp(number("semalpha", -1f), -1f, 255f));
+        semAlpha = Math.round(clamp(number("semalpha", 0f), -1f, 255f));
         String shape = prop("semshape", "auto");
         shadeBlur = number("shadeblur", 1f) >= 1f;
         sfRefract = number("sfrefract", 0f) >= 1f;
@@ -373,7 +374,7 @@ public final class Tuning {
         liveOptics = clamp(number("liveoptics", 1f), 0f, 2f);
         liveSheen = clamp(number("livesheen", 0.02f), 0f, 0.15f);
         liveGlint = clamp(number("liveglint", 0.10f), 0f, 1f);
-        shadeGlint = clamp(number("shadeglint", 0.10f), 0f, 1f);
+        shadeGlint = clamp(number("shadeglint", 0.22f), 0f, 1f);
         liveLens = number("livelens", 1f) >= 1f;
         // 40 ms: chosen on the device on 25/10 (was 50).
         lensMaxAge = Math.round(clamp(number("lensmaxage", 40f), 8f, 500f));
@@ -384,7 +385,7 @@ public final class Tuning {
         shadeBlurPath = Math.round(clamp(number("shadeblurpath", 1f), 0f, 1f));
         shadeFadeCut = clamp(number("shadefadecut", 0.5f), 0f, 1f);
         kgWinBlur = number("kgwinblur", 0f) >= 1f;
-        kgBlurRadius = Math.round(clamp(number("kgblurradius", -1f), -1f, 400f));
+        kgBlurRadius = Math.round(clamp(number("kgblurradius", 12f), -1f, 400f));
         pillGlass = number("pillglass", 1f) >= 1f;
         pillBlur = Math.round(clamp(number("pillblur", 40f), 0f, 400f));
         kgOptics = Math.round(clamp(number("kgoptics", 1f), 0f, 1f));
@@ -406,27 +407,28 @@ public final class Tuning {
         catch(IllegalArgumentException e) { selectedLightTone=0xffffffff; }
         lightTone = selectedLightTone & 0xffffff;
         lightToneOpacity = (selectedLightTone >>> 24) / 255f;
-        shadeLightGlass = clamp(number("shadelightglass", 0.27f), 0f, 0.95f);
+        shadeLightGlass = clamp(number("shadelightglass", 0.18f), 0f, 0.95f);
         shadeDarkGlass = clamp(number("shadedarkglass", 0.14f), 0f, 0.95f);
         lightOutline = clamp(number("lightoutline", 0.8f), 0f, 2f);
         lightEdge = clamp(number("lightedge", 1f), 0f, 4f);
         liveDarkAlpha = Math.round(clamp(number("livedarkalpha", 20f), 0f, 255f));
-        liveDarkFill = Math.round(clamp(number("livedarkfill", 10f), 0f, 255f));
+        liveDarkFill = Math.round(clamp(number("livedarkfill", 0f), 0f, 255f));
         liveRim = clamp(number("liverim", 2f), 0f, 4f);
         kgDarkAlpha = Math.round(clamp(number("kgdarkalpha", 20f), 0f, 255f));
-        kgDarkFill = Math.round(clamp(number("kgdarkfill", 14f), 0f, 255f));
+        kgDarkFill = Math.round(clamp(number("kgdarkfill", 5f), 0f, 255f));
         kgRim = clamp(number("kgrim", 2f), 0f, 4f);
         kgGlint = clamp(number("kgglint", 0.10f), 0f, 1f);
         textSwap = number("textswap", 1f) >= 1f;
-        headerTone = number("headertone", 1f) >= 1f;
+        headerTone = number("headertone", 0f) >= 1f;
         iconTone = number("icontone", 1f) >= 1f;
         popupTone = number("popuptone", 1f) >= 1f;
         popupLock = number("popuplock", 1f) >= 1f;
         orphanDraw = number("orphandraw", 1f) >= 1f;
         shadeLocal = number("shadelocal", 0f) >= 1f;
-        panelDim = clamp(number("paneldim", 0.12f), 0f, 0.4f);
-        panelBlurCap = Math.round(clamp(number("panelblurcap", 52f), -1f, 400f));
+        panelDim = clamp(number("paneldim", 0.08f), 0f, 0.4f);
+        panelBlurCap = Math.round(clamp(number("panelblurcap", 70f), -1f, 400f));
         mediaArt = mediaArtOpacity(prop("mediaart", ""));
+        qsMediaArt = qsMediaArtOpacity(systemProp("mediaart", ""));
         panelNativeGray = number("panelnativegray", 0f) >= 1f;
         int selectedPanelColor;
         try {
@@ -436,7 +438,7 @@ public final class Tuning {
         qsGlint = clamp(number("qs.glint", 0f), 0f, 1f);
         shadeScaleVeil = Math.round(Math.max(0f, Math.min(255f, number("shadescaleveil", 115f))));
         sfOptics = Math.round(clamp(number("sf.optics", 0f), 0f, 1000f));
-        headerGap = clamp(number("headergap", 4f), 0f, 8f);
+        headerGap = clamp(number("headergap", 7f), 0f, 8f);
         perf = number("perf", 0f) >= 1f;
         Perf.enabled = perf;
         trace = number("trace", 0f) >= 1f;
@@ -449,10 +451,10 @@ public final class Tuning {
         return !sfRefract && liveBlur && "auto".equals(backdrop);
     }
 
-    static final int LIVE_RADIUS = 80, LIVE_SHADE_RADIUS = 120;
+    static final int LIVE_RADIUS = 80, LIVE_SHADE_RADIUS = 60;
     /**
-     * Blur radius of a card in LSPosed-only mode. Pop-ups (and lockscreen cards) take less blur than
-     * shade cards: over an app they are the only blur, in the shade the window is blurred already.
+     * Blur radius of a card in LSPosed-only mode. Pop-up, shade and lockscreen overrides are
+     * independent; the shade window also blurs the backdrop behind its cards.
      * A card that moves between the two (a pop-up opening the shade) ramps between the radii
      * (BackgroundBlurBridge). kgblurradius, when set, still applies to lockscreen cards.
      */
@@ -525,7 +527,7 @@ public final class Tuning {
         return "backdrop=" + backdrop + " profile=" + profile + " lens=" + lens + " rimhz=" + rimHz + " rimblur=" + rimBlur
                 + " refract=" + refract + " ior=" + ior + " blur=" + blur + " sat=" + saturation
                 + " disp=" + dispersion + " hz=" + hz + " hzkg=" + keyguardHz + " tint=" + tintAlpha
-                + " semradius=" + semRadius + " semradiuslens=" + semRadiusLens + " sflens=" + sfLens + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " live=" + live + " liveradius=" + liveRadius + " liveshaderadius=" + liveShadeRadius + " liveoptics=" + liveOptics + " livesheen=" + liveSheen + " liveglint=" + liveGlint + " shadeglint=" + shadeGlint + " livelens=" + liveLens + " lensmaxage=" + lensMaxAge + " lenssettle=" + lensSettle + " lensgate=" + lensGate + " lenstransition=" + lensTransition + " kgblurpath=" + kgBlurPath + " shadeblurpath=" + shadeBlurPath + " shadefadecut=" + shadeFadeCut + " kgblurradius=" + kgBlurRadius + " pillglass=" + pillGlass + " pillblur=" + pillBlur + " kgoptics=" + kgOptics + " huoptics=" + huOptics + " kglens=" + kgLens + " shadetone=" + shadeTone + " shadeveil=" + shadeVeil + " shadeadaptive=" + shadeAdaptive + " shadecap=" + shadeCap + " shadelift=" + shadeLift + " veilmax=" + veilMax + " stylelo=" + styleLo + " stylehi=" + styleHi + " lightglass=" + lightGlass + " lighttone=" + Integer.toHexString(lightTone) + " lightedge=" + lightEdge + " lightoutline=" + lightOutline + " shadelightglass=" + shadeLightGlass + " shadedarkglass=" + shadeDarkGlass + " livedarkalpha=" + liveDarkAlpha + " livedarkfill=" + liveDarkFill + " liverim=" + liveRim + " kgdarkalpha=" + kgDarkAlpha + " kgdarkfill=" + kgDarkFill + " kgrim=" + kgRim + " kgglint=" + kgGlint + " textswap=" + textSwap + " headertone=" + headerTone + " icontone=" + iconTone + " popuptone=" + popupTone + " popuplock=" + popupLock + " orphandraw=" + orphanDraw + " shadescaleveil=" + shadeScaleVeil + " shadelocal=" + shadeLocal + " paneldim=" + panelDim + " panelblurcap=" + panelBlurCap + " panelnativegray=" + panelNativeGray + " panelcolor=" + Integer.toHexString(panelColor) + " sfoptics=" + sfOptics + " kgwinblur=" + kgWinBlur + " headergap=" + headerGap + " perf=" + perf + " trace=" + trace;
+                + " semradius=" + semRadius + " semradiuslens=" + semRadiusLens + " sflens=" + sfLens + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " live=" + live + " liveradius=" + liveRadius + " liveshaderadius=" + liveShadeRadius + " liveoptics=" + liveOptics + " livesheen=" + liveSheen + " liveglint=" + liveGlint + " shadeglint=" + shadeGlint + " livelens=" + liveLens + " lensmaxage=" + lensMaxAge + " lenssettle=" + lensSettle + " lensgate=" + lensGate + " lenstransition=" + lensTransition + " kgblurpath=" + kgBlurPath + " shadeblurpath=" + shadeBlurPath + " shadefadecut=" + shadeFadeCut + " kgblurradius=" + kgBlurRadius + " pillglass=" + pillGlass + " pillblur=" + pillBlur + " kgoptics=" + kgOptics + " huoptics=" + huOptics + " kglens=" + kgLens + " shadetone=" + shadeTone + " shadeveil=" + shadeVeil + " shadeadaptive=" + shadeAdaptive + " shadecap=" + shadeCap + " shadelift=" + shadeLift + " veilmax=" + veilMax + " stylelo=" + styleLo + " stylehi=" + styleHi + " lightglass=" + lightGlass + " lighttone=" + Integer.toHexString(lightTone) + " lightedge=" + lightEdge + " lightoutline=" + lightOutline + " shadelightglass=" + shadeLightGlass + " shadedarkglass=" + shadeDarkGlass + " livedarkalpha=" + liveDarkAlpha + " livedarkfill=" + liveDarkFill + " liverim=" + liveRim + " kgdarkalpha=" + kgDarkAlpha + " kgdarkfill=" + kgDarkFill + " kgrim=" + kgRim + " kgglint=" + kgGlint + " textswap=" + textSwap + " headertone=" + headerTone + " icontone=" + iconTone + " popuptone=" + popupTone + " popuplock=" + popupLock + " orphandraw=" + orphanDraw + " shadescaleveil=" + shadeScaleVeil + " shadelocal=" + shadeLocal + " paneldim=" + panelDim + " panelblurcap=" + panelBlurCap + " panelnativegray=" + panelNativeGray + " panelcolor=" + Integer.toHexString(panelColor) + " sfoptics=" + sfOptics + " kgwinblur=" + kgWinBlur + " headergap=" + headerGap + " perf=" + perf + " trace=" + trace + " mediaart=" + mediaArt + " qsmediaart=" + qsMediaArt;
     }
 
     /** A hex RGB value (with or without #), or the fallback. */
@@ -537,17 +539,26 @@ public final class Tuning {
     private static float clamp(float v, float lo, float hi) { return Float.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : lo; }
 
     /**
-     * debug.oulg.mediaart / app setting: empty or unreadable = 0.25; "0", "off", "false" or any
+     * debug.oulg.mediaart / app setting: empty or unreadable = 0.50; "0", "off", "false" or any
      * value not above 0 = native art; otherwise clamped to [0.05, 1].
      */
     public static float mediaArtOpacity(String raw) {
-        if (raw == null) return MEDIA_ART_DEFAULT;
+        return mediaArtOpacity(raw, MEDIA_ART_DEFAULT);
+    }
+
+    /** Preserve the original QS default when no debug property is set. */
+    public static float qsMediaArtOpacity(String raw) {
+        return mediaArtOpacity(raw, 0.25f);
+    }
+
+    private static float mediaArtOpacity(String raw, float fallback) {
+        if (raw == null) return fallback;
         String s = raw.trim().toLowerCase(java.util.Locale.ROOT);
-        if (s.isEmpty()) return MEDIA_ART_DEFAULT;
+        if (s.isEmpty()) return fallback;
         if (s.equals("off") || s.equals("false")) return MEDIA_ART_NATIVE;
         float f;
-        try { f = Float.parseFloat(s); } catch (NumberFormatException e) { return MEDIA_ART_DEFAULT; }
-        if (Float.isNaN(f)) return MEDIA_ART_DEFAULT;
+        try { f = Float.parseFloat(s); } catch (NumberFormatException e) { return fallback; }
+        if (Float.isNaN(f)) return fallback;
         if (f <= 0f) return MEDIA_ART_NATIVE;
         return Math.max(MEDIA_ART_MIN, Math.min(1f, f));
     }
@@ -561,6 +572,10 @@ public final class Tuning {
     private static String prop(String key, String fallback) {
         String override = io.github.igorcv88.oneuiliquidglass.config.ConfigClient.override(key);
         if (override != null) return override;
+        return systemProp(key, fallback);
+    }
+
+    private static String systemProp(String key, String fallback) {
         try {
             java.lang.reflect.Method get = sysGet;
             if (get == null) sysGet = get = Class.forName("android.os.SystemProperties").getMethod("get", String.class, String.class);

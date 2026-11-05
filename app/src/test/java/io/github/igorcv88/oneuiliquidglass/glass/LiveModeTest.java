@@ -15,10 +15,11 @@ public final class LiveModeTest {
         assertFalse(Tuning.live(false, true, "grid"));
         assertFalse(Tuning.live(false, true, "off"));
     }
-    @Test public void popupsTakeLessBlurThanShadeCards() {
+    @Test public void popupAndShadeUseTheirIndependentDefaults() {
         assertEquals(Tuning.LIVE_RADIUS, Tuning.livePx(Tuning.LIVE_RADIUS, Tuning.LIVE_SHADE_RADIUS, -1, true, false));
         assertEquals(Tuning.LIVE_SHADE_RADIUS, Tuning.livePx(Tuning.LIVE_RADIUS, Tuning.LIVE_SHADE_RADIUS, -1, false, false));
-        assertTrue(Tuning.LIVE_RADIUS < Tuning.LIVE_SHADE_RADIUS);
+        assertEquals(80, Tuning.LIVE_RADIUS);
+        assertEquals(60, Tuning.LIVE_SHADE_RADIUS);
         // Both stay well under the 180 px that read as a uniformly frosted plate on the device.
         assertTrue(Tuning.LIVE_SHADE_RADIUS < GlassSpec.SAMSUNG_RADIUS);
     }

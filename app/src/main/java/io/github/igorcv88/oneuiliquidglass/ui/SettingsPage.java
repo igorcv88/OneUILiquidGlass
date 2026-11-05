@@ -4,6 +4,8 @@ import android.view.*;
 import android.widget.*;
 
 import io.github.igorcv88.oneuiliquidglass.Config;
+import io.github.igorcv88.oneuiliquidglass.R;
+import io.github.igorcv88.oneuiliquidglass.i18n.AppLanguage;
 import io.github.igorcv88.oneuiliquidglass.config.*;
 import io.github.igorcv88.oneuiliquidglass.live.SfLive;
 import io.github.igorcv88.oneuiliquidglass.ui.kit.*;
@@ -28,16 +30,21 @@ public final class SettingsPage implements Page {
         scroll = Ui.scroller(a);
         content = Ui.column(a);
         scroll.addView(content);
-        content.addView(Ui.title(a, t, "Ajustes"), Ui.match(t.dp(8), t.dp(4)));
+        content.addView(Ui.title(a, t, host.activity().getString(R.string.settings)), Ui.match(t.dp(8), t.dp(4)));
 
-        content.addView(Ui.section(a, t, "Aparência"));
+        content.addView(Ui.section(a, t, host.activity().getString(R.string.appearance)));
         LinearLayout look = Ui.card(a, t);
-        themeRow = Ui.listRow(a, t, Icon.SUN, "Tema", "", Ui.chevron(a, t));
+        LinearLayout languageRow = Ui.listRow(a, t, Icon.SETTINGS, a.getString(R.string.language),
+                AppLanguage.PORTUGUESE.equals(AppLanguage.get(a)) ? "Português (Brasil)" : "English", Ui.chevron(a, t));
+        languageRow.setOnClickListener(v -> chooseLanguage());
+        look.addView(languageRow);
+        look.addView(Ui.divider(a, t, t.dp(72)));
+        themeRow = Ui.listRow(a, t, Icon.SUN, host.activity().getString(R.string.theme), "", Ui.chevron(a, t));
         themeRow.setOnClickListener(v -> chooseTheme());
         look.addView(themeRow);
         look.addView(Ui.divider(a, t, t.dp(72)));
         motion = new Toggle(a, t);
-        LinearLayout motionRow = Ui.switchRow(a, t, Icon.PULSE, "Reduzir movimento", "Menos animações no app", motion);
+        LinearLayout motionRow = Ui.switchRow(a, t, Icon.PULSE, host.activity().getString(R.string.reduce_motion), host.activity().getString(R.string.reduce_motion_desc), motion);
         motion.listener((x, on) -> {
             host.model().ui.edit().putBoolean("reduceMotion", on).apply();
             host.rebuild();
@@ -45,72 +52,70 @@ public final class SettingsPage implements Page {
         look.addView(motionRow);
         content.addView(look, Ui.match());
 
-        content.addView(Ui.section(a, t, "Vidro"));
+        content.addView(Ui.section(a, t, host.activity().getString(R.string.glass)));
         LinearLayout glass = Ui.card(a, t);
-        lensRow = Ui.listRow(a, t, Icon.LENS, "Lente dinâmica", "", Ui.chevron(a, t));
+        lensRow = Ui.listRow(a, t, Icon.LENS, host.activity().getString(R.string.dynamic_lens), "", Ui.chevron(a, t));
         lensRow.setOnClickListener(v -> host.openLens());
         glass.addView(lensRow);
         glass.addView(Ui.divider(a, t, t.dp(72)));
-        LinearLayout tests = Ui.listRow(a, t, Icon.BELL, "Notificação de teste", "Agendar, várias de uma vez, canal", Ui.chevron(a, t));
+        LinearLayout tests = Ui.listRow(a, t, Icon.BELL, host.activity().getString(R.string.test_notification), host.activity().getString(R.string.test_notification_desc), Ui.chevron(a, t));
         tests.setOnClickListener(v -> host.openTestOptions());
         glass.addView(tests);
         glass.addView(Ui.divider(a, t, t.dp(72)));
-        LinearLayout styles = Ui.listRow(a, t, Icon.PALETTE, "Estilos", "Salvar, restaurar, desfazer", Ui.chevron(a, t));
+        LinearLayout styles = Ui.listRow(a, t, Icon.PALETTE, host.activity().getString(R.string.styles), host.activity().getString(R.string.styles_desc), Ui.chevron(a, t));
         styles.setOnClickListener(v -> new PresetsSheet(host).show());
         glass.addView(styles);
         content.addView(glass, Ui.match());
 
-        content.addView(Ui.section(a, t, "Backup"));
+        content.addView(Ui.section(a, t, host.activity().getString(R.string.backup)));
         LinearLayout backup = Ui.card(a, t);
-        LinearLayout export = Ui.listRow(a, t, Icon.BACKUP, "Exportar ajustes", "Arquivo JSON com todos os valores do app", null);
+        LinearLayout export = Ui.listRow(a, t, Icon.BACKUP, host.activity().getString(R.string.export_settings), host.activity().getString(R.string.export_settings_desc), null);
         export.setOnClickListener(v -> host.exportSettings());
         backup.addView(export);
         backup.addView(Ui.divider(a, t, t.dp(72)));
-        LinearLayout imp = Ui.listRow(a, t, Icon.COPY, "Importar ajustes", "Mostra as diferenças antes de usar", null);
+        LinearLayout imp = Ui.listRow(a, t, Icon.COPY, host.activity().getString(R.string.import_settings), host.activity().getString(R.string.import_settings_desc), null);
         imp.setOnClickListener(v -> host.importSettings());
         backup.addView(imp);
         content.addView(backup, Ui.match());
 
-        content.addView(Ui.section(a, t, "Diagnóstico"));
+        content.addView(Ui.section(a, t, host.activity().getString(R.string.diagnostics)));
         LinearLayout diag = Ui.card(a, t);
-        syncRow = Ui.listRow(a, t, Icon.PULSE, "Comunicação com o sistema", "", Ui.chevron(a, t));
+        syncRow = Ui.listRow(a, t, Icon.PULSE, host.activity().getString(R.string.system_connection), "", Ui.chevron(a, t));
         syncRow.setOnClickListener(v -> host.openSync());
         diag.addView(syncRow);
         conflictsDivider = Ui.divider(a, t, t.dp(72));
         diag.addView(conflictsDivider);
-        conflictsRow = Ui.listRow(a, t, Icon.WARNING, "Alterados fora do app", "", Ui.chevron(a, t));
+        conflictsRow = Ui.listRow(a, t, Icon.WARNING, host.activity().getString(R.string.external_changes), "", Ui.chevron(a, t));
         conflictsRow.setOnClickListener(v -> host.openConflicts());
         diag.addView(conflictsRow);
         diag.addView(Ui.divider(a, t, t.dp(72)));
-        LinearLayout all = Ui.listRow(a, t, Icon.CODE, "Todos os parâmetros", "Lista técnica completa, com busca", Ui.chevron(a, t));
+        LinearLayout all = Ui.listRow(a, t, Icon.CODE, host.activity().getString(R.string.all_parameters), host.activity().getString(R.string.all_parameters_desc), Ui.chevron(a, t));
         all.setOnClickListener(v -> new SearchSheet(host, Controls.Surface.HEADSUP, true).show());
         diag.addView(all);
         diag.addView(Ui.divider(a, t, t.dp(72)));
-        LinearLayout report = Ui.listRow(a, t, Icon.COPY, "Copiar relatório", "Sem conteúdo de notificações", null);
+        LinearLayout report = Ui.listRow(a, t, Icon.COPY, host.activity().getString(R.string.copy_report), host.activity().getString(R.string.copy_report_desc), null);
         report.setOnClickListener(v -> host.copy(report()));
         diag.addView(report);
         content.addView(diag, Ui.match());
 
-        content.addView(Ui.section(a, t, "Recuperação"));
+        content.addView(Ui.section(a, t, host.activity().getString(R.string.recovery)));
         LinearLayout rec = Ui.card(a, t);
-        LinearLayout safe = Ui.listRow(a, t, Icon.SHIELD, "Desligar todo o vidro", "Volta ao visual original; os ajustes ficam salvos", null);
+        LinearLayout safe = Ui.listRow(a, t, Icon.SHIELD, host.activity().getString(R.string.disable_all_glass), host.activity().getString(R.string.disable_all_glass_desc), null);
         safe.setOnClickListener(v -> {
             host.model().master(false);
-            host.feedback("Vidro desligado");
+            host.feedback(host.activity().getString(R.string.glass_disabled));
         });
         rec.addView(safe);
         rec.addView(Ui.divider(a, t, t.dp(72)));
-        LinearLayout restart = Ui.listRow(a, t, Icon.RESTART, "Reiniciar interface do sistema", "Reinicia a SystemUI; os apps continuam abertos", null);
+        LinearLayout restart = Ui.listRow(a, t, Icon.RESTART, host.activity().getString(R.string.restart_system_ui), host.activity().getString(R.string.restart_system_ui_desc), null);
         restart.setOnClickListener(v -> InfoSheets.restartSystemUi(host));
         rec.addView(restart);
         rec.addView(Ui.divider(a, t, t.dp(72)));
-        LinearLayout soft = Ui.listRow(a, t, Icon.RESTART, "Reiniciar userspace (\u201csoft reboot\u201d)", "Reinicia o compositor e o zygote; todos os apps fecham", null);
+        LinearLayout soft = Ui.listRow(a, t, Icon.RESTART, host.activity().getString(R.string.restart_userspace), host.activity().getString(R.string.restart_userspace_desc), null);
         soft.setOnClickListener(v -> InfoSheets.softReboot(host));
         rec.addView(soft);
         content.addView(rec, Ui.match());
-        TextView help = Ui.text(a, t, "Se as notificações travarem, desative o módulo no LSPosed e reinicie o"
-                + " aparelho. A lente dinâmica nunca é carregada na inicialização: reiniciar o aparelho volta"
-                + " ao compositor original.", Theme.CAPTION, t.inkMuted, false);
+        TextView help = Ui.text(a, t, a.getString(R.string.settings_recovery_help), Theme.CAPTION, t.inkMuted, false);
         help.setPadding(t.dp(8), t.dp(12), t.dp(8), 0);
         content.addView(help);
         TextView version = Ui.text(a, t, "One UI Liquid Glass " + versionName(a), Theme.CAPTION, t.inkFaint, false);
@@ -127,12 +132,20 @@ public final class SettingsPage implements Page {
     }
 
     private void chooseTheme() {
-        Sheet s = new Sheet(host.activity(), t, "Tema");
-        s.choices(new String[][] {{"system", "Seguir o sistema", null}, {"light", "Claro", null}, {"dark", "Escuro", null}},
+        Sheet s = new Sheet(host.activity(), t, host.activity().getString(R.string.theme));
+        s.choices(new String[][] {{"system", host.activity().getString(R.string.follow_system), null}, {"light", host.activity().getString(R.string.light_theme), null}, {"dark", host.activity().getString(R.string.dark_theme), null}},
                 host.model().ui.getString("theme", "system"), v -> {
                     host.model().ui.edit().putString("theme", v).apply();
                     host.rebuild();
                 });
+        s.show();
+    }
+
+    private void chooseLanguage() {
+        Sheet s = new Sheet(host.activity(), t, host.activity().getString(R.string.language));
+        s.choices(new String[][] {{AppLanguage.ENGLISH, "English", null},
+                        {AppLanguage.PORTUGUESE, "Português (Brasil)", null}},
+                AppLanguage.get(host.activity()), host::changeLanguage);
         s.show();
     }
 
@@ -141,19 +154,18 @@ public final class SettingsPage implements Page {
         ControlState st = m.state();
         StringBuilder r = new StringBuilder("One UI Liquid Glass ").append(versionName(host.activity()))
                 .append('\n').append(PresetsSheet.device())
-                .append("\nVidro: ").append(st.enabled ? "ligado" : "desligado")
-                .append(" · modo: ").append(st.applicability().mode.label)
-                .append(" · sistema: ").append(m.sync())
-                .append(" · leitura de propriedades: ").append(m.observedAvailable() ? "ok" : "indisponível")
-                .append(" · preferências LSPosed: ").append(Config.lsposedPrefs)
-                .append("\nLente: ").append(SfLive.state(m.lens.model().status)).append('\n');
+                .append('\n').append(host.activity().getString(R.string.report_glass,
+                        host.activity().getString(st.enabled ? R.string.switch_on : R.string.switch_off),
+                        HomePage.modeLabel(host.activity(), st.applicability().mode), m.sync().name()))
+                .append('\n').append(host.activity().getString(R.string.report_properties,
+                        m.observedAvailable() ? "ok" : host.activity().getString(R.string.report_unavailable), String.valueOf(Config.lsposedPrefs)))
+                .append('\n').append(host.activity().getString(R.string.report_lens, SfLive.state(m.lens.model().status).name())).append('\n');
         for (SettingSpec s : SettingsRegistry.all()) {
             String saved = st.saved.get(s.key), observed = st.observed.get(s.key);
-            r.append(s.fullKey()).append(" padrão=").append(s.defaultValue)
-                    .append(" salvo=").append(saved == null ? "-" : saved)
-                    .append(" aparelho=").append(observed == null || observed.isEmpty() ? "-" : observed)
-                    .append(" em_uso=").append(st.device(s.key))
-                    .append(s.applyMode == SettingSpec.ApplyMode.SF_RECOMPILE && st.pendingRestart(s.key) ? " pendente" : "")
+            r.append(s.fullKey()).append(host.activity().getString(R.string.report_values,
+                            s.defaultValue, saved == null ? "-" : saved,
+                            observed == null || observed.isEmpty() ? "-" : observed, st.device(s.key)))
+                    .append(s.applyMode == SettingSpec.ApplyMode.SF_RECOMPILE && st.pendingRestart(s.key) ? host.activity().getString(R.string.report_pending) : "")
                     .append('\n');
         }
         for (java.util.Map.Entry<String, String> e : st.shownMap().entrySet())
@@ -180,25 +192,25 @@ public final class SettingsPage implements Page {
     public void bind() {
         AppModel m = host.model();
         String theme = m.ui.getString("theme", "system");
-        Ui.setSubtitle(themeRow, theme.equals("light") ? "Claro" : theme.equals("dark") ? "Escuro" : "Seguir o sistema");
+        Ui.setSubtitle(themeRow, theme.equals("light") ? host.activity().getString(R.string.light_theme) : theme.equals("dark") ? host.activity().getString(R.string.dark_theme) : host.activity().getString(R.string.follow_system));
         motion.set(m.ui.getBoolean("reduceMotion", false), false);
         Mode mode = m.mode();
         SfLive.State lens = SfLive.state(m.lens.model().status);
-        String lensText = mode == Mode.DYNAMIC_LENS ? "Ativa" : !m.lens.model().bundled ? "Indisponível nesta versão"
-                : lens == SfLive.State.NO_ROOT ? "Opcional · exige root" : lens == SfLive.State.UNSUPPORTED ? "Firmware não compatível" : "Não ativada";
+        String lensText = mode == Mode.DYNAMIC_LENS ? host.activity().getString(R.string.active_feminine) : !m.lens.model().bundled ? host.activity().getString(R.string.unavailable_in_build)
+                : lens == SfLive.State.NO_ROOT ? host.activity().getString(R.string.optional_requires_root) : lens == SfLive.State.UNSUPPORTED ? host.activity().getString(R.string.unsupported_firmware) : host.activity().getString(R.string.not_enabled);
         int pending = mode == Mode.DYNAMIC_LENS ? m.pendingCompositor().size() : 0;
-        if (pending > 0) lensText += pending == 1 ? " · 1 ajuste pendente" : " · " + pending + " ajustes pendentes";
+        if (pending > 0) lensText += pending == 1 ? host.activity().getString(R.string.settings_pending_one) : host.activity().getString(R.string.settings_pending_many, pending);
         Ui.setSubtitle(lensRow, lensText);
         switch (m.sync()) {
-            case SYNCED: Ui.setSubtitle(syncRow, "Ajustes lidos pelo sistema"); break;
-            case WAITING: Ui.setSubtitle(syncRow, "Enviando…"); break;
-            case NO_RESPONSE: Ui.setSubtitle(syncRow, "Sem confirmação da última alteração"); break;
-            case NOT_DETECTED: Ui.setSubtitle(syncRow, "Módulo não detectado"); break;
-            default: Ui.setSubtitle(syncRow, "Vidro desligado");
+            case SYNCED: Ui.setSubtitle(syncRow, host.activity().getString(R.string.settings_read)); break;
+            case WAITING: Ui.setSubtitle(syncRow, host.activity().getString(R.string.sending)); break;
+            case NO_RESPONSE: Ui.setSubtitle(syncRow, host.activity().getString(R.string.last_change_unconfirmed)); break;
+            case NOT_DETECTED: Ui.setSubtitle(syncRow, host.activity().getString(R.string.module_not_detected)); break;
+            default: Ui.setSubtitle(syncRow, host.activity().getString(R.string.glass_disabled));
         }
         int conflicts = m.conflicts().size();
         conflictsRow.setVisibility(conflicts == 0 ? View.GONE : View.VISIBLE);
         conflictsDivider.setVisibility(conflicts == 0 ? View.GONE : View.VISIBLE);
-        Ui.setSubtitle(conflictsRow, conflicts == 1 ? "1 ajuste" : conflicts + " ajustes");
+        Ui.setSubtitle(conflictsRow, conflicts == 1 ? host.activity().getString(R.string.settings_conflict_one) : host.activity().getString(R.string.settings_conflict_many, conflicts));
     }
 }

@@ -5,6 +5,7 @@ import android.view.*;
 import android.widget.*;
 
 import io.github.igorcv88.oneuiliquidglass.config.*;
+import io.github.igorcv88.oneuiliquidglass.R;
 import io.github.igorcv88.oneuiliquidglass.ui.kit.*;
 
 /**
@@ -38,7 +39,7 @@ public final class ControlRow extends LinearLayout {
                 || control.format == Controls.Format.CHOICE || control.format == Controls.Format.COLOR ? 12 : 2));
         LinearLayout line = Ui.row(c);
         LinearLayout texts = Ui.column(c);
-        title = Ui.text(c, t, control.title, Theme.BODY, t.ink, false);
+        title = Ui.text(c, t, ControlTitles.title(host.activity(), control), Theme.BODY, t.ink, false);
         texts.addView(title);
         status = Ui.text(c, t, "", Theme.CAPTION, t.inkMuted, false);
         status.setVisibility(GONE);
@@ -46,7 +47,7 @@ public final class ControlRow extends LinearLayout {
         line.addView(texts, new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1));
         value = Ui.text(c, t, "", Theme.LABEL, t.inkMuted, true);
         value.setPadding(t.dp(8), 0, t.dp(4), 0);
-        reset = Ui.iconButton(c, t, Icon.RESET, t.inkFaint, "Restaurar padrão de " + control.title);
+        reset = Ui.iconButton(c, t, Icon.RESET, t.inkFaint, host.activity().getString(R.string.control_reset_a11y, ControlTitles.title(host.activity(), control)));
         reset.setOnClickListener(v -> resetToDefault());
         reset.setVisibility(INVISIBLE);
         SettingSpec spec = control.spec();
@@ -79,7 +80,7 @@ public final class ControlRow extends LinearLayout {
                 scale = Scale.of(control);
                 slider = new Slider(c, t);
                 slider.configure(scale.steps, scale.index(spec.defaultValue), scale.auto);
-                slider.describe(control.title, i -> ValueFormat.display(control, scale.value(i)));
+                slider.describe(ControlTitles.title(host.activity(), control), i -> ControlValues.display(host.activity(), control, scale.value(i)));
                 slider.listener(new Slider.Listener() {
                     @Override
                     public void start() {
@@ -89,7 +90,7 @@ public final class ControlRow extends LinearLayout {
                     @Override
                     public void change(int index, boolean fromUser) {
                         String raw = scale.value(index);
-                        value.setText(ValueFormat.display(control, raw));
+                        value.setText(ControlValues.display(host.activity(), control, raw));
                         host.preview(control.key, raw, control.channel);
                     }
 
@@ -138,10 +139,10 @@ public final class ControlRow extends LinearLayout {
     private void commit(String raw) {
         AppModel.Result r = host.model().save(control.key, raw);
         if (!r.ok) {
-            host.feedback(r.conflict ? "Este valor foi alterado fora do app" : r.message);
+            host.feedback(r.conflict ? host.activity().getString(R.string.error_conflict) : r.message);
             if (r.conflict) host.openConflicts();
         } else if (control.needsRestart()) {
-            host.feedback("Salvo · aplicado ao reiniciar o userspace");
+            host.feedback(host.activity().getString(R.string.control_saved_restart));
         }
     }
 
@@ -149,30 +150,30 @@ public final class ControlRow extends LinearLayout {
         String def = control.spec().defaultValue;
         commit(def);
         performHapticFeedback(HapticFeedbackConstants.CONFIRM);
-        announceForAccessibility(control.title + " restaurado");
+        announceForAccessibility(host.activity().getString(R.string.control_reset_done, ControlTitles.title(host.activity(), control)));
     }
 
     /** What an automatic value resolves to now, as the readers resolve it. */
     private String followed(ControlState st, Mode mode) {
         switch (control.key) {
             case "kgblurradius":
-                return mode == Mode.STANDARD ? ValueFormat.display(Controls.get("liveradius"), st.shown("liveradius"))
+                return mode == Mode.STANDARD ? ControlValues.display(host.activity(), Controls.get("liveradius"), st.shown("liveradius"))
                         : followed("semradiuslens", st);
             case "semradiuslens":
                 return followed("semradius", st);
             case "semradius":
                 return "180 px";
             case "kglens":
-                return ValueFormat.display(Controls.get("sflens"), st.shown("sflens"));
+                return ControlValues.display(host.activity(), Controls.get("sflens"), st.shown("sflens"));
             default:
                 return null;
         }
     }
 
-    private static String followed(String key, ControlState st) {
+    private String followed(String key, ControlState st) {
         String v = st.shown(key);
         Controls.Control c = Controls.get(key);
-        if (!ValueFormat.isAuto(c, v)) return ValueFormat.display(c, v);
+        if (!ValueFormat.isAuto(c, v)) return ControlValues.display(host.activity(), c, v);
         return key.equals("semradiuslens") ? followed("semradius", st) : "180 px";
     }
 
@@ -183,7 +184,7 @@ public final class ControlRow extends LinearLayout {
         Applicability.Result a = app.on(control.key, surface);
         usable = a.usable();
         boolean changed = st.changed(control.key);
-        String shown = ValueFormat.display(control, raw);
+        String shown = ControlValues.display(host.activity(), control, raw);
         String follows = ValueFormat.isAuto(control, raw) ? followed(st, app.mode) : null;
         if (follows != null) shown = shown + " · " + follows;
         value.setText(shown);
@@ -200,12 +201,12 @@ public final class ControlRow extends LinearLayout {
         title.setTextColor(usable ? t.ink : t.inkFaint);
         String line = null;
         int color = t.inkMuted;
-        if (a.kind == Applicability.Kind.INACTIVE) line = a.reason;
+        if (a.kind == Applicability.Kind.INACTIVE) line = ControlReasons.text(host.activity(), a.reason);
         else if (a.kind == Applicability.Kind.NEEDS_RESTART && st.pendingRestart(control.key)) {
-            line = "Pendente · aplicar ao reiniciar o userspace";
+            line = host.activity().getString(R.string.control_pending_restart);
             color = t.warn;
         } else if (host.model().observedAvailable() && host.model().repo.conflict(control.spec())) {
-            line = "Alterado fora do app";
+            line = host.activity().getString(R.string.control_external_change);
             color = t.warn;
         }
         status.setText(line == null ? "" : line);

@@ -6,6 +6,7 @@ import android.os.Handler;
 import android.os.Looper;
 
 import io.github.igorcv88.oneuiliquidglass.Config;
+import io.github.igorcv88.oneuiliquidglass.R;
 import io.github.igorcv88.oneuiliquidglass.config.*;
 import io.github.igorcv88.oneuiliquidglass.live.*;
 
@@ -131,10 +132,10 @@ public final class AppModel {
     public Result save(String key, String value) {
         SettingSpec s = SettingsRegistry.get(key);
         drafts.remove(key);
-        if (s == null || !Controls.editable(key)) return new Result(false, false, "Não editável");
+        if (s == null || !Controls.editable(key)) return new Result(false, false, activity.getString(R.string.error_not_editable));
         if (repo.conflict(s)) {
             notifyChanged();
-            return new Result(false, true, "Alterado fora do app. Revise antes de salvar.");
+            return new Result(false, true, activity.getString(R.string.error_conflict));
         }
         try {
             repo.save(s, value);
@@ -142,7 +143,7 @@ public final class AppModel {
             return new Result(true, false, "");
         } catch (IllegalArgumentException e) {
             notifyChanged();
-            return new Result(false, false, e.getMessage());
+            return new Result(false, false, activity.getString(R.string.error_invalid_setting, key));
         }
     }
 

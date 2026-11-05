@@ -21,12 +21,12 @@ public final class QuickSettingsGlass {
     public static final int CLEAR = 0x00ffffff;
     /** Default tint over light backdrops: the colour and alpha of qs.lightcolor / qs.lightfill. */
     static final int LIGHT_TINT = 0x141823;
-    static final float LIGHT_FILL = 0.10f, MAX_LIGHT_FILL = 0.18f;
+    static final float LIGHT_FILL = 0f, MAX_LIGHT_FILL = 0.18f;
     /**
      * Basal rim alpha: the same all around the outline, so no corner looks lit regardless of what
      * is behind it. White in every scene: a darkened outline read as a drawn border, not glass.
      */
-    static final float DARK_RIM = 0.26f, LIGHT_RIM = 0.18f;
+    static final float DARK_RIM = 0.28f, LIGHT_RIM = 0.18f;
     /** Default slider progress thickness: share of the capsule's narrow side. */
     static final float SLIDER_FILL = 0.85f;
 

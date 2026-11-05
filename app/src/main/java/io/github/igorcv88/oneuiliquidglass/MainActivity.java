@@ -12,6 +12,7 @@ import android.view.*;
 import android.widget.*;
 
 import io.github.igorcv88.oneuiliquidglass.config.*;
+import io.github.igorcv88.oneuiliquidglass.i18n.AppLanguage;
 import io.github.igorcv88.oneuiliquidglass.live.CompositorValues;
 import io.github.igorcv88.oneuiliquidglass.ui.*;
 import io.github.igorcv88.oneuiliquidglass.ui.kit.*;
@@ -23,6 +24,10 @@ import io.github.igorcv88.oneuiliquidglass.ui.kit.*;
  * the destination, surface and scroll positions.
  */
 public final class MainActivity extends Activity implements Host {
+    @Override
+    protected void attachBaseContext(Context base) {
+        super.attachBaseContext(AppLanguage.wrap(base));
+    }
     private static final int REQ_NOTIFY = 71, REQ_EXPORT = 91, REQ_IMPORT = 92;
     private final java.util.concurrent.ExecutorService io = java.util.concurrent.Executors.newSingleThreadExecutor();
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -98,7 +103,7 @@ public final class MainActivity extends Activity implements Host {
         };
         Bundle surfaceState = ui.getBundle("surfaces");
         if (surfaceState != null) surfaces.restore(surfaceState);
-        nav = new GlassNav(this, theme, new String[] {"Início", "Superfícies", "Ajustes"},
+        nav = new GlassNav(this, theme, new String[] {getString(R.string.nav_home), getString(R.string.nav_surfaces), getString(R.string.settings)},
                 new Icon[] {Icon.HOME, Icon.LAYERS, Icon.SETTINGS}, tab, this::go);
         FrameLayout.LayoutParams np = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
         root.addView(nav, np);
@@ -157,6 +162,17 @@ public final class MainActivity extends Activity implements Host {
     public void rebuild() {
         Bundle ui = saveUi();
         model.clearDrafts();
+        build(ui);
+    }
+
+    @Override
+    @SuppressWarnings("deprecation")
+    public void changeLanguage(String language) {
+        Bundle ui = saveUi();
+        AppLanguage.set(this, language);
+        Configuration configuration = new Configuration(getResources().getConfiguration());
+        configuration.setLocales(new android.os.LocaleList(java.util.Locale.forLanguageTag(AppLanguage.get(this))));
+        getResources().updateConfiguration(configuration, getResources().getDisplayMetrics());
         build(ui);
     }
 
@@ -356,17 +372,17 @@ public final class MainActivity extends Activity implements Host {
     private void sendTest() {
         if (pendingDelay > 0) {
             TestNotifications.schedule(this, pendingCount, pendingDelay, o -> {
-                if (!isDestroyed()) home.showTestResult(TestNotifications.describe(o), problem(o));
+                if (!isDestroyed()) home.showTestResult(TestNotifications.describe(this, o), problem(o));
             });
-            home.showTestResult(TestNotifications.describe(TestNotifications.Outcome.SCHEDULED), false);
-            feedback("Chega em 5 segundos");
+            home.showTestResult(TestNotifications.describe(this, TestNotifications.Outcome.SCHEDULED), false);
+            feedback(getString(R.string.test_arrives));
             return;
         }
         TestNotifications.Outcome o = TestNotifications.post(this, pendingCount, true);
-        home.showTestResult(TestNotifications.describe(o), problem(o));
+        home.showTestResult(TestNotifications.describe(this, o), problem(o));
         if (o == TestNotifications.Outcome.BLOCKED_APP) openAppNotifications();
         else if (o == TestNotifications.Outcome.BLOCKED_CHANNEL) ControlSheets.tests(this);
-        else feedback(pendingCount > 1 ? "Notificações enviadas" : "Notificação enviada");
+        else feedback(pendingCount > 1 ? getString(R.string.test_sent_many) : getString(R.string.test_sent_one));
     }
 
     private static boolean problem(TestNotifications.Outcome o) {
@@ -385,8 +401,8 @@ public final class MainActivity extends Activity implements Host {
         permissionPending = false;
         if (results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED) sendTest();
         else {
-            home.showTestResult("Sem permissão, o teste não foi enviado. Permita notificações nos ajustes do app.", true);
-            feedback("Permissão de notificações negada");
+            home.showTestResult(getString(R.string.test_permission_help), true);
+            feedback(getString(R.string.test_permission_denied));
         }
     }
 
@@ -423,22 +439,22 @@ public final class MainActivity extends Activity implements Host {
                             CompositorValues.compiledValues(sf),
                             sf.getString("compiledGeneration", ""), sf.getLong("compiledAt", 0));
                     try (java.io.OutputStream out = getContentResolver().openOutputStream(uri, "wt")) {
-                        if (out == null) throw new java.io.IOException("destino indisponível");
+                        if (out == null) throw new java.io.IOException(getString(R.string.export_unavailable));
                         out.write(json.getBytes(java.nio.charset.StandardCharsets.UTF_8));
                     }
-                    deliver(() -> feedback("Ajustes exportados. O perfil restaura os valores salvos no app; os snapshots de diagnóstico não reproduzem toda a aparência."));
+                    deliver(() -> feedback(getString(R.string.export_success)));
                 } else {
                     String data;
                     try (java.io.InputStream in = getContentResolver().openInputStream(uri)) {
-                        if (in == null) throw new java.io.IOException("arquivo indisponível");
+                        if (in == null) throw new java.io.IOException(getString(R.string.import_unavailable));
                         byte[] bytes = in.readNBytes(PresetCodec.MAX_BYTES + 1);
-                        if (bytes.length > PresetCodec.MAX_BYTES) throw new java.io.IOException("arquivo muito grande");
+                        if (bytes.length > PresetCodec.MAX_BYTES) throw new java.io.IOException(getString(R.string.import_too_large));
                         data = new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
                     }
                     deliver(() -> ControlSheets.review(this, data));
                 }
             } catch (Exception e) {
-                deliver(() -> feedback("Falhou: " + e.getMessage()));
+                deliver(() -> feedback(getString(R.string.operation_failed, e.getMessage())));
             }
         });
     }
@@ -446,7 +462,7 @@ public final class MainActivity extends Activity implements Host {
     @Override
     public void copy(String text) {
         ((ClipboardManager) getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("One UI Liquid Glass", text));
-        feedback("Copiado");
+        feedback(getString(R.string.clipboard_copied));
     }
 
     private void deliver(Runnable r) {

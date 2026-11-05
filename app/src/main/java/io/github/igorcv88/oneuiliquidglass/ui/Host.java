@@ -44,6 +44,9 @@ public interface Host {
     /** Rebuild views after a theme or motion preference change, keeping position. */
     void rebuild();
 
+    /** Change the app language without discarding in-progress settings. */
+    void changeLanguage(String language);
+
     void exportSettings();
 
     void importSettings();

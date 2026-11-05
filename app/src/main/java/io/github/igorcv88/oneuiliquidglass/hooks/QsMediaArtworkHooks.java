@@ -18,7 +18,7 @@ import java.util.function.BooleanSupplier;
  * affect notification media, Now Bar, the QS buttons or the app icon rendered by other owners.
  * The value is changed only in the canonical PainterElement constructor; Compose copies it into
  * the PainterNode on create/update. No draw or node callbacks, maps, or per-frame lookups. A new
- * composition (including a new media page or track) reads the current module setting.</p>
+ * composition (including a new media page or track) reads the existing debug property.</p>
  */
 final class QsMediaArtworkHooks {
     static final String PAGE = "media.components.OneUI90MediaPlayerPageKt";
@@ -121,7 +121,7 @@ final class QsMediaArtworkHooks {
         XposedBridge.hookAllConstructors(element, new XC_MethodHook() {
             @Override protected void beforeHookedMethod(MethodHookParam p) {
                 if (p.args.length != 1 || p.args[0] == null || !artworkBlock(p.args[0].getClass().getName())) return;
-                if (!dropOverlay(enabled.getAsBoolean(), Tuning.get().mediaArt, property(OVERLAY_PROPERTY))) return;
+                if (!dropOverlay(enabled.getAsBoolean(), Tuning.get().qsMediaArt, property(OVERLAY_PROPERTY))) return;
                 try {
                     Object replacement = contentOnly();
                     if (!loggedOverlay) {
@@ -206,7 +206,7 @@ final class QsMediaArtworkHooks {
                     // constructor. Touch only the primary one to avoid multiplying twice.
                     if (!matches(frame.owner, painter) || !alphaSlot(p.args)) return;
                     float original = (Float) p.args[4];
-                    float adjusted = opacity(original, Tuning.get().mediaArt, enabled.getAsBoolean());
+                    float adjusted = opacity(original, Tuning.get().qsMediaArt, enabled.getAsBoolean());
                     if (adjusted == original) return;
                     p.args[4] = adjusted;
                     if (!loggedApplied) {

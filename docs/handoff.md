@@ -114,7 +114,9 @@ no Galaxy, 🔧 implementado/testado localmente, ☐ sem comprovação física.
    nova e estabilidade após ~2 min. Não mexer no instalador nativo, no shader
    nem no modo de root para esse bug.
 
-### Próxima rodada — alvo exclusivo: notificações ao vivo (sem mídia) e toasts
+### Registro histórico — rodada de notificações ao vivo não-mídia e toasts
+
+Esta seção descreve o escopo daquela rodada. O suporte de mídia foi adicionado depois; consulte o README e o checklist atual.
 
 - **Live update na tela bloqueada:** diagnosticar separadamente a cápsula
   associada à notificação ao vivo e a pílula **inferior entre os dois atalhos**
