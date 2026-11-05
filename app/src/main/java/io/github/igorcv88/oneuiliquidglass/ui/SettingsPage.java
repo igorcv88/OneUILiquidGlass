@@ -156,10 +156,10 @@ public final class SettingsPage implements Page {
                 .append('\n').append(PresetsSheet.device())
                 .append('\n').append(host.activity().getString(R.string.report_glass,
                         host.activity().getString(st.enabled ? R.string.switch_on : R.string.switch_off),
-                        HomePage.modeLabel(host.activity(), st.applicability().mode), m.sync()))
+                        HomePage.modeLabel(host.activity(), st.applicability().mode), m.sync().name()))
                 .append('\n').append(host.activity().getString(R.string.report_properties,
-                        m.observedAvailable() ? "ok" : host.activity().getString(R.string.report_unavailable), Config.lsposedPrefs))
-                .append('\n').append(host.activity().getString(R.string.report_lens, SfLive.state(m.lens.model().status))).append('\n');
+                        m.observedAvailable() ? "ok" : host.activity().getString(R.string.report_unavailable), String.valueOf(Config.lsposedPrefs)))
+                .append('\n').append(host.activity().getString(R.string.report_lens, SfLive.state(m.lens.model().status).name())).append('\n');
         for (SettingSpec s : SettingsRegistry.all()) {
             String saved = st.saved.get(s.key), observed = st.observed.get(s.key);
             r.append(s.fullKey()).append(host.activity().getString(R.string.report_values,

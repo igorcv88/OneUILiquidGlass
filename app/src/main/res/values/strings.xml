@@ -405,4 +405,15 @@
     <string name="report_lens">Lens: %1$s</string>
     <string name="report_values">\u0020default=%1$s saved=%2$s device=%3$s in_use=%4$s</string>
     <string name="report_pending">\u0020pending</string>
+    <string name="root_unchecked">Root not checked yet</string>
+    <string name="root_timeout">SU authorization timed out</string>
+    <string name="root_denied_unavailable">SU denied or unavailable</string>
+    <string name="root_restarting_ui">Restarting System UI…</string>
+    <string name="root_restarting_userspace">Restarting userspace…</string>
+    <string name="root_authorize">Authorize SU access for this app…</string>
+    <string name="root_bad_uid">SU did not return UID 0</string>
+    <string name="root_ui_requested">Restart requested. Waiting for System UI to read the settings again.</string>
+    <string name="root_userspace_requested">Userspace restart requested</string>
+    <string name="root_confirmed">Root access confirmed</string>
+    <string name="root_unavailable">Root unavailable</string>
 </resources>
