@@ -365,7 +365,7 @@ public class MediaArtGlassTest {
         glass = true;
         MediaArtGlass.watch(root);
         frame();
-        assertEquals(0.20f, art.getAlpha(), 1e-6f);
+        assertEquals(0.40f, art.getAlpha(), 1e-6f);
         assertEquals(0f, overlay.getAlpha(), 0f);
         assertEquals("transition alpha untouched in this mode", 1f, art.getTransitionAlpha(), 0f);
         assertEquals(1f, overlay.getTransitionAlpha(), 0f);
@@ -385,7 +385,7 @@ public class MediaArtGlassTest {
         art.setAlpha(0.60f);   // Samsung animates the art while we hold it
         overlay.setAlpha(0.70f);
         frame();
-        assertEquals(0.15f, art.getAlpha(), 1e-6f);
+        assertEquals(0.30f, art.getAlpha(), 1e-6f);
         assertEquals(0f, overlay.getAlpha(), 0f);
         glass = false;
         frame();
