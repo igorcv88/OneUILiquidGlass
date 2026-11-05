@@ -180,7 +180,7 @@ public final class HomePage implements Page {
         content.addView(style, Ui.match());
     }
 
-    private static String surfaceLabel(android.content.Context c, Controls.Surface surface) {
+    static String surfaceLabel(android.content.Context c, Controls.Surface surface) {
         switch (surface) {
             case HEADSUP: return c.getString(R.string.surface_popup);
             case KEYGUARD: return c.getString(R.string.surface_lock);
