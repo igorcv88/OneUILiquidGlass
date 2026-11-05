@@ -340,16 +340,19 @@ public final class SfLiveController {
                                     activity.getSharedPreferences(
                                             "sf_live_ui", Activity.MODE_PRIVATE));
                         String log = before.log;
+                        boolean logReadFailed = false;
                         if (error instanceof SfLiveFlow.Failure
                                 && ((SfLiveFlow.Failure) error).selftest
                                 && bundle != null) {
                             try {
                                 log = run(bundle, SfLive.Command.LOG, null).output;
                             } catch (Exception secondary) {
-                                log = activity.getString(R.string.sf_log_failed, secondary.getMessage());
+                                log = secondary.getMessage() == null ? secondary.getClass().getSimpleName() : secondary.getMessage();
+                                logReadFailed = true;
                             }
                         }
                         final String failureLog = log;
+                        final boolean translateLogFailure = logReadFailed;
                         publish(
                                 new Model(
                                         false,
@@ -358,7 +361,8 @@ public final class SfLiveController {
                                         () -> activity.getString(R.string.sf_interrupted_prefix) + " "
                                                 + localizedFailure(error)
                                                 + "\n" + activity.getString(R.string.sf_no_further_restart)
-                                                + (failureLog.isEmpty() ? "" : "\n" + failureLog),
+                                                + (failureLog.isEmpty() ? "" : "\n" + (translateLogFailure
+                                                        ? activity.getString(R.string.sf_log_failed, failureLog) : failureLog)),
                                         failureLog, true));
                     }
                 });
