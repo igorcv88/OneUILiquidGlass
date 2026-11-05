@@ -218,7 +218,7 @@ final class ControlSheet extends Sheet {
         exact.setPadding(t.dp(4), t.dp(8), 0, 0);
         box.addView(exact);
         field = field(activity.getString(R.string.control_value) + (unit.isEmpty() ? "" : " (" + unit + ")") + (scale.auto ? activity.getString(R.string.control_auto_suffix) : ""),
-                ValueFormat.isAuto(c, working) ? "-1" : ValueFormat.toEdit(c, working, host.activity().getResources().getConfiguration().getLocales().get(0)),
+                ValueFormat.isAuto(c, working) ? "-1" : ValueFormat.isOff(c, working) ? "0" : ValueFormat.toEdit(c, working, host.activity().getResources().getConfiguration().getLocales().get(0)),
                 InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL | InputType.TYPE_NUMBER_FLAG_SIGNED);
         field.setOnEditorActionListener((v, id, e) -> {
             if (id == EditorInfo.IME_ACTION_DONE) {
@@ -290,7 +290,7 @@ final class ControlSheet extends Sheet {
         if (slider != null && syncSlider) slider.set(scale.index(raw));
         if (colorPicker != null) colorPicker.setColor(raw);
         if (field != null) {
-            String edit = scale == null ? raw : ValueFormat.isAuto(c, raw) ? "-1" : ValueFormat.toEdit(c, raw, host.activity().getResources().getConfiguration().getLocales().get(0));
+            String edit = scale == null ? raw : ValueFormat.isAuto(c, raw) ? "-1" : ValueFormat.isOff(c, raw) ? "0" : ValueFormat.toEdit(c, raw, host.activity().getResources().getConfiguration().getLocales().get(0));
             if (!edit.equals(field.getText().toString())) field.setText(edit);
             field.setError(null);
         }

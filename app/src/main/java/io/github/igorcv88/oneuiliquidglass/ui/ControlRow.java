@@ -139,10 +139,10 @@ public final class ControlRow extends LinearLayout {
     private void commit(String raw) {
         AppModel.Result r = host.model().save(control.key, raw);
         if (!r.ok) {
-            host.feedback(r.conflict ? "Este valor foi alterado fora do app" : r.message);
+            host.feedback(r.conflict ? host.activity().getString(R.string.error_conflict) : r.message);
             if (r.conflict) host.openConflicts();
         } else if (control.needsRestart()) {
-            host.feedback("Salvo · aplicado ao reiniciar o userspace");
+            host.feedback(host.activity().getString(R.string.control_saved_restart));
         }
     }
 

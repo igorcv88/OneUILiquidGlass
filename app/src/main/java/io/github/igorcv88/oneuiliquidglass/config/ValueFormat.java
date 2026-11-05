@@ -36,8 +36,10 @@ public final class ValueFormat {
     /** A control whose 0 means "native" (mediaart) shows its own label there. */
     public static boolean isOff(Controls.Control c, String raw) {
         if (c.offLabel == null || raw == null) return false;
+        String value = raw.trim();
+        if (value.equalsIgnoreCase("off") || value.equalsIgnoreCase("false")) return true;
         try {
-            return Double.parseDouble(raw) == 0;
+            return Double.parseDouble(value) <= 0;
         } catch (RuntimeException e) {
             return false;
         }

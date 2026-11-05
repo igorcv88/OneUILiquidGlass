@@ -46,6 +46,7 @@ public class UiLabelsTest {
                 if (!text.isEmpty()) assertNotEquals(control.key + ": " + text, 0, ControlOptions.resource(text));
         }
         assertEquals("Native artwork", ControlValues.display(en, Controls.get("mediaart"), "0"));
+        assertEquals("Native artwork", ControlValues.display(en, Controls.get("mediaart"), "off"));
         assertEquals("Automatic", ControlValues.display(en, Controls.get("kgblurradius"), "-1"));
         assertEquals("Adaptive", ControlValues.display(en, Controls.get("shadetone"), "3"));
         assertTrue(ControlDescriptions.hint(en, Controls.get("mediaart")).contains("without turning off glass"));
@@ -71,6 +72,7 @@ public class UiLabelsTest {
         assertEquals("Padrão: 50 %", pt.getString(R.string.control_default, "50 %"));
         assertEquals("Salvo no aplicativo: 50 %", pt.getString(R.string.control_saved_in_app, "50 %"));
         assertEquals("Capa nativa", ControlValues.display(pt, Controls.get("mediaart"), "0"));
+        assertEquals("Capa nativa", ControlValues.display(pt, Controls.get("mediaart"), "OFF"));
         assertEquals("Automático", ControlValues.display(pt, Controls.get("kgblurradius"), "-1"));
         assertEquals("Adaptativa", ControlValues.display(pt, Controls.get("shadetone"), "3"));
         assertTrue(ControlDescriptions.hint(pt, Controls.get("mediaart")).contains("sem desligar o vidro"));
