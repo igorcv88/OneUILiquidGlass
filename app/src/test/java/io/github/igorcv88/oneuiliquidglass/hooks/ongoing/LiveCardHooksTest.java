@@ -596,6 +596,108 @@ public class LiveCardHooksTest {
         assertSame(nativeFill, root.fill().getBackground());
         assertEquals("translucency was draw-only", 255, nativeFill.getAlpha());
     }
+
+    // ---- OULG_MEDIA_FALLBACK: RESTORED verdict=NO_DATA on an attached media card ----
+
+    private static boolean glassed(CardItemView root) { return root.fill().getBackground() instanceof LiveGlassDrawable; }
+
+    /** Track changes: Samsung swaps the list entry and fires writers before the next bind. */
+    @Test public void writersBetweenAnEntrySwapAndTheRebindKeepTheGlass() {
+        OngoingActivityData first = new OngoingActivityData("com.spotify.music", true);
+        adapter.mList.add(first);
+        CardItemView root = card(0);
+        assertTrue(glassed(root));
+        assertTrue("held while attached", hooks.holdsDataForTest(root));
+        for (int track = 0; track < 4; track++) {
+            adapter.mList.set(0, new OngoingActivityData("com.spotify.music", true));
+            stack.updateItemBg();
+            hooks.stackUpdated(stack);
+            stack.changeCardBg(root.fill(), 0xff102030 + track);
+            hooks.cardWriter(root.fill(), true);
+            assertTrue("track " + track, glassed(root));
+            hooks.cardBound(adapter, root, 0);
+            assertTrue("rebound with the new entry, track " + track, glassed(root));
+        }
+    }
+
+    @Test public void aLookupMissForTheSameStillListedItemKeepsTheGlass() {
+        OngoingActivityData media = new OngoingActivityData("com.spotify.music", true);
+        adapter.mList.add(media);
+        CardItemView root = card(0);
+        for (int i = 0; i < 4; i++) {
+            // Mid-update: slot 0 momentarily unreadable, the same object still in the list.
+            adapter.mList.set(0, null);
+            adapter.mList.add(media);
+            adapter.getView(0, root, stack);
+            hooks.cardBound(adapter, root, 0);
+            assertTrue("miss " + i, glassed(root));
+            adapter.mList.clear();
+            adapter.mList.add(media);
+            hooks.cardBound(adapter, root, 0);
+            assertTrue(glassed(root));
+        }
+    }
+
+    @Test public void aLookupMissForAnItemNoLongerListedGoesNative() {
+        adapter.mList.add(new OngoingActivityData("com.spotify.music", true));
+        CardItemView root = card(0);
+        adapter.mList.clear();
+        hooks.cardBound(adapter, root, 0);
+        assertFalse(glassed(root));
+    }
+
+    @Test public void aLookupMissAtAnotherPositionGoesNative() {
+        adapter.mList.add(new OngoingActivityData("com.spotify.music", true));
+        CardItemView root = card(0);
+        adapter.getView(1, root, stack); // convertView reused for slot 1, which has no data
+        hooks.cardBound(adapter, root, 1);
+        assertFalse("unknown item in a reused view", glassed(root));
+    }
+
+    @Test public void aLookupMissFromAnotherAdapterGoesNative() {
+        OngoingActivityData media = new OngoingActivityData("com.spotify.music", true);
+        adapter.mList.add(media);
+        CardItemView root = card(0);
+        OngoingCardAdapter other = new OngoingCardAdapter();
+        hooks.cardBound(other, root, 0);
+        assertFalse(glassed(root));
+    }
+
+    @Test public void heldDataFlagsAreStillReadAndAutomationGoesNative() {
+        OngoingActivityData media = new OngoingActivityData("com.spotify.music", true);
+        adapter.mList.add(media);
+        CardItemView root = card(0);
+        media.mIsAutomation = true;
+        stack.changeCardBg(root.fill(), 0xff222222);
+        hooks.cardWriter(root.fill(), true);
+        assertFalse(glassed(root));
+        // A later lookup miss does not bring the glass back over an ineligible item.
+        adapter.mList.set(0, null);
+        adapter.mList.add(media);
+        hooks.cardBound(adapter, root, 0);
+        assertFalse(glassed(root));
+    }
+
+    @Test public void aConvertViewReusedForAnIneligibleItemGoesNative() {
+        adapter.mList.add(new OngoingActivityData("com.spotify.music", true));
+        OngoingActivityData automation = new OngoingActivityData("com.samsung.android.app.routines", false);
+        automation.mIsAutomation = true;
+        adapter.mList.add(automation);
+        CardItemView root = card(0);
+        assertTrue(glassed(root));
+        adapter.getView(1, root, stack);
+        hooks.cardBound(adapter, root, 1);
+        assertFalse(glassed(root));
+    }
+
+    @Test public void theDataIsHeldOnlyWhileTheRootIsAttached() {
+        adapter.mList.add(new OngoingActivityData("com.spotify.music", true));
+        CardItemView root = card(0);
+        assertTrue(hooks.holdsDataForTest(root));
+        android.view.ViewGroup frame = (android.view.ViewGroup) root.getParent();
+        frame.removeView(root);
+        assertFalse("detached: weak only", hooks.holdsDataForTest(root));
+        frame.addView(root);
+        assertTrue("reattached while the data is alive", hooks.holdsDataForTest(root));
+    }
 }
-
-

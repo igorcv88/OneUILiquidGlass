@@ -152,7 +152,7 @@ public class LockMediaGlassTest {
         assertEquals("no new layer, no new offer", regions, env.regions.size());
     }
 
-    @Test public void collapseIsFollowedBeforeTheGeometryShrinks() {
+    @Test public void collapseHidesOpaqueFillWithoutDrawingAnOversizedGlassBubble() {
         build();
         lens.watch(card);
         show();
@@ -161,13 +161,21 @@ public class LockMediaGlassTest {
         frame();
         lens.expandedState(stack, false);  // Samsung starts collapsing; still tall this frame
         GlassLayer layer = layerOf(capsule);
-        assertEquals("lens ready at the start of the collapse", View.VISIBLE, layer.getVisibility());
+        assertEquals("no huge blur region at collapse start", View.INVISIBLE, layer.getVisibility());
         frame();
+        assertEquals("opaque native fill hidden during collapse", View.INVISIBLE, fill.getVisibility());
+        assertEquals(View.INVISIBLE, stroke.getVisibility());
+        card.layout(0, 0, 848, 520); // transitional width, still much taller than capsule
+        frame();
+        assertEquals(View.INVISIBLE, layer.getVisibility());
+        card.layout(0, 0, 848, 242); // approaches the previously measured 224px capsule
+        frame();
+        assertEquals("lens restored only near compact bounds", View.VISIBLE, layer.getVisibility());
         assertEquals(View.INVISIBLE, fill.getVisibility());
         assertEquals(View.INVISIBLE, stroke.getVisibility());
     }
 
-    @Test public void expansionKeepsTheLensUntilTheCardIsTallerThanWide() {
+    @Test public void expansionParksGlassBeforeItsRegionGrowsIntoAnOversizedBubble() {
         build();
         lens.watch(card);
         show();
@@ -175,10 +183,13 @@ public class LockMediaGlassTest {
         GlassLayer layer = layerOf(capsule);
         assertEquals(View.VISIBLE, layer.getVisibility());
         assertEquals(View.INVISIBLE, fill.getVisibility());
-        card.layout(0, 0, 1280, 1942);
+        card.layout(0, 0, 848, 340); // still wider than tall, but past compact bounds
         frame();
         assertEquals(View.INVISIBLE, layer.getVisibility());
         assertEquals(View.VISIBLE, fill.getVisibility());
+        card.layout(0, 0, 1280, 1942);
+        frame();
+        assertEquals(View.INVISIBLE, layer.getVisibility());
     }
 
     @Test public void withoutAStackFlagATallCardIsExpanded() {
@@ -204,13 +215,30 @@ public class LockMediaGlassTest {
         assertEquals(View.VISIBLE, fill.getVisibility());
     }
 
-    @Test public void expandedRule() {
-        assertFalse(LockMediaGlass.expanded(null, 848, 224));
-        assertTrue(LockMediaGlass.expanded(null, 1280, 1942));
-        assertFalse("no geometry yet", LockMediaGlass.expanded(null, 0, 0));
-        assertFalse("collapse trusted at once", LockMediaGlass.expanded(false, 1280, 1942));
-        assertFalse("expansion waits for the geometry", LockMediaGlass.expanded(true, 848, 224));
-        assertTrue(LockMediaGlass.expanded(true, 1280, 1942));
+    @Test public void compactEnvelopeTracksTheLastNativeCapsuleSize() {
+        assertTrue(LockMediaGlass.compactEnough(848, 224, 0));
+        assertTrue(LockMediaGlass.compactEnough(848, 242, 224));
+        assertFalse("early glass would trail expanded geometry", LockMediaGlass.compactEnough(848, 520, 224));
+        assertFalse(LockMediaGlass.compactEnough(1280, 1942, 224));
+        assertTrue("pre-layout must not blank the first frame", LockMediaGlass.compactEnough(0, 0, 0));
+    }
+
+    @Test public void refreshWhileExpandedKeepsTheSameGlassDrawable() {
+        build();
+        lens.watch(card);
+        show();
+        GlassLayer layer = layerOf(capsule);
+        LiveGlassDrawable material = (LiveGlassDrawable) layer.getBackground();
+        lens.expandedState(stack, true);
+        card.layout(0, 0, 1280, 1942);
+        frame();
+        glass.refresh(LiveSurface.NOWBAR);
+        assertSame("refresh cannot discard parked material", material, layer.getBackground());
+        lens.expandedState(stack, false);
+        card.layout(0, 0, 848, 224);
+        frame();
+        assertSame(material, layer.getBackground());
+        assertEquals(View.VISIBLE, layer.getVisibility());
     }
 
     @Test public void gateOffAndDetachRestoreEverything() {

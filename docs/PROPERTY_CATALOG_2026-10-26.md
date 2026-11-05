@@ -141,12 +141,12 @@ Observar que as propriedades `lightglass` e `shadelightglass` se aplicam a super
 | `sf.kgcool` | 0.50 | Lockscreen: matiz fria |
 | `sf.kgtilt` | 1.42 | Lockscreen: inclinação da luz (rad) |
 | `sf.kgline` | 0.62 | Lockscreen: contorno |
-| `sf.kgcorecap` | 52 | Lockscreen: teto do raio efetivo do miolo (px) |
+| `sf.kgcorecap` | 48 | Lockscreen: teto do raio efetivo do miolo (px) |
 | `sf.kggradient` | 1 | Lockscreen: transição contínua vidro-miolo (0–1; 0 usa curva anterior, junto de kgcorecap=62 restaura referência) |
 | `sf.kgband` | 0.85 | Lockscreen: largura da transição óptica (fração do raio do canto; 0 restaura v0.22; abaixo de ~0.42 fica no bisel mínimo) |
 | `sf.kgbodylens` | 0.05 | Lockscreen: curvatura da lente no miolo (ampliação uniforme; 0 desliga) |
 | `sf.kgblurexp` | 2 | Lockscreen: expoente da subida do blur na transição (1–4; maior = menos blur na transição) |
-| `sf.kgedgeblur` | 0 | Lockscreen: raio extra do blur no contorno (0 preserva o desenho anterior) |
+| `sf.kgedgeblur` | 48 | Lockscreen: raio extra do blur no contorno (igual ao teto do miolo para blur uniforme, 0 restaura o contorno nítido com miolo) |
 | `sf.kgblur` | 1 | Lockscreen: multiplicador do blur adicional em toda a superfície, independente do blur base |
 | `sf.kgrefract` | 1 | Lockscreen: multiplicador de toda a refração (aro e miolo) |
 | `sf.kgflatcap` | 0.22 | Lockscreen: teto do peso de achatamento |

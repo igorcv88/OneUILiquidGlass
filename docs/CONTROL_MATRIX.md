@@ -85,7 +85,7 @@ Gerada por `ControlMatrixTest` a partir de `SettingsRegistry`, `Controls`, `Appl
 | `panelnativegray` | Véu cinza da Samsung | Central | Cor e contraste · standard | boolean · 0 | hooks/HeadsUpHooks | ao vivo | ativo | ativo | ativo |  | behavior | CM |
 | `panelcolor` | Cor do fundo da central | Central | Cor e contraste · standard | rgb · 00000000 | hooks/HeadsUpHooks | ao vivo | ativo | ativo | ativo |  | behavior | CM |
 | `headergap` | Espaço acima do título | Pop-up, Bloqueio, Central | Comportamento · advanced | float · 0–8 · 4 | hooks/HeaderGapHooks | ao vivo | ativo | ativo | ativo |  | faithful · header_gap | CM, SC, PT |
-| `mediaart` | Opacidade da capa de mídia | Central | Vidro e desfoque · standard | float · 0–1 · 0.50 | hooks/QsMediaArtworkHooks, hooks/ongoing/MediaArtGlass | ao vivo | ativo | ativo | ativo |  | behavior | CM, SC |
+| `mediaart` | Opacidade da capa de mídia | Central | Vidro e desfoque · standard | float · 0–1 · 0.25 | hooks/QsMediaArtworkHooks, hooks/ongoing/MediaArtGlass | ao vivo | ativo | ativo | ativo |  | behavior | CM, SC |
 | `sf.optics` | Versão óptica anunciada | Pop-up, Bloqueio, Central | Técnico · internal | readonly · 0 | sfhook/oulg_sf.c, hooks/HeadsUpHooks, hooks/QuickSettingsEdgeLight | leitura | leitura | leitura | leitura |  | none | CM, CV |
 | `perf` | Medir tempo dos ganchos | Pop-up, Bloqueio, Central | Técnico · technical | boolean · 0 | diagnostics/Perf | ao vivo | ativo | ativo | ativo |  | none | CM |
 | `trace` | Registro detalhado de janelas | Pop-up, Bloqueio, Central | Técnico · technical | boolean · 0 | diagnostics/Probe | ao vivo | ativo | ativo | ativo |  | none | CM |
@@ -187,8 +187,8 @@ Guardados em `glass` SharedPreferences, entregues ao SystemUI pelo `ConfigProvid
 | `surface.shade.feature.tonemap.enabled` | hooks/HeadsUpHooks (`feature("tonemap")`) | Central: camada Proteção de contraste desligada | ativo | ativo | ativo |
 | `surface.shade.feature.per_card_blur.enabled` | hooks/HeadsUpHooks (`feature("per_card_blur")`) | Central: camada Desfoque por cartão desligada | ativo | ativo | ativo |
 | `surface.quicksettings.enabled` | hooks/QuickSettingsHooks (`enabled`) | Central de controle volta ao visual nativo | inativo (opt-in) | ativo | ativo |
-| `surface.liveactivity.enabled` | hooks/ongoing/LiveSurfaceHooks (`allows`) | pílula e cartões de atividades ao vivo e mídia voltam ao fundo nativo | inativo (opt-in) | ativo | ativo |
-| `surface.nowbar.enabled` | hooks/ongoing/LiveSurfaceHooks (`allows`) | cartão da Now Bar e cápsula compacta de mídia voltam ao fundo nativo; mídia expandida e AOD permanecem nativos | inativo (opt-in) | ativo | ativo |
+| `surface.liveactivity.enabled` | hooks/ongoing/LiveSurfaceHooks (`allows`) | pílula e cartão da atividade ao vivo (sem mídia) voltam ao fundo nativo | inativo (opt-in) | ativo | ativo |
+| `surface.nowbar.enabled` | hooks/ongoing/LiveSurfaceHooks (`allows`) | cartão da Now Bar (sem mídia) volta ao fundo nativo | inativo (opt-in) | ativo | ativo |
 | `surface.toast.enabled` | hooks/ongoing/LiveSurfaceHooks (`allows`) | toasts voltam ao fundo nativo | inativo (opt-in) | ativo | ativo |
 
 ## Funções sem propriedade

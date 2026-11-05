@@ -277,6 +277,9 @@ public final class QuickSettingsHooks {
             hookIconTile();
             tileProbe.install(loader);
             content.install();
+            // The active QS media page draws artwork in Compose; the shade media-art hook
+            // deliberately follows a different View hierarchy. Keep these routes independent.
+            new QsMediaArtworkHooks(loader, content, this::enabled).install();
             installPrefetchGesture();
             ready = true;
             Tuning.onChanged(() -> {

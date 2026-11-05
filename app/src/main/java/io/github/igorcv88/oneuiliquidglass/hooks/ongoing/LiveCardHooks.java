@@ -41,11 +41,38 @@ final class LiveCardHooks {
     static final String ADAPTER = "com.android.systemui.statusbar.phone.ongoingactivity.OngoingCardAdapter";
     static final String STACK = "com.android.systemui.statusbar.phone.ongoingactivity.CardStackview.CardStackView";
 
-    private static final class Classification {
+    /**
+     * What the last bind found for a root. OULG_MEDIA_FALLBACK (DZIF, 04/11/2026): an attached,
+     * fully visible media card went RESTORED verdict=NO_DATA again and again during track changes
+     * (MediaArtGlass then saw noGlass and put the opaque art back). Two ways led there: the data
+     * was only weakly held, so a writer after Samsung replaced the list entry but before the next
+     * bind could find it collected; and a bind whose position lookup missed overwrote a valid
+     * classification with (null, NO_DATA).
+     *
+     * <p>The data is therefore held strongly while the root is attached (this object is the value
+     * of a weak map keyed by the root, so it never outlives the view) and only weakly once the
+     * root is detached. Its flags are still re-read on every writer.</p>
+     */
+    private static final class Classification implements View.OnAttachStateChangeListener {
+        private Object held;
         final WeakReference<Object> data;
         final LiveEligibility.Verdict verdict;
-        Classification(Object data, LiveEligibility.Verdict verdict) { this.data = new WeakReference<>(data); this.verdict = verdict; }
+        /** The position of the bind that produced it, and that bind's adapter. */
+        final int position;
+        final WeakReference<Object> adapter;
+        Classification(Object data, LiveEligibility.Verdict verdict, Object adapter, int position, View root) {
+            this.data = new WeakReference<>(data);
+            this.verdict = verdict;
+            this.adapter = new WeakReference<>(adapter);
+            this.position = position;
+            held = root != null && root.isAttachedToWindow() ? data : null;
+        }
+        Object data() { return held != null ? held : data.get(); }
+        @Override public void onViewAttachedToWindow(View v) { held = data.get(); }
+        @Override public void onViewDetachedFromWindow(View v) { held = null; }
     }
+    /** Bound items checked for a still-listed previous item (live updates are a handful). */
+    private static final int LIST_LIMIT = 32;
     private final WeakHashMap<View, Classification> roots = new WeakHashMap<>();
     /** Fill views changeCardBg wrote, by the root they belong to (found by structure otherwise). */
     private final WeakHashMap<View, WeakReference<View>> writtenFill = new WeakHashMap<>();
@@ -106,11 +133,38 @@ final class LiveCardHooks {
         if (root == null) return;
         Object data = locator.at(adapter, position);
         if (data == null && helper != null) data = helper.at(adapter, position);
+        Classification prev = roots.get(root);
+        if (data == null && keepThroughMiss(prev, adapter, position)) {
+            // A lookup miss during Samsung's list update, for the same item in the same slot:
+            // the classification (and the glass) stays; the next bind with data replaces it.
+            Probe.log("LIVE_CARD_DATA", "lookupMiss=kept position=" + position + " " + LiveRenderProbe.view(root));
+            evaluate(root, prev);
+            return;
+        }
+        if (data == null && prev != null && prev.verdict.ok())
+            Probe.log("LIVE_CARD_DATA", "lookupMiss=native position=" + position + " prevPosition=" + prev.position
+                    + " " + LiveRenderProbe.view(root));
         LiveEligibility.Verdict verdict = LiveEligibility.card(data);
-        Classification c = new Classification(data, verdict);
+        Classification c = new Classification(data, verdict, adapter, position, root);
+        if (prev != null) root.removeOnAttachStateChangeListener(prev);
+        root.addOnAttachStateChangeListener(c);
         roots.put(root, c);
         evaluate(root, c);
         if (verdict.ok()) Probe.liveSurfaceLater(root, "CARD", 450);
+    }
+
+    /**
+     * A bind without data keeps the previous classification only while that item's identity is
+     * still verifiable: it was eligible, it was bound at this same position by this same adapter,
+     * its data object is still held and the adapter still lists exactly that object. Anything else
+     * (another slot, another adapter, the item gone, an unresolvable list) is a new, unknown card
+     * and goes native.
+     */
+    private boolean keepThroughMiss(Classification prev, Object adapter, int position) {
+        if (prev == null || !prev.verdict.ok() || prev.position != position || prev.adapter.get() != adapter) return false;
+        Object prior = prev.data();
+        if (prior == null || !LiveEligibility.ongoing(prior).ok()) return false;
+        return locator.lists(adapter, prior, LIST_LIMIT) || (helper != null && helper.lists(adapter, prior, LIST_LIMIT));
     }
 
     /** After changeCardBg(View, int), setBlurBG(View, int) and initNormalNotificationView(View). */
@@ -135,6 +189,9 @@ final class LiveCardHooks {
         }
         if (!any && glass.tracked(target)) glass.forget(target, "unclassified");
     }
+    /** Tests: whether the classification of this root holds its data strongly now. */
+    boolean holdsDataForTest(View root) { Classification c = roots.get(root); return c != null && c.held != null; }
+
     /** Old single-argument form (tests, initNormalNotificationView). */
     void cardWriter(View target) { cardWriter(target, false); }
 
@@ -150,7 +207,7 @@ final class LiveCardHooks {
     /** Offers the card's fill (and a root that has its own background) with the current verdict. */
     private void evaluate(View root, Classification c) {
         if (c == null) return;
-        Object data = c.data.get();
+        Object data = c.data();
         // Recheck mutable data (especially automation) before each writer; the bind's structural
         // result is retained only when it was already ineligible.
         LiveEligibility.Verdict verdict = data == null ? LiveEligibility.Verdict.NO_DATA
@@ -335,7 +392,7 @@ final class LiveCardHooks {
             View root = e.getKey();
             Classification c = e.getValue();
             if (root == null || c == null || !c.verdict.ok() || !LiveChipHooks.within(root, stack)) continue;
-            Object data = c.data.get();
+            Object data = c.data();
             if (data == null || !LiveEligibility.ongoing(data).ok()) continue;
             // The adapter may classify item_root ABOVE stack_pip_layout (DZIF),
             // or CardItemView below it. Resolve from the actual material host so both

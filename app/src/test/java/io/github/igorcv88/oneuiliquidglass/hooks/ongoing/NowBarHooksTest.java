@@ -140,7 +140,15 @@ public class NowBarHooksTest {
         NowBarItem briefing = new NowBarItem("com.samsung.android.app.moments", null);
         brief.d0(briefing);
         hooks.cardBound(abi, brief, briefing);
-        assertFalse(brief.getCardViewContainer().getBackground() instanceof LiveGlassDrawable);
+        assertTrue("DZIF Now Brief gets the same reversible glass as other ongoing cards",
+                brief.getCardViewContainer().getBackground() instanceof LiveGlassDrawable);
+
+        NowBarOngoingCardView suggestion = new NowBarOngoingCardView(activity);
+        NowBarItem unverified = new NowBarItem("com.samsung.android.app.smartsuggestion", null);
+        suggestion.d0(unverified);
+        hooks.cardBound(abi, suggestion, unverified);
+        assertFalse("unknown suggestion layouts remain native",
+                suggestion.getCardViewContainer().getBackground() instanceof LiveGlassDrawable);
     }
 
     @Test public void mediaPayloadArrivingLaterDoesNotRemoveExistingGlass() {
