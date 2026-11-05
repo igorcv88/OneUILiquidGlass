@@ -292,6 +292,8 @@ public final class Tuning {
      * (hooks.ongoing.MediaArtGlass): 0.05-1, or {@link #MEDIA_ART_NATIVE} for the native art.
      */
     public final float mediaArt;
+    /** QS keeps its existing property-only setting and default independently of the app control. */
+    public final float qsMediaArt;
     public static final float MEDIA_ART_NATIVE = -1f, MEDIA_ART_DEFAULT = 0.50f, MEDIA_ART_MIN = 0.05f;
     /** Keep Samsung's gray BGColorAdjustment over the blur. */
     public final boolean panelNativeGray;
@@ -427,6 +429,7 @@ public final class Tuning {
         panelDim = clamp(number("paneldim", 0.12f), 0f, 0.4f);
         panelBlurCap = Math.round(clamp(number("panelblurcap", 52f), -1f, 400f));
         mediaArt = mediaArtOpacity(prop("mediaart", ""));
+        qsMediaArt = qsMediaArtOpacity(systemProp("mediaart", ""));
         panelNativeGray = number("panelnativegray", 0f) >= 1f;
         int selectedPanelColor;
         try {
@@ -541,13 +544,22 @@ public final class Tuning {
      * value not above 0 = native art; otherwise clamped to [0.05, 1].
      */
     public static float mediaArtOpacity(String raw) {
-        if (raw == null) return MEDIA_ART_DEFAULT;
+        return mediaArtOpacity(raw, MEDIA_ART_DEFAULT);
+    }
+
+    /** Preserve the original QS default when no debug property is set. */
+    public static float qsMediaArtOpacity(String raw) {
+        return mediaArtOpacity(raw, 0.25f);
+    }
+
+    private static float mediaArtOpacity(String raw, float fallback) {
+        if (raw == null) return fallback;
         String s = raw.trim().toLowerCase(java.util.Locale.ROOT);
-        if (s.isEmpty()) return MEDIA_ART_DEFAULT;
+        if (s.isEmpty()) return fallback;
         if (s.equals("off") || s.equals("false")) return MEDIA_ART_NATIVE;
         float f;
-        try { f = Float.parseFloat(s); } catch (NumberFormatException e) { return MEDIA_ART_DEFAULT; }
-        if (Float.isNaN(f)) return MEDIA_ART_DEFAULT;
+        try { f = Float.parseFloat(s); } catch (NumberFormatException e) { return fallback; }
+        if (Float.isNaN(f)) return fallback;
         if (f <= 0f) return MEDIA_ART_NATIVE;
         return Math.max(MEDIA_ART_MIN, Math.min(1f, f));
     }
@@ -561,6 +573,10 @@ public final class Tuning {
     private static String prop(String key, String fallback) {
         String override = io.github.igorcv88.oneuiliquidglass.config.ConfigClient.override(key);
         if (override != null) return override;
+        return systemProp(key, fallback);
+    }
+
+    private static String systemProp(String key, String fallback) {
         try {
             java.lang.reflect.Method get = sysGet;
             if (get == null) sysGet = get = Class.forName("android.os.SystemProperties").getMethod("get", String.class, String.class);

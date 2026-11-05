@@ -28,6 +28,8 @@ public class ControlMatrixTest {
         Matcher m = Pattern.compile("(?m)^\\s*(?:int |String |float )?(\\w+) = [^;]*?(?:number|prop)\\(\"([a-z0-9.]+)\"").matcher(tuning);
         while (m.find()) out.computeIfAbsent(m.group(2), k -> new TreeSet<>()).add(m.group(1));
         // Derived fields read through locals or helpers.
+        // QS reads the same debug property independently of the app override.
+        out.computeIfAbsent("mediaart", k -> new TreeSet<>()).add("qsMediaArt");
         out.put("shadetone", new TreeSet<>(Arrays.asList("shadeTone", "shadeVeil", "shadeAdaptive")));
         out.put("liveblur", new TreeSet<>(Collections.singletonList("live")));
         out.computeIfAbsent("sfrefract", k -> new TreeSet<>()).add("live");
