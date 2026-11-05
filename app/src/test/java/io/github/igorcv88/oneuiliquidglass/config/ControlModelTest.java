@@ -326,4 +326,17 @@ public class ControlModelTest {
         assertFalse("live, no restart", s.pendingRestart("mediaart"));
         assertEquals("0.50", state(Collections.emptyMap(), Collections.emptyMap()).shown("mediaart"));
     }
+    @Test
+    public void numbersFollowTheSelectedLocaleWithoutChangingStoredValues() {
+        Controls.Control c = Controls.get("sflens");
+        java.util.Locale pt = java.util.Locale.forLanguageTag("pt-BR");
+        java.util.Locale en = java.util.Locale.ENGLISH;
+        assertEquals("0,45", ValueFormat.display(c, "0.45", pt));
+        assertEquals("0.45", ValueFormat.display(c, "0.45", en));
+        assertEquals("0,45", ValueFormat.toEdit(c, "0.45", pt));
+        assertEquals("0.45", ValueFormat.toEdit(c, "0.45", en));
+        assertEquals("0.45", ValueFormat.fromEdit(c, "0,45"));
+        assertEquals("0.45", ValueFormat.fromEdit(c, "0.45"));
+    }
+
 }

@@ -15,9 +15,9 @@ public final class ValueFormat {
 
     private ValueFormat() {}
 
-    private static String num(double n, int decimals) {
+    private static String num(double n, int decimals, Locale locale) {
         DecimalFormat f = new DecimalFormat(decimals == 0 ? "0" : "0." + "0".repeat(decimals),
-                DecimalFormatSymbols.getInstance(BR));
+                DecimalFormatSymbols.getInstance(locale));
         f.setRoundingMode(RoundingMode.HALF_UP);
         String s = f.format(n);
         return s.equals("-0") ? "0" : s;
@@ -44,6 +44,10 @@ public final class ValueFormat {
     }
 
     public static String display(Controls.Control c, String raw) {
+        return display(c, raw, BR);
+    }
+
+    public static String display(Controls.Control c, String raw, Locale locale) {
         if (raw == null) return "";
         if (isAuto(c, raw)) return c.autoLabel;
         if (isOff(c, raw)) return c.offLabel;
@@ -68,25 +72,25 @@ public final class ValueFormat {
         }
         switch (c.format) {
             case PX:
-                return num(n, 0) + " px";
+                return num(n, 0, locale) + " px";
             case MS:
-                return num(n, 0) + " ms";
+                return num(n, 0, locale) + " ms";
             case HZ:
-                return num(n, 0) + " Hz";
+                return num(n, 0, locale) + " Hz";
             case DP:
-                return num(n, n == Math.rint(n) ? 0 : 1) + " dp";
+                return num(n, n == Math.rint(n) ? 0 : 1, locale) + " dp";
             case COUNT:
-                return num(n, 0);
+                return num(n, 0, locale);
             case PERCENT_255:
-                return num(n / 255.0 * 100, 0) + " %";
+                return num(n / 255.0 * 100, 0, locale) + " %";
             case PERCENT_1:
-                return num(n * 100, 0) + " %";
+                return num(n * 100, 0, locale) + " %";
             case GAIN:
-                return "×" + num(n, 2);
+                return "×" + num(n, 2, locale);
             case DEGREES:
-                return num(Math.toDegrees(n), 0) + "°";
+                return num(Math.toDegrees(n), 0, locale) + "°";
             default:
-                return num(n, 2);
+                return num(n, 2, locale);
         }
     }
 
@@ -115,6 +119,10 @@ public final class ValueFormat {
 
     /** Raw value -> the number typed in the editor. */
     public static String toEdit(Controls.Control c, String raw) {
+        return toEdit(c, raw, BR);
+    }
+
+    public static String toEdit(Controls.Control c, String raw, Locale locale) {
         double n;
         try {
             n = Double.parseDouble(raw);
@@ -123,16 +131,16 @@ public final class ValueFormat {
         }
         switch (c.format) {
             case PERCENT_1:
-                return num(n * 100, 0);
+                return num(n * 100, 0, locale);
             case PERCENT_255:
-                return num(n / 255.0 * 100, 0);
+                return num(n / 255.0 * 100, 0, locale);
             case DEGREES:
-                return num(Math.toDegrees(n), 0);
+                return num(Math.toDegrees(n), 0, locale);
             case GAIN:
             case PLAIN:
-                return num(n, 2);
+                return num(n, 2, locale);
             default:
-                return num(n, c.spec() != null && c.spec().type == SettingSpec.Type.INT ? 0 : 1);
+                return num(n, c.spec() != null && c.spec().type == SettingSpec.Type.INT ? 0 : 1, locale);
         }
     }
 

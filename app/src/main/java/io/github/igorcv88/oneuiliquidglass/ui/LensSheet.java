@@ -181,8 +181,8 @@ final class LensSheet extends Sheet {
                 Controls.Control c = Controls.get(e.getKey());
                 if (c == null) continue;
                 b.append(b.length() == 0 ? "" : "\n").append(c.title).append(" · ").append(SearchSheet.surfaces(c))
-                        .append(": ").append(ValueFormat.display(c, from(e.getKey(), st))).append(" → ")
-                        .append(ValueFormat.display(c, e.getValue()));
+                        .append(": ").append(ValueFormat.display(c, from(e.getKey(), st), host.activity().getResources().getConfiguration().getLocales().get(0))).append(" → ")
+                        .append(ValueFormat.display(c, e.getValue(), host.activity().getResources().getConfiguration().getLocales().get(0)));
             }
             card.addView(Ui.text(activity, t, b, Theme.LABEL, t.ink, false));
             pendingBox.addView(card, Ui.match());

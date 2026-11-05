@@ -195,16 +195,16 @@ final class ControlSheet extends Sheet {
         }
         scale = Scale.of(c);
         LinearLayout top = Ui.row(activity);
-        valueText = Ui.text(activity, t, ValueFormat.display(c, working), Theme.TITLE, t.ink, true);
+        valueText = Ui.text(activity, t, ValueFormat.display(c, working, host.activity().getResources().getConfiguration().getLocales().get(0)), Theme.TITLE, t.ink, true);
         top.addView(valueText, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-        TextView def = Ui.button(activity, t, "Padrão: " + ValueFormat.display(c, s.defaultValue), Icon.RESET, Ui.ButtonStyle.TEXT, true);
+        TextView def = Ui.button(activity, t, "Padrão: " + ValueFormat.display(c, s.defaultValue, host.activity().getResources().getConfiguration().getLocales().get(0)), Icon.RESET, Ui.ButtonStyle.TEXT, true);
         def.setOnClickListener(v -> setWorking(s.defaultValue, true));
         top.addView(def);
         box.addView(top);
         slider = new Slider(activity, t);
         slider.configure(scale.steps, scale.index(s.defaultValue), scale.auto);
         slider.set(scale.index(working));
-        slider.describe(c.title, i -> ValueFormat.display(c, scale.value(i)));
+        slider.describe(c.title, i -> ValueFormat.display(c, scale.value(i), host.activity().getResources().getConfiguration().getLocales().get(0)));
         slider.listener(new Slider.Listener() {
             @Override public void start() {}
             @Override public void change(int index, boolean fromUser) { setWorking(scale.value(index), false); }
@@ -216,7 +216,7 @@ final class ControlSheet extends Sheet {
         exact.setPadding(t.dp(4), t.dp(8), 0, 0);
         box.addView(exact);
         field = field("Valor" + (unit.isEmpty() ? "" : " (" + unit + ")") + (scale.auto ? " · use -1 para " + c.autoLabel.toLowerCase(java.util.Locale.ROOT) : ""),
-                ValueFormat.isAuto(c, working) ? "-1" : ValueFormat.toEdit(c, working),
+                ValueFormat.isAuto(c, working) ? "-1" : ValueFormat.toEdit(c, working, host.activity().getResources().getConfiguration().getLocales().get(0)),
                 InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL | InputType.TYPE_NUMBER_FLAG_SIGNED);
         field.setOnEditorActionListener((v, id, e) -> {
             if (id == EditorInfo.IME_ACTION_DONE) {
@@ -284,11 +284,11 @@ final class ControlSheet extends Sheet {
 
     private void setWorking(String raw, boolean syncSlider) {
         working = raw;
-        if (valueText != null) valueText.setText(ValueFormat.display(c, raw));
+        if (valueText != null) valueText.setText(ValueFormat.display(c, raw, host.activity().getResources().getConfiguration().getLocales().get(0)));
         if (slider != null && syncSlider) slider.set(scale.index(raw));
         if (colorPicker != null) colorPicker.setColor(raw);
         if (field != null) {
-            String edit = scale == null ? raw : ValueFormat.isAuto(c, raw) ? "-1" : ValueFormat.toEdit(c, raw);
+            String edit = scale == null ? raw : ValueFormat.isAuto(c, raw) ? "-1" : ValueFormat.toEdit(c, raw, host.activity().getResources().getConfiguration().getLocales().get(0));
             if (!edit.equals(field.getText().toString())) field.setText(edit);
             field.setError(null);
         }
@@ -309,7 +309,7 @@ final class ControlSheet extends Sheet {
         String text = field.getText().toString().trim();
         try {
             // Preserve a legacy opacity below 50% unless the user changes it.
-            if (c.key.equals("mediaart") && text.equals(ValueFormat.toEdit(c, working))) return true;
+            if (c.key.equals("mediaart") && text.equals(ValueFormat.toEdit(c, working, host.activity().getResources().getConfiguration().getLocales().get(0)))) return true;
             String raw;
             if (c.format == Controls.Format.COLOR) raw = c.spec().validate(text);
             else if (scale.auto && text.equals("-1")) raw = c.spec().validate("-1");
@@ -345,19 +345,19 @@ final class ControlSheet extends Sheet {
     private void values(LinearLayout body, ControlState st) {
         String saved = st.saved.get(c.key), device = st.device(c.key);
         StringBuilder b = new StringBuilder();
-        if (saved != null) b.append("Salvo no aplicativo: ").append(ValueFormat.display(c, saved));
+        if (saved != null) b.append("Salvo no aplicativo: ").append(ValueFormat.display(c, saved, host.activity().getResources().getConfiguration().getLocales().get(0)));
         if (model.observedAvailable()) {
             String o = st.observed.get(c.key);
             if (o != null && !o.isEmpty()) {
                 b.append(b.length() == 0 ? "" : "\n").append("Propriedade do sistema: ")
-                        .append(ValueFormat.display(c, o));
+                        .append(ValueFormat.display(c, o, host.activity().getResources().getConfiguration().getLocales().get(0)));
                 if (saved != null && c.spec().applyMode == SettingSpec.ApplyMode.LIVE
                         && !c.spec().helperOwned() && !saved.equals(o))
                     b.append("\nO valor do aplicativo tem prioridade; o valor do sistema pode permanecer diferente.");
             }
         }
         if (c.needsRestart())
-            b.append(b.length() == 0 ? "" : "\n").append("Em uso pela lente: ").append(ValueFormat.display(c, device));
+            b.append(b.length() == 0 ? "" : "\n").append("Em uso pela lente: ").append(ValueFormat.display(c, device, host.activity().getResources().getConfiguration().getLocales().get(0)));
         if (b.length() == 0) return;
         TextView v = Ui.text(activity, t, b, Theme.CAPTION, t.inkMuted, false);
         v.setPadding(t.dp(8), t.dp(10), t.dp(8), t.dp(4));

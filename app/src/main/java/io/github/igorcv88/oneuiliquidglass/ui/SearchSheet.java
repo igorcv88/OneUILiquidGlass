@@ -91,7 +91,7 @@ final class SearchSheet extends Sheet {
                 if (card.getChildCount() > 0) card.addView(Ui.divider(activity, t, t.dp(20)));
                 Controls.Surface where = c.on(surface) ? surface : c.surfaces.iterator().next();
                 Applicability.Result a = app.on(c.key, where);
-                String value = ValueFormat.display(c, st.shown(c.key));
+                String value = ValueFormat.display(c, st.shown(c.key), host.activity().getResources().getConfiguration().getLocales().get(0));
                 String sub = surfaces(c) + " · " + value + (a.usable() || a.kind == Applicability.Kind.READ_ONLY ? "" : " · " + a.reason);
                 if (technical) sub += "\n" + c.spec().fullKey();
                 LinearLayout r = Ui.listRow(activity, t, null, c.title, sub, Controls.editable(c.key) ? Ui.chevron(activity, t) : null);
