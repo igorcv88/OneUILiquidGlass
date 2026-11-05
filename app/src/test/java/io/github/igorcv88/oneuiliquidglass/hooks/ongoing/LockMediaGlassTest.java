@@ -124,30 +124,93 @@ public class LockMediaGlassTest {
         assertEquals(View.VISIBLE, stroke.getVisibility());
     }
 
-    @Test public void expandedStaysNativeAndCompactGetsTheLensBack() {
+    /** OULG_LOCK165_CLEAN: each expand/collapse rebuilt the layer (first draw EMPTY 0x0). */
+    @Test public void expandAndCollapseKeepTheSameLensInstance() {
+        build();
+        lens.watch(card);
+        show();
+        GlassLayer layer = layerOf(capsule);
+        LiveGlassDrawable g = (LiveGlassDrawable) layer.getBackground();
+        int regions = env.regions.size();
+        for (int i = 0; i < 3; i++) {
+            lens.expandedState(stack, true);
+            card.layout(0, 0, 1280, 1942);
+            frame();
+            assertSame("parked, not removed", layer, layerOf(capsule));
+            assertEquals(View.INVISIBLE, layer.getVisibility());
+            assertEquals("expanded is native", View.VISIBLE, fill.getVisibility());
+            assertEquals(View.VISIBLE, stroke.getVisibility());
+            lens.expandedState(stack, false);
+            card.layout(0, 0, 848, 224);
+            frame();
+            assertSame(layer, layerOf(capsule));
+            assertSame("same LiveGlass material", g, layer.getBackground());
+            assertEquals(View.VISIBLE, layer.getVisibility());
+            assertEquals(View.INVISIBLE, fill.getVisibility());
+            assertEquals(View.INVISIBLE, stroke.getVisibility());
+        }
+        assertEquals("no new layer, no new offer", regions, env.regions.size());
+    }
+
+    @Test public void collapseIsFollowedBeforeTheGeometryShrinks() {
         build();
         lens.watch(card);
         show();
         lens.expandedState(stack, true);
-        assertNull(layerOf(capsule));
-        assertEquals(View.VISIBLE, fill.getVisibility());
-        assertEquals(View.VISIBLE, stroke.getVisibility());
-        lens.expandedState(stack, false);
+        card.layout(0, 0, 1280, 1942);
         frame();
-        Shadows.shadowOf(Looper.getMainLooper()).idle();
-        assertNotNull(layerOf(capsule));
+        lens.expandedState(stack, false);  // Samsung starts collapsing; still tall this frame
+        GlassLayer layer = layerOf(capsule);
+        assertEquals("lens ready at the start of the collapse", View.VISIBLE, layer.getVisibility());
+        frame();
         assertEquals(View.INVISIBLE, fill.getVisibility());
+        assertEquals(View.INVISIBLE, stroke.getVisibility());
     }
 
-    @Test public void aCardTallerThanWideIsTreatedAsExpanded() {
+    @Test public void expansionKeepsTheLensUntilTheCardIsTallerThanWide() {
+        build();
+        lens.watch(card);
+        show();
+        lens.expandedState(stack, true);   // animation starts, card still compact
+        GlassLayer layer = layerOf(capsule);
+        assertEquals(View.VISIBLE, layer.getVisibility());
+        assertEquals(View.INVISIBLE, fill.getVisibility());
+        card.layout(0, 0, 1280, 1942);
+        frame();
+        assertEquals(View.INVISIBLE, layer.getVisibility());
+        assertEquals(View.VISIBLE, fill.getVisibility());
+    }
+
+    @Test public void withoutAStackFlagATallCardIsExpanded() {
         build();
         lens.watch(card);
         show();
         card.layout(0, 0, 1280, 1942);
         frame();
-        assertNull(layerOf(capsule));
+        assertEquals(View.INVISIBLE, layerOf(capsule).getVisibility());
         assertEquals(View.VISIBLE, fill.getVisibility());
         assertEquals(View.VISIBLE, stroke.getVisibility());
+    }
+
+    @Test public void aDetachedCardIsNeverSynced() {
+        build();
+        lens.watch(card);
+        show();
+        ((FrameLayout) stack.getParent()).removeView(stack);
+        assertNull(layerOf(capsule));
+        lens.refreshAll();
+        lens.expandedState(stack, false);
+        assertNull("no layer added to a card that is not attached", layerOf(capsule));
+        assertEquals(View.VISIBLE, fill.getVisibility());
+    }
+
+    @Test public void expandedRule() {
+        assertFalse(LockMediaGlass.expanded(null, 848, 224));
+        assertTrue(LockMediaGlass.expanded(null, 1280, 1942));
+        assertFalse("no geometry yet", LockMediaGlass.expanded(null, 0, 0));
+        assertFalse("collapse trusted at once", LockMediaGlass.expanded(false, 1280, 1942));
+        assertFalse("expansion waits for the geometry", LockMediaGlass.expanded(true, 848, 224));
+        assertTrue(LockMediaGlass.expanded(true, 1280, 1942));
     }
 
     @Test public void gateOffAndDetachRestoreEverything() {

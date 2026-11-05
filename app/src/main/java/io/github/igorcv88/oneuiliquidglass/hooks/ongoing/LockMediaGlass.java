@@ -30,9 +30,15 @@ import java.util.WeakHashMap;
  * attach and synced from the card's pre-draw, before its first visible frame, not from the
  * one-second diagnostic scan.</p>
  *
- * <p>Expanded (the stack's setExpandedCardState(true) or a card taller than wide) stays native:
- * the layer is removed and both views get their visibility back. Per frame: geometry and
- * reference checks on cached views; the views are resolved by id once per attach.</p>
+ * <p>Expanded stays native without tearing the lens down (OULG_LOCK165_CLEAN, DZIF: every
+ * expand/collapse removed the layer and built a new one, whose first draw was EMPTY 0x0): the
+ * same layer and LiveGlass state are kept, the layer is parked INVISIBLE (its accumulated alpha
+ * is 0, so its blur region is not drawn) and fill and stroke get their visibility back. Collapse
+ * follows Samsung's setExpandedCardState(false) at once, before the card's geometry shrinks;
+ * expansion keeps the lens until the card is really taller than wide. Without a stack flag the
+ * geometry alone decides. A card that is not attached is never synced. The layer is removed only
+ * for gate off, detach, a missing container or an error. Per frame: geometry and reference
+ * checks on cached views; the views are resolved by id once per attach.</p>
  */
 final class LockMediaGlass {
     static final String MEDIA = NowBarHooks.PRESENTATION + "NowBarMediaCardView";
@@ -109,8 +115,8 @@ final class LockMediaGlass {
 
         void sync() {
             View k = card.get();
-            if (k == null) return;
-            if (expanded(k)) { release("expanded"); return; }
+            // A stale instance (detached, already released) does no work and gets no layer.
+            if (k == null || !k.isAttachedToWindow()) return;
             if (!glass.allows(LiveSurface.NOWBAR)) { release("gate"); return; }
             View c = container.get();
             if (c == null || !c.isAttachedToWindow()) {
@@ -119,7 +125,19 @@ final class LockMediaGlass {
             }
             if (!(c instanceof ViewGroup) || !NativeShape.cardLike(c)) { release("noContainer"); return; }
             GlassLayer l = layer(this, (ViewGroup) c);
+            boolean expanded = expanded(k);
+            park(l, expanded);
             if (!glass.tracked(l)) offer(k, c, l);
+            // The glass's own sync gives the shown state; expanded is native whatever it says.
+            if (expanded) decorations(false);
+        }
+
+        /** Expanded: the lens is kept but not drawn. Compact: drawn again in this same frame. */
+        private void park(GlassLayer l, boolean expanded) {
+            int want = expanded ? View.INVISIBLE : View.VISIBLE;
+            if (l.getVisibility() == want) return;
+            l.setVisibility(want);
+            Probe.log("LOCK_MEDIA_GLASS", "state=" + (expanded ? "parked" : "unparked") + " card=" + id(card.get()));
         }
 
         private void offer(View k, View c, GlassLayer l) {
@@ -169,9 +187,7 @@ final class LockMediaGlass {
         }
 
         private boolean expanded(View k) {
-            Boolean s = expandedStacks.get(stack.get());
-            if (Boolean.TRUE.equals(s)) return true;
-            return k.getWidth() > 0 && k.getHeight() > k.getWidth();
+            return LockMediaGlass.expanded(expandedStacks.get(stack.get()), k.getWidth(), k.getHeight());
         }
     }
 
@@ -220,6 +236,15 @@ final class LockMediaGlass {
             container.addView(l, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         }
         return l;
+    }
+
+    /**
+     * flag: the stack's last setExpandedCardState, or null. Collapse (false) is trusted at once,
+     * before the geometry shrinks; expansion (true) only once the card is taller than wide.
+     */
+    static boolean expanded(Boolean flag, int width, int height) {
+        boolean tall = width > 0 && height > width;
+        return flag == null ? tall : flag && tall;
     }
 
     private static View findStack(View card) {
