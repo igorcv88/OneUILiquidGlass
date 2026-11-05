@@ -1,6 +1,7 @@
 package io.github.igorcv88.oneuiliquidglass.live;
 
 import android.app.Activity;
+import io.github.igorcv88.oneuiliquidglass.R;
 import android.os.Handler;
 import android.os.Looper;
 
@@ -15,7 +16,7 @@ import java.util.function.Consumer;
  */
 public final class SfLiveController {
     public static final class Model {
-        public final boolean busy, bundled;
+        public final boolean busy, bundled, failed;
         public final Map<String, String> status;
         public final String message, log;
 
@@ -25,6 +26,11 @@ public final class SfLiveController {
                 Map<String, String> status,
                 String message,
                 String log) {
+            this(busy, bundled, status, message, log, false);
+        }
+
+        Model(boolean busy, boolean bundled, Map<String, String> status, String message, String log, boolean failed) {
+            this.failed = failed;
             this.busy = busy;
             this.bundled = bundled;
             this.status = Collections.unmodifiableMap(new LinkedHashMap<>(status));
@@ -50,10 +56,8 @@ public final class SfLiveController {
                         bundled,
                         Collections.emptyMap(),
                         bundled
-                                ? "Bundle desta versão disponível. Toque para verificar/autorizar"
-                                      + " SU. Ainda não foi solicitado root."
-                                : "Bundle SF ausente neste build. Compile com sfhook/build.sh antes"
-                                      + " do Gradle. Nenhuma operação root está disponível.",
+                                ? activity.getString(R.string.sf_bundle_ready)
+                                : activity.getString(R.string.sf_bundle_missing),
                         "");
     }
 
@@ -105,9 +109,7 @@ public final class SfLiveController {
                             : command == SfLive.Command.INSTALL ? 30 : 15;
             if (!process.waitFor(timeout, TimeUnit.SECONDS))
                 throw new IOException(
-                        "Tempo esgotado em "
-                                + command
-                                + ". Verifique autorização SU e leia o log antes de repetir.");
+                        activity.getString(R.string.sf_command_timeout, command.name()));
             return new SfLiveFlow.Reply(process.exitValue(), output.get(2, TimeUnit.SECONDS));
         } finally {
             process.destroy();
@@ -119,7 +121,7 @@ public final class SfLiveController {
         File dir = SfLive.extract(activity);
         Map<String, String> manifest = SfLive.manifest(activity);
         if (!"arm64-v8a".equals(manifest.get("abi")))
-            throw new IOException("ABI do bundle incompatível");
+            throw new IOException(activity.getString(R.string.sf_bad_abi));
         for (String[] file :
                 new String[][] {
                     {"oulg_inject", "sha256_inject"},
@@ -135,9 +137,43 @@ public final class SfLiveController {
             StringBuilder hex = new StringBuilder();
             for (byte b : digest.digest()) hex.append(String.format(Locale.ROOT, "%02x", b & 255));
             if (!hex.toString().equals(manifest.get(file[1])))
-                throw new IOException("Hash inválido: " + file[0] + ". Helper não foi executado.");
+                throw new IOException(activity.getString(R.string.sf_bad_hash, file[0]));
         }
         return dir;
+    }
+
+    private String localizedFailure(Exception error) {
+        String text = error.getMessage();
+        if (!(error instanceof SfLiveFlow.Failure) || text == null) return String.valueOf(text);
+        int newline = text.indexOf('\n');
+        String first = newline < 0 ? text : text.substring(0, newline);
+        String tail = newline < 0 ? "" : text.substring(newline);
+        int id;
+        switch (first) {
+            case "Helper sem resposta válida; root não confirmado.": id = R.string.sf_failure_helper; break;
+            case "O módulo legado oulg_sf ainda está ativo. Desative pelo método de root existente e faça reboot antes da rota live.": id = R.string.sf_failure_legacy; break;
+            case "Firmware fora da allowlist do bundle. Nada foi instalado/reiniciado.": id = R.string.sf_failure_firmware; break;
+            case "Bundle inválido. Nada foi instalado/reiniciado.": id = R.string.sf_failure_bundle; break;
+            case "Instalação não confirmada.": id = R.string.sf_failure_install; break;
+            case "Instalação difere do bundle. Operação interrompida.": id = R.string.sf_failure_mismatch; break;
+            case "Instalação inconsistente; prepare novamente.": id = R.string.sf_failure_inconsistent; break;
+            case "Selftest não aprovado.": id = R.string.sf_failure_selftest; break;
+            case "Stamp do selftest não corresponde aos binários instalados.": id = R.string.sf_failure_stamp; break;
+            case "Valores recusados; nada foi reiniciado.": id = R.string.sf_failure_values; break;
+            case "Binários mudaram ou selftest ausente. Prepare novamente antes de reiniciar.": id = R.string.sf_failure_not_ready; break;
+            case "Início do reinício não confirmado.": id = R.string.sf_failure_restart; break;
+            default:
+                if (first.startsWith("O valor de ") && first.endsWith(" não foi confirmado; nada foi reiniciado.")) {
+                    String key = first.substring("O valor de ".length(), first.indexOf(" não foi confirmado;"));
+                    return activity.getString(R.string.sf_failure_not_confirmed, key) + tail;
+                }
+                int rejected = first.indexOf(" recusado (");
+                if (rejected > 0 && first.endsWith(")"))
+                    return activity.getString(R.string.sf_failure_command, first.substring(0, rejected),
+                            first.substring(rejected + " recusado (".length(), first.length() - 1)) + tail;
+                return text;
+        }
+        return activity.getString(id) + tail;
     }
 
     private enum Action {
@@ -198,10 +234,7 @@ public final class SfLiveController {
                         true,
                         true,
                         before.status,
-                        "Executando "
-                                + action
-                                + ". Autorize SU para o UID deste APK pelo método de root"
-                                + " instalado.",
+                        activity.getString(R.string.sf_executing, action.name()),
                         before.log);
         if (listener != null) listener.accept(model);
         worker.execute(
@@ -242,15 +275,14 @@ public final class SfLiveController {
                             case PREPARE:
                                 status = flow.prepare();
                                 message =
-                                        "Preparação concluída. Nenhum reinício foi feito. Confira o"
-                                            + " estado abaixo.";
+                                        activity.getString(R.string.sf_prepared);
                                 break;
                             case RESTART:
                                 Map<String, String> values = SfLive.normalizeValues(restartValues);
                                 Map<String, String> freshStatus = flow.status();
                                 io.github.igorcv88.oneuiliquidglass.config.SystemPropertyReader.refresh();
                                 if (!io.github.igorcv88.oneuiliquidglass.config.SystemPropertyReader.available())
-                                    throw new IOException("Não foi possível ler os props antes do reinício");
+                                    throw new IOException(activity.getString(R.string.sf_props_unavailable));
                                 Map<String, String> inputs = CompositorValues.restartInputs(
                                         io.github.igorcv88.oneuiliquidglass.config.SystemPropertyReader.snapshot(), values);
                                 android.content.SharedPreferences prefs = activity.getSharedPreferences(
@@ -262,15 +294,13 @@ public final class SfLiveController {
                                         new io.github.igorcv88.oneuiliquidglass.config.ConfigRepository(activity)
                                                 .adoptWritten(written));
                                 message =
-                                        "Reinício iniciado. Os apps serão encerrados. Reabra e"
-                                            + " verifique o estado; ainda não é confirmação de"
-                                            + " injeção/refração.";
+                                        activity.getString(R.string.sf_restart_started);
                                 status = Collections.emptyMap();
                                 break;
                             case LOG:
                                 SfLiveFlow.Reply reply = run(bundle, SfLive.Command.LOG, null);
                                 log = reply.output;
-                                message = "Últimos logs de selftest/injeção.\n" + log;
+                                message = activity.getString(R.string.sf_recent_logs) + "\n" + log;
                                 break;
                             case UNINSTALL:
                                 SfLiveFlow.Reply removed =
@@ -280,15 +310,12 @@ public final class SfLiveController {
                                     throw new IOException(removed.output);
                                 status = flow.status();
                                 message =
-                                        "Arquivos removidos. A biblioteca em memória só sai quando"
-                                            + " o SF reiniciar; faça reboot para retornar ao"
-                                            + " compositor nativo.";
+                                        activity.getString(R.string.sf_removed);
                                 break;
                             default:
                                 status = flow.status();
                                 message =
-                                        "Estado lido do helper. Confirmação exige processo estável, GOT e reescrita."
-                                            + " Aguarde 2 minutos após o reinício e verifique novamente.";
+                                        activity.getString(R.string.sf_status_read);
                         }
                         io.github.igorcv88.oneuiliquidglass.config.SystemPropertyReader.refresh();
                         if (action == Action.STATUS) confirmCompiled(status);
@@ -305,7 +332,7 @@ public final class SfLiveController {
                             try {
                                 log = run(bundle, SfLive.Command.LOG, null).output;
                             } catch (Exception secondary) {
-                                log = "Falha ao ler log: " + secondary.getMessage();
+                                log = activity.getString(R.string.sf_log_failed, secondary.getMessage());
                             }
                         }
                         publish(
@@ -313,11 +340,11 @@ public final class SfLiveController {
                                         false,
                                         true,
                                         Collections.emptyMap(),
-                                        "Operação interrompida: "
-                                                + error.getMessage()
-                                                + "\nNenhum reinício adicional será feito."
+                                        activity.getString(R.string.sf_interrupted_prefix) + " "
+                                                + localizedFailure(error)
+                                                + "\n" + activity.getString(R.string.sf_no_further_restart)
                                                 + (log.isEmpty() ? "" : "\n" + log),
-                                        log));
+                                        log, true));
                     }
                 });
     }

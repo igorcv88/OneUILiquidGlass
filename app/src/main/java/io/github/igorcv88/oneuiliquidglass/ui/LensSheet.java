@@ -150,8 +150,7 @@ final class LensSheet extends Sheet {
         }
         // Keep the actual failed operation visible instead of replacing it with a generic state.
         // In particular, a rejected property value must not look like a root permission failure.
-        if (!model.busy && model.message != null
-                && model.message.startsWith("Operação interrompida:")) {
+        if (!model.busy && model.failed) {
             title = activity.getString(R.string.lens_interrupted);
             text = model.message;
             action = activity.getString(R.string.lens_check_state);
