@@ -65,7 +65,9 @@ public class AppLanguageTest {
     @Test public void activityRecreationKeepsLanguageAndUnrelatedPreferences() {
         context.getSharedPreferences("ui", Context.MODE_PRIVATE).edit()
                 .putBoolean("reduceMotion", true).putBoolean("favorite.liveradius", true).commit();
-        Config.open(context).edit().putString("desired.mediaart", "0.75").commit();
+        android.content.SharedPreferences config = Config.open(context);
+        String previousMedia = config.getString("desired.mediaart", null);
+        config.edit().putString("desired.mediaart", "0.75").commit();
         ActivityController<MainActivity> controller = Robolectric.buildActivity(MainActivity.class).setup();
         try {
             MainActivity first = controller.get();
@@ -84,6 +86,8 @@ public class AppLanguageTest {
             assertEquals("0.75", Config.open(recreated).getString("desired.mediaart", null));
         } finally {
             controller.pause().stop().destroy();
+            if (previousMedia == null) config.edit().remove("desired.mediaart").commit();
+            else config.edit().putString("desired.mediaart", previousMedia).commit();
         }
     }
 
