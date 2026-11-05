@@ -200,7 +200,7 @@ public final class SettingsPage implements Page {
         String lensText = mode == Mode.DYNAMIC_LENS ? host.activity().getString(R.string.active_feminine) : !m.lens.model().bundled ? host.activity().getString(R.string.unavailable_in_build)
                 : lens == SfLive.State.NO_ROOT ? host.activity().getString(R.string.optional_requires_root) : lens == SfLive.State.UNSUPPORTED ? host.activity().getString(R.string.unsupported_firmware) : host.activity().getString(R.string.not_enabled);
         int pending = mode == Mode.DYNAMIC_LENS ? m.pendingCompositor().size() : 0;
-        if (pending > 0) lensText += pending == 1 ? " · 1 ajuste pendente" : " · " + pending + " ajustes pendentes";
+        if (pending > 0) lensText += pending == 1 ? host.activity().getString(R.string.settings_pending_one) : host.activity().getString(R.string.settings_pending_many, pending);
         Ui.setSubtitle(lensRow, lensText);
         switch (m.sync()) {
             case SYNCED: Ui.setSubtitle(syncRow, host.activity().getString(R.string.settings_read)); break;
@@ -212,6 +212,6 @@ public final class SettingsPage implements Page {
         int conflicts = m.conflicts().size();
         conflictsRow.setVisibility(conflicts == 0 ? View.GONE : View.VISIBLE);
         conflictsDivider.setVisibility(conflicts == 0 ? View.GONE : View.VISIBLE);
-        Ui.setSubtitle(conflictsRow, conflicts == 1 ? "1 ajuste" : conflicts + " ajustes");
+        Ui.setSubtitle(conflictsRow, conflicts == 1 ? host.activity().getString(R.string.settings_conflict_one) : host.activity().getString(R.string.settings_conflict_many, conflicts));
     }
 }

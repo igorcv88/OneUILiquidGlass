@@ -119,4 +119,8 @@
     <string name="search_hint">Name, effect, or property</string>
     <string name="search_prompt">Type to search settings across all three surfaces.</string>
     <string name="search_no_results">No results.</string>
+    <string name="settings_pending_one"> · 1 setting pending</string>
+    <string name="settings_pending_many"> · %1$d settings pending</string>
+    <string name="settings_conflict_one">1 setting</string>
+    <string name="settings_conflict_many">%1$d settings</string>
 </resources>

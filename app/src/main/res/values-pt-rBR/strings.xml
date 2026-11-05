@@ -119,4 +119,8 @@
     <string name="search_hint">Nome, efeito ou propriedade</string>
     <string name="search_prompt">Digite para buscar entre todos os ajustes dos três ambientes.</string>
     <string name="search_no_results">Nada encontrado.</string>
+    <string name="settings_pending_one"> · 1 ajuste pendente</string>
+    <string name="settings_pending_many"> · %1$d ajustes pendentes</string>
+    <string name="settings_conflict_one">1 ajuste</string>
+    <string name="settings_conflict_many">%1$d ajustes</string>
 </resources>
