@@ -115,9 +115,7 @@ public final class SettingsPage implements Page {
         soft.setOnClickListener(v -> InfoSheets.softReboot(host));
         rec.addView(soft);
         content.addView(rec, Ui.match());
-        TextView help = Ui.text(a, t, "Se as notificações travarem, desative o módulo no LSPosed e reinicie o"
-                + " aparelho. A lente dinâmica nunca é carregada na inicialização: reiniciar o aparelho volta"
-                + " ao compositor original.", Theme.CAPTION, t.inkMuted, false);
+        TextView help = Ui.text(a, t, a.getString(R.string.settings_recovery_help), Theme.CAPTION, t.inkMuted, false);
         help.setPadding(t.dp(8), t.dp(12), t.dp(8), 0);
         content.addView(help);
         TextView version = Ui.text(a, t, "One UI Liquid Glass " + versionName(a), Theme.CAPTION, t.inkFaint, false);

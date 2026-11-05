@@ -29,11 +29,9 @@ public final class HomePage implements Page {
     private final Toggle quickSettingsToggle;
     private final LinearLayout quickSettingsRow;
     /** Live update at the top, Now Bar and toasts: opt-ins of their own (hooks/ongoing). */
-    private static final String[][] LIVE_SURFACES = {
-            {ProductFlags.LIVE_ACTIVITY, "Atividade ao vivo", "Pílula e cartões de atividades e mídia"},
-            {ProductFlags.NOW_BAR, "Now Bar", "Atividades e cápsula compacta de mídia na tela de bloqueio"},
-            {ProductFlags.TOAST, "Avisos rápidos", "Toasts do sistema, como “Copiado”"},
-    };
+    private static final String[] LIVE_KEYS = {ProductFlags.LIVE_ACTIVITY, ProductFlags.NOW_BAR, ProductFlags.TOAST};
+    private static final int[] LIVE_LABELS = {R.string.home_live_activity, R.string.now_bar, R.string.home_toast};
+    private static final int[] LIVE_DESCRIPTIONS = {R.string.home_live_activity_desc, R.string.home_nowbar_desc, R.string.home_toast_desc};
     private final Map<String, Toggle> liveToggles = new LinkedHashMap<>();
     private final Map<String, LinearLayout> liveRows = new LinkedHashMap<>();
     private final TextView testResult;
@@ -99,17 +97,18 @@ public final class HomePage implements Page {
         noticeSlot = Ui.column(a);
         content.addView(noticeSlot, Ui.match(t.dp(12), 0));
 
-        content.addView(Ui.section(a, t, "Ambientes"));
+        content.addView(Ui.section(a, t, a.getString(R.string.home_surfaces)));
         LinearLayout surfaces = Ui.card(a, t);
         Icon[] icons = {Icon.POPUP, Icon.LOCK, Icon.SHADE};
         for (Controls.Surface s : Controls.Surface.values()) {
             Toggle tg = new Toggle(a, t);
-            tg.setContentDescription("Vidro em " + s.label);
+            String label = surfaceLabel(a, s);
+            tg.setContentDescription(a.getString(R.string.home_surface_glass, label));
             tg.listener((x, on) -> {
                 host.model().flag("surface." + s.id + ".enabled", on);
-                host.feedback(s.label + (on ? ": vidro ligado" : ": vidro desligado"));
+                host.feedback(a.getString(on ? R.string.home_surface_enabled : R.string.home_surface_disabled, label));
             });
-            LinearLayout r = Ui.listRow(a, t, icons[s.ordinal()], s.label, "", tg);
+            LinearLayout r = Ui.listRow(a, t, icons[s.ordinal()], label, "", tg);
             r.setOnClickListener(v -> host.showSurface(s));
             r.setContentDescription(null);
             if (s.ordinal() > 0) surfaces.addView(Ui.divider(a, t, t.dp(72)));
@@ -127,15 +126,15 @@ public final class HomePage implements Page {
         quickSettingsRow = Ui.listRow(a, t, Icon.SHADE, host.activity().getString(R.string.home_qs), host.activity().getString(R.string.home_qs_desc), quickSettingsToggle);
         quickSettingsRow.setOnClickListener(v -> quickSettingsToggle.toggleByUser());
         surfaces.addView(quickSettingsRow);
-        for (String[] live : LIVE_SURFACES) {
-            String key = live[0], label = live[1];
+        for (int i = 0; i < LIVE_KEYS.length; i++) {
+            String key = LIVE_KEYS[i], label = a.getString(LIVE_LABELS[i]);
             Toggle tg = new Toggle(a, t);
-            tg.setContentDescription("Vidro em " + label);
+            tg.setContentDescription(a.getString(R.string.home_surface_glass, label));
             tg.listener((x, on) -> {
                 host.model().flag(key, on);
-                host.feedback(label + (on ? ": vidro ligado" : ": vidro desligado"));
+                host.feedback(a.getString(on ? R.string.home_surface_enabled : R.string.home_surface_disabled, label));
             });
-            LinearLayout r = Ui.listRow(a, t, Icon.SHADE, label, live[2], tg);
+            LinearLayout r = Ui.listRow(a, t, Icon.SHADE, label, a.getString(LIVE_DESCRIPTIONS[i]), tg);
             r.setOnClickListener(v -> tg.toggleByUser());
             surfaces.addView(Ui.divider(a, t, t.dp(72)));
             surfaces.addView(r);
@@ -166,19 +165,36 @@ public final class HomePage implements Page {
             if (!result.ok) {
                 if (result.conflict) host.openConflicts();
                 else host.feedback(result.message);
-            } else host.feedback(on ? "Registro detalhado solicitado" : "Registro detalhado desligado");
+            } else host.feedback(a.getString(on ? R.string.home_log_enabled : R.string.home_log_disabled));
         });
-        traceRow = Ui.listRow(a, t, Icon.INFO, "Registro detalhado", host.activity().getString(R.string.home_diagnostic_desc), traceToggle);
+        traceRow = Ui.listRow(a, t, Icon.INFO, a.getString(R.string.home_log), host.activity().getString(R.string.home_diagnostic_desc), traceToggle);
         traceRow.setOnClickListener(v -> traceToggle.toggleByUser());
         test.addView(traceRow);
         content.addView(test, Ui.match());
 
-        content.addView(Ui.section(a, t, "Estilo"));
+        content.addView(Ui.section(a, t, a.getString(R.string.home_style)));
         LinearLayout style = Ui.card(a, t);
-        LinearLayout presets = Ui.listRow(a, t, Icon.PALETTE, "Estilos", host.activity().getString(R.string.home_styles_desc), Ui.chevron(a, t));
+        LinearLayout presets = Ui.listRow(a, t, Icon.PALETTE, a.getString(R.string.styles), host.activity().getString(R.string.home_styles_desc), Ui.chevron(a, t));
         presets.setOnClickListener(v -> new PresetsSheet(host).show());
         style.addView(presets);
         content.addView(style, Ui.match());
+    }
+
+    private static String surfaceLabel(android.content.Context c, Controls.Surface surface) {
+        switch (surface) {
+            case HEADSUP: return c.getString(R.string.surface_popup);
+            case KEYGUARD: return c.getString(R.string.surface_lock);
+            default: return c.getString(R.string.surface_shade);
+        }
+    }
+
+    private static String modeLabel(android.content.Context c, Mode mode) {
+        switch (mode) {
+            case DYNAMIC_LENS: return c.getString(R.string.mode_dynamic);
+            case CAPTURE: return c.getString(R.string.mode_capture);
+            case PLAIN_BLUR: return c.getString(R.string.mode_blur);
+            default: return c.getString(R.string.mode_standard);
+        }
     }
 
     public void showTestResult(String text, boolean problem) {
@@ -208,7 +224,7 @@ public final class HomePage implements Page {
         ControlState st = m.state();
         Applicability app = st.applicability();
         master.set(st.enabled, true);
-        Ui.setSubtitle(masterRow, st.enabled ? "Modo: " + app.mode.label : host.activity().getString(R.string.home_original_notifications));
+        Ui.setSubtitle(masterRow, st.enabled ? host.activity().getString(R.string.home_mode, modeLabel(host.activity(), app.mode)) : host.activity().getString(R.string.home_original_notifications));
         AppModel.Sync sync = m.sync();
         int dot;
         String line;
@@ -218,11 +234,11 @@ public final class HomePage implements Page {
         } else {
             int on = 0;
             for (Controls.Surface s : Controls.Surface.values()) if (app.surfaceOn(s)) on++;
-            line = (on == 3 ? host.activity().getString(R.string.home_active_all) : on == 0 ? host.activity().getString(R.string.home_none_enabled) : "Ativo em " + on + " de 3 ambientes");
+            line = (on == 3 ? host.activity().getString(R.string.home_active_all) : on == 0 ? host.activity().getString(R.string.home_none_enabled) : host.activity().getString(R.string.home_active_count, on));
             switch (sync) {
                 case SYNCED: dot = t.ok; break;
-                case WAITING: dot = t.accent; line += " · enviando"; break;
-                case NO_RESPONSE: dot = t.warn; line += " · sem resposta do sistema"; break;
+                case WAITING: dot = t.accent; line += host.activity().getString(R.string.home_sending); break;
+                case NO_RESPONSE: dot = t.warn; line += host.activity().getString(R.string.home_no_response); break;
                 case NOT_DETECTED: dot = t.warn; line = host.activity().getString(R.string.home_module_missing); break;
                 default: dot = t.inkFaint;
             }
@@ -237,7 +253,7 @@ public final class HomePage implements Page {
             int changed = 0;
             for (Controls.Control c : Controls.all())
                 if (c.on(s) && Controls.editable(c.key) && c.tier != Controls.Tier.TECHNICAL && st.saved.containsKey(c.key) && st.changed(c.key)) changed++;
-            String sub = !st.enabled ? host.activity().getString(R.string.home_glass_off) : !on ? host.activity().getString(R.string.home_off) : changed == 0 ? host.activity().getString(R.string.home_default) : changed == 1 ? "1 ajuste personalizado" : changed + " ajustes personalizados";
+            String sub = !st.enabled ? host.activity().getString(R.string.home_glass_off) : !on ? host.activity().getString(R.string.home_off) : changed == 0 ? host.activity().getString(R.string.home_default) : changed == 1 ? host.activity().getString(R.string.home_custom_one) : host.activity().getString(R.string.home_custom_many, changed);
             Ui.setSubtitle(rows.get(s), sub);
         }
         boolean quickOn = "1".equals(st.shown(ProductFlags.QUICK_SETTINGS));
@@ -257,7 +273,7 @@ public final class HomePage implements Page {
         AppModel.Sync traceSync = m.sync();
         Ui.setSubtitle(traceRow, !traceRequested ? host.activity().getString(R.string.home_off) : traceSync == AppModel.Sync.SYNCED
                 ? host.activity().getString(R.string.home_system_received) : traceSync == AppModel.Sync.WAITING
-                ? "Ativando no SystemUI…" : host.activity().getString(R.string.home_unconfirmed));
+                ? host.activity().getString(R.string.home_trace_enabling) : host.activity().getString(R.string.home_unconfirmed));
         notice(st, sync);
     }
 
@@ -272,24 +288,24 @@ public final class HomePage implements Page {
         CompositorValues.Outcome last = m.lastApply();
         if (last == CompositorValues.Outcome.NOT_LOADED) {
             key = "lens-failed";
-            n = Ui.notice(a, t, Ui.Tone.ERROR, "A lente dinâmica não foi carregada no último reinício.", "Detalhes", host::openLens);
+            n = Ui.notice(a, t, Ui.Tone.ERROR, a.getString(R.string.home_lens_failed), a.getString(R.string.home_details), host::openLens);
         } else if (!pending.isEmpty()) {
             key = "pending" + pending.size();
-            n = Ui.notice(a, t, Ui.Tone.INFO, pending.size() == 1 ? "1 ajuste da lente aguarda aplicação." : pending.size() + " ajustes da lente aguardam aplicação.", "Aplicar", host::openLens);
+            n = Ui.notice(a, t, Ui.Tone.INFO, pending.size() == 1 ? a.getString(R.string.home_lens_pending_one) : a.getString(R.string.home_lens_pending_many, pending.size()), a.getString(R.string.home_apply), host::openLens);
         } else if (m.mode() == Mode.DYNAMIC_LENS && m.compositorUnverified()) {
             key = "lens-unverified";
             n = Ui.notice(a, t, Ui.Tone.WARN,
-                    "Não foi confirmado quais ajustes a lente carregou no último reinício.",
-                    "Verificar", host::openLens);
+                    a.getString(R.string.home_lens_unverified),
+                    a.getString(R.string.home_check), host::openLens);
         } else if (st.enabled && sync == AppModel.Sync.NOT_DETECTED) {
             key = "detect";
-            n = Ui.notice(a, t, Ui.Tone.WARN, "O sistema ainda não leu os ajustes. Confira se o módulo está ativo no LSPosed.", "Ver como", host::openSync);
+            n = Ui.notice(a, t, Ui.Tone.WARN, a.getString(R.string.home_not_read), a.getString(R.string.home_how), host::openSync);
         } else if (st.enabled && sync == AppModel.Sync.NO_RESPONSE) {
             key = "sync";
-            n = Ui.notice(a, t, Ui.Tone.WARN, "O sistema não confirmou as últimas alterações.", "Resolver", host::openSync);
+            n = Ui.notice(a, t, Ui.Tone.WARN, a.getString(R.string.home_unconfirmed_changes), a.getString(R.string.home_resolve), host::openSync);
         } else if (!conflicts.isEmpty()) {
             key = "conflict" + conflicts.size();
-            n = Ui.notice(a, t, Ui.Tone.INFO, conflicts.size() == 1 ? "Um ajuste foi alterado fora do app." : conflicts.size() + " ajustes foram alterados fora do app.", "Revisar", host::openConflicts);
+            n = Ui.notice(a, t, Ui.Tone.INFO, conflicts.size() == 1 ? a.getString(R.string.home_conflict_one) : a.getString(R.string.home_conflict_many, conflicts.size()), a.getString(R.string.home_review), host::openConflicts);
         } else key = "";
         if (key.equals(noticeKey)) return;
         noticeKey = key;

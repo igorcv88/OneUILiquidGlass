@@ -3,6 +3,7 @@ package io.github.igorcv88.oneuiliquidglass.i18n;
 import static org.junit.Assert.assertEquals;
 
 import android.content.Context;
+import io.github.igorcv88.oneuiliquidglass.R;
 import android.content.res.Configuration;
 import android.os.LocaleList;
 
@@ -42,4 +43,19 @@ public class AppLanguageTest {
         AppLanguage.set(recreated, AppLanguage.ENGLISH);
         assertEquals("en", AppLanguage.get(context));
     }
+    @Test public void homeLabelsAndFormattedMessagesFollowSelectedLanguage() {
+        Context en = AppLanguage.wrap(context);
+        assertEquals("Glass on Lock screen", en.getString(R.string.home_surface_glass,
+                en.getString(R.string.surface_lock)));
+        assertEquals("Active on 2 of 3 surfaces", en.getString(R.string.home_active_count, 2));
+        assertEquals("3 settings changed outside the app.", en.getString(R.string.home_conflict_many, 3));
+
+        AppLanguage.set(context, AppLanguage.PORTUGUESE);
+        Context pt = AppLanguage.wrap(context);
+        assertEquals("Vidro em Bloqueio", pt.getString(R.string.home_surface_glass,
+                pt.getString(R.string.surface_lock)));
+        assertEquals("Ativo em 2 de 3 ambientes", pt.getString(R.string.home_active_count, 2));
+        assertEquals("3 ajustes foram alterados fora do app.", pt.getString(R.string.home_conflict_many, 3));
+    }
+
 }
