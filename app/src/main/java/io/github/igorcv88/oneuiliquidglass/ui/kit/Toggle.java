@@ -121,6 +121,7 @@ public final class Toggle extends View {
     @Override
     public void onInitializeAccessibilityNodeInfo(AccessibilityNodeInfo info) {
         super.onInitializeAccessibilityNodeInfo(info);
+        if (getContentDescription() != null) info.setContentDescription(getContentDescription());
         info.setCheckable(true);
         info.setChecked(checked);
         info.setStateDescription(getContext().getString(checked ? R.string.switch_on : R.string.switch_off));
