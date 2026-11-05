@@ -23,6 +23,21 @@ import java.util.function.BooleanSupplier;
 final class QsMediaArtworkHooks {
     static final String PAGE = "media.components.OneUI90MediaPlayerPageKt";
     static final String BITMAP_PAINTER = "androidx.compose.ui.graphics.painter.BitmapPainter";
+    /**
+     * DZIF (QS_MEDIA_PAINTER_SOURCE, 04/11/2026): inside the page frame the artwork is an
+     * EmptyPainter while it loads, then this DrawablePainter; BitmapPainter never appears there.
+     */
+    static final String DRAWABLE_PAINTER = "com.android.compose.ui.graphics.painter.DrawablePainter";
+    /**
+     * DZIF (QS_MEDIA_DRAW_SOURCE): MediaArtworkKt builds a DrawWithContentElement around the
+     * artwork, the QS counterpart of the shade's sec_album_art film. While the artwork is
+     * translucent it is replaced by a block that only draws its content; debug.oulg.qsmediaoverlay
+     * = native keeps Samsung's block.
+     */
+    static final String ARTWORK_BLOCK = "com.android.systemui.samsung.quicksetting.ui.media.components.MediaArtworkKt";
+    static final String OVERLAY_PROPERTY = "debug.oulg.qsmediaoverlay";
+    private Object contentOnly;
+    private boolean loggedOverlay;
     private final ClassLoader loader;
     private final QsContentHooks content;
     private final BooleanSupplier enabled;
@@ -48,7 +63,42 @@ final class QsMediaArtworkHooks {
     }
 
     static boolean matches(String owner, String painterClass) {
-        return PAGE.equals(owner) && BITMAP_PAINTER.equals(painterClass);
+        return PAGE.equals(owner) && (BITMAP_PAINTER.equals(painterClass) || DRAWABLE_PAINTER.equals(painterClass));
+    }
+
+    /** Samsung's draw block around the QS artwork (one of MediaArtworkKt's lambdas). */
+    static boolean artworkBlock(String lambdaClass) {
+        return lambdaClass != null && lambdaClass.startsWith(ARTWORK_BLOCK + "$");
+    }
+
+    /** Drop the block only while the artwork is translucent, the module is on and not opted out. */
+    static boolean dropOverlay(boolean enabled, float artOpacity, String override) {
+        return enabled && Float.isFinite(artOpacity) && artOpacity > Tuning.MEDIA_ART_NATIVE && artOpacity < 1f
+                && !"native".equals(override == null ? null : override.trim());
+    }
+
+    /**
+     * A kotlin Function1 that only calls ContentDrawScope.drawContent(): the artwork itself, no
+     * film. One stateless instance (equal across recompositions), built from SystemUI's loader.
+     */
+    private Object contentOnly() throws ReflectiveOperationException {
+        if (contentOnly != null) return contentOnly;
+        Class<?> function1 = Class.forName("kotlin.jvm.functions.Function1", false, loader);
+        Class<?> scope = Class.forName("androidx.compose.ui.graphics.drawscope.ContentDrawScope", false, loader);
+        final java.lang.reflect.Method draw = scope.getMethod("drawContent");
+        final Object unit = Class.forName("kotlin.Unit", false, loader).getField("INSTANCE").get(null);
+        contentOnly = java.lang.reflect.Proxy.newProxyInstance(loader, new Class<?>[] {function1}, (proxy, m, args) -> {
+            switch (m.getName()) {
+                case "invoke":
+                    if (args != null && args.length == 1 && scope.isInstance(args[0])) draw.invoke(args[0]);
+                    return unit;
+                case "equals": return args != null && args.length == 1 && proxy == args[0];
+                case "hashCode": return System.identityHashCode(proxy);
+                case "toString": return "OulgQsArtworkContentOnly";
+                default: return null;
+            }
+        });
+        return contentOnly;
     }
 
     /** The primary PainterElement constructor has six parameters, alpha being the fifth. */
@@ -61,6 +111,29 @@ final class QsMediaArtworkHooks {
                 || !Float.isFinite(nativeAlpha))
             return nativeAlpha;
         return nativeAlpha * Math.min(1f, Math.max(Tuning.MEDIA_ART_MIN, artOpacity));
+    }
+
+    /** MediaArtworkKt's draw block: content only while the artwork is translucent. Construction only. */
+    private void installOverlay() {
+        Class<?> element;
+        try { element = Class.forName("androidx.compose.ui.draw.DrawWithContentElement", false, loader); }
+        catch (ClassNotFoundException | LinkageError e) { Probe.log("QS_MEDIA_OVERLAY", "installed=false reason=noElement"); return; }
+        XposedBridge.hookAllConstructors(element, new XC_MethodHook() {
+            @Override protected void beforeHookedMethod(MethodHookParam p) {
+                if (p.args.length != 1 || p.args[0] == null || !artworkBlock(p.args[0].getClass().getName())) return;
+                if (!dropOverlay(enabled.getAsBoolean(), Tuning.get().qsMediaArt, property(OVERLAY_PROPERTY))) return;
+                try {
+                    Object replacement = contentOnly();
+                    if (!loggedOverlay) {
+                        loggedOverlay = true;
+                        Probe.log("QS_MEDIA_OVERLAY", "state=contentOnly lambda=" + p.args[0].getClass().getName());
+                    }
+                    p.args[0] = replacement;
+                } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
+                    Probe.log("QS_MEDIA_OVERLAY", "state=native reason=" + e.getClass().getSimpleName());
+                }
+            }
+        });
     }
 
     /** Read-only: logs which element classes the QS media code builds; changes nothing. */
@@ -142,7 +215,8 @@ final class QsMediaArtworkHooks {
                     }
                 }
             });
-            Probe.log("QS_MEDIA_ART_HOOK", "installed=true painter=BitmapPainter scope=OneUI90MediaPlayerPageKt phase=constructor");
+            installOverlay();
+            Probe.log("QS_MEDIA_ART_HOOK", "installed=true painter=BitmapPainter,DrawablePainter scope=OneUI90MediaPlayerPageKt phase=constructor");
             if ("1".equals(property(PROBE))) installProbe(element);
         } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
             Probe.log("QS_MEDIA_ART_HOOK", "installed=false reason=" + e.getClass().getSimpleName());

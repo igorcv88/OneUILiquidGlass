@@ -57,4 +57,24 @@ public class QsMediaArtworkHooksTest {
         assertEquals(.50f, io.github.igorcv88.oneuiliquidglass.glass.Tuning.mediaArtOpacity(null), 0f);
     }
 
+
+    @Test public void theLoadedArtworkPainterIsEligible() {
+        assertTrue(QsMediaArtworkHooks.matches(QsMediaArtworkHooks.PAGE, QsMediaArtworkHooks.DRAWABLE_PAINTER));
+        assertFalse("placeholder while loading", QsMediaArtworkHooks.matches(QsMediaArtworkHooks.PAGE,
+                "com.android.compose.ui.graphics.painter.EmptyPainter"));
+        assertFalse("header icons keep their painter", QsMediaArtworkHooks.matches(
+                "media.components.OneUI90MediaPlayerHeaderKt", QsMediaArtworkHooks.DRAWABLE_PAINTER));
+    }
+
+    @Test public void onlyTheArtworkBlockIsReplacedAndOnlyWhileTranslucent() {
+        assertTrue(QsMediaArtworkHooks.artworkBlock(QsMediaArtworkHooks.ARTWORK_BLOCK + "$$ExternalSyntheticLambda4"));
+        assertFalse(QsMediaArtworkHooks.artworkBlock(
+                "com.android.systemui.samsung.quicksetting.ui.media.components.OneUI90MediaPlayerPageKt$1"));
+        assertFalse(QsMediaArtworkHooks.artworkBlock(null));
+        assertTrue(QsMediaArtworkHooks.dropOverlay(true, 0.45f, null));
+        assertFalse("module off", QsMediaArtworkHooks.dropOverlay(false, 0.45f, null));
+        assertFalse("native art", QsMediaArtworkHooks.dropOverlay(true, Tuning.MEDIA_ART_NATIVE, null));
+        assertFalse("opaque art keeps Samsung's block", QsMediaArtworkHooks.dropOverlay(true, 1f, null));
+        assertFalse("opt-out", QsMediaArtworkHooks.dropOverlay(true, 0.45f, "native"));
+    }
 }
