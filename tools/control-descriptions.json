@@ -1,33 +1,614 @@
 {
-  "liveradius": ["Controls the standard glass blur in pop-ups. Lock screen cards follow this value when their blur is automatic.", "Controla o desfoque do vidro padrão nos pop-ups. Os cartões da tela de bloqueio seguem esse valor quando o desfoque está em automático."],
-  "liveshaderadius": ["Controls the standard glass blur inside each notification shade card.", "Controla o desfoque do vidro padrão dentro de cada cartão da central de notificações."],
-  "kgblurradius": ["Controls lock screen card blur. Automatic follows pop-up blur or blur under the dynamic lens.", "Controla o desfoque dos cartões da tela de bloqueio. Em automático, segue o desfoque do pop-up ou sob a lente dinâmica."],
-  "semradiuslens": ["Controls system blur under the dynamic lens. Less blur leaves more detail for refraction.", "Controla o desfoque do sistema sob a lente dinâmica. Menos desfoque preserva detalhes para a refração."],
-  "semradius": ["Controls system blur on cards without the standard glass or a lens.", "Controla o desfoque do sistema nos cartões sem vidro padrão ou lente."],
-  "livedarkfill": ["Adjusts the black fill over dark pop-up glass.", "Ajusta o preenchimento preto sobre o vidro escuro dos pop-ups."],
-  "kgdarkfill": ["Adjusts the black fill inside dark lock screen cards.", "Ajusta o preenchimento preto dentro dos cartões escuros da tela de bloqueio."],
-  "livedarkalpha": ["Adjusts the translucent white layer in dark pop-up glass.", "Ajusta a camada branca translúcida do vidro escuro dos pop-ups."],
-  "kgdarkalpha": ["Adjusts the translucent white layer in dark lock screen glass.", "Ajusta a camada branca translúcida do vidro escuro da tela de bloqueio."],
-  "lightglass": ["Adjusts light glass opacity on pop-ups and lock screen cards.", "Ajusta a opacidade do vidro claro dos pop-ups e cartões da tela de bloqueio."],
-  "shadelightglass": ["Adjusts light glass opacity on notification shade cards.", "Ajusta a opacidade do vidro claro dos cartões da central de notificações."],
-  "shadedarkglass": ["Adjusts dark glass opacity on notification shade cards.", "Ajusta a opacidade do vidro escuro dos cartões da central de notificações."],
-  "mediaart": ["Adjusts artwork opacity over glass in the notification shade and Live Updates media card. Native artwork restores its original appearance without turning off glass.", "Ajusta a opacidade da capa sobre o vidro na central de notificações e no cartão de mídia das Live Updates. Capa nativa restaura a apresentação original sem desligar o vidro."],
-  "shadeblur": ["Gives each expanded shade card its own blur instead of relying only on the panel blur.", "Aplica desfoque próprio a cada cartão expandido da central, além do desfoque do painel."],
-  "pillglass": ["Applies glass to the lock screen notification icon summary.", "Aplica vidro ao resumo de ícones de notificações da tela de bloqueio."],
-  "pillblur": ["Controls blur in the lock screen notification icon summary.", "Controla o desfoque do resumo de ícones de notificações da tela de bloqueio."],
-  "sflens": ["Adjusts edge refraction on pop-ups when the dynamic lens is active.", "Ajusta a refração da borda dos pop-ups quando a lente dinâmica está ativa."],
-  "kglens": ["Adjusts edge refraction on lock screen cards when the dynamic lens is active.", "Ajusta a refração da borda dos cartões da tela de bloqueio quando a lente dinâmica está ativa."],
-  "liverim": ["Adjusts the pop-up outline, together with the edge intensity setting.", "Ajusta o contorno do pop-up em conjunto com a intensidade das bordas."],
-  "kgrim": ["Adjusts the outline of lock screen cards.", "Ajusta o contorno dos cartões da tela de bloqueio."],
-  "liveglint": ["Adjusts the highlight in the upper-left corner of pop-ups.", "Ajusta o reflexo no canto superior esquerdo dos pop-ups."],
-  "kgglint": ["Adjusts the corner highlight on lock screen cards.", "Ajusta o reflexo no canto dos cartões da tela de bloqueio."],
-  "shadeglint": ["Adjusts the corner highlight on notification shade cards.", "Ajusta o reflexo no canto dos cartões da central de notificações."],
-  "veilmax": ["Limits the contrast veil calculated from the background.", "Limita o véu de contraste calculado a partir do fundo."],
-  "popuptone": ["Measures the background to adjust contrast on pop-ups.", "Mede o fundo para ajustar o contraste dos pop-ups."],
-  "textswap": ["Adapts the glass and text colors to the background.", "Adapta as cores do vidro e do texto ao fundo."],
-  "shadetone": ["Selects how notification shade cards protect text contrast.", "Seleciona como os cartões da central protegem o contraste do texto."],
-  "paneldim": ["Darkens the shade background over light apps in dark theme.", "Escurece o fundo da central sobre aplicativos claros no tema escuro."],
-  "panelblurcap": ["Limits background blur behind notifications and Quick Settings. Native lets Samsung choose the blur.", "Limita o desfoque atrás das notificações e da central de controle. Nativo deixa a Samsung definir o desfoque."],
-  "panelnativegray": ["Restores Samsung’s native gray color adjustment over the shade background.", "Restaura o ajuste de cor cinza nativo da Samsung sobre o fundo da central."],
-  "panelcolor": ["Adjusts the color and opacity of the shade background independently of the cards.", "Ajusta a cor e a opacidade do fundo da central independentemente dos cartões."]
+  "liveradius": [
+    "Controls the standard glass blur in pop-ups. Lock screen cards follow this value when their blur is automatic.",
+    "Controla o desfoque do vidro padrão nos pop-ups. Os cartões da tela de bloqueio seguem esse valor quando o desfoque está em automático."
+  ],
+  "liveshaderadius": [
+    "Controls the standard glass blur inside each notification shade card.",
+    "Controla o desfoque do vidro padrão dentro de cada cartão da central de notificações."
+  ],
+  "kgblurradius": [
+    "Controls lock screen card blur. Automatic follows pop-up blur or blur under the dynamic lens.",
+    "Controla o desfoque dos cartões da tela de bloqueio. Em automático, segue o desfoque do pop-up ou sob a lente dinâmica."
+  ],
+  "semradiuslens": [
+    "Controls system blur under the dynamic lens. Less blur leaves more detail for refraction.",
+    "Controla o desfoque do sistema sob a lente dinâmica. Menos desfoque preserva detalhes para a refração."
+  ],
+  "semradius": [
+    "Controls system blur on cards without the standard glass or a lens.",
+    "Controla o desfoque do sistema nos cartões sem vidro padrão ou lente."
+  ],
+  "livedarkfill": [
+    "Adjusts the black fill over dark pop-up glass.",
+    "Ajusta o preenchimento preto sobre o vidro escuro dos pop-ups."
+  ],
+  "kgdarkfill": [
+    "Adjusts the black fill inside dark lock screen cards.",
+    "Ajusta o preenchimento preto dentro dos cartões escuros da tela de bloqueio."
+  ],
+  "livedarkalpha": [
+    "Adjusts the translucent white layer in dark pop-up glass.",
+    "Ajusta a camada branca translúcida do vidro escuro dos pop-ups."
+  ],
+  "kgdarkalpha": [
+    "Adjusts the translucent white layer in dark lock screen glass.",
+    "Ajusta a camada branca translúcida do vidro escuro da tela de bloqueio."
+  ],
+  "lightglass": [
+    "Adjusts light glass opacity on pop-ups and lock screen cards.",
+    "Ajusta a opacidade do vidro claro dos pop-ups e cartões da tela de bloqueio."
+  ],
+  "shadelightglass": [
+    "Adjusts light glass opacity on notification shade cards.",
+    "Ajusta a opacidade do vidro claro dos cartões da central de notificações."
+  ],
+  "shadedarkglass": [
+    "Adjusts dark glass opacity on notification shade cards.",
+    "Ajusta a opacidade do vidro escuro dos cartões da central de notificações."
+  ],
+  "mediaart": [
+    "Adjusts artwork opacity over glass in the notification shade and Live Updates media card. Native artwork restores its original appearance without turning off glass.",
+    "Ajusta a opacidade da capa sobre o vidro na central de notificações e no cartão de mídia das Live Updates. Capa nativa restaura a apresentação original sem desligar o vidro."
+  ],
+  "shadeblur": [
+    "Gives each expanded shade card its own blur instead of relying only on the panel blur.",
+    "Aplica desfoque próprio a cada cartão expandido da central, além do desfoque do painel."
+  ],
+  "pillglass": [
+    "Applies glass to the lock screen notification icon summary.",
+    "Aplica vidro ao resumo de ícones de notificações da tela de bloqueio."
+  ],
+  "pillblur": [
+    "Controls blur in the lock screen notification icon summary.",
+    "Controla o desfoque do resumo de ícones de notificações da tela de bloqueio."
+  ],
+  "sflens": [
+    "Adjusts edge refraction on pop-ups when the dynamic lens is active.",
+    "Ajusta a refração da borda dos pop-ups quando a lente dinâmica está ativa."
+  ],
+  "kglens": [
+    "Adjusts edge refraction on lock screen cards when the dynamic lens is active.",
+    "Ajusta a refração da borda dos cartões da tela de bloqueio quando a lente dinâmica está ativa."
+  ],
+  "liverim": [
+    "Adjusts the pop-up outline, together with the edge intensity setting.",
+    "Ajusta o contorno do pop-up em conjunto com a intensidade das bordas."
+  ],
+  "kgrim": [
+    "Adjusts the outline of lock screen cards.",
+    "Ajusta o contorno dos cartões da tela de bloqueio."
+  ],
+  "liveglint": [
+    "Adjusts the highlight in the upper-left corner of pop-ups.",
+    "Ajusta o reflexo no canto superior esquerdo dos pop-ups."
+  ],
+  "kgglint": [
+    "Adjusts the corner highlight on lock screen cards.",
+    "Ajusta o reflexo no canto dos cartões da tela de bloqueio."
+  ],
+  "shadeglint": [
+    "Adjusts the corner highlight on notification shade cards.",
+    "Ajusta o reflexo no canto dos cartões da central de notificações."
+  ],
+  "veilmax": [
+    "Limits the contrast veil calculated from the background.",
+    "Limita o véu de contraste calculado a partir do fundo."
+  ],
+  "popuptone": [
+    "Measures the background to adjust contrast on pop-ups.",
+    "Mede o fundo para ajustar o contraste dos pop-ups."
+  ],
+  "textswap": [
+    "Adapts the glass and text colors to the background.",
+    "Adapta as cores do vidro e do texto ao fundo."
+  ],
+  "shadetone": [
+    "Selects how notification shade cards protect text contrast.",
+    "Seleciona como os cartões da central protegem o contraste do texto."
+  ],
+  "paneldim": [
+    "Darkens the shade background over light apps in dark theme.",
+    "Escurece o fundo da central sobre aplicativos claros no tema escuro."
+  ],
+  "panelblurcap": [
+    "Limits background blur behind notifications and Quick Settings. Native lets Samsung choose the blur.",
+    "Limita o desfoque atrás das notificações e da central de controle. Nativo deixa a Samsung definir o desfoque."
+  ],
+  "panelnativegray": [
+    "Restores Samsung’s native gray color adjustment over the shade background.",
+    "Restaura o ajuste de cor cinza nativo da Samsung sobre o fundo da central."
+  ],
+  "panelcolor": [
+    "Adjusts the color and opacity of the shade background independently of the cards.",
+    "Ajusta a cor e a opacidade do fundo da central independentemente dos cartões."
+  ],
+  "liveoptics": [
+    "Adjusts overall edge lighting for standard glass, including the outline and highlights.",
+    "Ajusta a iluminação geral das bordas do vidro padrão, incluindo contorno e reflexos."
+  ],
+  "livesheen": [
+    "Adjusts the highlight that fades from the top of each card.",
+    "Ajusta o brilho que se dissipa a partir do topo de cada cartão."
+  ],
+  "lightoutline": [
+    "Adjusts the outline of light glass over light backgrounds.",
+    "Ajusta o contorno do vidro claro sobre fundos claros."
+  ],
+  "lightedge": [
+    "Adjusts the edge shadow on light glass.",
+    "Ajusta a sombra da borda do vidro claro."
+  ],
+  "kgoptics": [
+    "Selects the dynamic lens material used on lock screen cards.",
+    "Seleciona o material da lente dinâmica nos cartões da tela de bloqueio."
+  ],
+  "huoptics": [
+    "Selects the dynamic lens material used on pop-ups.",
+    "Seleciona o material da lente dinâmica nos pop-ups."
+  ],
+  "lighttone": [
+    "Changes the base color of light glass.",
+    "Altera a cor-base do vidro claro."
+  ],
+  "stylelo": [
+    "Sets the background luminance below which a card switches to dark glass.",
+    "Define a luminância do fundo abaixo da qual o cartão volta ao vidro escuro."
+  ],
+  "stylehi": [
+    "Sets the background luminance above which a card switches to light glass.",
+    "Define a luminância do fundo acima da qual o cartão passa ao vidro claro."
+  ],
+  "shadecap": [
+    "Sets the background luminance threshold for darkening behind light text.",
+    "Define o limite de luminância para escurecer o fundo sob texto claro."
+  ],
+  "shadelift": [
+    "Sets the background luminance threshold for lightening behind dark text.",
+    "Define o limite de luminância para clarear o fundo sob texto escuro."
+  ],
+  "headertone": [
+    "Adapts the shade clock, date, and carrier text to the background.",
+    "Adapta o relógio, a data e a operadora da central ao fundo."
+  ],
+  "icontone": [
+    "Matches monochrome notification icons to the text color.",
+    "Ajusta os ícones monocromáticos das notificações à cor do texto."
+  ],
+  "shadescaleveil": [
+    "Adjusts the fallback contrast veil while a shade card is resized.",
+    "Ajusta o véu de contraste usado enquanto um cartão da central muda de tamanho."
+  ],
+  "shadelocal": [
+    "Measures the background behind each card instead of the whole screen.",
+    "Mede o fundo atrás de cada cartão em vez da tela inteira."
+  ],
+  "popuplock": [
+    "Stabilizes pop-up contrast by confirming background changes before switching tone.",
+    "Estabiliza o contraste do pop-up ao confirmar mudanças do fundo antes de trocar o tom."
+  ],
+  "orphandraw": [
+    "Applies the shade tone to collapsed group rows on their first draw.",
+    "Aplica o tom da central às linhas de grupos minimizados desde o primeiro desenho."
+  ],
+  "headergap": [
+    "Adjusts the space between the header and title of expanded notifications.",
+    "Ajusta o espaço entre o cabeçalho e o título das notificações expandidas."
+  ],
+  "shadefadecut": [
+    "Sets the opacity below which card blur is removed while the shade closes.",
+    "Define a opacidade abaixo da qual o desfoque do cartão é removido ao fechar a central."
+  ],
+  "kgwinblur": [
+    "Allows touch-triggered window blur ramps on the stationary lock screen.",
+    "Permite rampas de desfoque da janela iniciadas por toque na tela de bloqueio parada."
+  ],
+  "livelens": [
+    "Shows a captured refracted edge strip on pop-ups while the background is still.",
+    "Mostra uma faixa refratada capturada na borda dos pop-ups enquanto o fundo está parado."
+  ],
+  "lens": [
+    "Adjusts the displacement of the pop-up lens strip relative to the bevel.",
+    "Ajusta o deslocamento da faixa de lente do pop-up em relação ao bisel."
+  ],
+  "rimblur": [
+    "Controls blur on the captured edge strip.",
+    "Controla o desfoque da faixa capturada na borda."
+  ],
+  "lensmaxage": [
+    "Sets the maximum age of a capture used by the lens strip.",
+    "Define a idade máxima da captura usada pela faixa de lente."
+  ],
+  "lenssettle": [
+    "Sets how long the lens strip stays hidden after a touch or gesture.",
+    "Define por quanto tempo a faixa de lente fica oculta após um toque ou gesto."
+  ],
+  "lenstransition": [
+    "Sets the extra delay after a gesture that may open another app.",
+    "Define a espera adicional após um gesto que pode abrir outro aplicativo."
+  ],
+  "lensgate": [
+    "Selects which touches hide the lens strip during movement.",
+    "Seleciona quais toques ocultam a faixa de lente durante o movimento."
+  ],
+  "sf.core": [
+    "Adjusts blur at the center of pop-ups.",
+    "Ajusta o desfoque no centro dos pop-ups."
+  ],
+  "sf.hublur": [
+    "Multiplies the compositor blur across the pop-up without changing base blur.",
+    "Multiplica o desfoque do compositor no pop-up sem alterar o desfoque básico."
+  ],
+  "sf.hubodylens": [
+    "Adjusts diffuse refraction across the pop-up, independently of its edge.",
+    "Ajusta a refração difusa em todo o pop-up, independentemente da borda."
+  ],
+  "sf.hurefract": [
+    "Multiplies refraction across the pop-up center and edges.",
+    "Multiplica a refração no centro e nas bordas do pop-up."
+  ],
+  "sf.hubloom": [
+    "Reduces very bright samples in the pop-up center.",
+    "Reduz amostras muito claras no centro do pop-up."
+  ],
+  "sf.edgeblur": [
+    "Adjusts pop-up edge blur and its transition toward the center.",
+    "Ajusta o desfoque da borda do pop-up e sua transição até o centro."
+  ],
+  "sf.taps": [
+    "Sets the samples per pixel for inner pop-up blur; higher values cost more GPU time.",
+    "Define as amostras por pixel do desfoque interno do pop-up; valores maiores custam mais GPU."
+  ],
+  "sf.ramp": [
+    "Sets the depth at which pop-up inner blur reaches full strength.",
+    "Define a profundidade em que o desfoque interno do pop-up atinge a força máxima."
+  ],
+  "sf.kgcore": [
+    "Adjusts blur in the center of lock screen cards.",
+    "Ajusta o desfoque no centro dos cartões da tela de bloqueio."
+  ],
+  "sf.kgblur": [
+    "Multiplies the shader blur across lock screen cards without changing base blur.",
+    "Multiplica o desfoque do shader nos cartões da tela de bloqueio sem alterar o desfoque básico."
+  ],
+  "sf.kgrefract": [
+    "Multiplies edge and center refraction on lock screen cards.",
+    "Multiplica a refração da borda e do centro dos cartões da tela de bloqueio."
+  ],
+  "sf.kgedgeblur": [
+    "Adjusts blur at the edges of lock screen cards.",
+    "Ajusta o desfoque nas bordas dos cartões da tela de bloqueio."
+  ],
+  "sf.kgsat": [
+    "Adjusts color saturation through lock screen glass.",
+    "Ajusta a saturação das cores através do vidro da tela de bloqueio."
+  ],
+  "sf.kgcool": [
+    "Adjusts the cool tint of lock screen glass.",
+    "Ajusta o tom frio do vidro da tela de bloqueio."
+  ],
+  "sf.kgline": [
+    "Adjusts the dynamic lens outline on the lock screen.",
+    "Ajusta o contorno da lente dinâmica na tela de bloqueio."
+  ],
+  "sf.kgrim": [
+    "Adjusts reflection in the lock screen lens rim.",
+    "Ajusta o reflexo no aro da lente da tela de bloqueio."
+  ],
+  "sf.kgspec": [
+    "Adjusts the specular highlight on lock screen edges.",
+    "Ajusta o brilho especular nas bordas da tela de bloqueio."
+  ],
+  "sf.kgglow": [
+    "Adjusts the width of the lock screen lens rim glow.",
+    "Ajusta a largura do brilho em volta do aro da lente na tela de bloqueio."
+  ],
+  "sf.kgtilt": [
+    "Sets the direction of the light illuminating the lock screen edge.",
+    "Define a direção da luz que ilumina a borda da tela de bloqueio."
+  ],
+  "sf.kgflat": [
+    "Adjusts how strongly the lock screen background brightness is made uniform.",
+    "Ajusta a intensidade da uniformização do brilho do fundo na tela de bloqueio."
+  ],
+  "sf.kglevel": [
+    "Sets the target brightness for lock screen uniformity.",
+    "Define o brilho-alvo da uniformização na tela de bloqueio."
+  ],
+  "sf.kgflatcap": [
+    "Limits the strength of lock screen brightness uniformity.",
+    "Limita a intensidade da uniformização do brilho na tela de bloqueio."
+  ],
+  "sf.kgtone": [
+    "Adjusts the highlight curve through lock screen glass.",
+    "Ajusta a curva das áreas claras através do vidro da tela de bloqueio."
+  ],
+  "sf.kgcoredim": [
+    "Darkens the center of lock screen cards.",
+    "Escurece o centro dos cartões da tela de bloqueio."
+  ],
+  "sf.kgcorecap": [
+    "Limits the effective inner blur radius on the lock screen.",
+    "Limita o raio efetivo do desfoque interno da tela de bloqueio."
+  ],
+  "sf.kggradient": [
+    "Adjusts the transition between the glass edge and center.",
+    "Ajusta a transição entre a borda do vidro e o centro."
+  ],
+  "sf.kgband": [
+    "Adjusts the width over which lock screen edge blur and refraction grow.",
+    "Ajusta a largura da transição de desfoque e refração na borda da tela de bloqueio."
+  ],
+  "sf.kgbodylens": [
+    "Adjusts diffuse refraction across lock screen cards.",
+    "Ajusta a refração difusa em todo o cartão da tela de bloqueio."
+  ],
+  "sf.kgblurexp": [
+    "Adjusts how quickly blur increases across the lock screen edge transition.",
+    "Ajusta a velocidade de aumento do desfoque na transição da borda da tela de bloqueio."
+  ],
+  "sf.kgtaps": [
+    "Sets the samples per pixel for lock screen blur.",
+    "Define as amostras por pixel do desfoque da tela de bloqueio."
+  ],
+  "sf.kgramp": [
+    "Sets the depth at which lock screen inner blur reaches full strength.",
+    "Define a profundidade em que o desfoque interno da tela de bloqueio atinge a força máxima."
+  ],
+  "sf.shadecap": [
+    "Sets the maximum brightness under light text in the shade lens tone map.",
+    "Define o brilho máximo sob texto claro no mapa de tons da lente na central."
+  ],
+  "sf.shadelift": [
+    "Sets the minimum brightness under dark text in the shade lens tone map.",
+    "Define o brilho mínimo sob texto escuro no mapa de tons da lente na central."
+  ],
+  "sf.hulight": [
+    "Adjusts light entering the pop-up edge from the background.",
+    "Ajusta a luz do fundo que entra pela borda do pop-up."
+  ],
+  "sf.kglight": [
+    "Adjusts light entering lock screen card edges from the background.",
+    "Ajusta a luz do fundo que entra pelas bordas dos cartões da tela de bloqueio."
+  ],
+  "sf.shadelight": [
+    "Adjusts light entering shade card edges from the background.",
+    "Ajusta a luz do fundo que entra pelas bordas dos cartões da central."
+  ],
+  "sf.qslight": [
+    "Adjusts background light entering Quick Settings capsule edges.",
+    "Ajusta a luz do fundo que entra pelas bordas das cápsulas da central de controle."
+  ],
+  "sf.qslens": [
+    "Adjusts background refraction near Quick Settings capsule edges.",
+    "Ajusta a refração do fundo junto às bordas das cápsulas da central de controle."
+  ],
+  "sf.qsbody": [
+    "Adjusts the refracted background visible at Quick Settings capsule edges.",
+    "Ajusta o fundo refratado visível nas bordas das cápsulas da central de controle."
+  ],
+  "sf.qsdepth": [
+    "Adjusts how far light from a bright background enters a Quick Settings capsule.",
+    "Ajusta o alcance da luz de um fundo claro para dentro das cápsulas da central de controle."
+  ],
+  "sf.debug": [
+    "Colors rewritten shader programs magenta and cyan for diagnostics.",
+    "Pinta programas de shader reescritos em magenta e ciano para diagnóstico."
+  ],
+  "qs.lightfill": [
+    "Adjusts capsule tint over light backgrounds.",
+    "Ajusta o tom das cápsulas sobre fundos claros."
+  ],
+  "qs.lightcolor": [
+    "Changes the capsule tint color over light backgrounds.",
+    "Altera a cor do tom das cápsulas sobre fundos claros."
+  ],
+  "qs.lightglassopacity": [
+    "Adjusts capsule glass opacity over light backgrounds without changing edge intensity.",
+    "Ajusta a opacidade do vidro das cápsulas sobre fundos claros sem alterar a intensidade da borda."
+  ],
+  "qs.lightglasscolor": [
+    "Changes the RGBA color of the opacity layer over light backgrounds.",
+    "Altera a cor RGBA da camada de opacidade sobre fundos claros."
+  ],
+  "qs.lightoptics": [
+    "Adjusts capsule edge lighting over light backgrounds.",
+    "Ajusta a iluminação das bordas das cápsulas sobre fundos claros."
+  ],
+  "qs.tilelight": [
+    "Enables custom tile disc contrast over light backgrounds.",
+    "Ativa o contraste personalizado dos discos sobre fundos claros."
+  ],
+  "qs.hideoffdiscs": [
+    "Hides the background and border of identified off tile discs while keeping their icons.",
+    "Oculta o fundo e a borda dos discos desligados identificados, mantendo seus ícones."
+  ],
+  "qs.tilelighton": [
+    "Changes the color of on tile discs over light backgrounds.",
+    "Altera a cor dos discos ligados sobre fundos claros."
+  ],
+  "qs.tilelightoff": [
+    "Changes the color of off tile discs over light backgrounds.",
+    "Altera a cor dos discos desligados sobre fundos claros."
+  ],
+  "qs.tilelightoffalpha": [
+    "Adjusts the opacity of off tile discs over light backgrounds.",
+    "Ajusta a opacidade dos discos desligados sobre fundos claros."
+  ],
+  "qs.tilelightonink": [
+    "Changes monochrome on-tile icon color over light backgrounds.",
+    "Altera a cor dos ícones monocromáticos ligados sobre fundos claros."
+  ],
+  "qs.tilelightoffink": [
+    "Changes monochrome off-tile icon color over light backgrounds.",
+    "Altera a cor dos ícones monocromáticos desligados sobre fundos claros."
+  ],
+  "qs.tiledark": [
+    "Enables the custom tile palette over dark or colored backgrounds.",
+    "Ativa a paleta personalizada de discos sobre fundos escuros ou coloridos."
+  ],
+  "qs.tiledarkon": [
+    "Changes the color of on tile discs over dark or colored backgrounds.",
+    "Altera a cor dos discos ligados sobre fundos escuros ou coloridos."
+  ],
+  "qs.tiledarkoff": [
+    "Changes the color of off tile discs over dark or colored backgrounds.",
+    "Altera a cor dos discos desligados sobre fundos escuros ou coloridos."
+  ],
+  "qs.tiledarkoffalpha": [
+    "Adjusts the opacity of off tile discs over dark or colored backgrounds.",
+    "Ajusta a opacidade dos discos desligados sobre fundos escuros ou coloridos."
+  ],
+  "qs.tiledarkonink": [
+    "Changes monochrome on-tile icon color when the colored palette is enabled.",
+    "Altera a cor dos ícones monocromáticos ligados quando a paleta colorida está ativa."
+  ],
+  "qs.tiledarkoffink": [
+    "Changes monochrome off-tile icon color when the colored palette is enabled.",
+    "Altera a cor dos ícones monocromáticos desligados quando a paleta colorida está ativa."
+  ],
+  "qs.darkrim": [
+    "Adjusts capsule outline brightness over dark or colored backgrounds.",
+    "Ajusta o brilho do contorno das cápsulas sobre fundos escuros ou coloridos."
+  ],
+  "qs.lightrim": [
+    "Adjusts capsule outline brightness over light backgrounds.",
+    "Ajusta o brilho do contorno das cápsulas sobre fundos claros."
+  ],
+  "qs.glint": [
+    "Adjusts the additional highlight at the upper-left corner of capsules.",
+    "Ajusta o reflexo adicional no canto superior esquerdo das cápsulas."
+  ],
+  "qs.sliderlightcolor": [
+    "Changes the color and opacity of slider fill over light backgrounds.",
+    "Altera a cor e a opacidade do preenchimento dos sliders sobre fundos claros."
+  ],
+  "qs.sliderdarkcolor": [
+    "Changes the color and opacity of slider fill over dark or colored backgrounds.",
+    "Altera a cor e a opacidade do preenchimento dos sliders sobre fundos escuros ou coloridos."
+  ],
+  "qs.outer": [
+    "Adjusts brightness and volume slider capsule thickness without changing the touch area.",
+    "Ajusta a espessura das cápsulas de brilho e volume sem alterar a área de toque."
+  ],
+  "qs.fill": [
+    "Adjusts the thickness of the slider fill without changing brightness or volume.",
+    "Ajusta a espessura do preenchimento dos sliders sem alterar brilho ou volume."
+  ],
+  "qs.edgeblur": [
+    "Controls background blur sampled by the dynamic lens at capsule edges.",
+    "Controla o desfoque do fundo lido pela lente dinâmica nas bordas das cápsulas."
+  ],
+  "qs.lightstyle": [
+    "Retired setting kept for saved profiles; current styles use adaptive ink.",
+    "Ajuste descontinuado mantido nos perfis; os estilos atuais usam tinta adaptativa."
+  ],
+  "qs.track": [
+    "Retired setting kept for saved profiles; it has no drawn surface.",
+    "Ajuste descontinuado mantido nos perfis; ele não desenha uma superfície."
+  ],
+  "backdrop": [
+    "Selects the background source used outside the dynamic lens.",
+    "Seleciona a origem do fundo usada fora da lente dinâmica."
+  ],
+  "liveblur": [
+    "Enables the standard glass material drawn by the module.",
+    "Ativa o material de vidro padrão desenhado pelo módulo."
+  ],
+  "profile": [
+    "Selects the refraction model for captured backgrounds.",
+    "Seleciona o modelo de refração usado nos fundos capturados."
+  ],
+  "refract": [
+    "Multiplies displacement in the physical refraction model.",
+    "Multiplica o deslocamento do modelo físico de refração."
+  ],
+  "ior": [
+    "Sets the refractive index used by the physical model.",
+    "Define o índice de refração usado pelo modelo físico."
+  ],
+  "disp": [
+    "Adjusts displacement between red and blue in the captured image.",
+    "Ajusta a diferença de deslocamento entre vermelho e azul na imagem capturada."
+  ],
+  "rimhz": [
+    "Sets the capture rate for the pop-up lens strip.",
+    "Define a frequência de captura da faixa de lente do pop-up."
+  ],
+  "blur": [
+    "Controls blur applied to the full captured background.",
+    "Controla o desfoque aplicado ao fundo capturado por inteiro."
+  ],
+  "sat": [
+    "Adjusts saturation of the captured background.",
+    "Ajusta a saturação do fundo capturado."
+  ],
+  "hz": [
+    "Sets the pop-up capture rate in capture mode.",
+    "Define a frequência de captura do pop-up no modo de captura."
+  ],
+  "hzkg": [
+    "Sets the lock screen capture rate when capture is needed.",
+    "Define a frequência de captura da tela de bloqueio quando necessária."
+  ],
+  "tint": [
+    "Adjusts the opacity of the veil over the captured background.",
+    "Ajusta a opacidade do véu sobre o fundo capturado."
+  ],
+  "semcurve": [
+    "Selects the color curve used by system blur; support varies by firmware.",
+    "Seleciona a curva de cor do desfoque do sistema; o suporte varia conforme o firmware."
+  ],
+  "semshape": [
+    "Selects the geometry of the system blur region.",
+    "Seleciona a geometria da região de desfoque do sistema."
+  ],
+  "kgblurpath": [
+    "Selects where lock screen blur is drawn when the dynamic lens is active.",
+    "Seleciona onde o desfoque da tela de bloqueio é desenhado quando a lente dinâmica está ativa."
+  ],
+  "shadeblurpath": [
+    "Selects where shade card blur is drawn.",
+    "Seleciona onde o desfoque dos cartões da central é desenhado."
+  ],
+  "perf": [
+    "Logs hook timing for diagnostics; measuring has a performance cost.",
+    "Registra o tempo dos hooks para diagnóstico; a medição tem custo de desempenho."
+  ],
+  "trace": [
+    "Logs window and view trees for diagnostics and can generate extensive logs.",
+    "Registra árvores de janelas e views para diagnóstico e pode gerar muitos logs."
+  ],
+  "sfrefract": [
+    "Indicates whether the injector enabled the dynamic lens.",
+    "Indica se o injetor ativou a lente dinâmica."
+  ],
+  "sf.optics": [
+    "Reports the version marker written by the compositor library; it does not confirm the lens is active.",
+    "Mostra o marcador de versão gravado pela biblioteca do compositor; ele não confirma que a lente está ativa."
+  ],
+  "sf.norewrite": [
+    "Reports whether shader rewriting is disabled for the current userspace session.",
+    "Indica se a reescrita de shaders está desativada na sessão atual do userspace."
+  ],
+  "semalpha": [
+    "Adjusts the opacity of the color applied by system blur.",
+    "Ajusta a opacidade da cor aplicada pelo desfoque do sistema."
+  ],
+  "qs.active": [
+    "Retired setting kept for saved profiles; it no longer changes disc appearance.",
+    "Ajuste descontinuado mantido nos perfis; ele não altera mais a aparência dos discos."
+  ],
+  "qs.darkcolor": [
+    "Retired setting kept for saved profiles; it no longer changes capsule appearance.",
+    "Ajuste descontinuado mantido nos perfis; ele não altera mais a aparência das cápsulas."
+  ],
+  "qs.darkfill": [
+    "Retired setting kept for saved profiles; it no longer changes capsule appearance.",
+    "Ajuste descontinuado mantido nos perfis; ele não altera mais a aparência das cápsulas."
+  ],
+  "qs.idle": [
+    "Retired setting kept for saved profiles; it no longer changes off discs.",
+    "Ajuste descontinuado mantido nos perfis; ele não altera mais os discos desligados."
+  ]
 }

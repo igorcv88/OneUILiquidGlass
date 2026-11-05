@@ -9,13 +9,18 @@ root = Path(__file__).resolve().parents[1]
 data = json.loads((root / 'tools/control-descriptions.json').read_text())
 source = (root / 'app/src/main/java/io/github/igorcv88/oneuiliquidglass/config/Controls.java').read_text()
 known = set(re.findall(r'put\(c\("([^"]+)"', source))
-if set(data) - known:
-    raise SystemExit(f'Unknown controls: {sorted(set(data) - known)}')
+known.update(re.findall(r'\{"(qs\.[^"]+)",\s*"[^"]+\(descontinuado\)"\}', source))
+if set(data) != known:
+    raise SystemExit(f'Update descriptions: missing={sorted(known - set(data))} extra={sorted(set(data) - known)}')
 for folder, index in [('values', 0), ('values-pt-rBR', 1)]:
     lines = ['<?xml version="1.0" encoding="utf-8"?>', '<resources>']
     for key, values in sorted(data.items()):
         name = 'control_description_' + key.replace('.', '_')
-        value = escape(values[index]).replace("'", "\\'")
+        description = values[index]
+        if key.startswith('sf.') and key not in ('sf.optics', 'sf.norewrite'):
+            description += (' Changes apply after userspace restarts.' if index == 0
+                            else ' As mudanças são aplicadas após reiniciar o userspace.')
+        value = escape(description).replace("'", "\\'")
         lines.append(f'    <string name="{name}">{value}</string>')
     lines.append('</resources>')
     (root / f'app/src/main/res/{folder}/control_descriptions.xml').write_text('\n'.join(lines) + '\n')

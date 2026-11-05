@@ -30,6 +30,7 @@ public class UiLabelsTest {
         assertEquals("Saved in app: 50 %", en.getString(R.string.control_saved_in_app, "50 %"));
         for (Controls.Control control : Controls.all()) {
             assertNotEquals("Missing title resource for " + control.key, 0, ControlTitles.resource(control));
+            assertNotEquals("Missing description resource for " + control.key, 0, ControlDescriptions.resource(control.key));
             if (control.autoLabel != null) assertNotEquals(control.key, 0, ControlOptions.resource(control.autoLabel));
             if (control.offLabel != null) assertNotEquals(control.key, 0, ControlOptions.resource(control.offLabel));
             for (String[] option : control.choices.values()) for (String text : option)
