@@ -52,7 +52,7 @@ final class ControlSheet extends Sheet {
         if (!hint.isEmpty()) subtitle(hint);
         if (a.kind == Applicability.Kind.INACTIVE || a.kind == Applicability.Kind.OFF) {
             LinearLayout n = Ui.notice(activity, t, Ui.Tone.INFO,
-                    a.reason + ". " + activity.getString(R.string.control_inactive_suffix), null, null);
+                    ControlReasons.text(activity, a.reason) + ". " + activity.getString(R.string.control_inactive_suffix), null, null);
             body.addView(n, Ui.match(0, t.dp(12)));
         } else if (a.kind == Applicability.Kind.NEEDS_RESTART) {
             body.addView(Ui.notice(activity, t, Ui.Tone.WARN,

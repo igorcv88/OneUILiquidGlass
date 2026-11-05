@@ -283,7 +283,7 @@ public final class SurfacesPage implements Page {
             tg.set(app.layerOn(surface, e.getKey()), true);
             boolean usable = res.usable();
             Ui.enable(e.getValue(), usable);
-            Ui.setSubtitle(e.getValue(), usable ? null : res.reason);
+            Ui.setSubtitle(e.getValue(), usable ? null : ControlReasons.text(host.activity(), res.reason));
         }
         preview.values(st::shown, baseline::get);
     }

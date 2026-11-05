@@ -248,4 +248,8 @@
     <string name="control_reset_a11y">Restaurar padrão de %1$s</string>
     <string name="control_reset_done">%1$s restaurado</string>
     <string name="control_not_reported">Não informado</string>
+    <string name="control_surface_off">O vidro está desligado em %1$s</string>
+    <string name="control_layer_off">A camada %1$s está desligada</string>
+    <string name="control_pending_restart">Pendente · aplicar ao reiniciar o userspace</string>
+    <string name="control_external_change">Alterado fora do app</string>
 </resources>

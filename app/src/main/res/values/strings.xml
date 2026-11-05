@@ -248,4 +248,8 @@
     <string name="control_reset_a11y">Restore default for %1$s</string>
     <string name="control_reset_done">%1$s restored</string>
     <string name="control_not_reported">Not reported</string>
+    <string name="control_surface_off">Glass is off on %1$s</string>
+    <string name="control_layer_off">The %1$s layer is off</string>
+    <string name="control_pending_restart">Pending · apply after userspace restarts</string>
+    <string name="control_external_change">Changed outside the app</string>
 </resources>

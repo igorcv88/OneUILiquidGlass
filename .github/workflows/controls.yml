@@ -25,6 +25,8 @@ jobs:
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;35.0.0" "ndk;$NDK_VERSION"
       - name: Registry generation and distribution contracts
         run: |
+          python3 tools/generate-control-reasons.py
+          git diff --exit-code -- app/src/main/java/io/github/igorcv88/oneuiliquidglass/ui/ControlReasons.java app/src/main/res/values/control_reasons.xml app/src/main/res/values-pt-rBR/control_reasons.xml
           python3 tools/generate-control-options.py
           git diff --exit-code -- app/src/main/java/io/github/igorcv88/oneuiliquidglass/ui/ControlOptions.java app/src/main/res/values/control_options.xml app/src/main/res/values-pt-rBR/control_options.xml
           python3 tools/generate-control-descriptions.py

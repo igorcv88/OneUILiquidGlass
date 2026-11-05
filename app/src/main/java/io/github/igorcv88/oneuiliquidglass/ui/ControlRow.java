@@ -201,12 +201,12 @@ public final class ControlRow extends LinearLayout {
         title.setTextColor(usable ? t.ink : t.inkFaint);
         String line = null;
         int color = t.inkMuted;
-        if (a.kind == Applicability.Kind.INACTIVE) line = a.reason;
+        if (a.kind == Applicability.Kind.INACTIVE) line = ControlReasons.text(host.activity(), a.reason);
         else if (a.kind == Applicability.Kind.NEEDS_RESTART && st.pendingRestart(control.key)) {
-            line = "Pendente · aplicar ao reiniciar o userspace";
+            line = host.activity().getString(R.string.control_pending_restart);
             color = t.warn;
         } else if (host.model().observedAvailable() && host.model().repo.conflict(control.spec())) {
-            line = "Alterado fora do app";
+            line = host.activity().getString(R.string.control_external_change);
             color = t.warn;
         }
         status.setText(line == null ? "" : line);
