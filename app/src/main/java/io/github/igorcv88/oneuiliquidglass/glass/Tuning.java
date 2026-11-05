@@ -95,7 +95,7 @@ public final class Tuning {
      * contour and Fresnel are not affected. Lockscreen cards keep the full glint.
      */
     public final float liveGlint;
-    /** The same gain on expanded-shade cards (debug.oulg.shadeglint, default 0.22): they showed the second arc too. */
+    /** Gain on expanded-shade cards (debug.oulg.shadeglint, default 0.22): they showed the second arc too. */
     public final float shadeGlint;
     /**
      * Captured lens band on LSPosed-only pop-ups (debug.oulg.livelens, default 1). It shows only while
@@ -232,8 +232,7 @@ public final class Tuning {
      * Pop-ups in the dark theme, LSPosed-only mode (lockscreen cards keep liveDarkColor and no fill,
      * their look approved before round 39): white alpha of the region
      * colour (debug.oulg.livedarkalpha, 0-255, default 20) and black alpha of the fill
-     * (debug.oulg.livedarkfill, default 10). These are the values before the dark-theme lift of
-     * 25/10 01:41 UTC (28 and 0), the look of the 24/10 screenshot the user prefers: a clearer,
+     * (debug.oulg.livedarkfill, default 0). These control a clearer,
      * deeper body. 28 and 0 restore the lift.
      */
     public final int liveDarkAlpha, liveDarkFill;
@@ -454,8 +453,8 @@ public final class Tuning {
 
     static final int LIVE_RADIUS = 80, LIVE_SHADE_RADIUS = 60;
     /**
-     * Blur radius of a card in LSPosed-only mode. Pop-ups (and lockscreen cards) take less blur than
-     * shade cards: over an app they are the only blur, in the shade the window is blurred already.
+     * Blur radius of a card in LSPosed-only mode. Pop-up, shade and lockscreen overrides are
+     * independent; the shade window also blurs the backdrop behind its cards.
      * A card that moves between the two (a pop-up opening the shade) ramps between the radii
      * (BackgroundBlurBridge). kgblurradius, when set, still applies to lockscreen cards.
      */
