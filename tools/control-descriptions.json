@@ -610,5 +610,9 @@
   "qs.idle": [
     "Retired setting kept for saved profiles; it no longer changes off discs.",
     "Ajuste descontinuado mantido nos perfis; ele não altera mais os discos desligados."
+  ],
+  "edgepremul": [
+    "Experimental edge alpha. Enabled uses premultiplied transparency for the border highlight; disabled preserves original rendering.",
+    "Experimento de alpha da borda. Ligado usa transparência premultiplicada na luz do contorno; desligado preserva a renderização original."
   ]
 }

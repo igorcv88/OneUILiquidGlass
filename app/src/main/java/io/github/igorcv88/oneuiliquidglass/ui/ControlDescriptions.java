@@ -11,6 +11,7 @@ final class ControlDescriptions {
             case "backdrop": return R.string.control_description_backdrop;
             case "blur": return R.string.control_description_blur;
             case "disp": return R.string.control_description_disp;
+            case "edgepremul": return R.string.control_description_edgepremul;
             case "headergap": return R.string.control_description_headergap;
             case "headertone": return R.string.control_description_headertone;
             case "huoptics": return R.string.control_description_huoptics;

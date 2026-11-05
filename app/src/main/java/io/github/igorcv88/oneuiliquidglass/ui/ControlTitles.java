@@ -11,6 +11,7 @@ final class ControlTitles {
             case "Ajustar relógio e data": return R.string.control_title_4d394670dffa;
             case "Ajustar ícone pequeno": return R.string.control_title_5e2c27528f46;
             case "Alcance da luz": return R.string.control_title_46d2388cabed;
+            case "Alpha da borda (teste)": return R.string.control_title_5bb2279cf09d;
             case "Amostras do bloqueio": return R.string.control_title_9cbee42ce9d4;
             case "Amostras do pop-up": return R.string.control_title_e8d1e327dbeb;
             case "Brilho do vidro escuro": return R.string.control_title_bf8389203ea5;
