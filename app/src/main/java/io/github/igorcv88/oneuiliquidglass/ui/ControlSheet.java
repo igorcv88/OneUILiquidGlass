@@ -319,7 +319,16 @@ final class ControlSheet extends Sheet {
             setWorking(raw, true);
             return true;
         } catch (IllegalArgumentException e) {
-            field.setError(e.getMessage());
+            String message = e.getMessage();
+            if (c.format == Controls.Format.COLOR) message = activity.getString(R.string.error_color);
+            else if ("Digite um número".equals(message)) message = activity.getString(R.string.error_number);
+            else if (message != null && message.startsWith("Use 0%")) message = activity.getString(R.string.error_media_range);
+            else if (message != null && message.startsWith("Use de "))
+                message = activity.getString(R.string.error_value_range,
+                        ControlValues.display(activity, c, ValueFormat.plain(c.spec().min)),
+                        ControlValues.display(activity, c, ValueFormat.plain(c.spec().max)));
+            else message = activity.getString(R.string.error_invalid_value);
+            field.setError(message);
             return false;
         }
     }

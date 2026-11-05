@@ -26,6 +26,8 @@ public class UiLabelsTest {
         assertEquals("Per-card blur", UiLabels.layer(en, "per_card_blur"));
         assertEquals("Grid", UiLabels.backdrop(en, NotificationPreview.Backdrop.GRID));
         assertEquals("2 settings", UiLabels.count(en, 2));
+        assertEquals("Pop-up and Lock screen", SearchSheet.surfaces(en, Controls.get("liveradius")));
+        assertEquals("Enter a number", en.getString(R.string.error_number));
         assertEquals("Enable adaptive text", ControlReasons.text(en, "Ative o texto adaptativo"));
         assertEquals("Glass is off on Lock screen", ControlReasons.text(en, "O vidro está desligado em Bloqueio"));
         assertEquals("The Edges layer is off", ControlReasons.text(en, "A camada Bordas está desligada"));
@@ -54,6 +56,8 @@ public class UiLabelsTest {
         assertEquals("Desfoque por cartão", UiLabels.layer(pt, "per_card_blur"));
         assertEquals("Grade", UiLabels.backdrop(pt, NotificationPreview.Backdrop.GRID));
         assertEquals("2 ajustes", UiLabels.count(pt, 2));
+        assertEquals("Pop-up e Bloqueio", SearchSheet.surfaces(pt, Controls.get("liveradius")));
+        assertEquals("Digite um número", pt.getString(R.string.error_number));
         assertEquals("Ative o texto adaptativo", ControlReasons.text(pt, "Ative o texto adaptativo"));
         assertEquals("O vidro está desligado em Bloqueio", ControlReasons.text(pt, "O vidro está desligado em Bloqueio"));
         assertEquals("Padrão: 50 %", pt.getString(R.string.control_default, "50 %"));

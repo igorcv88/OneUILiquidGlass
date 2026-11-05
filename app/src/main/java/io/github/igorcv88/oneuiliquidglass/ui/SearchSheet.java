@@ -97,7 +97,7 @@ final class SearchSheet extends Sheet {
                 Controls.Surface where = c.on(surface) ? surface : c.surfaces.iterator().next();
                 Applicability.Result a = app.on(c.key, where);
                 String value = ControlValues.display(host.activity(), c, st.shown(c.key));
-                String sub = surfaces(c) + " · " + value + (a.usable() || a.kind == Applicability.Kind.READ_ONLY ? "" : " · " + ControlReasons.text(activity, a.reason));
+                String sub = surfaces(activity, c) + " · " + value + (a.usable() || a.kind == Applicability.Kind.READ_ONLY ? "" : " · " + ControlReasons.text(activity, a.reason));
                 if (technical) sub += "\n" + c.spec().fullKey();
                 LinearLayout r = Ui.listRow(activity, t, null, ControlTitles.title(activity, c), sub, Controls.editable(c.key) ? Ui.chevron(activity, t) : null);
                 if (Controls.editable(c.key)) r.setOnClickListener(v -> {
@@ -117,10 +117,13 @@ final class SearchSheet extends Sheet {
         return v;
     }
 
-    static String surfaces(Controls.Control c) {
-        if (c.surfaces.size() == 3) return "Todos os ambientes";
-        StringBuilder b = new StringBuilder();
-        for (Controls.Surface s : c.surfaces) b.append(b.length() == 0 ? "" : " e ").append(s.label);
-        return b.toString();
+    static String surfaces(android.content.Context context, Controls.Control c) {
+        if (c.surfaces.size() == 3) return context.getString(R.string.search_all_surfaces);
+        String out = "";
+        for (Controls.Surface s : c.surfaces) {
+            String name = HomePage.surfaceLabel(context, s);
+            out = out.isEmpty() ? name : context.getString(R.string.search_surfaces_join, out, name);
+        }
+        return out;
     }
 }

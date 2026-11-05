@@ -176,7 +176,7 @@ final class InfoSheets {
             if (card.getChildCount() > 0) card.addView(Ui.divider(a, t, t.dp(20)));
             LinearLayout block = Ui.column(a);
             block.setPadding(t.dp(18), t.dp(12), t.dp(12), t.dp(8));
-            block.addView(Ui.text(a, t, ControlTitles.title(host.activity(), c) + " · " + SearchSheet.surfaces(c), Theme.BODY, t.ink, false));
+            block.addView(Ui.text(a, t, ControlTitles.title(host.activity(), c) + " · " + SearchSheet.surfaces(host.activity(), c), Theme.BODY, t.ink, false));
             String observed = st.observed.get(key);
             block.addView(Ui.text(a, t, "App: " + ControlValues.display(host.activity(), c, st.saved.get(key)) + "   Terminal: "
                     + ControlValues.display(host.activity(), c, observed == null || observed.isEmpty() ? c.spec().defaultValue : observed), Theme.CAPTION, t.inkMuted, false));
