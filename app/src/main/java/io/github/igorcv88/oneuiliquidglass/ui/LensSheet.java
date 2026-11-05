@@ -5,6 +5,7 @@ import android.view.View;
 import android.widget.*;
 
 import io.github.igorcv88.oneuiliquidglass.config.*;
+import io.github.igorcv88.oneuiliquidglass.R;
 import io.github.igorcv88.oneuiliquidglass.live.*;
 import io.github.igorcv88.oneuiliquidglass.ui.kit.*;
 
@@ -26,10 +27,10 @@ final class LensSheet extends Sheet {
     private final AppModel.Listener listener = this::bind;
 
     LensSheet(Host host) {
-        super(host.activity(), host.theme(), "Lente dinâmica");
+        super(host.activity(), host.theme(), host.activity().getString(R.string.dynamic_lens));
         this.host = host;
         m = host.model();
-        subtitle("Refração real das bordas feita pelo compositor do sistema. Opcional; exige root.");
+        subtitle(activity.getString(R.string.lens_subtitle));
         LinearLayout card = Ui.card(activity, t);
         card.setPadding(t.dp(18), t.dp(16), t.dp(18), t.dp(16));
         state = Ui.text(activity, t, "", Theme.HEADLINE, t.ink, true);
@@ -45,31 +46,31 @@ final class LensSheet extends Sheet {
         pendingBox = Ui.column(activity);
         body().addView(pendingBox, Ui.match());
 
-        maintenance = Ui.section(activity, t, "Manutenção");
+        maintenance = Ui.section(activity, t, activity.getString(R.string.lens_maintenance));
         body().addView(maintenance);
         tools = Ui.card(activity, t);
-        LinearLayout refresh = Ui.listRow(activity, t, Icon.RESTART, "Verificar novamente", "Lê o estado sem alterar nada", null);
+        LinearLayout refresh = Ui.listRow(activity, t, Icon.RESTART, activity.getString(R.string.lens_check_again), activity.getString(R.string.lens_check_desc), null);
         refresh.setOnClickListener(v -> m.lens.status());
         tools.addView(refresh);
         tools.addView(Ui.divider(activity, t, t.dp(72)));
-        LinearLayout restart = Ui.listRow(activity, t, Icon.RESTART, "Reiniciar lente", "Reinicia o userspace após confirmação", null);
+        LinearLayout restart = Ui.listRow(activity, t, Icon.RESTART, activity.getString(R.string.lens_restart), activity.getString(R.string.lens_restart_desc), null);
         restart.setOnClickListener(v -> confirmRestart());
         tools.addView(restart);
         tools.addView(Ui.divider(activity, t, t.dp(72)));
-        LinearLayout log = Ui.listRow(activity, t, Icon.CODE, "Mostrar registro", "Últimos testes e injeções", null);
+        LinearLayout log = Ui.listRow(activity, t, Icon.CODE, activity.getString(R.string.lens_show_log), activity.getString(R.string.lens_log_desc), null);
         log.setOnClickListener(v -> m.lens.log());
         tools.addView(log);
         tools.addView(Ui.divider(activity, t, t.dp(72)));
-        LinearLayout copy = Ui.listRow(activity, t, Icon.COPY, "Copiar estado", null, null);
+        LinearLayout copy = Ui.listRow(activity, t, Icon.COPY, activity.getString(R.string.lens_copy_state), null, null);
         copy.setOnClickListener(v -> host.copy(describe(m.lens.model())));
         tools.addView(copy);
         tools.addView(Ui.divider(activity, t, t.dp(72)));
-        LinearLayout remove = Ui.listRow(activity, t, Icon.CLOSE, "Remover a lente", "Apaga só os arquivos dela; reinicie depois", null);
+        LinearLayout remove = Ui.listRow(activity, t, Icon.CLOSE, activity.getString(R.string.lens_remove), activity.getString(R.string.lens_remove_desc), null);
         remove.setOnClickListener(v -> confirmRemove());
         tools.addView(remove);
         body().addView(tools, Ui.match());
 
-        View[] d = Ui.disclosure(activity, t, null, "Detalhes técnicos", null, false, null);
+        View[] d = Ui.disclosure(activity, t, null, activity.getString(R.string.control_technical), null, false, null);
         LinearLayout tech = Ui.card(activity, t);
         tech.addView(d[0]);
         protocol = Ui.text(activity, t, "", Theme.SMALL, t.inkMuted, false);
@@ -96,72 +97,72 @@ final class LensSheet extends Sheet {
         String title, text, action;
         boolean enabled = !model.busy && !m.root.busy();
         if (!model.bundled) {
-            title = "Indisponível nesta versão";
-            text = "Este APK foi compilado sem os componentes da lente.";
+            title = activity.getString(R.string.lens_unavailable);
+            text = activity.getString(R.string.lens_unavailable_desc);
             action = null;
         } else if (model.busy || m.root.busy()) {
-            title = "Trabalhando…";
-            text = "Autorize o acesso root se o gerenciador pedir.";
-            action = "Aguarde";
+            title = activity.getString(R.string.lens_working);
+            text = activity.getString(R.string.lens_authorize_root);
+            action = activity.getString(R.string.lens_wait);
             enabled = false;
         } else if (!m.root.granted()) {
-            title = "Root não verificado";
-            text = "O app só pede acesso root quando você toca abaixo. Nada é instalado nesta etapa.";
-            action = "Verificar acesso root";
+            title = activity.getString(R.string.lens_root_unchecked);
+            text = activity.getString(R.string.lens_root_check_desc);
+            action = activity.getString(R.string.lens_check_root);
         } else if (!su()) {
-            title = "Estado desconhecido";
-            text = "Root concedido. Verifique o estado da lente.";
-            action = "Verificar estado";
+            title = activity.getString(R.string.lens_unknown);
+            text = activity.getString(R.string.lens_root_granted);
+            action = activity.getString(R.string.lens_check_state);
         } else switch (s) {
             case UNSUPPORTED:
-                title = "Firmware não compatível";
-                text = "A lente só foi validada em versões específicas do sistema. Nada foi instalado.";
+                title = activity.getString(R.string.lens_unsupported);
+                text = activity.getString(R.string.lens_unsupported_desc);
                 action = null;
                 break;
             case UPDATE:
             case SELFTEST:
-                title = s == SfLive.State.UPDATE ? "Não instalada" : "Instalada, falta testar";
-                text = "Instalar copia os arquivos e testa a injeção em um processo descartável. Nada é reiniciado.";
-                action = s == SfLive.State.UPDATE ? "Instalar e testar" : "Testar";
+                title = s == SfLive.State.UPDATE ? activity.getString(R.string.lens_not_installed) : activity.getString(R.string.lens_needs_test);
+                text = activity.getString(R.string.lens_install_desc);
+                action = s == SfLive.State.UPDATE ? activity.getString(R.string.lens_install_test) : activity.getString(R.string.action_test);
                 break;
             case RESTART:
-                title = "Pronta para ativar";
-                text = "Ativar reinicia o userspace. Depois de reiniciar o aparelho, a lente fica desligada até você ativá-la de novo.";
-                action = "Ativar lente";
+                title = activity.getString(R.string.lens_ready);
+                text = activity.getString(R.string.lens_activate_desc);
+                action = activity.getString(R.string.lens_activate);
                 break;
             case LOADED:
                 boolean on = "1".equals(model.status.get("sfrefract")) && "1".equals(model.status.get("sf_rewrite"))
                         && "1".equals(model.status.get("sf_got")) && "1".equals(model.status.get("sf_rewrite_ok"))
                         && "1".equals(model.status.get("sf_stable"));
-                title = on ? "Ativa" : "Carregada, aguardando verificação";
+                title = on ? activity.getString(R.string.lens_active) : activity.getString(R.string.lens_loaded_unverified);
                 text = on ? (pending.isEmpty()
-                        ? unverified ? "A lente está carregada, mas ainda não foi verificado um reinício com estes parâmetros."
-                                     : "A lente está carregada no compositor."
-                        : "Há ajustes esperando um reinício para valer.")
-                        : "Aguarde 2 minutos após ativar, abra uma notificação e verifique o estado. Sem confirmação de GOT/reescrita, consulte o registro.";
-                action = !pending.isEmpty() ? (pending.size() == 1 ? "Aplicar 1 ajuste" : "Aplicar " + pending.size() + " ajustes")
-                        : !on ? "Verificar estado" : unverified ? "Reiniciar para confirmar" : null;
+                        ? unverified ? activity.getString(R.string.lens_loaded_params_unverified)
+                                     : activity.getString(R.string.lens_loaded_desc)
+                        : activity.getString(R.string.lens_pending_desc))
+                        : activity.getString(R.string.lens_wait_verify);
+                action = !pending.isEmpty() ? (pending.size() == 1 ? activity.getString(R.string.lens_apply_one) : activity.getString(R.string.lens_apply_many, pending.size()))
+                        : !on ? activity.getString(R.string.lens_check_state) : unverified ? activity.getString(R.string.lens_restart_confirm) : null;
                 break;
             default:
-                title = "Sem resposta";
-                text = "O auxiliar não respondeu. Confira o acesso root e tente de novo.";
-                action = "Verificar acesso root";
+                title = activity.getString(R.string.lens_no_response);
+                text = activity.getString(R.string.lens_no_response_desc);
+                action = activity.getString(R.string.lens_check_root);
         }
-        // Keep the actual failed operation visible instead of replacing it with "Sem resposta".
+        // Keep the actual failed operation visible instead of replacing it with a generic state.
         // In particular, a rejected property value must not look like a root permission failure.
         if (!model.busy && model.message != null
                 && model.message.startsWith("Operação interrompida:")) {
-            title = "Operação interrompida";
+            title = activity.getString(R.string.lens_interrupted);
             text = model.message;
-            action = "Verificar estado";
+            action = activity.getString(R.string.lens_check_state);
         }
         CompositorValues.Outcome last = m.lastApply();
         if (last != CompositorValues.Outcome.NONE && last != CompositorValues.Outcome.UNVERIFIED) {
             String when = DateFormat.getTimeFormat(activity).format(new Date(m.lastApplyAt()));
             switch (last) {
-                case CONFIRMED: text += "\nÚltimo reinício (" + when + "): processo estável, GOT/reescrita observados e inputs conferidos; não comprova cada shader."; break;
-                case NOT_LOADED: text += "\nÚltimo reinício (" + when + "): a lente não foi carregada. Veja o registro."; break;
-                case CHANGED: text += "\nÚltimo reinício (" + when + "): carregada, mas algum valor mudou depois."; break;
+                case CONFIRMED: text += "\n" + activity.getString(R.string.lens_last_confirmed, when); break;
+                case NOT_LOADED: text += "\n" + activity.getString(R.string.lens_last_not_loaded, when); break;
+                case CHANGED: text += "\n" + activity.getString(R.string.lens_last_changed, when); break;
                 default: break;
             }
         }
@@ -172,7 +173,7 @@ final class LensSheet extends Sheet {
         primary.setEnabled(enabled);
         pendingBox.removeAllViews();
         if (!pending.isEmpty()) {
-            pendingBox.addView(Ui.section(activity, t, "Aguardando reinício"));
+            pendingBox.addView(Ui.section(activity, t, activity.getString(R.string.lens_await_restart)));
             LinearLayout card = Ui.card(activity, t);
             card.setPadding(t.dp(18), t.dp(12), t.dp(18), t.dp(12));
             StringBuilder b = new StringBuilder();
@@ -188,8 +189,7 @@ final class LensSheet extends Sheet {
             pendingBox.addView(card, Ui.match());
         } else if (unverified && s == SfLive.State.LOADED) {
             pendingBox.addView(Ui.text(activity, t,
-                    "O valor do getprop pode ter mudado sem o shader recompilar. O próximo reinício "
-                            + "pelo app registra os parâmetros enviados ao compositor; confira o estado depois.",
+                    activity.getString(R.string.lens_unverified_warning),
                     Theme.LABEL, t.inkMuted, false));
         }
         protocol.setText(describe(model));
@@ -211,7 +211,7 @@ final class LensSheet extends Sheet {
         if (!m.root.granted()) {
             m.root.check(ok -> {
                 if (ok) m.lens.status();
-                else host.feedback("Acesso root não concedido");
+                else host.feedback(activity.getString(R.string.root_not_granted));
             });
             return;
         }
@@ -247,26 +247,25 @@ final class LensSheet extends Sheet {
     private void confirmRestart() {
         SfLiveController.Model model = m.lens.model();
         if (!SfControlPolicy.restart(m.root.granted(), model.bundled, model.busy, model.status)) {
-            host.feedback("Instale e teste a lente antes de reiniciar");
+            host.feedback(activity.getString(R.string.lens_install_first));
             return;
         }
         Map<String, String> pending = m.pendingCompositor();
-        Sheet s = new Sheet(activity, t, "Reiniciar userspace?");
-        s.text("A tela fica preta por cerca de 20 segundos e todos os apps abertos são fechados, inclusive"
-                + " este. O sistema volta com a lente dinâmica"
-                + (pending.isEmpty() ? (m.compositorUnverified() ? "; os parâmetros enviados serão conferidos após o reinício." : ".")
-                        : " e " + (pending.size() == 1 ? "1 ajuste novo." : pending.size() + " ajustes novos."))
-                + "\n\nSe algo falhar, reiniciar o aparelho volta ao compositor original: nada é carregado na inicialização.");
+        Sheet s = new Sheet(activity, t, activity.getString(R.string.restart_userspace_title));
+        s.text(activity.getString(R.string.lens_confirm_base)
+                + (pending.isEmpty() ? (m.compositorUnverified() ? activity.getString(R.string.lens_confirm_verify) : ".")
+                        : pending.size() == 1 ? activity.getString(R.string.lens_confirm_one) : activity.getString(R.string.lens_confirm_many, pending.size()))
+                + "\n\n" + activity.getString(R.string.lens_confirm_fallback));
         Toggle ack = new Toggle(activity, t);
-        LinearLayout row = Ui.switchRow(activity, t, null, "Salvei o que estava fazendo", null, ack);
+        LinearLayout row = Ui.switchRow(activity, t, null, activity.getString(R.string.restart_saved_ack), null, ack);
         LinearLayout card = Ui.card(activity, t);
         card.addView(row);
         s.body().addView(card, Ui.match(t.dp(4), 0));
-        s.action("Cancelar", Ui.ButtonStyle.OUTLINED, s::dismiss);
-        TextView go = s.action("Reiniciar userspace", Ui.ButtonStyle.FILLED, () -> {
+        s.action(activity.getString(R.string.action_cancel), Ui.ButtonStyle.OUTLINED, s::dismiss);
+        TextView go = s.action(activity.getString(R.string.restart_userspace), Ui.ButtonStyle.FILLED, () -> {
             s.dismiss();
             m.lens.restartConfirmed(pending);
-            host.feedback("Gravando valores e reiniciando…");
+            host.feedback(activity.getString(R.string.lens_applying));
         });
         go.setEnabled(false);
         ack.listener((x, on) -> go.setEnabled(on));
@@ -274,14 +273,13 @@ final class LensSheet extends Sheet {
     }
 
     private void confirmRemove() {
-        Sheet s = new Sheet(activity, t, "Remover a lente?");
-        s.text("Apaga somente os arquivos instalados por este app e desliga a refração. O compositor em"
-                + " uso mantém a lente até o próximo reinício do aparelho. Seus ajustes ficam salvos.");
-        s.action("Cancelar", Ui.ButtonStyle.OUTLINED, s::dismiss);
-        s.action("Remover", Ui.ButtonStyle.DANGER, () -> {
+        Sheet s = new Sheet(activity, t, activity.getString(R.string.lens_remove_title));
+        s.text(activity.getString(R.string.lens_remove_warning));
+        s.action(activity.getString(R.string.action_cancel), Ui.ButtonStyle.OUTLINED, s::dismiss);
+        s.action(activity.getString(R.string.action_remove), Ui.ButtonStyle.DANGER, () -> {
             s.dismiss();
             if (!su()) {
-                host.feedback("Verifique o acesso root primeiro");
+                host.feedback(activity.getString(R.string.lens_root_first));
                 return;
             }
             m.lens.uninstallConfirmed();
