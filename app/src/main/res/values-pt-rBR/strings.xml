@@ -247,4 +247,5 @@
     <string name="control_applies">Vale em: %1$s</string>
     <string name="control_reset_a11y">Restaurar padrão de %1$s</string>
     <string name="control_reset_done">%1$s restaurado</string>
+    <string name="control_not_reported">Não informado</string>
 </resources>

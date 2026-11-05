@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="control_description_kgblurradius">Controls lock screen card blur. Automatic follows pop-up blur or blur under the dynamic lens.</string>
+    <string name="control_description_kgdarkalpha">Adjusts the translucent white layer in dark lock screen glass.</string>
+    <string name="control_description_kgdarkfill">Adjusts the black fill inside dark lock screen cards.</string>
+    <string name="control_description_kgglint">Adjusts the corner highlight on lock screen cards.</string>
+    <string name="control_description_kglens">Adjusts edge refraction on lock screen cards when the dynamic lens is active.</string>
+    <string name="control_description_kgrim">Adjusts the outline of lock screen cards.</string>
+    <string name="control_description_lightglass">Adjusts light glass opacity on pop-ups and lock screen cards.</string>
+    <string name="control_description_livedarkalpha">Adjusts the translucent white layer in dark pop-up glass.</string>
+    <string name="control_description_livedarkfill">Adjusts the black fill over dark pop-up glass.</string>
+    <string name="control_description_liveglint">Adjusts the highlight in the upper-left corner of pop-ups.</string>
+    <string name="control_description_liveradius">Controls the standard glass blur in pop-ups. Lock screen cards follow this value when their blur is automatic.</string>
+    <string name="control_description_liverim">Adjusts the pop-up outline, together with the edge intensity setting.</string>
+    <string name="control_description_liveshaderadius">Controls the standard glass blur inside each notification shade card.</string>
+    <string name="control_description_mediaart">Adjusts artwork opacity over glass in the notification shade and Live Updates media card. Native artwork restores its original appearance without turning off glass.</string>
+    <string name="control_description_panelblurcap">Limits background blur behind notifications and Quick Settings. Native lets Samsung choose the blur.</string>
+    <string name="control_description_panelcolor">Adjusts the color and opacity of the shade background independently of the cards.</string>
+    <string name="control_description_paneldim">Darkens the shade background over light apps in dark theme.</string>
+    <string name="control_description_panelnativegray">Restores Samsung’s native gray color adjustment over the shade background.</string>
+    <string name="control_description_pillblur">Controls blur in the lock screen notification icon summary.</string>
+    <string name="control_description_pillglass">Applies glass to the lock screen notification icon summary.</string>
+    <string name="control_description_popuptone">Measures the background to adjust contrast on pop-ups.</string>
+    <string name="control_description_semradius">Controls system blur on cards without the standard glass or a lens.</string>
+    <string name="control_description_semradiuslens">Controls system blur under the dynamic lens. Less blur leaves more detail for refraction.</string>
+    <string name="control_description_sflens">Adjusts edge refraction on pop-ups when the dynamic lens is active.</string>
+    <string name="control_description_shadeblur">Gives each expanded shade card its own blur instead of relying only on the panel blur.</string>
+    <string name="control_description_shadedarkglass">Adjusts dark glass opacity on notification shade cards.</string>
+    <string name="control_description_shadeglint">Adjusts the corner highlight on notification shade cards.</string>
+    <string name="control_description_shadelightglass">Adjusts light glass opacity on notification shade cards.</string>
+    <string name="control_description_shadetone">Selects how notification shade cards protect text contrast.</string>
+    <string name="control_description_textswap">Adapts the glass and text colors to the background.</string>
+    <string name="control_description_veilmax">Limits the contrast veil calculated from the background.</string>
+</resources>

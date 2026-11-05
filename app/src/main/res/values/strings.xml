@@ -247,4 +247,5 @@
     <string name="control_applies">Applies to: %1$s</string>
     <string name="control_reset_a11y">Restore default for %1$s</string>
     <string name="control_reset_done">%1$s restored</string>
+    <string name="control_not_reported">Not reported</string>
 </resources>

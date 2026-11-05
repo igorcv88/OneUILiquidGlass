@@ -99,7 +99,7 @@ final class PresetsSheet extends Sheet {
                 String now = c != null ? st.shown(e.getKey()) : st.shown(e.getKey());
                 if (now != null && now.equals(e.getValue())) continue;
                 if (c != null) {
-                    lines.add(ControlTitles.title(host.activity(), c) + " · " + surfaces(host.activity(), c) + ": " + ValueFormat.display(c, now, host.activity().getResources().getConfiguration().getLocales().get(0)) + " → " + ValueFormat.display(c, e.getValue(), host.activity().getResources().getConfiguration().getLocales().get(0)));
+                    lines.add(ControlTitles.title(host.activity(), c) + " · " + surfaces(host.activity(), c) + ": " + ControlValues.display(host.activity(), c, now) + " → " + ControlValues.display(host.activity(), c, e.getValue()));
                     if (c.needsRestart()) compositor++;
                 } else lines.add(flagName(host.activity(), e.getKey()) + ": " + host.activity().getString("1".equals(e.getValue()) ? R.string.switch_on : R.string.switch_off));
             }

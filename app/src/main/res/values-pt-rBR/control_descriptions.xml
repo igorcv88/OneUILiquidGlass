@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="control_description_kgblurradius">Controla o desfoque dos cartões da tela de bloqueio. Em automático, segue o desfoque do pop-up ou sob a lente dinâmica.</string>
+    <string name="control_description_kgdarkalpha">Ajusta a camada branca translúcida do vidro escuro da tela de bloqueio.</string>
+    <string name="control_description_kgdarkfill">Ajusta o preenchimento preto dentro dos cartões escuros da tela de bloqueio.</string>
+    <string name="control_description_kgglint">Ajusta o reflexo no canto dos cartões da tela de bloqueio.</string>
+    <string name="control_description_kglens">Ajusta a refração da borda dos cartões da tela de bloqueio quando a lente dinâmica está ativa.</string>
+    <string name="control_description_kgrim">Ajusta o contorno dos cartões da tela de bloqueio.</string>
+    <string name="control_description_lightglass">Ajusta a opacidade do vidro claro dos pop-ups e cartões da tela de bloqueio.</string>
+    <string name="control_description_livedarkalpha">Ajusta a camada branca translúcida do vidro escuro dos pop-ups.</string>
+    <string name="control_description_livedarkfill">Ajusta o preenchimento preto sobre o vidro escuro dos pop-ups.</string>
+    <string name="control_description_liveglint">Ajusta o reflexo no canto superior esquerdo dos pop-ups.</string>
+    <string name="control_description_liveradius">Controla o desfoque do vidro padrão nos pop-ups. Os cartões da tela de bloqueio seguem esse valor quando o desfoque está em automático.</string>
+    <string name="control_description_liverim">Ajusta o contorno do pop-up em conjunto com a intensidade das bordas.</string>
+    <string name="control_description_liveshaderadius">Controla o desfoque do vidro padrão dentro de cada cartão da central de notificações.</string>
+    <string name="control_description_mediaart">Ajusta a opacidade da capa sobre o vidro na central de notificações e no cartão de mídia das Live Updates. Capa nativa restaura a apresentação original sem desligar o vidro.</string>
+    <string name="control_description_panelblurcap">Limita o desfoque atrás das notificações e da central de controle. Nativo deixa a Samsung definir o desfoque.</string>
+    <string name="control_description_panelcolor">Ajusta a cor e a opacidade do fundo da central independentemente dos cartões.</string>
+    <string name="control_description_paneldim">Escurece o fundo da central sobre aplicativos claros no tema escuro.</string>
+    <string name="control_description_panelnativegray">Restaura o ajuste de cor cinza nativo da Samsung sobre o fundo da central.</string>
+    <string name="control_description_pillblur">Controla o desfoque do resumo de ícones de notificações da tela de bloqueio.</string>
+    <string name="control_description_pillglass">Aplica vidro ao resumo de ícones de notificações da tela de bloqueio.</string>
+    <string name="control_description_popuptone">Mede o fundo para ajustar o contraste dos pop-ups.</string>
+    <string name="control_description_semradius">Controla o desfoque do sistema nos cartões sem vidro padrão ou lente.</string>
+    <string name="control_description_semradiuslens">Controla o desfoque do sistema sob a lente dinâmica. Menos desfoque preserva detalhes para a refração.</string>
+    <string name="control_description_sflens">Ajusta a refração da borda dos pop-ups quando a lente dinâmica está ativa.</string>
+    <string name="control_description_shadeblur">Aplica desfoque próprio a cada cartão expandido da central, além do desfoque do painel.</string>
+    <string name="control_description_shadedarkglass">Ajusta a opacidade do vidro escuro dos cartões da central de notificações.</string>
+    <string name="control_description_shadeglint">Ajusta o reflexo no canto dos cartões da central de notificações.</string>
+    <string name="control_description_shadelightglass">Ajusta a opacidade do vidro claro dos cartões da central de notificações.</string>
+    <string name="control_description_shadetone">Seleciona como os cartões da central protegem o contraste do texto.</string>
+    <string name="control_description_textswap">Adapta as cores do vidro e do texto ao fundo.</string>
+    <string name="control_description_veilmax">Limita o véu de contraste calculado a partir do fundo.</string>
+</resources>

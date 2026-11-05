@@ -178,8 +178,8 @@ final class InfoSheets {
             block.setPadding(t.dp(18), t.dp(12), t.dp(12), t.dp(8));
             block.addView(Ui.text(a, t, ControlTitles.title(host.activity(), c) + " · " + SearchSheet.surfaces(c), Theme.BODY, t.ink, false));
             String observed = st.observed.get(key);
-            block.addView(Ui.text(a, t, "App: " + ValueFormat.display(c, st.saved.get(key), host.activity().getResources().getConfiguration().getLocales().get(0)) + "   Terminal: "
-                    + ValueFormat.display(c, observed == null || observed.isEmpty() ? c.spec().defaultValue : observed, host.activity().getResources().getConfiguration().getLocales().get(0)), Theme.CAPTION, t.inkMuted, false));
+            block.addView(Ui.text(a, t, "App: " + ControlValues.display(host.activity(), c, st.saved.get(key)) + "   Terminal: "
+                    + ControlValues.display(host.activity(), c, observed == null || observed.isEmpty() ? c.spec().defaultValue : observed), Theme.CAPTION, t.inkMuted, false));
             LinearLayout actions = Ui.row(a);
             TextView external = Ui.button(a, t, "Usar o do terminal", null, Ui.ButtonStyle.TEXT, true);
             external.setOnClickListener(v -> {

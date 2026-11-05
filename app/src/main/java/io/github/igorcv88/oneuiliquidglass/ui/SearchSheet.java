@@ -65,7 +65,7 @@ final class SearchSheet extends Sheet {
     }
 
     static boolean matchesControl(android.content.Context context, Controls.Control c, String query) {
-        String hay = fold(ControlTitles.title(context, c) + " " + c.title + " " + c.hint + " " + c.help + " " + c.spec().fullKey()
+        String hay = fold(ControlTitles.title(context, c) + " " + c.title + " " + ControlDescriptions.hint(context, c) + " " + ControlDescriptions.help(context, c) + " " + c.hint + " " + c.help + " " + c.spec().fullKey()
                 + " " + c.section.label + " " + UiLabels.section(context, c.section));
         return hay.contains(fold(query == null ? "" : query.trim()));
     }
@@ -96,7 +96,7 @@ final class SearchSheet extends Sheet {
                 if (card.getChildCount() > 0) card.addView(Ui.divider(activity, t, t.dp(20)));
                 Controls.Surface where = c.on(surface) ? surface : c.surfaces.iterator().next();
                 Applicability.Result a = app.on(c.key, where);
-                String value = ValueFormat.display(c, st.shown(c.key), host.activity().getResources().getConfiguration().getLocales().get(0));
+                String value = ControlValues.display(host.activity(), c, st.shown(c.key));
                 String sub = surfaces(c) + " · " + value + (a.usable() || a.kind == Applicability.Kind.READ_ONLY ? "" : " · " + a.reason);
                 if (technical) sub += "\n" + c.spec().fullKey();
                 LinearLayout r = Ui.listRow(activity, t, null, ControlTitles.title(activity, c), sub, Controls.editable(c.key) ? Ui.chevron(activity, t) : null);

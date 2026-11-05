@@ -48,7 +48,8 @@ final class ControlSheet extends Sheet {
         ControlState st = model.state();
         Applicability.Result a = st.applicability().on(c.key, surface);
         LinearLayout body = body();
-        if (!c.hint.isEmpty()) subtitle(c.hint);
+        String hint = ControlDescriptions.hint(activity, c);
+        if (!hint.isEmpty()) subtitle(hint);
         if (a.kind == Applicability.Kind.INACTIVE || a.kind == Applicability.Kind.OFF) {
             LinearLayout n = Ui.notice(activity, t, Ui.Tone.INFO,
                     a.reason + ". " + activity.getString(R.string.control_inactive_suffix), null, null);
@@ -63,7 +64,7 @@ final class ControlSheet extends Sheet {
         }
         samples(body);
         editor(body);
-        TextView help = Ui.text(activity, t, c.help, Theme.LABEL, t.inkMuted, false);
+        TextView help = Ui.text(activity, t, ControlDescriptions.help(activity, c), Theme.LABEL, t.inkMuted, false);
         help.setPadding(t.dp(8), t.dp(14), t.dp(8), t.dp(4));
         body.addView(help);
         values(body, st);
@@ -170,7 +171,7 @@ final class ControlSheet extends Sheet {
                 String[][] options = new String[c.choices.size()][];
                 int i = 0;
                 for (java.util.Map.Entry<String, String[]> e : c.choices.entrySet())
-                    options[i++] = new String[] {e.getKey(), e.getValue()[0], e.getValue()[1]};
+                    options[i++] = new String[] {e.getKey(), ControlOptions.text(activity, e.getValue()[0]), ControlOptions.text(activity, e.getValue()[1])};
                 box.setPadding(t.dp(4), t.dp(4), t.dp(4), t.dp(4));
                 LinearLayout holder = Ui.column(activity);
                 box.addView(holder);
@@ -196,16 +197,16 @@ final class ControlSheet extends Sheet {
         }
         scale = Scale.of(c);
         LinearLayout top = Ui.row(activity);
-        valueText = Ui.text(activity, t, ValueFormat.display(c, working, host.activity().getResources().getConfiguration().getLocales().get(0)), Theme.TITLE, t.ink, true);
+        valueText = Ui.text(activity, t, ControlValues.display(host.activity(), c, working), Theme.TITLE, t.ink, true);
         top.addView(valueText, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-        TextView def = Ui.button(activity, t, activity.getString(R.string.control_default, ValueFormat.display(c, s.defaultValue, host.activity().getResources().getConfiguration().getLocales().get(0))), Icon.RESET, Ui.ButtonStyle.TEXT, true);
+        TextView def = Ui.button(activity, t, activity.getString(R.string.control_default, ControlValues.display(host.activity(), c, s.defaultValue)), Icon.RESET, Ui.ButtonStyle.TEXT, true);
         def.setOnClickListener(v -> setWorking(s.defaultValue, true));
         top.addView(def);
         box.addView(top);
         slider = new Slider(activity, t);
         slider.configure(scale.steps, scale.index(s.defaultValue), scale.auto);
         slider.set(scale.index(working));
-        slider.describe(ControlTitles.title(activity, c), i -> ValueFormat.display(c, scale.value(i), host.activity().getResources().getConfiguration().getLocales().get(0)));
+        slider.describe(ControlTitles.title(activity, c), i -> ControlValues.display(host.activity(), c, scale.value(i)));
         slider.listener(new Slider.Listener() {
             @Override public void start() {}
             @Override public void change(int index, boolean fromUser) { setWorking(scale.value(index), false); }
@@ -285,7 +286,7 @@ final class ControlSheet extends Sheet {
 
     private void setWorking(String raw, boolean syncSlider) {
         working = raw;
-        if (valueText != null) valueText.setText(ValueFormat.display(c, raw, host.activity().getResources().getConfiguration().getLocales().get(0)));
+        if (valueText != null) valueText.setText(ControlValues.display(host.activity(), c, raw));
         if (slider != null && syncSlider) slider.set(scale.index(raw));
         if (colorPicker != null) colorPicker.setColor(raw);
         if (field != null) {
@@ -346,18 +347,18 @@ final class ControlSheet extends Sheet {
     private void values(LinearLayout body, ControlState st) {
         String saved = st.saved.get(c.key), device = st.device(c.key);
         StringBuilder b = new StringBuilder();
-        if (saved != null) b.append(activity.getString(R.string.control_saved_in_app, ValueFormat.display(c, saved, host.activity().getResources().getConfiguration().getLocales().get(0))));
+        if (saved != null) b.append(activity.getString(R.string.control_saved_in_app, ControlValues.display(host.activity(), c, saved)));
         if (model.observedAvailable()) {
             String o = st.observed.get(c.key);
             if (o != null && !o.isEmpty()) {
-                b.append(b.length() == 0 ? "" : "\n").append(activity.getString(R.string.control_system_property, ValueFormat.display(c, o, host.activity().getResources().getConfiguration().getLocales().get(0))));
+                b.append(b.length() == 0 ? "" : "\n").append(activity.getString(R.string.control_system_property, ControlValues.display(host.activity(), c, o)));
                 if (saved != null && c.spec().applyMode == SettingSpec.ApplyMode.LIVE
                         && !c.spec().helperOwned() && !saved.equals(o))
                     b.append("\n").append(activity.getString(R.string.control_app_priority));
             }
         }
         if (c.needsRestart())
-            b.append(b.length() == 0 ? "" : "\n").append(activity.getString(R.string.control_lens_value, ValueFormat.display(c, device, host.activity().getResources().getConfiguration().getLocales().get(0))));
+            b.append(b.length() == 0 ? "" : "\n").append(activity.getString(R.string.control_lens_value, ControlValues.display(host.activity(), c, device)));
         if (b.length() == 0) return;
         TextView v = Ui.text(activity, t, b, Theme.CAPTION, t.inkMuted, false);
         v.setPadding(t.dp(8), t.dp(10), t.dp(8), t.dp(4));

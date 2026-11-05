@@ -80,7 +80,7 @@ public final class ControlRow extends LinearLayout {
                 scale = Scale.of(control);
                 slider = new Slider(c, t);
                 slider.configure(scale.steps, scale.index(spec.defaultValue), scale.auto);
-                slider.describe(ControlTitles.title(host.activity(), control), i -> ValueFormat.display(control, scale.value(i), host.activity().getResources().getConfiguration().getLocales().get(0)));
+                slider.describe(ControlTitles.title(host.activity(), control), i -> ControlValues.display(host.activity(), control, scale.value(i)));
                 slider.listener(new Slider.Listener() {
                     @Override
                     public void start() {
@@ -90,7 +90,7 @@ public final class ControlRow extends LinearLayout {
                     @Override
                     public void change(int index, boolean fromUser) {
                         String raw = scale.value(index);
-                        value.setText(ValueFormat.display(control, raw, host.activity().getResources().getConfiguration().getLocales().get(0)));
+                        value.setText(ControlValues.display(host.activity(), control, raw));
                         host.preview(control.key, raw, control.channel);
                     }
 
@@ -157,14 +157,14 @@ public final class ControlRow extends LinearLayout {
     private String followed(ControlState st, Mode mode) {
         switch (control.key) {
             case "kgblurradius":
-                return mode == Mode.STANDARD ? ValueFormat.display(Controls.get("liveradius"), st.shown("liveradius"), host.activity().getResources().getConfiguration().getLocales().get(0))
+                return mode == Mode.STANDARD ? ControlValues.display(host.activity(), Controls.get("liveradius"), st.shown("liveradius"))
                         : followed("semradiuslens", st);
             case "semradiuslens":
                 return followed("semradius", st);
             case "semradius":
                 return "180 px";
             case "kglens":
-                return ValueFormat.display(Controls.get("sflens"), st.shown("sflens"), host.activity().getResources().getConfiguration().getLocales().get(0));
+                return ControlValues.display(host.activity(), Controls.get("sflens"), st.shown("sflens"));
             default:
                 return null;
         }
@@ -173,7 +173,7 @@ public final class ControlRow extends LinearLayout {
     private String followed(String key, ControlState st) {
         String v = st.shown(key);
         Controls.Control c = Controls.get(key);
-        if (!ValueFormat.isAuto(c, v)) return ValueFormat.display(c, v, host.activity().getResources().getConfiguration().getLocales().get(0));
+        if (!ValueFormat.isAuto(c, v)) return ControlValues.display(host.activity(), c, v);
         return key.equals("semradiuslens") ? followed("semradius", st) : "180 px";
     }
 
@@ -184,7 +184,7 @@ public final class ControlRow extends LinearLayout {
         Applicability.Result a = app.on(control.key, surface);
         usable = a.usable();
         boolean changed = st.changed(control.key);
-        String shown = ValueFormat.display(control, raw, host.activity().getResources().getConfiguration().getLocales().get(0));
+        String shown = ControlValues.display(host.activity(), control, raw);
         String follows = ValueFormat.isAuto(control, raw) ? followed(st, app.mode) : null;
         if (follows != null) shown = shown + " · " + follows;
         value.setText(shown);

@@ -30,7 +30,15 @@ public class UiLabelsTest {
         assertEquals("Saved in app: 50 %", en.getString(R.string.control_saved_in_app, "50 %"));
         for (Controls.Control control : Controls.all()) {
             assertNotEquals("Missing title resource for " + control.key, 0, ControlTitles.resource(control));
+            if (control.autoLabel != null) assertNotEquals(control.key, 0, ControlOptions.resource(control.autoLabel));
+            if (control.offLabel != null) assertNotEquals(control.key, 0, ControlOptions.resource(control.offLabel));
+            for (String[] option : control.choices.values()) for (String text : option)
+                if (!text.isEmpty()) assertNotEquals(control.key + ": " + text, 0, ControlOptions.resource(text));
         }
+        assertEquals("Native artwork", ControlValues.display(en, Controls.get("mediaart"), "0"));
+        assertEquals("Automatic", ControlValues.display(en, Controls.get("kgblurradius"), "-1"));
+        assertEquals("Adaptive", ControlValues.display(en, Controls.get("shadetone"), "3"));
+        assertTrue(ControlDescriptions.hint(en, Controls.get("mediaart")).contains("without turning off glass"));
         assertEquals("Blur", ControlTitles.title(en, Controls.get("liveradius")));
         assertEquals("Media artwork opacity", ControlTitles.title(en, Controls.get("mediaart")));
         assertTrue(SearchSheet.matchesControl(en, Controls.get("mediaart"), "artwork opacity"));
@@ -44,6 +52,10 @@ public class UiLabelsTest {
         assertEquals("2 ajustes", UiLabels.count(pt, 2));
         assertEquals("Padrão: 50 %", pt.getString(R.string.control_default, "50 %"));
         assertEquals("Salvo no aplicativo: 50 %", pt.getString(R.string.control_saved_in_app, "50 %"));
+        assertEquals("Capa nativa", ControlValues.display(pt, Controls.get("mediaart"), "0"));
+        assertEquals("Automático", ControlValues.display(pt, Controls.get("kgblurradius"), "-1"));
+        assertEquals("Adaptativa", ControlValues.display(pt, Controls.get("shadetone"), "3"));
+        assertTrue(ControlDescriptions.hint(pt, Controls.get("mediaart")).contains("sem desligar o vidro"));
         assertEquals("Desfoque", ControlTitles.title(pt, Controls.get("liveradius")));
         assertEquals("Opacidade da capa de mídia", ControlTitles.title(pt, Controls.get("mediaart")));
         assertTrue(SearchSheet.matchesControl(pt, Controls.get("mediaart"), "capa de midia"));
