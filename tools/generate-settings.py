@@ -47,7 +47,7 @@ for key,(default,domain,desc) in rows.items():
    elif key=='kglens':lo,hi=-1,1.2
   if key=='kglens': lo,hi=-1,1.2
   if key=='liveradius': default='80'
-  if key=='liveshaderadius': default='120'
+  if key=='liveshaderadius': default='60'
  scope='shade' if key.startswith('qs.') else 'headsup' if key=='popuplock' else 'shade' if key=='orphandraw' else 'keyguard' if key.startswith(('kg','pill','sf.kg')) or key=='hzkg' else 'shade' if key.startswith(('shade','sf.shade','sf.qs')) or key in ('headertone','paneldim','panelblurcap','panelnativegray','panelcolor') else 'headsup' if key.startswith(('hu','sf.hu')) or key in ('liveglint','liverim','livedarkalpha','livedarkfill','sf.core','sf.taps','sf.ramp','sf.edgeblur') else 'all'
  group='Central de controle' if key.startswith('qs.') else 'Compositor' if sf else 'Diagnóstico' if key in ('sf.optics','trace','perf') else 'Captura' if key in 'backdrop profile lens refract rimhz rimblur ior blur sat disp hz hzkg tint livelens lensmaxage lenssettle lenstransition lensgate lensregiondiff'.split() else 'Cor e contraste' if key in 'shadetone shadecap shadelift veilmax stylelo stylehi lightglass lighttone shadelightglass livedarkalpha livedarkfill kgdarkalpha kgdarkfill textswap headertone icontone popuptone popuplock orphandraw shadescaleveil shadelocal paneldim panelnativegray panelcolor semcurve semalpha'.split() else 'Bordas e luz' if key in 'liveoptics livesheen liveglint shadeglint liverim kgrim kgglint lightedge lightoutline sflens kglens kgoptics huoptics'.split() else 'Blur e material'
  if key=='shadedarkglass': group='Cor e contraste'

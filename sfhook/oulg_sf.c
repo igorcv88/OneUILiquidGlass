@@ -311,8 +311,8 @@ static float prop_float(const char *name, float fallback) {
 static void layered_blur(struct oulg_profile p[OULG_PROFILES]) {
     p[0] = OULG_PROFILES_DEFAULT[0];
     p[0].core = prop_float("debug.oulg.sf.core", OULG_CORE_DEFAULT);
-    p[0].taps = (int) prop_float("debug.oulg.sf.taps", OULG_TAPS_DEFAULT);
-    p[0].ramp = prop_float("debug.oulg.sf.ramp", OULG_RAMP_DEFAULT);
+    p[0].taps = (int) prop_float("debug.oulg.sf.taps", OULG_HU_TAPS_DEFAULT);
+    p[0].ramp = prop_float("debug.oulg.sf.ramp", OULG_HU_RAMP_DEFAULT);
     p[0].bloom = prop_float("debug.oulg.sf.hubloom", OULG_HU_BLOOM_DEFAULT);
     p[0].edge = prop_float("debug.oulg.sf.edgeblur", OULG_HU_EDGE_DEFAULT);
     p[0].lensbody = prop_float("debug.oulg.sf.hubodylens", OULG_HU_BODYLENS_DEFAULT);
