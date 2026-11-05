@@ -64,6 +64,12 @@ final class SearchSheet extends Sheet {
         return Normalizer.normalize(s, Normalizer.Form.NFD).replaceAll("\\p{M}", "").toLowerCase(Locale.ROOT);
     }
 
+    static boolean matchesControl(android.content.Context context, Controls.Control c, String query) {
+        String hay = fold(c.title + " " + c.hint + " " + c.help + " " + c.spec().fullKey()
+                + " " + c.section.label + " " + UiLabels.section(context, c.section));
+        return hay.contains(fold(query == null ? "" : query.trim()));
+    }
+
     private void render() {
         results.removeAllViews();
         String q = fold(query.getText().toString().trim());
@@ -76,8 +82,7 @@ final class SearchSheet extends Sheet {
         Map<Controls.Section, List<Controls.Control>> groups = new EnumMap<>(Controls.Section.class);
         for (Controls.Control c : Controls.all()) {
             if (!technical && c.tier == Controls.Tier.INTERNAL) continue;
-            String hay = fold(c.title + " " + c.hint + " " + c.help + " " + c.spec().fullKey() + " " + c.section.label);
-            if (!q.isEmpty() && !hay.contains(q)) continue;
+            if (!matchesControl(activity, c, q)) continue;
             groups.computeIfAbsent(c.section, k -> new ArrayList<>()).add(c);
         }
         if (groups.isEmpty()) {
