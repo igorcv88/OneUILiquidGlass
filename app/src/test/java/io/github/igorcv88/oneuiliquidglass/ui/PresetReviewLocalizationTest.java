@@ -39,6 +39,10 @@ public class PresetReviewLocalizationTest {
                 try { io.github.igorcv88.oneuiliquidglass.config.PresetCodec.parse(inputs[n]); org.junit.Assert.fail(); }
                 catch (Exception e) { assertEquals(expected[index][n], PresetsSheet.PresetReview.importError(context, e)); }
             }
+            try { io.github.igorcv88.oneuiliquidglass.config.PresetCodec.parse("x".repeat(io.github.igorcv88.oneuiliquidglass.config.PresetCodec.MAX_BYTES + 1)); org.junit.Assert.fail(); }
+            catch (Exception e) { assertEquals(index == 0 ? "The preset file is too large." : "O arquivo de preset é muito grande.", PresetsSheet.PresetReview.importError(context, e)); }
+            try { io.github.igorcv88.oneuiliquidglass.config.PresetCodec.parse(inputs[3]); org.junit.Assert.fail(); }
+            catch (Exception e) { assertEquals(context.getString(io.github.igorcv88.oneuiliquidglass.R.string.preset_invalid), PresetsSheet.PresetReview.importError(context, e)); }
             index++;
         }
     }
