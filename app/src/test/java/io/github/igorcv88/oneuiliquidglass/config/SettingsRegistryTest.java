@@ -137,7 +137,7 @@ public class SettingsRegistryTest {
     public void mediaArtOpacityDomain() {
         SettingSpec s = SettingsRegistry.get("mediaart");
         assertEquals(SettingSpec.ApplyMode.LIVE, s.applyMode);
-        assertEquals("0.25", s.defaultValue);
+        assertEquals("0.50", s.defaultValue);
         assertEquals(0.05, s.step, 1e-9);
         assertEquals("0", s.validate("0"));
         assertEquals("0.05", s.validate("0.05"));

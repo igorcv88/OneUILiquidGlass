@@ -322,6 +322,6 @@ public class ControlModelTest {
         assertEquals("0.15", s.device("mediaart"));
         assertEquals("0.15", s.shown("mediaart"));
         assertFalse("live, no restart", s.pendingRestart("mediaart"));
-        assertEquals("0.25", state(Collections.emptyMap(), Collections.emptyMap()).shown("mediaart"));
+        assertEquals("0.50", state(Collections.emptyMap(), Collections.emptyMap()).shown("mediaart"));
     }
 }

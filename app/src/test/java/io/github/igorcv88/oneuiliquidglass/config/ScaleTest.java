@@ -44,12 +44,12 @@ public class ScaleTest {
     public void mediaArtOpacityMovesInFivePercentStepsWithNativeAtZero() {
         Scale s = Scale.of(Controls.get("mediaart"));
         assertFalse(s.auto);
-        assertEquals(20, s.steps);
+        assertEquals(11, s.steps);
         assertEquals("0", s.value(0));
-        assertEquals("0.05", s.value(1));
-        assertEquals("0.25", s.value(5));
-        assertEquals("1", s.value(20));
-        assertEquals(5, s.index("0.25"));
-        assertEquals(5, s.index(SettingsRegistry.get("mediaart").defaultValue));
+        assertEquals("0.5", s.value(1));
+        assertEquals("0.7", s.value(5));
+        assertEquals("1", s.value(11));
+        assertEquals(1, s.index("0.25"));
+        assertEquals(1, s.index(SettingsRegistry.get("mediaart").defaultValue));
     }
 }

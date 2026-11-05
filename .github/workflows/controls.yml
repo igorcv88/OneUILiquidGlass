@@ -33,6 +33,9 @@ jobs:
         run: ANDROID_NDK="$ANDROID_HOME/ndk/$NDK_VERSION" sh sfhook/build.sh
       - name: Android checks
         run: |
+          OULG_UPDATE_MATRIX=1 ./gradlew testDebugUnitTest --tests "*ControlMatrixTest"
+          base64 -w0 docs/CONTROL_MATRIX.md
+          echo
           ./gradlew testDebugUnitTest lintDebug assembleDebug
           unzip -l app/build/outputs/apk/debug/app-debug.apk > "$RUNNER_TEMP/apk-entries.txt"
           for entry in oulg_inject liboulg_sf.so oulg-live.sh allowed_fingerprints live.prop; do

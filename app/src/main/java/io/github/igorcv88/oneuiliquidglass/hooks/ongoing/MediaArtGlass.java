@@ -39,7 +39,7 @@ import java.util.function.LongSupplier;
  *
  * <p>Opacity: the app's "Opacidade da capa de mídia" slider (5%-100% in 5% steps), the same
  * key as {@code debug.oulg.mediaart}, read through Tuning (app setting first, then the system
- * property): unset = 0.25; a number is clamped to [0.05, 1.00]; "0" or "off" keeps the media
+ * property): unset = 0.50; a number is clamped to [0.05, 1.00]; "0" or "off" keeps the media
  * native. {@code debug.oulg.mediaart.alpha}: "transition" (default,
  * View.setTransitionAlpha, which leaves Samsung's own alpha field alone) or "view"
  * (View.setAlpha, the call #159 showed effective). Both are read when a root attaches and when it

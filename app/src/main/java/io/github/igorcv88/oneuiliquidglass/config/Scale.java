@@ -11,6 +11,7 @@ import java.math.RoundingMode;
 public final class Scale {
     public final SettingSpec spec;
     public final boolean auto;
+    private final boolean nativeArt;
     /** First valid non-sentinel value. */
     public final double low;
     public final int steps;
@@ -18,13 +19,15 @@ public final class Scale {
     private Scale(SettingSpec spec, boolean auto, double low) {
         this.spec = spec;
         this.auto = auto;
+        this.nativeArt = spec.key.equals("mediaart");
         this.low = low;
         int span = (int) Math.ceil((spec.max - low) / spec.step - 1e-6);
-        steps = Math.max(1, span + (auto ? 1 : 0));
+        steps = Math.max(1, span + (auto || nativeArt ? 1 : 0));
     }
 
     public static Scale of(Controls.Control c) {
         SettingSpec s = c.spec();
+        if (c.key.equals("mediaart")) return new Scale(s, false, .5);
         if (c.autoLabel != null && s.min < 0) {
             double low = c.key.equals("kglens") ? .1 : 0;
             return new Scale(s, true, low);
@@ -35,8 +38,9 @@ public final class Scale {
     /** Raw validated value at a position 0..steps. */
     public String value(int index) {
         index = Math.max(0, Math.min(steps, index));
+        if (nativeArt && index == 0) return spec.validate("0");
         if (auto && index == 0) return spec.validate("-1");
-        double n = low + (index - (auto ? 1 : 0)) * spec.step;
+        double n = low + (index - (auto || nativeArt ? 1 : 0)) * spec.step;
         n = Math.min(spec.max, n);
         if (spec.type == SettingSpec.Type.INT) n = Math.rint(n);
         return spec.validate(
@@ -51,9 +55,10 @@ public final class Scale {
         } catch (RuntimeException e) {
             return 0;
         }
+        if (nativeArt && n <= 0) return 0;
         if (auto && n < 0) return 0;
         if (n >= spec.max) return steps;
-        int i = (int) Math.round((Math.max(low, n) - low) / spec.step) + (auto ? 1 : 0);
+        int i = (int) Math.round((Math.max(low, n) - low) / spec.step) + (auto || nativeArt ? 1 : 0);
         return Math.max(0, Math.min(steps, i));
     }
 }

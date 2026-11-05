@@ -320,7 +320,7 @@ public final class Controls {
                 .off("Capa nativa")
                 .hint("Ajusta a transparência da capa sobre o vidro")
                 .help("Opacidade da capa do álbum no player da central e no cartão de mídia das"
-                        + " atividades ao vivo, de 5% a 100%. Com o vidro ativo, o fundo opaco e a"
+                        + " atividades ao vivo, de 50% a 100%. Com o vidro ativo, o fundo opaco e a"
                         + " película da Samsung saem e a capa deixa o vidro aparecer; os controles e"
                         + " a onda não mudam. 0% devolve a capa nativa.")
                 .show(BEHAV, Channel.NONE));

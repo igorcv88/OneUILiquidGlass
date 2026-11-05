@@ -292,7 +292,7 @@ public final class Tuning {
      * (hooks.ongoing.MediaArtGlass): 0.05-1, or {@link #MEDIA_ART_NATIVE} for the native art.
      */
     public final float mediaArt;
-    public static final float MEDIA_ART_NATIVE = -1f, MEDIA_ART_DEFAULT = 0.25f, MEDIA_ART_MIN = 0.05f;
+    public static final float MEDIA_ART_NATIVE = -1f, MEDIA_ART_DEFAULT = 0.50f, MEDIA_ART_MIN = 0.05f;
     /** Keep Samsung's gray BGColorAdjustment over the blur. */
     public final boolean panelNativeGray;
     /** Optional RGBA overlay on the shade window blur, unrelated to card tint. */
@@ -537,7 +537,7 @@ public final class Tuning {
     private static float clamp(float v, float lo, float hi) { return Float.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : lo; }
 
     /**
-     * debug.oulg.mediaart / app setting: empty or unreadable = 0.25; "0", "off", "false" or any
+     * debug.oulg.mediaart / app setting: empty or unreadable = 0.50; "0", "off", "false" or any
      * value not above 0 = native art; otherwise clamped to [0.05, 1].
      */
     public static float mediaArtOpacity(String raw) {
