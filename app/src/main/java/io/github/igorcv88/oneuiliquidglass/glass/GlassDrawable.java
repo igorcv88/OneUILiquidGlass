@@ -298,6 +298,8 @@ public final class GlassDrawable extends Drawable {
         s.setFloatUniform("shadow", spec.innerShadow * (lightStyle && Tuning.get().live ? lightEdge : 1f));
         // LSPosed-only cards over the live drawable blur take the light-only edge model.
         Tuning t = Tuning.get();
+        // This uniform exists only in SOURCE; REFRACT_SOURCE remains unchanged.
+        if (s == shader) s.setFloatUniform("edgePremulSafe", t.edgePremulSafe ? 1f : 0f);
         boolean live = t.live && backdrop instanceof BackgroundBlurBridge;
         s.setFloatUniform("hairGain", edgeEnabled ? 1f : 0f);
         s.setFloatUniform("decor", edgeEnabled ? (live ? t.liveOptics : 1f) : 0f);
