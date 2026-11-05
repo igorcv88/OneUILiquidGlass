@@ -30,8 +30,8 @@ public final class HomePage implements Page {
     private final LinearLayout quickSettingsRow;
     /** Live update at the top, Now Bar and toasts: opt-ins of their own (hooks/ongoing). */
     private static final String[][] LIVE_SURFACES = {
-            {ProductFlags.LIVE_ACTIVITY, "Atividade ao vivo", "Pílula e cartão no topo, sem mídia"},
-            {ProductFlags.NOW_BAR, "Now Bar", "Cartão na tela de bloqueio, sem mídia"},
+            {ProductFlags.LIVE_ACTIVITY, "Atividade ao vivo", "Pílula e cartões de atividades e mídia"},
+            {ProductFlags.NOW_BAR, "Now Bar", "Atividades e cápsula compacta de mídia na tela de bloqueio"},
             {ProductFlags.TOAST, "Avisos rápidos", "Toasts do sistema, como “Copiado”"},
     };
     private final Map<String, Toggle> liveToggles = new LinkedHashMap<>();
@@ -250,7 +250,7 @@ public final class HomePage implements Page {
             e.getValue().set(on, true);
             Ui.enable(e.getValue(), st.enabled);
             Ui.setSubtitle(liveRows.get(e.getKey()), !st.enabled ? "Vidro desligado" : on
-                    ? "Ativo · sem mídia · confirme no aparelho" : "Experimental · desativado por padrão");
+                    ? "Ativo · confirme no aparelho" : "Experimental · desativado por padrão");
         }
         boolean traceRequested = "1".equals(st.shown("trace"));
         traceToggle.set(traceRequested, true);
