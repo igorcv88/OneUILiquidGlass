@@ -88,10 +88,10 @@ public final class HomePage implements Page {
 
         LinearLayout masterCard = Ui.card(a, t);
         master = new Toggle(a, t);
-        masterRow = Ui.switchRow(a, t, Icon.BELL, "Vidro no SystemUI", "", master);
+        masterRow = Ui.switchRow(a, t, Icon.BELL, host.activity().getString(R.string.home_system_glass), "", master);
         master.listener((tg, on) -> {
             host.model().master(on);
-            host.feedback(on ? "Vidro ligado" : "Vidro desligado");
+            host.feedback(on ? host.activity().getString(R.string.home_glass_on) : host.activity().getString(R.string.home_glass_off));
         });
         masterCard.addView(masterRow);
         content.addView(masterCard, Ui.match());
@@ -119,12 +119,12 @@ public final class HomePage implements Page {
         }
         surfaces.addView(Ui.divider(a, t, t.dp(72)));
         quickSettingsToggle = new Toggle(a, t);
-        quickSettingsToggle.setContentDescription("Vidro da Central de controle");
+        quickSettingsToggle.setContentDescription(host.activity().getString(R.string.home_qs_glass));
         quickSettingsToggle.listener((tg, on) -> {
             host.model().flag(ProductFlags.QUICK_SETTINGS, on);
-            host.feedback(on ? "Central de controle: vidro ligado" : "Central de controle: vidro desligado");
+            host.feedback(on ? host.activity().getString(R.string.home_qs_on) : host.activity().getString(R.string.home_qs_off));
         });
-        quickSettingsRow = Ui.listRow(a, t, Icon.SHADE, "Central de controle", "Vidro nos controles e sliders", quickSettingsToggle);
+        quickSettingsRow = Ui.listRow(a, t, Icon.SHADE, host.activity().getString(R.string.home_qs), host.activity().getString(R.string.home_qs_desc), quickSettingsToggle);
         quickSettingsRow.setOnClickListener(v -> quickSettingsToggle.toggleByUser());
         surfaces.addView(quickSettingsRow);
         for (String[] live : LIVE_SURFACES) {
@@ -144,10 +144,10 @@ public final class HomePage implements Page {
         }
         content.addView(surfaces, Ui.match());
 
-        content.addView(Ui.section(a, t, "Teste"));
+        content.addView(Ui.section(a, t, host.activity().getString(R.string.home_test)));
         LinearLayout test = Ui.card(a, t);
         test.setPadding(t.dp(16), t.dp(16), t.dp(16), t.dp(8));
-        TextView send = Ui.button(a, t, "Testar notificação", Icon.BELL, Ui.ButtonStyle.FILLED, false);
+        TextView send = Ui.button(a, t, host.activity().getString(R.string.home_test_notification), Icon.BELL, Ui.ButtonStyle.FILLED, false);
         send.setOnClickListener(v -> host.testNotification());
         test.addView(send, Ui.match());
         testResult = Ui.text(a, t, "", Theme.LABEL, t.inkMuted, false);
@@ -155,12 +155,12 @@ public final class HomePage implements Page {
         testResult.setVisibility(View.GONE);
         testResult.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
         test.addView(testResult);
-        TextView more = Ui.button(a, t, "Mais opções de teste", null, Ui.ButtonStyle.TEXT, true);
+        TextView more = Ui.button(a, t, host.activity().getString(R.string.home_more_tests), null, Ui.ButtonStyle.TEXT, true);
         more.setOnClickListener(v -> host.openTestOptions());
         test.addView(more, Ui.match(t.dp(4), 0));
         test.addView(Ui.divider(a, t, t.dp(16)));
         traceToggle = new Toggle(a, t);
-        traceToggle.setContentDescription("Registro detalhado para diagnóstico");
+        traceToggle.setContentDescription(host.activity().getString(R.string.home_detailed_log));
         traceToggle.listener((toggle, on) -> {
             AppModel.Result result = host.model().save("trace", on ? "1" : "0");
             if (!result.ok) {
@@ -168,14 +168,14 @@ public final class HomePage implements Page {
                 else host.feedback(result.message);
             } else host.feedback(on ? "Registro detalhado solicitado" : "Registro detalhado desligado");
         });
-        traceRow = Ui.listRow(a, t, Icon.INFO, "Registro detalhado", "Para coletar diagnósticos", traceToggle);
+        traceRow = Ui.listRow(a, t, Icon.INFO, "Registro detalhado", host.activity().getString(R.string.home_diagnostic_desc), traceToggle);
         traceRow.setOnClickListener(v -> traceToggle.toggleByUser());
         test.addView(traceRow);
         content.addView(test, Ui.match());
 
         content.addView(Ui.section(a, t, "Estilo"));
         LinearLayout style = Ui.card(a, t);
-        LinearLayout presets = Ui.listRow(a, t, Icon.PALETTE, "Estilos", "Salvar, restaurar ou voltar ao padrão", Ui.chevron(a, t));
+        LinearLayout presets = Ui.listRow(a, t, Icon.PALETTE, "Estilos", host.activity().getString(R.string.home_styles_desc), Ui.chevron(a, t));
         presets.setOnClickListener(v -> new PresetsSheet(host).show());
         style.addView(presets);
         content.addView(style, Ui.match());
@@ -208,22 +208,22 @@ public final class HomePage implements Page {
         ControlState st = m.state();
         Applicability app = st.applicability();
         master.set(st.enabled, true);
-        Ui.setSubtitle(masterRow, st.enabled ? "Modo: " + app.mode.label : "Notificações com o visual original");
+        Ui.setSubtitle(masterRow, st.enabled ? "Modo: " + app.mode.label : host.activity().getString(R.string.home_original_notifications));
         AppModel.Sync sync = m.sync();
         int dot;
         String line;
         if (!st.enabled) {
-            line = "Desligado";
+            line = host.activity().getString(R.string.home_off);
             dot = t.inkFaint;
         } else {
             int on = 0;
             for (Controls.Surface s : Controls.Surface.values()) if (app.surfaceOn(s)) on++;
-            line = (on == 3 ? "Ativo nos três ambientes" : on == 0 ? "Nenhum ambiente ligado" : "Ativo em " + on + " de 3 ambientes");
+            line = (on == 3 ? host.activity().getString(R.string.home_active_all) : on == 0 ? host.activity().getString(R.string.home_none_enabled) : "Ativo em " + on + " de 3 ambientes");
             switch (sync) {
                 case SYNCED: dot = t.ok; break;
                 case WAITING: dot = t.accent; line += " · enviando"; break;
                 case NO_RESPONSE: dot = t.warn; line += " · sem resposta do sistema"; break;
-                case NOT_DETECTED: dot = t.warn; line = "Módulo não detectado no sistema"; break;
+                case NOT_DETECTED: dot = t.warn; line = host.activity().getString(R.string.home_module_missing); break;
                 default: dot = t.inkFaint;
             }
         }
@@ -237,27 +237,27 @@ public final class HomePage implements Page {
             int changed = 0;
             for (Controls.Control c : Controls.all())
                 if (c.on(s) && Controls.editable(c.key) && c.tier != Controls.Tier.TECHNICAL && st.saved.containsKey(c.key) && st.changed(c.key)) changed++;
-            String sub = !st.enabled ? "Vidro desligado" : !on ? "Desligado" : changed == 0 ? "Padrão" : changed == 1 ? "1 ajuste personalizado" : changed + " ajustes personalizados";
+            String sub = !st.enabled ? host.activity().getString(R.string.home_glass_off) : !on ? host.activity().getString(R.string.home_off) : changed == 0 ? host.activity().getString(R.string.home_default) : changed == 1 ? "1 ajuste personalizado" : changed + " ajustes personalizados";
             Ui.setSubtitle(rows.get(s), sub);
         }
         boolean quickOn = "1".equals(st.shown(ProductFlags.QUICK_SETTINGS));
         quickSettingsToggle.set(quickOn, true);
         Ui.enable(quickSettingsToggle, st.enabled);
-        Ui.setSubtitle(quickSettingsRow, !st.enabled ? "Vidro desligado" : quickOn
-                ? "Ativo · teste os tiles no aparelho" : "Experimental · desativado por padrão");
+        Ui.setSubtitle(quickSettingsRow, !st.enabled ? host.activity().getString(R.string.home_glass_off) : quickOn
+                ? host.activity().getString(R.string.home_qs_active) : host.activity().getString(R.string.home_experimental));
         for (Map.Entry<String, Toggle> e : liveToggles.entrySet()) {
             boolean on = "1".equals(st.shown(e.getKey()));
             e.getValue().set(on, true);
             Ui.enable(e.getValue(), st.enabled);
-            Ui.setSubtitle(liveRows.get(e.getKey()), !st.enabled ? "Vidro desligado" : on
-                    ? "Ativo · confirme no aparelho" : "Experimental · desativado por padrão");
+            Ui.setSubtitle(liveRows.get(e.getKey()), !st.enabled ? host.activity().getString(R.string.home_glass_off) : on
+                    ? host.activity().getString(R.string.home_verify) : host.activity().getString(R.string.home_experimental));
         }
         boolean traceRequested = "1".equals(st.shown("trace"));
         traceToggle.set(traceRequested, true);
         AppModel.Sync traceSync = m.sync();
-        Ui.setSubtitle(traceRow, !traceRequested ? "Desligado" : traceSync == AppModel.Sync.SYNCED
-                ? "Ativo · configuração recebida pelo SystemUI" : traceSync == AppModel.Sync.WAITING
-                ? "Ativando no SystemUI…" : "Solicitado · sem confirmação do SystemUI");
+        Ui.setSubtitle(traceRow, !traceRequested ? host.activity().getString(R.string.home_off) : traceSync == AppModel.Sync.SYNCED
+                ? host.activity().getString(R.string.home_system_received) : traceSync == AppModel.Sync.WAITING
+                ? "Ativando no SystemUI…" : host.activity().getString(R.string.home_unconfirmed));
         notice(st, sync);
     }
 
