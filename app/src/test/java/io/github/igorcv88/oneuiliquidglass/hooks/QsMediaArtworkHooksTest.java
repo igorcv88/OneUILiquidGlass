@@ -39,4 +39,13 @@ public class QsMediaArtworkHooksTest {
         assertEquals(0.8f, QsMediaArtworkHooks.opacity(0.8f, 0.45f, false), 0f);
         assertEquals(0.8f, QsMediaArtworkHooks.opacity(0.8f, Float.NaN, true), 0f);
     }
+
+    @Test public void probeReportsOnlyMediaSources() {
+        assertTrue(QsMediaArtworkHooks.mediaSource(
+                "com.android.systemui.samsung.quicksetting.ui.media.components.OneUI90MediaPlayerPageKt$Art$1", null));
+        assertTrue(QsMediaArtworkHooks.mediaSource("androidx.compose.Foo$1", "media.components.OneUI90MediaPlayerInfoKt"));
+        assertFalse(QsMediaArtworkHooks.mediaSource(
+                "com.android.systemui.samsung.quicksetting.ui.tiles.QuickTileKt$1", "tiles.QuickTileKt"));
+        assertFalse(QsMediaArtworkHooks.mediaSource("androidx.compose.Foo$1", null));
+    }
 }
