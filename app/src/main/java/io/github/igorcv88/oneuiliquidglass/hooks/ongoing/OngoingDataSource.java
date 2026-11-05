@@ -65,6 +65,17 @@ final class OngoingDataSource {
         } catch (ReflectiveOperationException | RuntimeException e) { return null; }
     }
 
+    /** Whether this exact object is still one of the helper's items (first {@code limit} indices). Binds only. */
+    boolean lists(Object adapter, Object data, int limit) {
+        if (adapter == null || data == null) return false;
+        Object count = NativeShape.call(adapter, "getItemCount");
+        if (!(count instanceof Integer)) count = NativeShape.call(adapter, "getCount");
+        if (!(count instanceof Integer)) return false;
+        int n = Math.min((Integer) count, limit);
+        for (int i = 0; i < n; i++) if (at(adapter, i) == data) return true;
+        return false;
+    }
+
     private Object instance(Object adapter) throws IllegalAccessException {
         Class<?> type = adapter.getClass();
         Field f;

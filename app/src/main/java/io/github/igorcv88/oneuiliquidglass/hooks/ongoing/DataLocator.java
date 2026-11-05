@@ -33,6 +33,34 @@ final class DataLocator {
         return read(member, adapter, position);
     }
 
+    /**
+     * Whether this exact object (identity, not equals) is still one of the adapter's items, through
+     * the member already resolved for its class: the data list, or getItem(int) over getCount() /
+     * getItemCount() positions up to {@code limit}. False when nothing was resolved (unverifiable).
+     * Called from binds only, never per frame.
+     */
+    boolean lists(Object adapter, Object data, int limit) {
+        if (adapter == null || data == null) return false;
+        Object member;
+        synchronized (members) { member = members.get(adapter.getClass()); }
+        try {
+            if (member instanceof Field) {
+                Object list = ((Field) member).get(adapter);
+                if (!(list instanceof List)) return false;
+                for (Object v : (List<?>) list) if (v == data) return true;
+                return false;
+            }
+            if (member instanceof Method) {
+                Object count = NativeShape.call(adapter, "getCount");
+                if (!(count instanceof Integer)) count = NativeShape.call(adapter, "getItemCount");
+                if (!(count instanceof Integer)) return false;
+                int n = Math.min((Integer) count, limit);
+                for (int i = 0; i < n; i++) if (((Method) member).invoke(adapter, i) == data) return true;
+            }
+        } catch (ReflectiveOperationException | RuntimeException e) { return false; }
+        return false;
+    }
+
     private Object read(Object member, Object adapter, int position) {
         try {
             Object v;
