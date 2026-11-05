@@ -199,6 +199,7 @@ public class SettingsRegistryTest {
         };
         for (String[] pair : expected)
             assertEquals(pair[0], pair[1], SettingsRegistry.get(pair[0]).defaultValue);
-        assertEquals(5.0 / 255.0, Double.parseDouble(SettingsRegistry.get("kgdarkfill").defaultValue) / 255.0, 1e-9);
+        assertEquals("2 %", ValueFormat.display(Controls.get("kgdarkfill"), "5"));
+        assertEquals("5", ValueFormat.fromEdit(Controls.get("kgdarkfill"), "2"));
     }
 }
