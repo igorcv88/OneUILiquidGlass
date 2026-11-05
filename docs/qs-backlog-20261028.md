@@ -40,8 +40,9 @@ notificações personalizadas, live updates ou traduções.
 - 🔧 Live updates não-mídia: pílula (L1, `setChipBg`) e cartão expandido (L2,
   `changeCardBg`/`setBlurBG`/`updateItemBg`) com vidro desde o bind e após cada
   writer; Now Bar da lockscreen (L3, plugin AODService, uma instalação por
-  classloader) só em `NowBarOngoingCardView`. Mídia excluída por
-  `mIsMediaOngoingData`, `isMediaView`, classe exata e `getFaceWidgetMediaData`.
+  classloader) em `NowBarOngoingCardView`. A mídia usa caminhos separados:
+  cartão da pilha e cápsula compacta da Now Bar; a mídia expandida e o AOD
+  permanecem nativos.
   Opt-ins `surface.liveactivity.enabled` e `surface.nowbar.enabled`. Detalhes,
   limitações e roteiro físico: [live-toast-dzif.md](live-toast-dzif.md).
   ☐ validar no Galaxy, inclusive mídia simultânea como testemunha de regressão,
@@ -51,7 +52,10 @@ notificações personalizadas, live updates ou traduções.
   CardView do L3); ☐ repetir `docs/live-toast-dzif.md` no Galaxy.
 - ☐ Pós-PR #117 (03/11, físico): superfícies visíveis, material não convincente;
   🔧 curva neutra, fill estável e região do L2 sem cor sobreposta; ☐ repetir no Galaxy.
-- ☐ Mídia nas live updates/lockscreen: continua fora de escopo.
+- 🔧 Mídia na central, na pilha de Live Updates e na cápsula compacta da Now Bar
+  implementada; ☐ validar as transições e os gates no Galaxy S25 Ultra DZIF.
+  O player ativo de Quick Settings e a mídia expandida da tela de bloqueio
+  permanecem fora desse escopo.
 
 ### Central de Controle / Quick Settings
 
@@ -727,7 +731,7 @@ brilho. Preservar `qs.fill=0.85` e `qs.lightfill=0.05`; não escurecer cartões 
 
 - [ ] **Live updates de aplicativos não-mídia na lockscreen**: cápsula inferior com vidro
   permanente, sem comprometer toque, desbloqueio e segurança.
-- [ ] Avaliar mídia nas live updates/lockscreen somente depois dos aplicativos não-mídia.
+- [ ] Validar mídia na pilha de Live Updates e na cápsula compacta da lockscreen.
 - [ ] Validar consumo de reamostragem/performance, ausência de crashes SystemUI, rebinds
   após troca de app/tema e custo dos hooks com `debug.oulg.trace=0`.
 
