@@ -37,8 +37,10 @@ import java.util.function.LongSupplier;
  * native value and ours follows it proportionally (native x opacity, native x 0). Without glass,
  * with the property off, on detach or error, every native value is handed back exactly.</p>
  *
- * <p>{@code debug.oulg.mediaart}: unset = 0.50; a number is clamped to [0.50, 1.00]; "0" or "off"
- * keeps the media native. {@code debug.oulg.mediaart.alpha}: "transition" (default,
+ * <p>Opacity: the app's "Opacidade da capa de mídia" slider (5%-100% in 5% steps), the same
+ * key as {@code debug.oulg.mediaart}, read through Tuning (app setting first, then the system
+ * property): unset = 0.25; a number is clamped to [0.05, 1.00]; "0" or "off" keeps the media
+ * native. {@code debug.oulg.mediaart.alpha}: "transition" (default,
  * View.setTransitionAlpha, which leaves Samsung's own alpha field alone) or "view"
  * (View.setAlpha, the call #159 showed effective). Both are read when a root attaches and when it
  * draws again after a pause of {@link #SESSION_GAP_MS}, never on every frame. Per frame: a few
@@ -48,7 +50,9 @@ public final class MediaArtGlass implements View.OnAttachStateChangeListener, Vi
     public static final String PROPERTY = "debug.oulg.mediaart";
     public static final String PROBE_PROPERTY = "debug.oulg.mediaart.probe";
     public static final String ALPHA_PROPERTY = "debug.oulg.mediaart.alpha";
-    static final float DEFAULT_OPACITY = 0.50f, MIN_OPACITY = 0.50f, MAX_OPACITY = 1.00f, OFF = -1f;
+    static final float DEFAULT_OPACITY = io.github.igorcv88.oneuiliquidglass.glass.Tuning.MEDIA_ART_DEFAULT,
+            MIN_OPACITY = io.github.igorcv88.oneuiliquidglass.glass.Tuning.MEDIA_ART_MIN, MAX_OPACITY = 1.00f,
+            OFF = io.github.igorcv88.oneuiliquidglass.glass.Tuning.MEDIA_ART_NATIVE;
     static final long SESSION_GAP_MS = 1000;
     private static final String ROOT_CLASS = "com.android.systemui.media.QSMediaCornerRoundedView";
 
@@ -68,7 +72,9 @@ public final class MediaArtGlass implements View.OnAttachStateChangeListener, Vi
 
     static Names names = DZIF;
     static RowGlass rowGlass = row -> false;
-    static PropertySource property = MediaArtGlass::systemProperty;
+    /** The opacity, already parsed (production: Tuning, which reads the app setting first). */
+    interface OpacitySource { float get(); }
+    static OpacitySource opacitySource = () -> io.github.igorcv88.oneuiliquidglass.glass.Tuning.get().mediaArt;
     static PropertySource probeProperty = () -> systemProperty(PROBE_PROPERTY);
     static PropertySource alphaProperty = () -> systemProperty(ALPHA_PROPERTY);
     static LongSupplier clock = SystemClock::uptimeMillis;
@@ -404,22 +410,14 @@ public final class MediaArtGlass implements View.OnAttachStateChangeListener, Vi
 
     private static String id(View v) { return v == null ? "null" : Integer.toHexString(System.identityHashCode(v)); }
 
-    static float parse(String raw) {
-        if (raw == null) return DEFAULT_OPACITY;
-        String s = raw.trim().toLowerCase(Locale.ROOT);
-        if (s.isEmpty()) return DEFAULT_OPACITY;
-        if (s.equals("0") || s.equals("off") || s.equals("false")) return OFF;
-        try {
-            float f = Float.parseFloat(s);
-            if (Float.isNaN(f)) return DEFAULT_OPACITY;
-            return Math.max(MIN_OPACITY, Math.min(MAX_OPACITY, f));
-        } catch (NumberFormatException e) {
-            return DEFAULT_OPACITY;
-        }
+    static float parse(String raw) { return io.github.igorcv88.oneuiliquidglass.glass.Tuning.mediaArtOpacity(raw); }
+
+    private static float readOpacity() {
+        try { return opacitySource.get(); } catch (RuntimeException | LinkageError e) { return DEFAULT_OPACITY; }
     }
 
     private void readProperties() {
-        opacity = parse(readProperty());
+        opacity = readOpacity();
         probeMode = parseProbe(readProbeProperty());
         viewAlpha = parseAlphaMethod(read(alphaProperty));
     }
@@ -432,12 +430,6 @@ public final class MediaArtGlass implements View.OnAttachStateChangeListener, Vi
     private static String read(PropertySource source) {
         try { return source.get(); } catch (RuntimeException e) { return null; }
     }
-
-    private static String readProperty() {
-        try { return property.get(); } catch (RuntimeException e) { return null; }
-    }
-
-    private static String systemProperty() { return systemProperty(PROPERTY); }
 
     private static String systemProperty(String name) {
         try {
@@ -457,7 +449,7 @@ public final class MediaArtGlass implements View.OnAttachStateChangeListener, Vi
         WATCHED.clear();
         names = DZIF;
         rowGlass = row -> false;
-        property = MediaArtGlass::systemProperty;
+        opacitySource = () -> io.github.igorcv88.oneuiliquidglass.glass.Tuning.get().mediaArt;
         probeProperty = () -> systemProperty(PROBE_PROPERTY);
         alphaProperty = () -> systemProperty(ALPHA_PROPERTY);
         clock = SystemClock::uptimeMillis;

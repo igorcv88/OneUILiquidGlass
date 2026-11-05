@@ -10,7 +10,7 @@ for line in text.splitlines():
  if key in rows: continue
  if key=='sf.optics': default='0'; domain='readonly'; desc='Indicador de versão; não comprova reescrita ou execução do shader.'
  rows[key]=(default,domain,desc or domain)
-assert len(rows)==152,len(rows)
+assert len(rows)==153,len(rows)
 # Literal bounds follow Tuning; native limits are deliberately conservative UI limits, not C clamps.
 bools=set('livelens shadeblur sfrefract liveblur kgwinblur pillglass textswap headertone icontone popuptone popuplock orphandraw shadelocal panelnativegray perf trace sf.debug sf.norewrite qs.tilelight qs.tiledark qs.hideoffdiscs'.split())
 ints=set('qs.edgeblur rimhz hz hzkg tint lensmaxage lenssettle lenstransition liveradius liveshaderadius semradius semradiuslens semalpha kgblurpath shadeblurpath kgblurradius pillblur kgoptics huoptics livedarkalpha livedarkfill kgdarkalpha kgdarkfill shadescaleveil panelblurcap sf.taps sf.kgtaps'.split())
@@ -21,6 +21,7 @@ titles={'qs.darkfill':'Véu sobre fundo colorido (descontinuado)','qs.lightfill'
 titles['sf.qslight']='Luz pela borda da Central de controle'
 titles['shadedarkglass']='Opacidade escura da central'
 titles['qs.hideoffdiscs']='Discos desligados sem fundo'
+titles['mediaart']='Opacidade da capa de mídia'
 titles.update({'panelblurcap':'Limite de desfoque do fundo','panelnativegray':'Véu cinza da Samsung','panelcolor':'Cor do fundo da central',
                'qs.glint':'Reflexo extra no topo esquerdo','qs.sliderlightcolor':'Preenchimento de slider claro',
                'qs.sliderdarkcolor':'Preenchimento de slider colorido',
@@ -50,13 +51,14 @@ for key,(default,domain,desc) in rows.items():
  scope='shade' if key.startswith('qs.') else 'headsup' if key=='popuplock' else 'shade' if key=='orphandraw' else 'keyguard' if key.startswith(('kg','pill','sf.kg')) or key=='hzkg' else 'shade' if key.startswith(('shade','sf.shade','sf.qs')) or key in ('headertone','paneldim','panelblurcap','panelnativegray','panelcolor') else 'headsup' if key.startswith(('hu','sf.hu')) or key in ('liveglint','liverim','livedarkalpha','livedarkfill','sf.core','sf.taps','sf.ramp','sf.edgeblur') else 'all'
  group='Central de controle' if key.startswith('qs.') else 'Compositor' if sf else 'Diagnóstico' if key in ('sf.optics','trace','perf') else 'Captura' if key in 'backdrop profile lens refract rimhz rimblur ior blur sat disp hz hzkg tint livelens lensmaxage lenssettle lenstransition lensgate lensregiondiff'.split() else 'Cor e contraste' if key in 'shadetone shadecap shadelift veilmax stylelo stylehi lightglass lighttone shadelightglass livedarkalpha livedarkfill kgdarkalpha kgdarkfill textswap headertone icontone popuptone popuplock orphandraw shadescaleveil shadelocal paneldim panelnativegray panelcolor semcurve semalpha'.split() else 'Bordas e luz' if key in 'liveoptics livesheen liveglint shadeglint liverim kgrim kgglint lightedge lightoutline sflens kglens kgoptics huoptics'.split() else 'Blur e material'
  if key=='shadedarkglass': group='Cor e contraste'
+ if key=='mediaart': scope='shade'
  unit='ms' if 'ms' in domain else 'Hz' if 'Hz' in domain else 'px' if 'px' in domain or sf and ('core' in key) else 'dp' if key=='headergap' else 'rad' if key=='sf.kgtilt' else ''
  advanced=sf or group in ('Captura','Diagnóstico') or key in ('semcurve','semshape','kgblurpath','shadeblurpath','kgwinblur','huoptics')
  title=titles.get(key, desc.split(': ',1)[-1].split(';')[0])
  dependency='sfrefract=1' if sf or key in ('qs.edgeblur','sflens','kglens','kgoptics','huoptics','semradiuslens') else 'liveblur=1;sfrefract=0;backdrop=auto' if key in ('livelens','liveradius','liveshaderadius','liveoptics','livesheen','liveglint','shadeglint','liverim','kgrim','kgglint','livedarkalpha','livedarkfill','kgdarkalpha','kgdarkfill') else 'backdrop=capture|hybrid|grid' if key in ('profile','lens','refract','ior','disp','blur','sat','hz','hzkg') else ''
  strategy='MATERIAL' if key in 'liveradius liveshaderadius kgblurradius sflens kglens sat lighttone lightglass shadelightglass liveglint shadeglint kgglint liverim kgrim veilmax livedarkalpha livedarkfill kgdarkalpha kgdarkfill sf.core sf.kgcore sf.kgsat'.split() else 'DIAGRAM'
  if key=='shadedarkglass': strategy='MATERIAL'
- lines.append('        add(new SettingSpec('+','.join([q(key),q(group),q(scope),q(title),q(desc), 'SettingSpec.Type.'+typ,q(default),str(lo),str(hi),'1' if typ=='INT' else '.01',q(unit),q(enums.get(key,'')),q(dependency),'true' if advanced else 'false',q(strategy)])+'));')
+ lines.append('        add(new SettingSpec('+','.join([q(key),q(group),q(scope),q(title),q(desc), 'SettingSpec.Type.'+typ,q(default),str(lo),str(hi),'1' if typ=='INT' else '.05' if key=='mediaart' else '.01',q(unit),q(enums.get(key,'')),q(dependency),'true' if advanced else 'false',q(strategy)])+'));')
 (out/'SettingsRegistry.java').write_text('''package io.github.igorcv88.oneuiliquidglass.config;
 import java.util.*;
 /** Generated from the audited catalogue by tools/generate-settings.py. */

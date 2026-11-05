@@ -300,4 +300,28 @@ public class ControlModelTest {
         ControlState global = new ControlState(Collections.emptyMap(), Collections.emptyMap(), Collections.emptyMap(), false);
         assertTrue(PreviewParams.of(global::shown, Controls.Surface.SHADE, false, .5f).nativeCard);
     }
+
+    @Test
+    public void mediaArtOpacityReadsAsPercentAndZeroAsTheNativeArt() {
+        Controls.Control c = Controls.get("mediaart");
+        assertEquals(Controls.Format.PERCENT_1, c.format);
+        assertTrue(c.on(Controls.Surface.SHADE));
+        assertTrue(Controls.editable("mediaart"));
+        assertEquals("Capa nativa", ValueFormat.display(c, "0"));
+        assertEquals("5 %", ValueFormat.display(c, "0.05"));
+        assertEquals("25 %", ValueFormat.display(c, "0.25"));
+        assertEquals("100 %", ValueFormat.display(c, "1"));
+        assertEquals("0.25", ValueFormat.fromEdit(c, "25"));
+        assertThrows(IllegalArgumentException.class, () -> ValueFormat.fromEdit(c, "105"));
+    }
+
+    @Test
+    public void savedMediaArtOpacityIsWhatTheDeviceGets() {
+        Map<String, String> observed = Collections.singletonMap("mediaart", "0.8");
+        ControlState s = state(observed, Collections.singletonMap("mediaart", "0.15"));
+        assertEquals("0.15", s.device("mediaart"));
+        assertEquals("0.15", s.shown("mediaart"));
+        assertFalse("live, no restart", s.pendingRestart("mediaart"));
+        assertEquals("0.25", state(Collections.emptyMap(), Collections.emptyMap()).shown("mediaart"));
+    }
 }

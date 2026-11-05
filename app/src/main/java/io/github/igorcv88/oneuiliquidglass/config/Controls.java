@@ -116,6 +116,8 @@ public final class Controls {
 
     public static final class Control {
         public final String key, title, hint, help, autoLabel, feature;
+        /** Label shown for the value 0 when it means "native" (not a sentinel), or null. */
+        public final String offLabel;
         public final Section section;
         public final Tier tier;
         public final Format format;
@@ -131,6 +133,7 @@ public final class Controls {
             hint = b.hint;
             help = b.help;
             autoLabel = b.autoLabel;
+            offLabel = b.offLabel;
             feature = b.feature;
             section = b.section;
             tier = b.tier;
@@ -157,7 +160,7 @@ public final class Controls {
 
     static final class Builder {
         final String key;
-        String title, hint = "", help = "", autoLabel, feature;
+        String title, hint = "", help = "", autoLabel, offLabel, feature;
         Section section = Section.TECHNICAL;
         Tier tier = Tier.TECHNICAL;
         Format format = Format.PLAIN;
@@ -203,6 +206,11 @@ public final class Controls {
 
         Builder auto(String label) {
             autoLabel = label;
+            return this;
+        }
+
+        Builder off(String label) {
+            offLabel = label;
             return this;
         }
 
@@ -308,6 +316,14 @@ public final class Controls {
                 .hint("Usada nos cartões com vidro escuro")
                 .help("Aumenta ou reduz a opacidade do vidro escuro das notificações. Em 14%, mantém os materiais escuros anteriores; não altera o pop-up nem o bloqueio.")
                 .show(FAITH, Channel.REGION));
+        put(c("mediaart", "Opacidade da capa de mídia").fmt(Format.PERCENT_1).in(GLASS, STD).on(SH)
+                .off("Capa nativa")
+                .hint("Capa do álbum sobre o vidro do player")
+                .help("Opacidade da capa do álbum no player da central e no cartão de mídia das"
+                        + " atividades ao vivo, de 5% a 100%. Com o vidro ativo, o fundo opaco e a"
+                        + " película da Samsung saem e a capa deixa o vidro aparecer; os controles e"
+                        + " a onda não mudam. 0% devolve a capa nativa.")
+                .show(BEHAV, Channel.NONE));
         put(c("shadeblur", "Desfoque próprio por cartão").fmt(Format.TOGGLE).in(GLASS, ADV)
                 .on(SH).feature("per_card_blur")
                 .help("Cada cartão expandido ganha seu próprio desfoque em vez de usar só o do"
