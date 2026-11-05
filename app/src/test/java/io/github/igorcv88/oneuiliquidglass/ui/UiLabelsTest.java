@@ -5,6 +5,7 @@ import static org.junit.Assert.assertTrue;
 
 import android.content.Context;
 import io.github.igorcv88.oneuiliquidglass.config.Controls;
+import io.github.igorcv88.oneuiliquidglass.R;
 import io.github.igorcv88.oneuiliquidglass.i18n.AppLanguage;
 import io.github.igorcv88.oneuiliquidglass.ui.preview.NotificationPreview;
 import org.junit.Test;
@@ -24,6 +25,8 @@ public class UiLabelsTest {
         assertEquals("Per-card blur", UiLabels.layer(en, "per_card_blur"));
         assertEquals("Grid", UiLabels.backdrop(en, NotificationPreview.Backdrop.GRID));
         assertEquals("2 settings", UiLabels.count(en, 2));
+        assertEquals("Default: 50 %", en.getString(R.string.control_default, "50 %"));
+        assertEquals("Saved in app: 50 %", en.getString(R.string.control_saved_in_app, "50 %"));
         assertTrue(SearchSheet.matchesControl(en, Controls.get("liveradius"), "glass and blur"));
         assertTrue(SearchSheet.matchesControl(en, Controls.get("liveradius"), "LIVERADIUS"));
         AppLanguage.set(base, AppLanguage.PORTUGUESE);
@@ -32,6 +35,8 @@ public class UiLabelsTest {
         assertEquals("Desfoque por cartão", UiLabels.layer(pt, "per_card_blur"));
         assertEquals("Grade", UiLabels.backdrop(pt, NotificationPreview.Backdrop.GRID));
         assertEquals("2 ajustes", UiLabels.count(pt, 2));
+        assertEquals("Padrão: 50 %", pt.getString(R.string.control_default, "50 %"));
+        assertEquals("Salvo no aplicativo: 50 %", pt.getString(R.string.control_saved_in_app, "50 %"));
         assertTrue(SearchSheet.matchesControl(pt, Controls.get("liveradius"), "VIDRO E DESFOQUE"));
         assertTrue(SearchSheet.matchesControl(pt, Controls.get("liveradius"), "DESFOQUE"));
     }
