@@ -4,6 +4,8 @@ import android.view.*;
 import android.widget.*;
 
 import io.github.igorcv88.oneuiliquidglass.Config;
+import io.github.igorcv88.oneuiliquidglass.R;
+import io.github.igorcv88.oneuiliquidglass.i18n.AppLanguage;
 import io.github.igorcv88.oneuiliquidglass.config.*;
 import io.github.igorcv88.oneuiliquidglass.live.SfLive;
 import io.github.igorcv88.oneuiliquidglass.ui.kit.*;
@@ -32,6 +34,11 @@ public final class SettingsPage implements Page {
 
         content.addView(Ui.section(a, t, "Aparência"));
         LinearLayout look = Ui.card(a, t);
+        LinearLayout languageRow = Ui.listRow(a, t, Icon.SETTINGS, a.getString(R.string.language),
+                AppLanguage.PORTUGUESE.equals(AppLanguage.get(a)) ? "Português (Brasil)" : "English", Ui.chevron(a, t));
+        languageRow.setOnClickListener(v -> chooseLanguage());
+        look.addView(languageRow);
+        look.addView(Ui.divider(a, t, t.dp(72)));
         themeRow = Ui.listRow(a, t, Icon.SUN, "Tema", "", Ui.chevron(a, t));
         themeRow.setOnClickListener(v -> chooseTheme());
         look.addView(themeRow);
@@ -133,6 +140,14 @@ public final class SettingsPage implements Page {
                     host.model().ui.edit().putString("theme", v).apply();
                     host.rebuild();
                 });
+        s.show();
+    }
+
+    private void chooseLanguage() {
+        Sheet s = new Sheet(host.activity(), t, host.activity().getString(R.string.language));
+        s.choices(new String[][] {{AppLanguage.ENGLISH, "English", null},
+                        {AppLanguage.PORTUGUESE, "Português (Brasil)", null}},
+                AppLanguage.get(host.activity()), host::changeLanguage);
         s.show();
     }
 
