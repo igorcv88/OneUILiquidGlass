@@ -255,7 +255,7 @@
     <string name="search_all_surfaces">Todos os ambientes</string>
     <string name="search_surfaces_join">%1$s e %2$s</string>
     <string name="error_number">Digite um número</string>
-    <string name="error_media_range">Use 0% para a capa nativa ou de 50% a 100%</string>
+    <string name="error_media_range">Use 0% para a capa nativa ou de 5% a 100%</string>
     <string name="error_value_range">Use de %1$s a %2$s</string>
     <string name="error_invalid_value">Valor fora do intervalo permitido</string>
     <string name="error_color">Cor esperada: RRGGBB ou RRGGBBAA</string>

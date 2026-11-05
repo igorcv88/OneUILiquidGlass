@@ -15,7 +15,7 @@ import java.util.function.Function;
 /**
  * Editor for one control. Shows what changes (less / now / more samples focused on the part it
  * affects, or an honest "no visual sample"), the value with a numeric field, the default, why it
- * is inactive, and the technical name only inside activity.getString(R.string.control_technical).
+ * is inactive, and the technical name only inside the technical details section.
  */
 final class ControlSheet extends Sheet {
     private final Host host;
@@ -195,7 +195,7 @@ final class ControlSheet extends Sheet {
             default:
                 break;
         }
-        scale = Scale.of(c);
+        scale = Scale.of(c, working);
         LinearLayout top = Ui.row(activity);
         valueText = Ui.text(activity, t, ControlValues.display(host.activity(), c, working), Theme.TITLE, t.ink, true);
         top.addView(valueText, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
@@ -287,7 +287,11 @@ final class ControlSheet extends Sheet {
     private void setWorking(String raw, boolean syncSlider) {
         working = raw;
         if (valueText != null) valueText.setText(ControlValues.display(host.activity(), c, raw));
-        if (slider != null && syncSlider) slider.set(scale.index(raw));
+        if (slider != null && syncSlider) {
+            scale = Scale.of(c, raw);
+            slider.configure(scale.steps, scale.index(c.spec().defaultValue), scale.auto);
+            slider.set(scale.index(raw));
+        }
         if (colorPicker != null) colorPicker.setColor(raw);
         if (field != null) {
             String edit = scale == null ? raw : ValueFormat.isAuto(c, raw) ? "-1" : ValueFormat.isOff(c, raw) ? "0" : ValueFormat.toEdit(c, raw, host.activity().getResources().getConfiguration().getLocales().get(0));

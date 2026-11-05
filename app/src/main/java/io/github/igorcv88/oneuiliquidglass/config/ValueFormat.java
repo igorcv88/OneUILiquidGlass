@@ -174,8 +174,9 @@ public final class ValueFormat {
             default:
                 break;
         }
-        if (c.key.equals("mediaart") && n > 0 && n < .5)
-            throw new IllegalArgumentException("Use 0% para a capa nativa ou de 50% a 100%");
+        if (c.key.equals("mediaart") && n > 0 && n < .05)
+            throw new IllegalArgumentException("Use 0% para a capa nativa ou de 5% a 100%");
+        if (c.key.equals("mediaart") && n >= .05 && n < .5) return s.validate(plain(n));
         if (s.step > 0 && s.type != SettingSpec.Type.INT)
             n = BigDecimal.valueOf(n).divide(BigDecimal.valueOf(s.step), 0, RoundingMode.HALF_UP)
                     .multiply(BigDecimal.valueOf(s.step)).doubleValue();
