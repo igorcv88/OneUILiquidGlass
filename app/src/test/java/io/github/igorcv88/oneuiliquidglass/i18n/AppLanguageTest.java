@@ -5,6 +5,9 @@ import static org.junit.Assert.assertEquals;
 import android.content.Context;
 import io.github.igorcv88.oneuiliquidglass.R;
 import android.content.res.Configuration;
+import io.github.igorcv88.oneuiliquidglass.MainActivity;
+import org.robolectric.Robolectric;
+import org.robolectric.android.controller.ActivityController;
 import android.os.LocaleList;
 
 import org.junit.Before;
@@ -56,6 +59,26 @@ public class AppLanguageTest {
                 pt.getString(R.string.surface_lock)));
         assertEquals("Ativo em 2 de 3 ambientes", pt.getString(R.string.home_active_count, 2));
         assertEquals("3 ajustes foram alterados fora do app.", pt.getString(R.string.home_conflict_many, 3));
+    }
+
+    @Test public void activityRecreationKeepsLanguageAndUnrelatedPreferences() {
+        context.getSharedPreferences("ui", Context.MODE_PRIVATE).edit()
+                .putBoolean("reduceMotion", true).commit();
+        ActivityController<MainActivity> controller = Robolectric.buildActivity(MainActivity.class).setup();
+        try {
+            MainActivity first = controller.get();
+            first.changeLanguage(AppLanguage.PORTUGUESE);
+            assertEquals("pt-BR", first.getResources().getConfiguration().getLocales().get(0).toLanguageTag());
+            controller.recreate();
+            MainActivity recreated = controller.get();
+            assertEquals("pt-BR", recreated.getResources().getConfiguration().getLocales().get(0).toLanguageTag());
+            assertEquals(true, recreated.getSharedPreferences("ui", Context.MODE_PRIVATE).getBoolean("reduceMotion", false));
+            recreated.changeLanguage(AppLanguage.ENGLISH);
+            assertEquals("en", recreated.getResources().getConfiguration().getLocales().get(0).toLanguageTag());
+            assertEquals(true, recreated.getSharedPreferences("ui", Context.MODE_PRIVATE).getBoolean("reduceMotion", false));
+        } finally {
+            controller.pause().stop().destroy();
+        }
     }
 
 }
