@@ -308,6 +308,8 @@ final class ControlSheet extends Sheet {
         if (field == null) return true;
         String text = field.getText().toString().trim();
         try {
+            // Preserve a legacy opacity below 50% unless the user changes it.
+            if (c.key.equals("mediaart") && text.equals(ValueFormat.toEdit(c, working))) return true;
             String raw;
             if (c.format == Controls.Format.COLOR) raw = c.spec().validate(text);
             else if (scale.auto && text.equals("-1")) raw = c.spec().validate("-1");

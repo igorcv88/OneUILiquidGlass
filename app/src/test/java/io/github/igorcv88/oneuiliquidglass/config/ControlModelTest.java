@@ -311,7 +311,9 @@ public class ControlModelTest {
         assertEquals("5 %", ValueFormat.display(c, "0.05"));
         assertEquals("25 %", ValueFormat.display(c, "0.25"));
         assertEquals("100 %", ValueFormat.display(c, "1"));
-        assertEquals("0.25", ValueFormat.fromEdit(c, "25"));
+        assertThrows(IllegalArgumentException.class, () -> ValueFormat.fromEdit(c, "25"));
+        assertEquals("0.5", ValueFormat.fromEdit(c, "50"));
+        assertEquals("0", ValueFormat.fromEdit(c, "0"));
         assertThrows(IllegalArgumentException.class, () -> ValueFormat.fromEdit(c, "105"));
     }
 
