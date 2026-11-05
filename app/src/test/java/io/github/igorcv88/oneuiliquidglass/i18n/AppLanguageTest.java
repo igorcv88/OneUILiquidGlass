@@ -6,6 +6,7 @@ import android.content.Context;
 import io.github.igorcv88.oneuiliquidglass.R;
 import android.content.res.Configuration;
 import io.github.igorcv88.oneuiliquidglass.MainActivity;
+import io.github.igorcv88.oneuiliquidglass.Config;
 import org.robolectric.Robolectric;
 import org.robolectric.android.controller.ActivityController;
 import android.os.LocaleList;
@@ -63,7 +64,8 @@ public class AppLanguageTest {
 
     @Test public void activityRecreationKeepsLanguageAndUnrelatedPreferences() {
         context.getSharedPreferences("ui", Context.MODE_PRIVATE).edit()
-                .putBoolean("reduceMotion", true).commit();
+                .putBoolean("reduceMotion", true).putBoolean("favorite.liveradius", true).commit();
+        Config.open(context).edit().putString("desired.mediaart", "0.75").commit();
         ActivityController<MainActivity> controller = Robolectric.buildActivity(MainActivity.class).setup();
         try {
             MainActivity first = controller.get();
@@ -73,9 +75,13 @@ public class AppLanguageTest {
             MainActivity recreated = controller.get();
             assertEquals("pt-BR", recreated.getResources().getConfiguration().getLocales().get(0).toLanguageTag());
             assertEquals(true, recreated.getSharedPreferences("ui", Context.MODE_PRIVATE).getBoolean("reduceMotion", false));
+            assertEquals(true, recreated.getSharedPreferences("ui", Context.MODE_PRIVATE).getBoolean("favorite.liveradius", false));
+            assertEquals("0.75", Config.open(recreated).getString("desired.mediaart", null));
             recreated.changeLanguage(AppLanguage.ENGLISH);
             assertEquals("en", recreated.getResources().getConfiguration().getLocales().get(0).toLanguageTag());
             assertEquals(true, recreated.getSharedPreferences("ui", Context.MODE_PRIVATE).getBoolean("reduceMotion", false));
+            assertEquals(true, recreated.getSharedPreferences("ui", Context.MODE_PRIVATE).getBoolean("favorite.liveradius", false));
+            assertEquals("0.75", Config.open(recreated).getString("desired.mediaart", null));
         } finally {
             controller.pause().stop().destroy();
         }
