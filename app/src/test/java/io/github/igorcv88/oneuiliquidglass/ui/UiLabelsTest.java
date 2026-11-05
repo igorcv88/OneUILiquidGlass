@@ -28,6 +28,8 @@ public class UiLabelsTest {
         assertEquals("2 settings", UiLabels.count(en, 2));
         assertEquals("Pop-up and Lock screen", SearchSheet.surfaces(en, Controls.get("liveradius")));
         assertEquals("Enter a number", en.getString(R.string.error_number));
+        assertEquals("Restart System UI?", en.getString(R.string.restart_ui_title));
+        assertTrue(en.getString(R.string.restart_userspace_warning).contains("all open apps"));
         assertEquals("Enable adaptive text", ControlReasons.text(en, "Ative o texto adaptativo"));
         assertEquals("Glass is off on Lock screen", ControlReasons.text(en, "O vidro está desligado em Bloqueio"));
         assertEquals("The Edges layer is off", ControlReasons.text(en, "A camada Bordas está desligada"));
@@ -58,6 +60,8 @@ public class UiLabelsTest {
         assertEquals("2 ajustes", UiLabels.count(pt, 2));
         assertEquals("Pop-up e Bloqueio", SearchSheet.surfaces(pt, Controls.get("liveradius")));
         assertEquals("Digite um número", pt.getString(R.string.error_number));
+        assertEquals("Reiniciar a interface do sistema?", pt.getString(R.string.restart_ui_title));
+        assertTrue(pt.getString(R.string.restart_userspace_warning).contains("todos os apps"));
         assertEquals("Ative o texto adaptativo", ControlReasons.text(pt, "Ative o texto adaptativo"));
         assertEquals("O vidro está desligado em Bloqueio", ControlReasons.text(pt, "O vidro está desligado em Bloqueio"));
         assertEquals("Padrão: 50 %", pt.getString(R.string.control_default, "50 %"));
