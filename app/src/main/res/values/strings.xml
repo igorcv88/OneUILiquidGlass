@@ -123,4 +123,6 @@
     <string name="settings_pending_many"> · %1$d settings pending</string>
     <string name="settings_conflict_one">1 setting</string>
     <string name="settings_conflict_many">%1$d settings</string>
+    <string name="switch_on">On</string>
+    <string name="switch_off">Off</string>
 </resources>

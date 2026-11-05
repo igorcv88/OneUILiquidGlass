@@ -123,4 +123,6 @@
     <string name="settings_pending_many"> · %1$d ajustes pendentes</string>
     <string name="settings_conflict_one">1 ajuste</string>
     <string name="settings_conflict_many">%1$d ajustes</string>
+    <string name="switch_on">Ligado</string>
+    <string name="switch_off">Desligado</string>
 </resources>

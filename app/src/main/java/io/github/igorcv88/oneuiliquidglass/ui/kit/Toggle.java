@@ -9,6 +9,8 @@ import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.widget.Switch;
 
+import io.github.igorcv88.oneuiliquidglass.R;
+
 /**
  * Switch drawn by the app (52 x 32 dp track inside a 48 dp target), so One UI's OEM switch theme
  * never leaks in. Reads as a Switch to TalkBack. Usually placed inside a row that forwards clicks.
@@ -121,6 +123,7 @@ public final class Toggle extends View {
         super.onInitializeAccessibilityNodeInfo(info);
         info.setCheckable(true);
         info.setChecked(checked);
+        info.setStateDescription(getContext().getString(checked ? R.string.switch_on : R.string.switch_off));
     }
 
     @Override
