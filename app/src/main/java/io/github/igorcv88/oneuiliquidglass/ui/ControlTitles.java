@@ -145,6 +145,7 @@ final class ControlTitles {
             case "Ícone ligado · fundo claro": return R.string.control_title_99508c52e4b4;
             case "Ícone ligado · fundo colorido": return R.string.control_title_8f72472bf1f8;
             case "Índice de refração": return R.string.control_title_f2f3c60c5911;
+            case "Óptica da Now Bar (comparação)": return R.string.control_title_1cb1cc084b68;
             default: return 0;
         }
     }
