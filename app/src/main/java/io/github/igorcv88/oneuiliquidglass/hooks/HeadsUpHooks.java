@@ -120,6 +120,8 @@ public final class HeadsUpHooks {
         return thread;
     });
     private final Runnable p3PopupTick = this::sampleP3PopupAsync;
+    /** Kept strongly while BackdropMotion's listener registry holds only weak references. */
+    private final Runnable p3PopupTouchSignal = this::wakeP3PopupWatchOnTouch;
     private boolean p3PopupWatching;
     private boolean p3PopupQueryInFlight;
     private int p3PopupWatchGeneration;
@@ -139,11 +141,22 @@ public final class HeadsUpHooks {
         }
         return null;
     }
+    private long p3PopupInterval(long now) {
+        return P3EdgeSelection.popupWatchInterval(now, BackdropMotion.lastActive(), BackdropEvents.lastChange());
+    }
     private void startP3PopupWatch() {
         if (p3PopupWatching || visibleP3Popup() == null) return;
         p3PopupWatching = true;
-        Probe.log("P3_POPUP_WATCH", "state=start intervalMs=" + P3EdgeSelection.POPUP_WATCH_INTERVAL_MS);
-        main.postDelayed(p3PopupTick, P3EdgeSelection.POPUP_WATCH_INTERVAL_MS);
+        long interval = p3PopupInterval(android.os.SystemClock.uptimeMillis());
+        Probe.log("P3_POPUP_WATCH", "state=start intervalMs=" + interval
+                + " idleMs=" + P3EdgeSelection.POPUP_WATCH_INTERVAL_MS);
+        main.postDelayed(p3PopupTick, interval);
+    }
+    /** A verified touchscreen gesture may change an in-app color mode without a task event. */
+    private void wakeP3PopupWatchOnTouch() {
+        if (!p3PopupWatching || p3PopupQueryInFlight) return;
+        main.removeCallbacks(p3PopupTick);
+        main.postDelayed(p3PopupTick, P3EdgeSelection.POPUP_WATCH_TOUCH_WAKE_MS);
     }
     private void stopP3PopupWatch() {
         if (!p3PopupWatching) return;
@@ -160,9 +173,12 @@ public final class HeadsUpHooks {
         if (v == null) { stopP3PopupWatch(); return; }
         Context context = v.getContext();
         int generation = p3PopupWatchGeneration;
+        long sampleStarted = android.os.SystemClock.uptimeMillis();
         p3PopupQueryInFlight = true;
         p3PopupWorker.execute(() -> {
+            long queryStarted = android.os.SystemClock.elapsedRealtimeNanos();
             int mode = P3DisplayProbe.activeColorMode(context);
+            long queryUs = (android.os.SystemClock.elapsedRealtimeNanos() - queryStarted) / 1000;
             main.post(() -> {
                 if (!p3PopupWatching || generation != p3PopupWatchGeneration) return;
                 p3PopupQueryInFlight = false;
@@ -170,14 +186,25 @@ public final class HeadsUpHooks {
                     boolean compatEnabled = enabled && P3DisplayProbe.edgeCompatEnabled();
                     boolean collapsed = !Boolean.TRUE.equals(shadeExpanded);
                     boolean unlocked = barState != null && barState == Eligibility.BAR_SHADE;
+                    boolean modeChanged = false;
                     for (State state : new ArrayList<>(states.values())) {
                         View current = state.background.get();
                         if (P3EdgeSelection.watchPopup(compatEnabled,
                                 state.glass != null, state.pill, state.isHeadsUp(),
                                 current != null && current.isAttachedToWindow(),
                                 current != null && current.isShown(),
-                                collapsed, unlocked))
+                                collapsed, unlocked)) {
+                            modeChanged |= state.p3LastMode != mode;
                             state.applyP3Mode(mode, "popupWatch", true);
+                        }
+                    }
+                    if (modeChanged) {
+                        long now = android.os.SystemClock.uptimeMillis();
+                        Probe.log("P3_POPUP_TIMING", "mode=" + mode + " queryUs=" + queryUs
+                                + " roundTripMs=" + (now - sampleStarted)
+                                + " touchAgoMs=" + (now - BackdropMotion.lastActive())
+                                + " taskAgoMs=" + (now - BackdropEvents.lastChange())
+                                + " intervalMs=" + p3PopupInterval(now));
                     }
                 } catch (RuntimeException | LinkageError e) {
                     Probe.error("P3_POPUP_WATCH_FAILED", e);
@@ -185,7 +212,12 @@ public final class HeadsUpHooks {
                     return;
                 }
                 if (visibleP3Popup() == null) stopP3PopupWatch();
-                else main.postDelayed(p3PopupTick, P3EdgeSelection.POPUP_WATCH_INTERVAL_MS);
+                else {
+                    long now = android.os.SystemClock.uptimeMillis();
+                    long remaining = p3PopupInterval(now) - (now - sampleStarted);
+                    main.postDelayed(p3PopupTick,
+                            Math.max(P3EdgeSelection.POPUP_WATCH_MIN_GAP_MS, remaining));
+                }
             });
         });
     }
@@ -342,6 +374,7 @@ public final class HeadsUpHooks {
         // A task change re-measures the shown surfaces at once (periodic sampling stays the fallback).
         BackdropEvents.install(loader);
         BackdropEvents.add(this::backdropChanged);
+        BackdropMotion.listen(p3PopupTouchSignal);
         installShade();
         installBarState();
         installScrimClamp();

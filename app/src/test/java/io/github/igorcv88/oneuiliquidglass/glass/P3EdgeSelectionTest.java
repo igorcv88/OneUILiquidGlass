@@ -51,4 +51,20 @@ public final class P3EdgeSelectionTest {
                     flags[4], flags[5], flags[6], flags[7]));
         }
     }
+
+    @Test public void watcherAcceleratesForTouchAndTaskChangesThenReturnsToIdle() {
+        long now = 5000;
+        long active = P3EdgeSelection.POPUP_WATCH_ACTIVE_INTERVAL_MS;
+        long idle = P3EdgeSelection.POPUP_WATCH_INTERVAL_MS;
+        assertTrue(active < idle);
+        assertEquals(idle, P3EdgeSelection.popupWatchInterval(now, -1, -1));
+        assertEquals(active, P3EdgeSelection.popupWatchInterval(now, 4800, -1));
+        assertEquals(active, P3EdgeSelection.popupWatchInterval(now, -1, 4800));
+        assertEquals(active, P3EdgeSelection.popupWatchInterval(now, 3801, -1));
+        assertEquals(idle, P3EdgeSelection.popupWatchInterval(now, 3800, -1));
+        assertEquals(idle, P3EdgeSelection.popupWatchInterval(now, -1, 3800));
+        // A future or uninitialized signal cannot accidentally keep the fast path alive.
+        assertEquals(idle, P3EdgeSelection.popupWatchInterval(now, 5100, -1));
+        assertEquals(idle, P3EdgeSelection.popupWatchInterval(now, -1, 5100));
+    }
 }
