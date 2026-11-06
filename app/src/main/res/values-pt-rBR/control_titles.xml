@@ -3,14 +3,15 @@
     <string name="control_title_4d394670dffa">Ajustar relógio e data</string>
     <string name="control_title_5e2c27528f46">Ajustar ícone pequeno</string>
     <string name="control_title_46d2388cabed">Alcance da luz</string>
-    <string name="control_title_5bb2279cf09d">Alpha da borda (teste)</string>
     <string name="control_title_9cbee42ce9d4">Amostras do bloqueio</string>
     <string name="control_title_e8d1e327dbeb">Amostras do pop-up</string>
+    <string name="control_title_fe0c016c9945">Borda aditiva (compatibilidade P3)</string>
     <string name="control_title_bf8389203ea5">Brilho do vidro escuro</string>
     <string name="control_title_f40464148fea">Brilho especular</string>
     <string name="control_title_6953361f458b">Brilho no topo</string>
     <string name="control_title_9c77baea15a5">Contenção de brilho</string>
     <string name="control_title_4e1de10ed349">Contorno</string>
+    <string name="control_title_34c73e681838">Contorno fixo (comparação)</string>
     <string name="control_title_f6b5fd505d01">Contorno no vidro claro</string>
     <string name="control_title_45d9db06c0ee">Contorno sobre fundo claro</string>
     <string name="control_title_b11c820a9f04">Contorno sobre fundo colorido</string>

@@ -3,14 +3,15 @@
     <string name="control_title_4d394670dffa">Adjust clock and date</string>
     <string name="control_title_5e2c27528f46">Adjust small icon</string>
     <string name="control_title_46d2388cabed">Light reach</string>
-    <string name="control_title_5bb2279cf09d">Edge alpha (test)</string>
     <string name="control_title_9cbee42ce9d4">Lock screen samples</string>
     <string name="control_title_e8d1e327dbeb">Pop-up samples</string>
+    <string name="control_title_fe0c016c9945">Additive edge (P3 compatibility)</string>
     <string name="control_title_bf8389203ea5">Dark glass brightness</string>
     <string name="control_title_f40464148fea">Specular highlight</string>
     <string name="control_title_6953361f458b">Top sheen</string>
     <string name="control_title_9c77baea15a5">Highlight suppression</string>
     <string name="control_title_4e1de10ed349">Outline</string>
+    <string name="control_title_34c73e681838">Fixed rim (comparison)</string>
     <string name="control_title_f6b5fd505d01">Light glass outline</string>
     <string name="control_title_45d9db06c0ee">Outline on light background</string>
     <string name="control_title_b11c820a9f04">Outline on colored background</string>
