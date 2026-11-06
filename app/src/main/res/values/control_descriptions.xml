@@ -109,7 +109,7 @@
     <string name="control_description_sf_kgcore">Adjusts blur in the center of lock screen cards. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_kgcorecap">Limits the effective inner blur radius on the lock screen. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_kgcoredim">Darkens the center of lock screen cards. Changes apply after userspace restarts.</string>
-    <string name="control_description_sf_kgdepth">Sets how far the sampled background light extends into lock screen cards; darker areas still emit less light. Changes apply after userspace restarts.</string>
+    <string name="control_description_sf_kgdepth">Sets the maximum reach (px) of the faint inward light veil on lock screen cards. The bright, background-reactive rim stays narrow and unaffected by this setting. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_kgedgeblur">Adjusts blur at the edges of lock screen cards. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_kgfixedrim">On (default): preserve the outline and reflections that give the lens depth. Off: diagnostic only; removing all three makes the lock-screen card visually flat. Blur radii do not change. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_kgflat">Adjusts how strongly the lock screen background brightness is made uniform. Changes apply after userspace restarts.</string>

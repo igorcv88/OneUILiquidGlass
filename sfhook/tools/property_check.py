@@ -66,7 +66,7 @@ int main(void) {
         rim[mode] = (out / "mod_002.frag").read_text()
     dynamic, legacy = rim["0"], rim["1"]
     assert rim["default"] == legacy, "Default KG optics must preserve the confirmed lens appearance"
-    assert "oulg_glow(s, uv, 0.500, 24.000, 0.100, 0.280)" in dynamic
+    assert "oulg_glow(s, uv, 0.500, 16.000, 0.100, 0.280)" in dynamic
     replacements = {
         "clamp(0.720 * pow": "clamp(0.000 * pow",
         "line = 0.620 * exp": "line = 0.000 * exp",
@@ -78,38 +78,55 @@ int main(void) {
     assert legacy == dynamic, "KG rim mode unexpectedly modified blur, body, or other profiles"
     print("lockscreen: original optics restored by default; local-only probe and unchanged blur confirmed")
 
-    # The KG penetration slider must change only KG's depth argument in the generated shader,
-    # without affecting source sampling, fixed rim, other profiles or the input material.
+    # KG reach is literal support distance, separate from the bright dynamic rim. The slider
+    # must alter only the support argument, without affecting fixed rim, other profiles or material.
     depth = {}
-    for value in ("12", "24", "48", "49"):
+    for value in ("4", "16", "24", "48", "49"):
         out = temp / ("kgdepth_" + value)
         out.mkdir()
         subprocess.run([str(exe), str(root / "tools/testdata/synthetic_dump.txt"), str(out), "0",
                         "kgdepth=" + value], check=True, stdout=subprocess.DEVNULL)
         depth[value] = (out / "mod_002.frag").read_text()
-    assert depth["24"] == rim["default"]
-    assert depth["49"] == depth["24"], "invalid KG depth must fall back to default"
-    for value in ("12", "48"):
+    assert depth["16"] == rim["default"]
+    assert depth["49"] == depth["16"], "invalid KG depth must fall back to default"
+    for value in ("4", "24", "48"):
         assert f"oulg_glow(s, uv, 0.500, {float(value):.3f}, 0.100, 0.280)" in depth[value]
         assert depth[value].replace(f"oulg_glow(s, uv, 0.500, {float(value):.3f},",
-                                    "oulg_glow(s, uv, 0.500, 24.000,") == depth["24"]
-    assert "mix(u * u, sqrt(u), kg)" in dynamic
-    assert "0.25 * oulg_rad" in dynamic, "light must vanish before the inner medial axis"
-    def light_at(luma, depth, radius=55.0, kg=False):
+                                    "oulg_glow(s, uv, 0.500, 16.000,") == depth["16"]
+    assert "highp float reach = min(lmax, max(1.5, 0.90 * oulg_rad));" in dynamic
+    assert "mediump float rim = 1.60 * enter * exp(-0.5 * edgeDistance * edgeDistance);" in dynamic
+    assert "mediump float veil = 0.18 * enter * max(0.0, 1.0 - d / reach);" in dynamic
+    assert "0.25 * oulg_rad" in dynamic, "other profiles must keep the medial-axis cap"
+
+    def light_at(luma, d, radius=55.0, kg=False, kg_reach=16.0):
         u = max(0., min(1., (luma - 0.10) / 0.90))
-        width_luma = sqrt(u) if kg else u * u
-        reach = 24.0 if kg else 12.0
-        lam = min(1.5 + (reach - 1.5) * width_luma, radius / 4.)
-        x = max(0., min(1., (depth - 2.5 * lam) / (1.5 * lam)))
+        enter = min(0.50 * u, 0.28)
+        if kg:
+            reach = min(kg_reach, max(1.5, 0.90 * radius))
+            rim = 1.60 * enter * exp(-0.5 * (d / 1.8) ** 2)
+            veil = 0.18 * enter * max(0., 1.0 - d / reach)
+            return min(rim + veil, 0.55)
+        lam = max(min(1.5 + (12.0 - 1.5) * u * u, radius / 4.), 0.5)
+        x = max(0., min(1., (d - 2.5 * lam) / (1.5 * lam)))
         cutoff = 1.0 - x * x * (3.0 - 2.0 * x)
-        return min(0.50 * u, 0.28) * exp(-depth / lam) * cutoff
+        return enter * exp(-d / lam) * cutoff
+
     assert light_at(0.0, 0., kg=True) == 0.0
-    assert light_at(0.31, 10., kg=True) > 10 * light_at(0.31, 10., kg=False)
+    assert light_at(0.31, 1., kg=True) > light_at(0.31, 1., kg=False)
+    # At a fixed distance inside the card, 4/16/24 px must no longer render identically.
+    assert light_at(0.64, 8., kg=True, kg_reach=4.) < light_at(0.64, 8., kg=True, kg_reach=16.)
+    assert light_at(0.64, 8., kg=True, kg_reach=16.) < light_at(0.64, 8., kg=True, kg_reach=24.)
+    # The rim response itself must remain independent of the inward-veil support distance.
+    def rim_at(luma, d):
+        u = max(0., min(1., (luma - 0.10) / 0.90))
+        return 1.60 * min(0.50 * u, 0.28) * exp(-0.5 * (d / 1.8) ** 2)
+    assert rim_at(0.64, 0.) > 5 * (light_at(0.64, 9., kg=True, kg_reach=24.) - rim_at(0.64, 9.))
+    assert rim_at(1.0, 0.) > rim_at(0.31, 0.) > rim_at(0.0, 0.) == 0.0
     for luma in (0.11, 0.31, 0.41, 0.64, 1.0):
-        assert light_at(luma, 55., kg=True) == 0.0, "no light seam at card's medial axis"
+        assert light_at(luma, 55., kg=True) < 1e-100, "no light seam at card's medial axis"
         assert all(light_at(luma, d + 1., kg=True) <= light_at(luma, d, kg=True)
                    for d in range(55)), "light must decrease strictly inward"
-    print("lockscreen: mid-tone penetration, configurable depth and other-profile isolation passed")
+    print("lockscreen: independent dynamic rim, literal 4/16/24px veil reach, other-profile isolation passed")
 
     # A dedicated source-luminance probe separates missing backdrop samples from a failed light
     # blend on device. Mode 2 uses the same outline-coordinate texture read as oulg_glow. No probe

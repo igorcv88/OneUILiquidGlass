@@ -304,7 +304,8 @@ static float prop_float(const char *name, float fallback) {
 // of the refracted backdrop at the outline) and .qsdepth (penetration depth in px of light from a
 // white edge), the rest OULG_QS_* in refract.h. The edge
 // light of profiles 0-2: debug.oulg.sf.hulight, .kglight and .shadelight (gain; 0 restores v0.26
-// exactly). KG additionally controls the depth of mid-tone edge light with .kgdepth (px). Which
+// exactly). KG additionally controls only the faint inward light veil's maximum reach with
+// .kgdepth (px), leaving the bright, local backdrop-reactive rim independent. Which
 // profile a card gets travels in its tag, set live by the module.
 // .kggradient (0..1, default 1) enables the continuous glass/body transition;
 // .kggradient=0 with .kgcorecap=62 restores the v0.21 lockscreen reference.

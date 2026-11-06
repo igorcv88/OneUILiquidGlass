@@ -161,7 +161,7 @@ public class SettingsRegistryTest {
             {"sf.kgtone", "0"},
             {"sf.kgcoredim", "0"},
             {"sf.kglight", "0.50"},
-            {"sf.kgdepth", "24"},
+            {"sf.kgdepth", "16"},
             {"kgblurradius", "12"},
             {"kgdarkfill", "5"},
             {"sf.kgsat", "0.95"},

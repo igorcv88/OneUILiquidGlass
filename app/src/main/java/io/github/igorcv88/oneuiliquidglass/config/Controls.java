@@ -668,9 +668,10 @@ public final class Controls {
                 .help("Luz que entra pelo contorno dos cartões do bloqueio." + light)
                 .show(BEHAV, Channel.NONE));
         put(c("sf.kgdepth", "Alcance da luz dinâmica").fmt(Format.PX).in(LENS, ADV).on(KG)
-                .help("Até onde a luminosidade amostrada em cada trecho do contorno entra pelo"
-                        + " vidro do bloqueio. O efeito também depende do brilho do fundo: áreas"
-                        + " escuras continuam apagadas. Padrão experimental: 24 px." + restart)
+                .help("Alcance máximo, em pixels, do véu fraco que entra pelo vidro do bloqueio."
+                        + " A borda luminosa é concentrada em poucos pixels e mantém sua resposta"
+                        + " dinâmica independentemente deste alcance. Em cada trecho, o brilho vem"
+                        + " do fundo: áreas escuras continuam apagadas. Padrão: 16 px." + restart)
                 .show(BEHAV, Channel.NONE));
         put(c("sf.shadelight", "Luz pela borda (lente)").fmt(Format.PERCENT_1).in(LENS, ADV).on(SH)
                 .help("Luz que entra pelo contorno dos cartões da central." + light)

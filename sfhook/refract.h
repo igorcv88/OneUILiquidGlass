@@ -171,23 +171,33 @@
 // floor, cap) reads the backdrop at the nearest point of the outline (oulg_eo: from the sample to a
 // point 2 px inside the outline, set by the field and mapped to texture space by main) and returns
 // the light reaching this pixel, (colour, amount). With u = (luma - floor) / (1 - floor) of that
-// edge sample, the light entering is min(gain x u, cap) and it decays inward as exp(-d / lambda),
-// d the depth from the outline. Lambda grows with u^2 outside KG, with sqrt(u) on KG so midtone
-// light reaches farther in, while dark still adds none. One continuous field, with no fixed-width
-// band or inner edge: decay is monotonic. Lambda stays <= 0.25r to prevent a seam at the inner
-// medial axis. The light is cut smoothly between 2.5 and 4 lambda, exactly
-// zero at depth r and beyond, where the nearest outline point jumps (medial axis of the inner rect).
+// edge sample, the light entering is min(gain x u, cap). Outside KG it decays inward as
+// exp(-d/lambda), with lambda growing as u^2 and bounded by r/4. On KG the source is split into
+// a short, stronger rim (fixed Gaussian sigma 1.8 px) and a much weaker inward veil. Only that
+// veil uses lmax: an actual support distance in px, fading linearly to zero at d >= lmax,
+// capped at 0.9r
+// to avoid a seam where the nearest outline point jumps (medial axis). Increasing lmax changes
+// how far the veil reaches, never the intensity of the rim. Both terms still depend on the same
+// local backdrop luminance u; black produces neither. All light decreases monotonically inward.
 // The colour is white tinted 35 % toward the edge sample's hue. Moving content moves the light.
 #define OULG_FS_GLOW \
     "mediump vec4 oulg_glow(sampler2D s, highp vec2 uv, mediump float gain, highp float lmax, mediump float fl, mediump float cap) {\n" \
     "  mediump vec4 e = textureLod(s, uv + oulg_eo, 0.0);\n" \
     "  mediump vec3 rgb = e.rgb / max(e.a, 1e-3);\n" \
     "  mediump float u = clamp((dot(rgb, vec3(0.2126, 0.7152, 0.0722)) - fl) / (1.0 - fl), 0.0, 1.0);\n" \
-    "  mediump float kg = oulg_pf > 0.5 && oulg_pf < 1.5 ? 1.0 : 0.0;\n" \
-    "  highp float widthLuma = mix(u * u, sqrt(u), kg);\n" \
-    "  highp float lam = max(min(1.5 + (lmax - 1.5) * widthLuma, 0.25 * oulg_rad), 0.5);\n" \
     "  highp float d = max(oulg_dp, 0.0);\n" \
-    "  mediump float lit = min(gain * u, cap) * exp(-d / lam) * (1.0 - smoothstep(2.5 * lam, 4.0 * lam, d));\n" \
+    "  mediump float enter = min(gain * u, cap);\n" \
+    "  mediump float lit;\n" \
+    "  if (oulg_pf > 0.5 && oulg_pf < 1.5) {\n" \
+    "    highp float reach = min(lmax, max(1.5, 0.90 * oulg_rad));\n" \
+    "    highp float edgeDistance = d / 1.8;\n" \
+    "    mediump float rim = 1.60 * enter * exp(-0.5 * edgeDistance * edgeDistance);\n" \
+    "    mediump float veil = 0.18 * enter * max(0.0, 1.0 - d / reach);\n" \
+    "    lit = min(rim + veil, 0.55);\n" \
+    "  } else {\n" \
+    "    highp float lam = max(min(1.5 + (lmax - 1.5) * u * u, 0.25 * oulg_rad), 0.5);\n" \
+    "    lit = enter * exp(-d / lam) * (1.0 - smoothstep(2.5 * lam, 4.0 * lam, d));\n" \
+    "  }\n" \
     "  mediump float m = max(max(rgb.r, rgb.g), max(rgb.b, 1e-3));\n" \
     "  return vec4(mix(vec3(1.0), clamp(rgb / m, 0.0, 1.0), 0.35), lit);\n" \
     "}\n" \
@@ -507,7 +517,7 @@ struct oulg_profile { float core; int taps; float ramp; float sat; float tone; f
 // carry text (profile 2). Gain 0 restores v0.26 exactly for that profile (no code is emitted).
 #define OULG_HU_LIGHT_DEFAULT 0.40f
 #define OULG_KG_LIGHT_DEFAULT 0.50f
-#define OULG_KG_LDEPTH_DEFAULT 24.0f
+#define OULG_KG_LDEPTH_DEFAULT 16.0f
 #define OULG_SHADE_LIGHT_DEFAULT 0.30f
 #define OULG_EDGE_LDEPTH_DEFAULT 12.0f
 #define OULG_EDGE_LFLOOR_DEFAULT 0.10f

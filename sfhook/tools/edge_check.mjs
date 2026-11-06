@@ -33,7 +33,7 @@ const [work, refDir, png] = process.argv.slice(2);
 const W = 800, H = 520, CARD = { x: 40, y: 110, w: 720, h: 300, r: 145 };
 // The refract.h defaults this check is written against.
 const QS = { depth: 18.0, lens: 0.30 };
-const EDGE_DEPTH = 12.0, KG_EDGE_DEPTH = 24.0;
+const EDGE_DEPTH = 12.0, KG_EDGE_DEPTH = 16.0;
 
 // Rewrites of the synthetic dump for one parameter set, built from a refract.h + refract_check.c.
 const exes = {};
@@ -54,6 +54,11 @@ function build(name, overrides, srcDir = null) {
 const sets = {
   cur: build('cur'),
   light: build('light', 'qslens=0'),
+  // Same locked-card material, separate compiled values of the actual inward-veil reach.
+  kg4: build('kg4', 'kgfixedrim=0,kgdepth=4'),
+  kg16: build('kg16', 'kgfixedrim=0,kgdepth=16'),
+  kg24: build('kg24', 'kgfixedrim=0,kgdepth=24'),
+  kgdark: build('kgdark', 'kgfixedrim=0,kglight=0'),
   // Opacity 1 at the outline: the source row is read from rgb / alpha, 8-bit premultiplied.
   lens: build('lens', 'qslight=0,qsbody=1'),
   dark: build('dark', 'hulight=0,kglight=0,shadelight=0'),
@@ -149,6 +154,11 @@ for (const prog of PROGS) {
     job('cur', prog, pf, s); job('dark', prog, pf, s);
     if (sets.ref) job('ref', prog, pf, s);
   }
+  for (const set of ['kg4', 'kg16', 'kg24']) {
+    job(set, prog, 1, 'grey75');
+    job(set, prog, 1, 'black');
+  }
+  job('kgdark', prog, 1, 'black');
 }
 
 const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
@@ -298,6 +308,26 @@ for (const prog of PROGS) {
     console.log(`profile ${pf} ${prog}: edge light over grey +${outline.toFixed(3)} at 1-3 px, past ${4 * (pf === 1 ? KG_EDGE_DEPTH : EDGE_DEPTH)} px ${deep}/255, over black ${blackDiff}/255`
       + (refDiff === null ? '' : `, gain 0 vs reference ${refDiff}/255`));
   }
+  // 5. Lock-screen reach must be effective in GPU output, and leave the concentrated rim
+  // essentially unchanged. These were indistinguishable at 16/4 px in on-device screenshots.
+  const KG = name => img[`${name}/${prog}/p1/grey75`];
+  const ks = ['kg4', 'kg16', 'kg24'];
+  const kcol = (name, depth) => at(KG(name), 400, CARD.y + CARD.h - 1 - depth, 0);
+  const at8 = ks.map(name => kcol(name, 8));
+  check(at8[0] < at8[1] && at8[1] < at8[2],
+    `KG ${prog}: 4, 16, 24 px render without increasing inward light at 8 px (${at8.join(', ')})`);
+  const rim = ks.map(name => kcol(name, 1));
+  check(Math.max(...rim) - Math.min(...rim) <= 0.02,
+    `KG ${prog}: changing veil reach alters narrow rim by ${Math.max(...rim) - Math.min(...rim)}`);
+  for (const name of ks) {
+    const black = img[`${name}/${prog}/p1/black`];
+    const darkened = img[`kgdark/${prog}/p1/black`];
+    let diffBlack = 0;
+    for (const [x, y] of band.bottom) for (let ch = 0; ch < 3; ch++)
+      diffBlack = Math.max(diffBlack, Math.abs(at(black, x, y, ch) - at(darkened, x, y, ch)));
+    check(diffBlack <= 1 / 255, `KG ${name} ${prog}: black backdrop lights the rim (${diffBlack})`);
+  }
+  console.log(`KG ${prog}: 8 px inside, reach 4/16/24 -> ${at8.map(v => v.toFixed(4)).join(' / ')}; rim -> ${rim.map(v => v.toFixed(4)).join(' / ')}`);
 }
 // 4. The two programs draw the same card (inside it: outside, the harness gives neither coverage).
 let diff = 0;
