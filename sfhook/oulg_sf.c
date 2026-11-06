@@ -270,11 +270,14 @@ static int compiles(GLuint shader, const char *text) {
 // program already paired with it fails to link and Skia retries it unrewritten.
 static int vertex_broken;
 
-// Debug tint, read when a shader is compiled: changing it needs a surfaceflinger restart with the
-// shader cache cleared. The lens strength travels in the tag, set live by the module.
+// Shader diagnostics, read at compile time (requires a SurfaceFlinger restart/cache refresh):
+// 1 is the established magenta/cyan tag proof; 2 paints the raw backdrop luminance sampled at the
+// KG outline in green, before material, opacity and glow composition. 0 is the production path.
+// The lens strength travels in the tag, set live by the module.
 static int debug_tint(void) {
     char v[PROP_VALUE_MAX] = {0};
-    return __system_property_get("debug.oulg.sf.debug", v) > 0 && v[0] == '1';
+    if (__system_property_get("debug.oulg.sf.debug", v) <= 0) return 0;
+    return v[0] == '2' && !v[1] ? 2 : v[0] == '1' && !v[1] ? 1 : 0;
 }
 
 static float prop_float(const char *name, float fallback) {

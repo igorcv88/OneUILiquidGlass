@@ -76,3 +76,24 @@ int main(void) {
         legacy = legacy.replace(before, after)
     assert legacy == dynamic, "KG rim mode unexpectedly modified blur, body, or other profiles"
     print("lockscreen: original optics restored by default; local-only probe and unchanged blur confirmed")
+
+    # A dedicated source-luminance probe separates missing backdrop samples from a failed light
+    # blend on device. Mode 2 uses the same outline-coordinate texture read as oulg_glow. No probe
+    # source or extra sample is present in production (0) or tag-only (1) shader programs.
+    probe = {}
+    for mode in ("0", "1", "2"):
+        out = temp / ("debug_" + mode)
+        out.mkdir()
+        subprocess.run([str(exe), str(root / "tools/testdata/synthetic_dump.txt"), str(out), mode],
+                       check=True, stdout=subprocess.DEVNULL)
+        probe[mode] = (out / "mod_002.frag").read_text()
+    assert "oulg_kg_luma_probe" not in probe["0"]
+    assert "oulg_kg_luma_probe" not in probe["1"]
+    assert "oulg_kg_luma_probe" in probe["2"]
+    assert "textureLod(s, uv + oulg_eo, 0.0)" in probe["2"]
+    assert "oulg_dbg = 0.0;" in probe["2"] and "oulg_dbg = 1.0;" not in probe["2"]
+    assert "oulg_dbg = 1.0;" in probe["1"]
+    assert "oulg_dbg = 0.0;" in probe["0"]
+    # Only the selected profile is substituted: the optical body, blur and other profiles remain.
+    assert "if (oulg_on > 0.0 && oulg_pf > 0.5 && oulg_pf < 1.5) return oulg_kg_luma_probe(s, uv);" in probe["2"]
+    print("diagnostic: mode 2 reads real KG edge source; 0/1 omit probe and remain isolated")

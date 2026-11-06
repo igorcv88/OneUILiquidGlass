@@ -192,6 +192,15 @@
     "mediump vec4 oulg_over(mediump vec4 c, mediump vec4 g) {\n" \
     "  return vec4(c.rgb * (1.0 - g.a) + g.rgb * (g.a * c.a), c.a);\n" \
     "}\n"
+// Diagnostic mode 2: display the actual backdrop luminance at the same outline coordinates read
+// by oulg_glow(), before premultiplied-alpha composition or the card's material. Green varies from
+// black (dark source) to bright green (light source). Compiled into the shader ONLY in mode 2.
+#define OULG_FS_KG_LUMA_PROBE \
+    "mediump vec4 oulg_kg_luma_probe(sampler2D s, highp vec2 uv) {\n" \
+    "  mediump vec4 e = textureLod(s, uv + oulg_eo, 0.0);\n" \
+    "  mediump float y = clamp(dot(e.rgb / max(e.a, 1e-3), vec3(0.2126, 0.7152, 0.0722)), 0.0, 1.0);\n" \
+    "  return vec4(0.0, y, 0.0, 1.0);\n" \
+    "}\n"
 // One case of oulg_light (lo, hi, gain, depth, floor, cap), emitted only for profiles 0-2 whose gain
 // is above 0: with every gain at 0 oulg_light is the identity and those profiles draw as in v0.26.
 #define OULG_FS_LIGHT_CASE_FMT \
@@ -267,9 +276,11 @@
     "  return oulg_material(oulg_br < 0.5 ? c : mix(c, oulg_body(s, uv), oulg_br / 6.0));\n" \
     "}\n" \
     "mediump vec4 oulg_sample(sampler2D s, highp vec2 uv, float bias) {\n" \
+    "  %s" \
     "  return oulg_on > 0.0 ? (oulg_pf > 2.5 ? oulg_edge(s, uv, texture(s, uv, bias)) : oulg_light(s, uv, oulg_pf > 1.5 ? oulg_tone(texture(s, uv, bias)) : oulg_lens(s, uv))) : texture(s, uv, bias);\n" \
     "}\n" \
     "mediump vec4 oulg_sample(sampler2D s, highp vec2 uv) {\n" \
+    "  %s" \
     "  return oulg_on > 0.0 ? (oulg_pf > 2.5 ? oulg_edge(s, uv, texture(s, uv)) : oulg_light(s, uv, oulg_pf > 1.5 ? oulg_tone(texture(s, uv)) : oulg_lens(s, uv))) : texture(s, uv);\n" \
     "}\n"
 // The field (gradient1, ramp1, core1, ccap1, core0, ramp0, edge0, edge0, core0, ramp0, ramp1, core1, ccap1, band1, blurexp1, core1, ccap1, lensbody1,
@@ -675,7 +686,7 @@ static int oulg_append(char *out, size_t cap, size_t *at, const char *fmt, ...) 
 
 // The shared library for one program. External (camera/video) textures allow neither textureLod nor
 // the filtered path: they get the globals and the field only, and keep their plain sample.
-static int oulg_lib(char *out, size_t cap, int external, const struct oulg_profile p[OULG_PROFILES]) {
+static int oulg_lib(char *out, size_t cap, int external, int debug, const struct oulg_profile p[OULG_PROFILES]) {
     size_t at = 0;
     if (!oulg_append(out, cap, &at, "%s", OULG_FS_GLOBALS)) return 0;
     if (!external) {
@@ -698,6 +709,7 @@ static int oulg_lib(char *out, size_t cap, int external, const struct oulg_profi
     if (!external && !oulg_append(out, cap, &at, OULG_FS_TONE_FMT, (double) p[2].cap, (double) p[2].lift)) return 0;
     if (!external) {
         if (!oulg_append(out, cap, &at, "%s", OULG_FS_GLOW)) return 0;
+        if (debug == 2 && !oulg_append(out, cap, &at, "%s", OULG_FS_KG_LUMA_PROBE)) return 0;
         if (!oulg_append(out, cap, &at, "%s", "mediump vec4 oulg_light(sampler2D s, highp vec2 uv, mediump vec4 c) {\n")) return 0;
         for (int i = 0; i < 3; i++)
             if (p[i].light > 0.0f && !oulg_append(out, cap, &at, OULG_FS_LIGHT_CASE_FMT, i - 0.5, i + 0.5, (double) p[i].light,
@@ -719,7 +731,9 @@ static int oulg_lib(char *out, size_t cap, int external, const struct oulg_profi
     if (!external && !oulg_append(out, cap, &at, OULG_FS_LENS_FMT, uniformBody, coreOn, coreOn,
                                   (double) p[1].sat, (double) p[1].tone, (double) p[1].flat, (double) p[1].fcap, (double) p[1].level, (double) p[1].cdim,
                                   cr / cl, cg / cl, cb / cl, (double) p[1].glow, (double) p[1].rim, (double) p[1].tilt, (double) p[1].line,
-                                  (double) p[1].spec)) return 0;
+                                  (double) p[1].spec,
+                                  debug == 2 ? "if (oulg_on > 0.0 && oulg_pf > 0.5 && oulg_pf < 1.5) return oulg_kg_luma_probe(s, uv);\n" : "",
+                                  debug == 2 ? "if (oulg_on > 0.0 && oulg_pf > 0.5 && oulg_pf < 1.5) return oulg_kg_luma_probe(s, uv);\n" : "")) return 0;
     return 1;
 }
 
@@ -772,7 +786,7 @@ static char *oulg_rewrite_fragment(const char *src, int debug, const struct oulg
         "  highp vec2 oulg_de = oulg_ij * (oulg_e / oulg_hs);\n"
         "  oulg_eo = oulg_tx * oulg_de.x + oulg_ty * oulg_de.y;\n"
         "}\n",
-        coords, coords, coords, debug ? "1.0" : "0.0");
+        coords, coords, coords, debug == 1 ? "1.0" : "0.0");
     if (n <= 0 || (size_t) n >= sizeof block) return NULL;
 
     // Splice from the end backwards so earlier offsets stay valid.
@@ -784,7 +798,7 @@ static char *oulg_rewrite_fragment(const char *src, int debug, const struct oulg
     if (!u) return NULL;
     u = oulg_insert_after(u, 1, "void main() {\n", block);
     char lib[16384];
-    if (!oulg_lib(lib, sizeof lib, external, p)) { free(u); return NULL; }
+    if (!oulg_lib(lib, sizeof lib, external, debug, p)) { free(u); return NULL; }
     char *v = oulg_insert_after(u, 1, OULG_FS_DECL_AT, OULG_FS_DECL);
     return oulg_insert_after(v, 1, OULG_FS_DECL, lib);
 }
@@ -840,7 +854,7 @@ static char *oulg_rewrite_clip(const char *src, int debug, const struct oulg_pro
         "  oulg_tc += oulg_dx * oulg_off.x + oulg_dy * oulg_off.y;\n"
         "  oulg_eo = oulg_dx * oulg_e.x + oulg_dy * oulg_e.y;\n"
         "}\n",
-        coords, coords, coords, rph, rect, rect, debug ? "1.0" : "0.0", rect, rect,
+        coords, coords, coords, rph, rect, rect, debug == 1 ? "1.0" : "0.0", rect, rect,
         flip ? "  oulg_off.y *= u_skRTFlip.y;\n  oulg_e.y *= u_skRTFlip.y;\n" : "");
     if (n <= 0 || (size_t) n >= sizeof block) return NULL;
     char *s = oulg_splice(src, (size_t) (final - src), 0, "output_S1.rgb = mix(output_S1.rgb, vec3(0.0, output_S1.a, output_S1.a), oulg_dbg * 0.6);\n");
@@ -855,7 +869,7 @@ static char *oulg_rewrite_clip(const char *src, int debug, const struct oulg_pro
     free(t);
     if (!u) return NULL;
     char lib[16384];
-    if (!oulg_lib(lib, sizeof lib, external, p)) { free(u); return NULL; }
+    if (!oulg_lib(lib, sizeof lib, external, debug, p)) { free(u); return NULL; }
     return oulg_insert_before(u, 1, "void main() {\n", lib);
 }
 

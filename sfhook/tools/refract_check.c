@@ -1,7 +1,8 @@
 // Host check for refract.h: splits a device dump (oulg_shaders.txt) into orig_NNN.{vert,frag}, writes
 // each rewrite as mod_NNN.{vert,frag} (vertex shaders also as min_NNN.vert, the zero-output
 // fallback), for glslangValidator, including a link of each fragment rewrite against the vertex
-// rewrites. A third argument "0" builds them without the debug tint; a fourth overrides profile 1
+// rewrites. The third argument is diagnostic mode (0=off, 1=tag tint, 2=KG sampled-luma map);
+// a fourth overrides profile 1
 // parameters, e.g. "core=48,taps=24,rim=0,spec=0" (core taps ramp sat tone rim spec flat level cool tilt line ccap fcap cdim glow gradient band
 // bodylens blurexp); hubloom, hucore, hutaps, huramp and huedge set profile 0's; qslight, qswidth,
 // qsfloor, qscap, qslens and qsbody profile 3's; hulight, kglight and shadelight the edge light gain of
@@ -13,7 +14,7 @@ static void put(const char *dir, const char *kind, int idx, const char *ext, con
     FILE *o = fopen(path, "w"); fputs(text, o); fclose(o);
 }
 int main(int argc, char **argv) {
-    int dbg = !(argc > 3 && strcmp(argv[3], "0") == 0);
+    int dbg = argc > 3 ? atoi(argv[3]) : 1;
     struct oulg_profile prof[OULG_PROFILES] = {OULG_PROFILES_DEFAULT[0], OULG_PROFILES_DEFAULT[1], OULG_PROFILES_DEFAULT[2], OULG_PROFILES_DEFAULT[3]};
     float kgfixedrim = 1.0f;
     for (char *kv = argc > 4 ? strtok(argv[4], ",") : NULL; kv; kv = strtok(NULL, ",")) {
