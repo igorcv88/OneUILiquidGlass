@@ -616,8 +616,8 @@
     "Ajuste descontinuado mantido nos perfis; ele não altera mais os discos desligados."
   ],
   "edgepremul": [
-    "Default mode 3: premultiplied additive edge with 1.5x RGB light. Mode 0 restores the original blending; 1 uses normal blending; 2 adds light at 1.0x; 4 adds light at 1.4x.",
-    "Modo padrão 3: borda aditiva premultiplicada com luz RGB 1,5x. O modo 0 restaura a composição original; 1 usa composição normal; 2 soma luz a 1x; 4 soma a 1,4x."
+    "Default mode 0 keeps the original edge outside Display P3. Notifications on Display P3 automatically use additive mode 3 with 1.5x RGB light; disable with debug.oulg.p3edgecompat=0. Manual diagnostic modes: 1 uses premultiplied normal blending; 2 adds light at 1.0x; 3 at 1.5x; 4 at 1.4x. Saved values are preserved.",
+    "O padrão 0 mantém a borda original fora de Display P3. Notificações em Display P3 usam automaticamente o modo aditivo 3 com luz RGB 1,5x; desative com debug.oulg.p3edgecompat=0. Modos manuais de diagnóstico: 1 usa mistura normal premultiplicada; 2 soma a 1x; 3 a 1,5x; 4 a 1,4x. Valores salvos são preservados."
   ],
   "kgsharedoptics": [
     "KG notifications reuse the Now Bar's Java optical shader. Keep Fixed rim (sf.kgfixedrim=1) enabled: the combined appearance was approved on DZIF; disabling the structural rim flattened the glass. Does not change body tone, refraction, or blur. On is the approved default.",
