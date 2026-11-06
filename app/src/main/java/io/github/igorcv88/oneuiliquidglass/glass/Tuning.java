@@ -161,6 +161,11 @@ public final class Tuning {
      */
     public final int kgOptics;
     /**
+     * Experimental KG edge hand-off: the Java optics shared with Now Bar may draw even when the
+     * SurfaceFlinger profile is active. It is opt-in to avoid duplicating the existing KG rim.
+     */
+    public final boolean kgSharedOptics;
+    /**
      * Opt-in preview of the lockscreen material on heads-up cards (debug.oulg.huoptics=1), for A/B
      * on the device. Default 0: heads-up cards keep the established material.
      */
@@ -392,6 +397,7 @@ public final class Tuning {
         pillGlass = number("pillglass", 1f) >= 1f;
         pillBlur = Math.round(clamp(number("pillblur", 40f), 0f, 400f));
         kgOptics = Math.round(clamp(number("kgoptics", 1f), 0f, 1f));
+        kgSharedOptics = number("kgsharedoptics", 0f) >= 1f;
         huOptics = Math.round(clamp(number("huoptics", 0f), 0f, 1f));
         float kl = number("kglens", 0.40f);
         kgLens = kl < 0f ? -1f : clamp(kl, 0.1f, 1.2f);

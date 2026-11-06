@@ -403,6 +403,12 @@ public final class Controls {
                 .help("Qual material a lente dinâmica usa nos cartões do bloqueio. Muda sem"
                         + " reiniciar.")
                 .show(BEHAV, Channel.NONE));
+        put(c("kgsharedoptics", "Óptica da Now Bar (comparação)").fmt(Format.TOGGLE).in(EDGES, ADV)
+                .on(KG).feature("edge")
+                .help("Experimento: desenha na notificação compacta a mesma óptica Java da Now Bar."
+                        + " Para evitar uma borda dupla, desligue também 'Contorno fixo (comparação)'"
+                        + " e aplique no userspace. Não altera o corpo nem o blur.")
+                .show(BEHAV, Channel.NONE));
         put(c("huoptics", "Material da lente no pop-up").fmt(Format.CHOICE).in(EDGES, ADV)
                 .on(HU)
                 .choice("0", "Material do pop-up", "Padrão")

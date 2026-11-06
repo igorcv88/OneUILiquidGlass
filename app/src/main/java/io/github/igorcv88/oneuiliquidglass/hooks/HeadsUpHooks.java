@@ -2514,6 +2514,8 @@ public final class HeadsUpHooks {
         String lastSharedAlpha;
         /** Keyguard-to-shade routing changes, without per-frame logging. */
         String lastLockedShadeRoute;
+        /** Transition-only trace of the experimental Java optical owner on KG rows. */
+        boolean lastKgSharedEdge;
         /**
          * What an LSPosed-only card asks the compositor for: the surface, the radius and colour sent to
          * the blur region, the fill, the cross-window capability (false on One UI 9 even when the blur
@@ -2546,13 +2548,22 @@ public final class HeadsUpHooks {
                 }
             }
             // The edge shader steps back only for a card the compositor demonstrably lights: profile
-            // 1 requested, a tag that survives every program (radius and shape), and a library whose
-            // profile-1 optics are confirmed (debug.oulg.sf.optics). Otherwise it keeps its lighting.
+            // 1 requested, a tag that survives every program (radius and shape), and confirmed SF
+            // optics. kgsharedoptics is the opt-in exception: the Java edge stays like Now Bar's.
             if (glass != null) {
                 float[] radii = shape();
                 boolean tagged = SemBlurBridge.tagProfile(lens, kgSurface) == 1 && SemBlurBridge.reliableTag(radii[0])
                         && (compBridge != null || (semBridge != null && semBridge.tagsShape(radii)));
-                glass.setCompositorLit(tagged && Tuning.get().sfOptics >= 9);
+                Tuning tuning = Tuning.get();
+                boolean compositorOwns = Eligibility.compositorOwnsEdge(tagged, tuning.sfOptics >= 9,
+                        kgSurface, lens, tuning.kgSharedOptics);
+                glass.setCompositorLit(compositorOwns);
+                if (kgSurface && lastKgSharedEdge != tuning.kgSharedOptics) {
+                    lastKgSharedEdge = tuning.kgSharedOptics;
+                    Probe.log("KG_EDGE_OWNER", "javaExperiment=" + tuning.kgSharedOptics
+                            + " tagged=" + tagged + " lens=" + lens
+                            + " compositorOwns=" + compositorOwns);
+                }
             }
             if (compBridge != null) {
                 try { compBridge.setOptics(kgSurface, lens); }

@@ -27,6 +27,7 @@ final class ControlDescriptions {
             case "kglens": return R.string.control_description_kglens;
             case "kgoptics": return R.string.control_description_kgoptics;
             case "kgrim": return R.string.control_description_kgrim;
+            case "kgsharedoptics": return R.string.control_description_kgsharedoptics;
             case "kgwinblur": return R.string.control_description_kgwinblur;
             case "lens": return R.string.control_description_lens;
             case "lensgate": return R.string.control_description_lensgate;

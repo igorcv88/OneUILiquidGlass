@@ -19,6 +19,7 @@
     <string name="control_description_kglens">Adjusts edge refraction on lock screen cards when the dynamic lens is active.</string>
     <string name="control_description_kgoptics">Selects the dynamic lens material used on lock screen cards.</string>
     <string name="control_description_kgrim">Adjusts the outline of lock screen cards.</string>
+    <string name="control_description_kgsharedoptics">Experimental KG notification edge: reuse the same Java optical shader as Now Bar. For a single edge owner, set Fixed outline (comparison) off too (sf.kgfixedrim=0) and apply in userspace. Does not change body tone, refraction, or blur. Off is the safe default.</string>
     <string name="control_description_kgwinblur">Allows touch-triggered window blur ramps on the stationary lock screen.</string>
     <string name="control_description_lens">Adjusts the displacement of the pop-up lens strip relative to the bevel.</string>
     <string name="control_description_lensgate">Selects which touches hide the lens strip during movement.</string>

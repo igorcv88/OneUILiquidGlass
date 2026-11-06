@@ -53,6 +53,14 @@ public final class Eligibility {
             return false;
         return keyguardOptics(barState, headsUp);
     }
+    /**
+     * The opt-in KG experiment reuses Now Bar's Java edge shader on tagged KG notification rows.
+     * Other rows, including the expanded locked shade, retain the original edge owner.
+     */
+    public static boolean compositorOwnsEdge(boolean tagged, boolean sfOpticsConfirmed,
+                                             boolean keyguardProfile, boolean lens, boolean kgSharedOptics) {
+        return tagged && sfOpticsConfirmed && !(keyguardProfile && lens && kgSharedOptics);
+    }
     /** Diagnostic label only; unknown firmware state does not block rendering. */
     public static String surface(Boolean headsUp, Boolean keyguard, Boolean shadeExpanded) {
         if (Boolean.TRUE.equals(headsUp)) return "headsup";
