@@ -173,6 +173,7 @@ public final class Applicability {
             case "semradiuslens":
             case "sflens":
             case "kgoptics":
+            case "kgsharedoptics":
             case "huoptics":
             case "kgblurpath":
                 return lens ? ACTIVE : inactive(NEEDS_LENS);
