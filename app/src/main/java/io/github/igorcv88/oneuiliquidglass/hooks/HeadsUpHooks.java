@@ -2515,7 +2515,7 @@ public final class HeadsUpHooks {
         /** Keyguard-to-shade routing changes, without per-frame logging. */
         String lastLockedShadeRoute;
         /** Transition-only trace of the experimental Java optical owner on KG rows. */
-        boolean lastKgSharedEdge;
+        Boolean lastKgSharedEdge;
         /**
          * What an LSPosed-only card asks the compositor for: the surface, the radius and colour sent to
          * the blur region, the fill, the cross-window capability (false on One UI 9 even when the blur
@@ -2558,7 +2558,7 @@ public final class HeadsUpHooks {
                 boolean compositorOwns = Eligibility.compositorOwnsEdge(tagged, tuning.sfOptics >= 9,
                         kgSurface, lens, tuning.kgSharedOptics);
                 glass.setCompositorLit(compositorOwns);
-                if (kgSurface && lastKgSharedEdge != tuning.kgSharedOptics) {
+                if (kgSurface && (lastKgSharedEdge == null || lastKgSharedEdge != tuning.kgSharedOptics)) {
                     lastKgSharedEdge = tuning.kgSharedOptics;
                     Probe.log("KG_EDGE_OWNER", "javaExperiment=" + tuning.kgSharedOptics
                             + " tagged=" + tagged + " lens=" + lens

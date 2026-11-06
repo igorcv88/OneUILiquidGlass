@@ -15,6 +15,22 @@ import org.robolectric.annotation.Config;
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = 34)
 public class TuningApprovedDefaultsTest {
+    @Test public void kgSharedOpticsAloneInvalidatesTheCachedTuningSignature() throws Exception {
+        Field current = ConfigClient.class.getDeclaredField("current"); current.setAccessible(true);
+        Constructor<Tuning> constructor = Tuning.class.getDeclaredConstructor(); constructor.setAccessible(true);
+        Object old = current.get(null);
+        try {
+            current.set(null, Collections.emptyMap());
+            Tuning baseline = constructor.newInstance();
+            assertFalse(baseline.kgSharedOptics);
+            current.set(null, Collections.singletonMap("kgsharedoptics", "1"));
+            Tuning experiment = constructor.newInstance();
+            assertTrue(experiment.kgSharedOptics);
+            assertNotEquals(baseline.toString(), experiment.toString());
+            assertTrue(experiment.toString().contains("kgsharedoptics=true"));
+        } finally { current.set(null, old); }
+    }
+
     @Test public void runtimeFallbacksAndExplicitOverridesAreIndependent() throws Exception {
         Field current = ConfigClient.class.getDeclaredField("current"); current.setAccessible(true);
         Constructor<Tuning> constructor = Tuning.class.getDeclaredConstructor(); constructor.setAccessible(true);
