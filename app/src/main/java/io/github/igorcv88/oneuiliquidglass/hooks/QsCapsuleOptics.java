@@ -147,6 +147,8 @@ final class QsCapsuleOptics {
         s.setFloatUniform("specular", spec.specular * (media ? .65f : 1f) * illumination);
         s.setFloatUniform("shadow", spec.innerShadow * (light ? t.lightEdge : 1f));
         s.setFloatUniform("hairGain", 1f);
+        // This shader is shared with notifications; QS/Media must keep the neutral outer-line gain.
+        s.setFloatUniform("notificationLineGain", 1f);
         s.setFloatUniform("decor", t.liveOptics);
         s.setFloatUniform("live", 1f);
         s.setFloatUniform("sheen", media ? 0f : t.liveSheen);

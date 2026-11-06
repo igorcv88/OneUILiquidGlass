@@ -43,4 +43,15 @@ class DistributionTests(unittest.TestCase):
             match=re.search(r'add\(new SettingSpec\("'+re.escape(key)+r'"[^\n]*?SettingSpec.Type\.\w+,"([^"]+)"',registry)
             self.assertIsNotNone(match,key)
             self.assertEqual(default,match.group(1),key)
+    def test_notification_line_gain_is_initialized_by_every_shared_shader_consumer(self):
+        java_root=ROOT/'app/src/main/java/io/github/igorcv88/oneuiliquidglass'
+        consumers={p.relative_to(java_root).as_posix():p.read_text()
+            for p in java_root.rglob('*.java')
+            if 'new RuntimeShader(LiquidGlassShader.SOURCE)' in p.read_text()}
+        # Require review when a new direct SOURCE consumer is added: shader uniforms default to 0.
+        self.assertEqual(set(consumers),{'glass/GlassDrawable.java','hooks/QsCapsuleOptics.java'})
+        self.assertIn('setFloatUniform("notificationLineGain", notificationLineGain)',
+            consumers['glass/GlassDrawable.java'])
+        self.assertIn('setFloatUniform("notificationLineGain", 1f)',
+            consumers['hooks/QsCapsuleOptics.java'])
 if __name__=='__main__':unittest.main()
