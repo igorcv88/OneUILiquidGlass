@@ -315,7 +315,7 @@ public final class Tuning {
     public final boolean perf;
     /** Enables the view-tree and window diagnostic dumps (see {@link Probe#trace}). */
     public final boolean trace;
-    /** Experimental edge modes: 0 legacy, 1 premultiplied SRC_OVER, 2 PLUS x1, 3 PLUS x1.5, 4 PLUS x1.25. */
+    /** Experimental edge modes: 0 legacy, 1 premultiplied SRC_OVER, 2 PLUS x1, 3 PLUS x1.5, 4 PLUS x1.40. */
     public final int edgePremulMode;
     public final boolean edgePremulSafe;
     /** Bumped whenever any knob changes, so cached backdrop parameters are rebuilt. */

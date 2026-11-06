@@ -3,7 +3,7 @@
     <string name="control_description_backdrop">Selects the background source used outside the dynamic lens.</string>
     <string name="control_description_blur">Controls blur applied to the full captured background.</string>
     <string name="control_description_disp">Adjusts displacement between red and blue in the captured image.</string>
-    <string name="control_description_edgepremul">Experimental border alpha mode: 0 original; 1 premultiplied with normal blending; 2 premultiplied with additive light; 3 same as mode 2 with 50% more edge light RGB; 4 same as mode 2 with 25% more edge light RGB.</string>
+    <string name="control_description_edgepremul">Experimental border alpha mode: 0 original; 1 premultiplied with normal blending; 2 premultiplied with additive light; 3 same as mode 2 with 50% more edge light RGB; 4 same as mode 2 with 40% more edge light RGB.</string>
     <string name="control_description_headergap">Adjusts the space between the header and title of expanded notifications.</string>
     <string name="control_description_headertone">Adapts the shade clock, date, and carrier text to the background.</string>
     <string name="control_description_huoptics">Selects the dynamic lens material used on pop-ups.</string>
