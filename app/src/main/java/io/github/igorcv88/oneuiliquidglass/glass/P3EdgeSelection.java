@@ -16,4 +16,16 @@ public final class P3EdgeSelection {
     public static int effectiveMode(int selectedMode, boolean p3Compatibility) {
         return p3Compatibility && selectedMode == 0 ? COMPAT_EDGE_MODE : selectedMode;
     }
+
+    /**
+     * A heads-up can retain its original drawable after the display switches 7 -> 9.
+     * Sample on its bounded lifecycle events, not on each draw or pre-draw.
+     */
+    public static boolean popupRefreshEvent(String event, boolean headsUp,
+                                            boolean shadeCollapsed, boolean unlocked) {
+        if (!headsUp || !shadeCollapsed || !unlocked) return false;
+        return "setHeadsUp".equals(event) || "setPinned".equals(event)
+                || "onAttachedToWindow".equals(event) || "ATTACH".equals(event)
+                || "onAppearAnimationFinished".equals(event);
+    }
 }

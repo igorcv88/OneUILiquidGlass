@@ -1035,8 +1035,10 @@ public final class HeadsUpHooks {
                 // The blur is a view property: a card SystemUI does not redraw (the shade springing
                 // back to the lockscreen) would keep the expanded-shade blur. Re-decide now.
                 for (State s : new ArrayList<>(states.values())) {
-                    if (s.glass != null && barState != Eligibility.BAR_SHADE)
-                        s.glass.setP3EdgeCompatibility(false);
+                    if (s.glass != null) {
+                        if (barState != Eligibility.BAR_SHADE) s.applyP3Mode(-1, "barState", false);
+                        else if (s.isHeadsUp()) { s.sampleP3Mode("barState"); s.scheduleP3Settle(); }
+                    }
                     s.refreshLens(); s.invalidate();
                 }
                 if (Probe.trace) {
@@ -1092,7 +1094,8 @@ public final class HeadsUpHooks {
                     && barState == Eligibility.BAR_SHADE, p3Enabled,
                     shadeActiveColorMode);
             for (State s : new ArrayList<>(states.values())) {
-                if (s.glass != null) s.glass.setP3EdgeCompatibility(edgeCompat && !s.pill);
+                if (s.glass != null) s.applyP3Mode(shadeActiveColorMode,
+                        next ? "shadeOpen" : "shadeClose", p3Enabled);
             }
             Probe.log("P3_EDGE_ROUTE", "phase=" + (next ? "shadeOpen" : "shadeClose")
                     + " mode=" + shadeActiveColorMode + " compat=" + edgeCompat);
@@ -1318,6 +1321,21 @@ public final class HeadsUpHooks {
         /** Positive control: exactly which path was drawn by the already approved notification. */
         final LiveRenderProbe renderControl = new LiveRenderProbe();
         GlassDrawable glass;
+        /** The pop-up may retain this drawable through a later physical color-mode change. */
+        int p3LastMode = -1;
+        Boolean p3LastCompat;
+        boolean p3SettlePosted;
+        long p3LastSettleAt;
+        private static final long P3_SETTLE_MS = 48;
+        private final Runnable p3Settle = () -> {
+            p3SettlePosted = false;
+            p3LastSettleAt = android.os.SystemClock.uptimeMillis();
+            View v = background.get();
+            if (v != null && v.isAttachedToWindow() && isHeadsUp()
+                    && barState != null && barState == Eligibility.BAR_SHADE
+                    && !Boolean.TRUE.equals(shadeExpanded) && glass != null)
+                sampleP3Mode("headsUpSettled");
+        };
         /** The Samsung blur behind glass, when glassKind is SAMSUNG. */
         SemBlurBridge semBridge;
         /** The lens-mode BackgroundBlurDrawable behind glass on the lockscreen (debug.oulg.kgblurpath). */
@@ -1977,6 +1995,40 @@ public final class HeadsUpHooks {
             pill = rowClass == null || !rowClass.isInstance(row);
         }
         void invalidate() { View v = background.get(); if (v != null) v.invalidate(); }
+        boolean isHeadsUp() {
+            View r = row.get();
+            return r != null && Boolean.TRUE.equals(Reflect.bool(r, "isHeadsUpState", "mIsHeadsUp"));
+        }
+        /** Bound to the heads-up lifecycle, never called from draw() or onPreDraw(). */
+        void sampleP3Mode(String phase) {
+            View v = background.get();
+            if (glass == null || v == null) return;
+            boolean p3Surface = !pill && barState != null && barState == Eligibility.BAR_SHADE;
+            boolean p3Enabled = p3Surface && P3DisplayProbe.edgeCompatEnabled();
+            int mode = p3Enabled ? P3DisplayProbe.activeColorMode(v.getContext()) : -1;
+            applyP3Mode(mode, phase, p3Enabled);
+        }
+        void applyP3Mode(int mode, String phase, boolean p3Enabled) {
+            if (glass == null) return;
+            boolean surface = !pill && barState != null && barState == Eligibility.BAR_SHADE;
+            boolean compat = P3EdgeSelection.eligible(surface, p3Enabled, mode);
+            glass.setP3EdgeCompatibility(compat);
+            if (p3LastMode != mode || p3LastCompat == null || p3LastCompat != compat) {
+                View v = background.get();
+                Probe.log("P3_EDGE_ROUTE", "phase=" + phase + " viewId="
+                        + (v == null ? "null" : Integer.toHexString(System.identityHashCode(v)))
+                        + " mode=" + mode + " compat=" + compat + " enabled=" + p3Enabled
+                        + " headsUp=" + isHeadsUp() + " barState=" + barState);
+            }
+            p3LastMode = mode;
+            p3LastCompat = compat;
+        }
+        /** One delayed reconciliation for a display-mode switch during the pop-up entrance. */
+        void scheduleP3Settle() {
+            if (p3SettlePosted || android.os.SystemClock.uptimeMillis() - p3LastSettleAt < 350) return;
+            p3SettlePosted = true;
+            main.postDelayed(p3Settle, P3_SETTLE_MS);
+        }
         @Override public void onViewAttachedToWindow(View view) {
             long started = Perf.start(Perf.ATTACH);
             try { attached(view); } finally { Perf.end(Perf.ATTACH, started); }
@@ -2316,6 +2368,15 @@ public final class HeadsUpHooks {
         }
         private void onEvent(String event) {
             View v = background.get(), r = row.get(); if (v == null || r == null) return;
+            if ("setHeadsUp".equals(event) && !isHeadsUp()) {
+                if (p3SettlePosted) { main.removeCallbacks(p3Settle); p3SettlePosted = false; }
+                p3LastSettleAt = 0;
+            }
+            if (enabled && !pill && P3EdgeSelection.popupRefreshEvent(event, isHeadsUp(),
+                    !Boolean.TRUE.equals(shadeExpanded), barState != null && barState == Eligibility.BAR_SHADE)) {
+                if (glass != null) sampleP3Mode("headsUp:" + event);
+                scheduleP3Settle();
+            }
             // A leaving card's region is driven by its exit (onPreDraw): applying the last blur
             // again on startAppearAnimation re-set a region about to be cut.
             if (glass != null && !exit.leaving(android.os.SystemClock.uptimeMillis())) glass.reassertBackdropIfLost();
@@ -2416,7 +2477,7 @@ public final class HeadsUpHooks {
                         && shadeActiveColorMode >= 0 ? shadeActiveColorMode
                         : P3DisplayProbe.activeColorMode(v.getContext());
                 boolean p3Compat = P3EdgeSelection.eligible(p3Surface, p3Enabled, p3Mode);
-                glass.setP3EdgeCompatibility(p3Compat);
+                applyP3Mode(p3Mode, "cardCreate", p3Enabled);
                 glassWindow = new WeakReference<>(v.getWindowToken());
                 heldFor = null;
                 glass.setLightStyle(lightStyle, Tuning.get().lightEdge);
@@ -2431,8 +2492,7 @@ public final class HeadsUpHooks {
                         + " optics=" + (kind == Backdrop.Kind.SAMPLED ? "refraction" : "edge_shader")
                         + " edgeMode=" + P3EdgeSelection.effectiveMode(Tuning.get().edgePremulMode, p3Compat)
                         + " leaving=" + exit.leaving(android.os.SystemClock.uptimeMillis()));
-                if (p3Surface) Probe.log("P3_EDGE_ROUTE", "phase=cardCreate mode=" + p3Mode
-                        + " compat=" + p3Compat + " enabled=" + p3Enabled);
+                // Route changes are logged by applyP3Mode, including drawable reuse.
                 materialReported = false;
                 Probe.painters(row.get());
             }
@@ -2629,6 +2689,9 @@ public final class HeadsUpHooks {
          * is handed back later if the card is shown without glass.
          */
         void release(boolean restore) {
+            if (p3SettlePosted) { main.removeCallbacks(p3Settle); p3SettlePosted = false; }
+            p3LastMode = -1;
+            p3LastCompat = null;
             // Every path to the native background (hidden, ineligible, failed draw or compose)
             // passes here: the text gets its own colours back in the same frame. A ramp still running
             // must not apply its pending swap to a card that is going native.

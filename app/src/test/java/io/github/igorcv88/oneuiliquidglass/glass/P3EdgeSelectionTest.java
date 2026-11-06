@@ -21,4 +21,23 @@ public final class P3EdgeSelectionTest {
         for (int mode = 1; mode <= 4; mode++)
             assertEquals(mode, P3EdgeSelection.effectiveMode(mode, true));
     }
+
+    @Test public void headsUpLifecycleRechecksOnlyAnUnlockedCollapsedPopup() {
+        for (String event : new String[] {"setHeadsUp", "setPinned", "onAttachedToWindow", "ATTACH", "onAppearAnimationFinished"}) {
+            assertTrue(P3EdgeSelection.popupRefreshEvent(event, true, true, true));
+            assertFalse(P3EdgeSelection.popupRefreshEvent(event, false, true, true));
+            assertFalse(P3EdgeSelection.popupRefreshEvent(event, true, false, true));
+            assertFalse(P3EdgeSelection.popupRefreshEvent(event, true, true, false));
+        }
+        for (String event : new String[] {"onFinishInflate", "setUserExpanded", "setHeadsUpAnimatingAway", "DRAW"})
+            assertFalse(P3EdgeSelection.popupRefreshEvent(event, true, true, true));
+    }
+
+    @Test public void aRetainedPopupCanTransitionFromSrgbToP3AndBack() {
+        // The same drawable sees new samples; a shade opening is not required.
+        for (int mode : new int[] {7, 9, 7, -1, 9}) {
+            boolean compatible = P3EdgeSelection.eligible(true, true, mode);
+            assertEquals(mode == 9 ? 3 : 0, P3EdgeSelection.effectiveMode(0, compatible));
+        }
+    }
 }
