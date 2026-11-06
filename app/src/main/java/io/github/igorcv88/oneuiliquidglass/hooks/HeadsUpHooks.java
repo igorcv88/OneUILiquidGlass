@@ -2013,7 +2013,8 @@ public final class HeadsUpHooks {
             boolean surface = !pill && barState != null && barState == Eligibility.BAR_SHADE;
             boolean compat = P3EdgeSelection.eligible(surface, p3Enabled, mode);
             glass.setP3EdgeCompatibility(compat);
-            if (p3LastMode != mode || p3LastCompat == null || p3LastCompat != compat) {
+            if ("headsUpSettled".equals(phase) || p3LastMode != mode
+                    || p3LastCompat == null || p3LastCompat != compat) {
                 View v = background.get();
                 Probe.log("P3_EDGE_ROUTE", "phase=" + phase + " viewId="
                         + (v == null ? "null" : Integer.toHexString(System.identityHashCode(v)))
