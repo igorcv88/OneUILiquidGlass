@@ -1327,7 +1327,8 @@ public final class HeadsUpHooks {
         boolean p3SettlePosted;
         long p3LastSettleAt;
         private static final long P3_SETTLE_MS = 48;
-        private final Runnable p3Settle = () -> {
+        private final Runnable p3Settle = this::onP3Settle;
+        private void onP3Settle() {
             p3SettlePosted = false;
             p3LastSettleAt = android.os.SystemClock.uptimeMillis();
             View v = background.get();
@@ -1335,7 +1336,7 @@ public final class HeadsUpHooks {
                     && barState != null && barState == Eligibility.BAR_SHADE
                     && !Boolean.TRUE.equals(shadeExpanded) && glass != null)
                 sampleP3Mode("headsUpSettled");
-        };
+        }
         /** The Samsung blur behind glass, when glassKind is SAMSUNG. */
         SemBlurBridge semBridge;
         /** The lens-mode BackgroundBlurDrawable behind glass on the lockscreen (debug.oulg.kgblurpath). */
