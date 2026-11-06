@@ -1,6 +1,7 @@
 package io.github.igorcv88.oneuiliquidglass.hooks;
 
 import android.content.res.Configuration;
+import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.drawable.Drawable;
 import android.view.View;
@@ -16,6 +17,8 @@ import java.util.Collections;
 import java.util.Set;
 import java.util.WeakHashMap;
 import java.util.function.Consumer;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
 import io.github.igorcv88.oneuiliquidglass.Config;
@@ -110,8 +113,168 @@ public final class HeadsUpHooks {
     /** Fraction of the screen height from the top where a touch down may start a pull-down. */
     private static final float PRE_OPEN_EDGE = 0.06f;
     private final android.os.Handler main = new android.os.Handler(android.os.Looper.getMainLooper());
+    /** One worker for all visible heads-up rows; no compositor query on UI/draw frames. */
+    private final ExecutorService p3PopupWorker = Executors.newSingleThreadExecutor(r -> {
+        Thread thread = new Thread(r, "OULG-P3-Popup");
+        thread.setDaemon(true);
+        return thread;
+    });
+    private final Runnable p3PopupTick = this::sampleP3PopupAsync;
+    private boolean p3PopupWatching;
+    private boolean p3PopupQueryInFlight;
+    private int p3PopupWatchGeneration;
+    private int p3PopupDiagnosticHz, p3PopupSamples;
+    private long p3PopupStartedAt, p3PopupPreviousSampleAt, p3PopupQueryTotalUs;
+    private long p3PopupQueryMaxUs, p3PopupGapTotalMs, p3PopupGapMaxMs;
+    private long p3PopupWorkerCpuTotalUs, p3PopupWorkerCpuMaxUs;
+    private long p3PopupMainCpuTotalUs, p3PopupMainCpuMaxUs;
+    private int p3PopupWorkerCpuSamples, p3PopupMainCpuSamples;
     /** SystemUI's StatusBarState (0 shade, 1 keyguard, 2 shade over keyguard); null until first set. */
     private Integer barState;
+
+    private State visibleP3Popup() {
+        boolean compatEnabled = enabled && P3DisplayProbe.edgeCompatEnabled();
+        boolean unlocked = barState != null && barState == Eligibility.BAR_SHADE;
+        boolean collapsed = !Boolean.TRUE.equals(shadeExpanded);
+        if (!compatEnabled || !unlocked || !collapsed) return null;
+        for (State state : new ArrayList<>(states.values())) {
+            View v = state.background.get();
+            if (P3EdgeSelection.watchPopup(compatEnabled, state.glass != null, state.pill,
+                    state.isHeadsUp(), v != null && v.isAttachedToWindow(),
+                    v != null && v.isShown(), collapsed, unlocked)) return state;
+        }
+        return null;
+    }
+    private long p3PopupInterval(long now) {
+        if (p3PopupDiagnosticActive(now)) return P3EdgeSelection.diagnosticWatchInterval(p3PopupDiagnosticHz);
+        return P3EdgeSelection.POPUP_WATCH_INTERVAL_MS;
+    }
+    private boolean p3PopupDiagnosticActive(long now) {
+        return P3EdgeSelection.diagnosticWatchActive(now, p3PopupStartedAt, p3PopupDiagnosticHz);
+    }
+    private void startP3PopupWatch() {
+        if (p3PopupWatching || visibleP3Popup() == null) return;
+        p3PopupWatching = true;
+        p3PopupStartedAt = android.os.SystemClock.uptimeMillis();
+        p3PopupDiagnosticHz = P3DisplayProbe.popupWatchDiagnosticHz();
+        p3PopupSamples = 0;
+        p3PopupPreviousSampleAt = p3PopupQueryTotalUs = p3PopupQueryMaxUs = 0;
+        p3PopupGapTotalMs = p3PopupGapMaxMs = 0;
+        p3PopupWorkerCpuTotalUs = p3PopupWorkerCpuMaxUs = 0;
+        p3PopupMainCpuTotalUs = p3PopupMainCpuMaxUs = 0;
+        p3PopupWorkerCpuSamples = p3PopupMainCpuSamples = 0;
+        long interval = p3PopupInterval(p3PopupStartedAt);
+        Probe.log("P3_POPUP_WATCH", "state=start intervalMs=" + interval
+                + " defaultMs=" + P3EdgeSelection.POPUP_WATCH_INTERVAL_MS
+                + " diagnosticHz=" + p3PopupDiagnosticHz);
+        main.postDelayed(p3PopupTick, interval);
+    }
+    private void stopP3PopupWatch() {
+        if (!p3PopupWatching) return;
+        long elapsed = Math.max(1, android.os.SystemClock.uptimeMillis() - p3PopupStartedAt);
+        long gaps = Math.max(1, p3PopupSamples - 1);
+        Probe.log("P3_POPUP_WATCH_STATS", "diagnosticHz=" + p3PopupDiagnosticHz
+                + " elapsedMs=" + elapsed + " samples=" + p3PopupSamples
+                + " observedHz=" + String.format(java.util.Locale.ROOT, "%.1f", p3PopupSamples * 1000.0 / elapsed)
+                + " avgGapMs=" + p3PopupGapTotalMs / gaps + " maxGapMs=" + p3PopupGapMaxMs
+                + " avgQueryUs=" + p3PopupQueryTotalUs / Math.max(1, p3PopupSamples)
+                + " maxQueryUs=" + p3PopupQueryMaxUs
+                + " workerCpuSamples=" + p3PopupWorkerCpuSamples
+                + " workerCpuAvgUs=" + p3PopupWorkerCpuTotalUs / Math.max(1, p3PopupWorkerCpuSamples)
+                + " workerCpuMaxUs=" + p3PopupWorkerCpuMaxUs
+                + " mainCpuSamples=" + p3PopupMainCpuSamples
+                + " mainCpuAvgUs=" + p3PopupMainCpuTotalUs / Math.max(1, p3PopupMainCpuSamples)
+                + " mainCpuMaxUs=" + p3PopupMainCpuMaxUs);
+        p3PopupWatching = false;
+        p3PopupQueryInFlight = false;
+        p3PopupDiagnosticHz = 0;
+        p3PopupWatchGeneration++;
+        main.removeCallbacks(p3PopupTick);
+        Probe.log("P3_POPUP_WATCH", "state=stop");
+    }
+    private void sampleP3PopupAsync() {
+        if (!p3PopupWatching || p3PopupQueryInFlight) return;
+        State anchor = visibleP3Popup();
+        View v = anchor == null ? null : anchor.background.get();
+        if (v == null) { stopP3PopupWatch(); return; }
+        Context context = v.getContext();
+        int generation = p3PopupWatchGeneration;
+        long sampleStarted = android.os.SystemClock.uptimeMillis();
+        p3PopupQueryInFlight = true;
+        p3PopupWorker.execute(() -> {
+            long cpuStarted = android.os.Debug.threadCpuTimeNanos();
+            long queryStarted = android.os.SystemClock.elapsedRealtimeNanos();
+            int mode = P3DisplayProbe.activeColorMode(context);
+            long queryUs = (android.os.SystemClock.elapsedRealtimeNanos() - queryStarted) / 1000;
+            long cpuEnded = android.os.Debug.threadCpuTimeNanos();
+            long workerCpuUs = cpuStarted >= 0 && cpuEnded >= cpuStarted
+                    ? (cpuEnded - cpuStarted) / 1000 : -1;
+            main.post(() -> {
+                if (!p3PopupWatching || generation != p3PopupWatchGeneration) return;
+                long mainCpuStarted = android.os.Debug.threadCpuTimeNanos();
+                p3PopupQueryInFlight = false;
+                long sampledAt = android.os.SystemClock.uptimeMillis();
+                if (p3PopupPreviousSampleAt > 0) {
+                    long gap = sampledAt - p3PopupPreviousSampleAt;
+                    p3PopupGapTotalMs += gap;
+                    p3PopupGapMaxMs = Math.max(p3PopupGapMaxMs, gap);
+                }
+                p3PopupPreviousSampleAt = sampledAt;
+                p3PopupSamples++;
+                p3PopupQueryTotalUs += queryUs;
+                p3PopupQueryMaxUs = Math.max(p3PopupQueryMaxUs, queryUs);
+                if (workerCpuUs >= 0) {
+                    p3PopupWorkerCpuSamples++;
+                    p3PopupWorkerCpuTotalUs += workerCpuUs;
+                    p3PopupWorkerCpuMaxUs = Math.max(p3PopupWorkerCpuMaxUs, workerCpuUs);
+                }
+                try {
+                    boolean compatEnabled = enabled && P3DisplayProbe.edgeCompatEnabled();
+                    boolean collapsed = !Boolean.TRUE.equals(shadeExpanded);
+                    boolean unlocked = barState != null && barState == Eligibility.BAR_SHADE;
+                    boolean modeChanged = false;
+                    for (State state : new ArrayList<>(states.values())) {
+                        View current = state.background.get();
+                        if (P3EdgeSelection.watchPopup(compatEnabled,
+                                state.glass != null, state.pill, state.isHeadsUp(),
+                                current != null && current.isAttachedToWindow(),
+                                current != null && current.isShown(),
+                                collapsed, unlocked)) {
+                            modeChanged |= state.p3LastMode != mode;
+                            state.applyP3Mode(mode, "popupWatch", true);
+                        }
+                    }
+                    if (modeChanged) {
+                        long now = android.os.SystemClock.uptimeMillis();
+                        Probe.log("P3_POPUP_TIMING", "mode=" + mode + " queryUs=" + queryUs
+                                + " roundTripMs=" + (now - sampleStarted)
+                                + " touchAgoMs=" + (now - BackdropMotion.lastActive())
+                                + " taskAgoMs=" + (now - BackdropEvents.lastChange())
+                                + " intervalMs=" + p3PopupInterval(now));
+                    }
+                } catch (RuntimeException | LinkageError e) {
+                    Probe.error("P3_POPUP_WATCH_FAILED", e);
+                    stopP3PopupWatch();
+                    return;
+                }
+                State nextPopup = visibleP3Popup();
+                long mainCpuEnded = android.os.Debug.threadCpuTimeNanos();
+                if (mainCpuStarted >= 0 && mainCpuEnded >= mainCpuStarted) {
+                    long mainCpuUs = (mainCpuEnded - mainCpuStarted) / 1000;
+                    p3PopupMainCpuSamples++;
+                    p3PopupMainCpuTotalUs += mainCpuUs;
+                    p3PopupMainCpuMaxUs = Math.max(p3PopupMainCpuMaxUs, mainCpuUs);
+                }
+                if (nextPopup == null) stopP3PopupWatch();
+                else {
+                    long now = android.os.SystemClock.uptimeMillis();
+                    long remaining = p3PopupInterval(now) - (now - sampleStarted);
+                    main.postDelayed(p3PopupTick,
+                            Math.max(P3EdgeSelection.POPUP_WATCH_MIN_GAP_MS, remaining));
+                }
+            });
+        });
+    }
     /** When barState last changed (uptime ms), for the optics timeline. */
     private long barStateAt;
     /** Set once HybridBackdrop could not be built; heads-up rows then keep the plain compositor blur. */
@@ -703,6 +866,12 @@ public final class HeadsUpHooks {
      * samples. Main thread.
      */
     private void backdropChanged() {
+        // A task switch gets one immediate async color-mode sample; in-task transitions
+        // (Direct -> Feed) are still covered by the bounded visible-popup watcher.
+        if (p3PopupWatching) {
+            main.removeCallbacks(p3PopupTick);
+            if (!p3PopupQueryInFlight) main.post(p3PopupTick);
+        }
         if (Boolean.TRUE.equals(shadeExpanded) && shadeGrid != null && resampleCancel == null) {
             main.removeCallbacks(resample);
             resampleShade();
@@ -1035,10 +1204,14 @@ public final class HeadsUpHooks {
                 // The blur is a view property: a card SystemUI does not redraw (the shade springing
                 // back to the lockscreen) would keep the expanded-shade blur. Re-decide now.
                 for (State s : new ArrayList<>(states.values())) {
-                    if (s.glass != null && barState != Eligibility.BAR_SHADE)
-                        s.glass.setP3EdgeCompatibility(false);
+                    if (s.glass != null) {
+                        if (barState != Eligibility.BAR_SHADE) s.applyP3Mode(-1, "barState", false);
+                        else if (s.isHeadsUp()) { s.sampleP3Mode("barState"); s.scheduleP3Settle(); }
+                    }
                     s.refreshLens(); s.invalidate();
                 }
+                if (barState == Eligibility.BAR_SHADE) startP3PopupWatch();
+                else stopP3PopupWatch();
                 if (Probe.trace) {
                     // Scrims settle after the state change; snapshot them once the animation is done.
                     int at = barState;
@@ -1075,6 +1248,7 @@ public final class HeadsUpHooks {
                 ? ((Number) height).floatValue() > 0.5f : null;
         if (next != null && !next.equals(shadeExpanded)) {
             shadeExpanded = next; Probe.log("SHADE", "expanded=" + next);
+            if (next) stopP3PopupWatch();
             // A shade can reuse existing card drawables; switch their edge path before their
             // next draw. The compositor query is once per transition, never on the draw path.
             View colorAnchor = panelView == null ? null : panelView.get();
@@ -1092,7 +1266,8 @@ public final class HeadsUpHooks {
                     && barState == Eligibility.BAR_SHADE, p3Enabled,
                     shadeActiveColorMode);
             for (State s : new ArrayList<>(states.values())) {
-                if (s.glass != null) s.glass.setP3EdgeCompatibility(edgeCompat && !s.pill);
+                if (s.glass != null) s.applyP3Mode(shadeActiveColorMode,
+                        next ? "shadeOpen" : "shadeClose", p3Enabled);
             }
             Probe.log("P3_EDGE_ROUTE", "phase=" + (next ? "shadeOpen" : "shadeClose")
                     + " mode=" + shadeActiveColorMode + " compat=" + edgeCompat);
@@ -1114,6 +1289,7 @@ public final class HeadsUpHooks {
                 state.refreshLens();
                 state.invalidate();
             }
+            if (!next) startP3PopupWatch();
             // The panel controller's own view works with an empty shade; a row is only the fallback.
             Object panel = Reflect.read(controller, "mView");
             View sample = panel instanceof View && ((View) panel).isAttachedToWindow() ? (View) panel : null;
@@ -1318,6 +1494,22 @@ public final class HeadsUpHooks {
         /** Positive control: exactly which path was drawn by the already approved notification. */
         final LiveRenderProbe renderControl = new LiveRenderProbe();
         GlassDrawable glass;
+        /** The pop-up may retain this drawable through a later physical color-mode change. */
+        int p3LastMode = -1;
+        Boolean p3LastCompat;
+        boolean p3SettlePosted;
+        long p3LastSettleAt;
+        private static final long P3_SETTLE_MS = 48;
+        private final Runnable p3Settle = this::onP3Settle;
+        private void onP3Settle() {
+            p3SettlePosted = false;
+            p3LastSettleAt = android.os.SystemClock.uptimeMillis();
+            View v = background.get();
+            if (v != null && v.isAttachedToWindow() && isHeadsUp()
+                    && barState != null && barState == Eligibility.BAR_SHADE
+                    && !Boolean.TRUE.equals(shadeExpanded) && glass != null)
+                sampleP3Mode("headsUpSettled");
+        }
         /** The Samsung blur behind glass, when glassKind is SAMSUNG. */
         SemBlurBridge semBridge;
         /** The lens-mode BackgroundBlurDrawable behind glass on the lockscreen (debug.oulg.kgblurpath). */
@@ -1977,6 +2169,41 @@ public final class HeadsUpHooks {
             pill = rowClass == null || !rowClass.isInstance(row);
         }
         void invalidate() { View v = background.get(); if (v != null) v.invalidate(); }
+        boolean isHeadsUp() {
+            View r = row.get();
+            return r != null && Boolean.TRUE.equals(Reflect.bool(r, "isHeadsUpState", "mIsHeadsUp"));
+        }
+        /** Bound to the heads-up lifecycle, never called from draw() or onPreDraw(). */
+        void sampleP3Mode(String phase) {
+            View v = background.get();
+            if (glass == null || v == null) return;
+            boolean p3Surface = !pill && barState != null && barState == Eligibility.BAR_SHADE;
+            boolean p3Enabled = p3Surface && P3DisplayProbe.edgeCompatEnabled();
+            int mode = p3Enabled ? P3DisplayProbe.activeColorMode(v.getContext()) : -1;
+            applyP3Mode(mode, phase, p3Enabled);
+        }
+        void applyP3Mode(int mode, String phase, boolean p3Enabled) {
+            if (glass == null) return;
+            boolean surface = !pill && barState != null && barState == Eligibility.BAR_SHADE;
+            boolean compat = P3EdgeSelection.eligible(surface, p3Enabled, mode);
+            glass.setP3EdgeCompatibility(compat);
+            if ("headsUpSettled".equals(phase) || p3LastMode != mode
+                    || p3LastCompat == null || p3LastCompat != compat) {
+                View v = background.get();
+                Probe.log("P3_EDGE_ROUTE", "phase=" + phase + " viewId="
+                        + (v == null ? "null" : Integer.toHexString(System.identityHashCode(v)))
+                        + " mode=" + mode + " compat=" + compat + " enabled=" + p3Enabled
+                        + " headsUp=" + isHeadsUp() + " barState=" + barState);
+            }
+            p3LastMode = mode;
+            p3LastCompat = compat;
+        }
+        /** One delayed reconciliation for a display-mode switch during the pop-up entrance. */
+        void scheduleP3Settle() {
+            if (p3SettlePosted || android.os.SystemClock.uptimeMillis() - p3LastSettleAt < 350) return;
+            p3SettlePosted = true;
+            main.postDelayed(p3Settle, P3_SETTLE_MS);
+        }
         @Override public void onViewAttachedToWindow(View view) {
             long started = Perf.start(Perf.ATTACH);
             try { attached(view); } finally { Perf.end(Perf.ATTACH, started); }
@@ -2316,6 +2543,17 @@ public final class HeadsUpHooks {
         }
         private void onEvent(String event) {
             View v = background.get(), r = row.get(); if (v == null || r == null) return;
+            if ("setHeadsUp".equals(event) && !isHeadsUp()) {
+                if (p3SettlePosted) { main.removeCallbacks(p3Settle); p3SettlePosted = false; }
+                p3LastSettleAt = 0;
+                if (visibleP3Popup() == null) stopP3PopupWatch();
+            }
+            if (enabled && !pill && P3EdgeSelection.popupRefreshEvent(event, isHeadsUp(),
+                    !Boolean.TRUE.equals(shadeExpanded), barState != null && barState == Eligibility.BAR_SHADE)) {
+                if (glass != null) sampleP3Mode("headsUp:" + event);
+                scheduleP3Settle();
+                startP3PopupWatch();
+            }
             // A leaving card's region is driven by its exit (onPreDraw): applying the last blur
             // again on startAppearAnimation re-set a region about to be cut.
             if (glass != null && !exit.leaving(android.os.SystemClock.uptimeMillis())) glass.reassertBackdropIfLost();
@@ -2416,7 +2654,7 @@ public final class HeadsUpHooks {
                         && shadeActiveColorMode >= 0 ? shadeActiveColorMode
                         : P3DisplayProbe.activeColorMode(v.getContext());
                 boolean p3Compat = P3EdgeSelection.eligible(p3Surface, p3Enabled, p3Mode);
-                glass.setP3EdgeCompatibility(p3Compat);
+                applyP3Mode(p3Mode, "cardCreate", p3Enabled);
                 glassWindow = new WeakReference<>(v.getWindowToken());
                 heldFor = null;
                 glass.setLightStyle(lightStyle, Tuning.get().lightEdge);
@@ -2427,12 +2665,12 @@ public final class HeadsUpHooks {
                 glassKind = kind;
                 glassSource = source;
                 glass.setCallback(v);
+                if (isHeadsUp()) startP3PopupWatch();
                 Probe.log("GLASS_APPLIED", "viewId=" + Integer.toHexString(System.identityHashCode(v)) + " source=" + backdrop.name()
                         + " optics=" + (kind == Backdrop.Kind.SAMPLED ? "refraction" : "edge_shader")
                         + " edgeMode=" + P3EdgeSelection.effectiveMode(Tuning.get().edgePremulMode, p3Compat)
                         + " leaving=" + exit.leaving(android.os.SystemClock.uptimeMillis()));
-                if (p3Surface) Probe.log("P3_EDGE_ROUTE", "phase=cardCreate mode=" + p3Mode
-                        + " compat=" + p3Compat + " enabled=" + p3Enabled);
+                // Route changes are logged by applyP3Mode, including drawable reuse.
                 materialReported = false;
                 Probe.painters(row.get());
             }
@@ -2629,6 +2867,9 @@ public final class HeadsUpHooks {
          * is handed back later if the card is shown without glass.
          */
         void release(boolean restore) {
+            if (p3SettlePosted) { main.removeCallbacks(p3Settle); p3SettlePosted = false; }
+            p3LastMode = -1;
+            p3LastCompat = null;
             // Every path to the native background (hidden, ineligible, failed draw or compose)
             // passes here: the text gets its own colours back in the same frame. A ramp still running
             // must not apply its pending swap to a card that is going native.
@@ -2644,6 +2885,7 @@ public final class HeadsUpHooks {
             boolean drawable = compBridge != null;
             if (!restore && semBridge != null) semBridge.clearOnRelease();
             glass.release(); glass = null; glassKind = null; glassSource = null; semBridge = null; compBridge = null; glassWindow = null;
+            if (visibleP3Popup() == null) stopP3PopupWatch();
             View released = background.get();
             Probe.log("GLASS_RELEASED", "native=" + restore + " viewId=" + (released == null ? "null" : Integer.toHexString(System.identityHashCode(released)))
                     + " leaving=" + exit.leaving(android.os.SystemClock.uptimeMillis()) + " attached=" + (released != null && released.isAttachedToWindow()));

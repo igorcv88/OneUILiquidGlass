@@ -2,7 +2,7 @@ name: Controls panel checks
 on:
   pull_request:
 concurrency:
-  group: controls-${{ github.event.pull_request.head.sha || github.sha }}
+  group: controls-pr-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 permissions:
   contents: read
@@ -10,10 +10,14 @@ jobs:
   android-and-contracts:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    outputs:
+      unsigned_artifact_id: ${{ steps.upload_unsigned.outputs['artifact-id'] }}
     env:
       NDK_VERSION: "29.0.14206865"
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
@@ -51,5 +55,110 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y glslang-tools
           sh sfhook/tools/check.sh
-      # The APK is compiled and checked on this ephemeral runner only.
-      # Signed distributable APKs are published by the manual release workflow.
+      # Only the owner's same-repository PRs may request an APK signed with the release key.
+      # Fork PRs still run every check above, without receiving secrets or signed artifacts.
+      - name: Use installed release version for a reversible PR update
+        if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login == 'igorcv88'
+        id: pr_version
+        run: |
+          set -euo pipefail
+          LATEST_PATCH="$(git tag --list 'v0.1.*' | sed -nE 's/^v0[.]1[.]([0-9]+)$/\1/p' | sort -n | tail -n 1)"
+          test -n "$LATEST_PATCH"
+          echo "VERSION_CODE=$((100 + LATEST_PATCH))" >> "$GITHUB_ENV"
+          echo "VERSION_NAME=0.1.${LATEST_PATCH}-pr${{ github.event.pull_request.number }}" >> "$GITHUB_ENV"
+      - name: Build unsigned release candidate for isolated signing
+        if: steps.pr_version.outcome == 'success'
+        run: |
+          set -euo pipefail
+          ./gradlew assembleRelease -PreleaseVersionCode="$VERSION_CODE" -PreleaseVersionName="$VERSION_NAME"
+          test -s app/build/outputs/apk/release/app-release-unsigned.apk
+      - name: Transfer unsigned APK to signing job (delete immediately afterward)
+        if: steps.pr_version.outcome == 'success'
+        id: upload_unsigned
+        uses: actions/upload-artifact@v7
+        with:
+          path: app/build/outputs/apk/release/app-release-unsigned.apk
+          archive: false
+          if-no-files-found: error
+          retention-days: 1
+
+  sign-pr-apk:
+    name: Sign temporary PR APK
+    needs: android-and-contracts
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login == 'igorcv88'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Release secrets never reach the runner that checks out and builds PR code.
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Download untrusted unsigned APK only (no checkout or code execution)
+        uses: actions/download-artifact@v8
+        with:
+          name: app-release-unsigned.apk
+          path: ${{ runner.temp }}/unsigned
+      - name: Android signing tools
+        run: |
+          set -euo pipefail
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'build-tools;35.0.0'
+      - name: Sign with established release identity
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for name in KEYSTORE_BASE64 STORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "::error::Required signing secret missing: $name" >&2
+              exit 1
+            fi
+          done
+          KEY_FILE="$RUNNER_TEMP/oulg-pr-signing.keystore"
+          trap 'rm -f "$KEY_FILE"' EXIT
+          printf '%s' "$KEYSTORE_BASE64" | tr -d '\r\n ' | base64 --decode > "$KEY_FILE"
+          chmod 600 "$KEY_FILE"
+          TOOLS="$ANDROID_HOME/build-tools/35.0.0"
+          "$TOOLS/zipalign" -P 16 -f 4 "$RUNNER_TEMP/unsigned/app-release-unsigned.apk" "$RUNNER_TEMP/pr-aligned.apk"
+          "$TOOLS/apksigner" sign \
+            --ks "$KEY_FILE" \
+            --ks-key-alias "$KEY_ALIAS" \
+            --ks-pass env:STORE_PASSWORD \
+            --key-pass env:KEY_PASSWORD \
+            --out "OneUILiquidGlass-PR${{ github.event.pull_request.number }}-signed.apk" \
+            "$RUNNER_TEMP/pr-aligned.apk"
+          "$TOOLS/apksigner" verify --verbose --print-certs "OneUILiquidGlass-PR${{ github.event.pull_request.number }}-signed.apk"
+          "$TOOLS/aapt2" dump badging "OneUILiquidGlass-PR${{ github.event.pull_request.number }}-signed.apk" | head -n 1
+          sha256sum "OneUILiquidGlass-PR${{ github.event.pull_request.number }}-signed.apk"
+      - name: Publish just the APK, without ZIP, for one day
+        id: upload_signed
+        uses: actions/upload-artifact@v7
+        with:
+          path: OneUILiquidGlass-PR${{ github.event.pull_request.number }}-signed.apk
+          archive: false
+          if-no-files-found: error
+          retention-days: 1
+      - name: Remove intermediate and superseded PR artifacts
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UNSIGNED_ID: ${{ needs['android-and-contracts'].outputs.unsigned_artifact_id }}
+          SIGNED_ID: ${{ steps.upload_signed.outputs['artifact-id'] }}
+          SIGNED_NAME: OneUILiquidGlass-PR${{ github.event.pull_request.number }}-signed.apk
+        run: |
+          set -euo pipefail
+          if [[ -n "$UNSIGNED_ID" ]]; then
+            gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$UNSIGNED_ID" >/dev/null || echo '::warning::Unsigned APK could not be deleted immediately (retention: 1 day)'
+          fi
+          if [[ -n "$SIGNED_ID" ]]; then
+            gh api --paginate "repos/$GITHUB_REPOSITORY/actions/artifacts?per_page=100" \
+              | jq -r --arg name "$SIGNED_NAME" '.artifacts[]? | select(.name == $name) | .id' \
+              | while read -r artifact_id; do
+                  if [[ "$artifact_id" != "$SIGNED_ID" ]]; then
+                    gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$artifact_id" >/dev/null || echo '::warning::An older PR APK will expire within one day'
+                  fi
+                done
+          fi

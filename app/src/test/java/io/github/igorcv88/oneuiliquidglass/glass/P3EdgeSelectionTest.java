@@ -21,4 +21,54 @@ public final class P3EdgeSelectionTest {
         for (int mode = 1; mode <= 4; mode++)
             assertEquals(mode, P3EdgeSelection.effectiveMode(mode, true));
     }
+
+    @Test public void headsUpLifecycleRechecksOnlyAnUnlockedCollapsedPopup() {
+        for (String event : new String[] {"setHeadsUp", "setPinned", "onAttachedToWindow", "ATTACH", "onAppearAnimationFinished"}) {
+            assertTrue(P3EdgeSelection.popupRefreshEvent(event, true, true, true));
+            assertFalse(P3EdgeSelection.popupRefreshEvent(event, false, true, true));
+            assertFalse(P3EdgeSelection.popupRefreshEvent(event, true, false, true));
+            assertFalse(P3EdgeSelection.popupRefreshEvent(event, true, true, false));
+        }
+        for (String event : new String[] {"onFinishInflate", "setUserExpanded", "setHeadsUpAnimatingAway", "DRAW"})
+            assertFalse(P3EdgeSelection.popupRefreshEvent(event, true, true, true));
+    }
+
+    @Test public void aRetainedPopupCanTransitionFromSrgbToP3AndBack() {
+        // The same drawable sees new samples; a shade opening is not required.
+        for (int mode : new int[] {7, 9, 7, -1, 9}) {
+            boolean compatible = P3EdgeSelection.eligible(true, true, mode);
+            assertEquals(mode == 9 ? 3 : 0, P3EdgeSelection.effectiveMode(0, compatible));
+        }
+    }
+
+    @Test public void backgroundWatchIsLimitedToVisibleHeadsUp() {
+        assertEquals(33, P3EdgeSelection.POPUP_WATCH_INTERVAL_MS);
+        assertEquals(4, P3EdgeSelection.POPUP_WATCH_MIN_GAP_MS);
+        assertEquals(P3EdgeSelection.POPUP_WATCH_INTERVAL_MS,
+                P3EdgeSelection.diagnosticWatchInterval(30));
+        assertTrue(P3EdgeSelection.watchPopup(true, true, false, true, true, true, true, true));
+        for (int disabled = 0; disabled < 8; disabled++) {
+            boolean[] flags = {true, true, false, true, true, true, true, true};
+            flags[disabled] = !flags[disabled];
+            assertFalse(P3EdgeSelection.watchPopup(flags[0], flags[1], flags[2], flags[3],
+                    flags[4], flags[5], flags[6], flags[7]));
+        }
+    }
+
+    @Test public void experimentalRatesAreExplicitAndTimeBound() {
+        assertEquals(0, P3EdgeSelection.diagnosticWatchInterval(0));
+        assertEquals(42, P3EdgeSelection.diagnosticWatchInterval(24));
+        assertEquals(33, P3EdgeSelection.diagnosticWatchInterval(30));
+        assertEquals(17, P3EdgeSelection.diagnosticWatchInterval(60));
+        assertEquals(0, P3EdgeSelection.diagnosticWatchInterval(120));
+        assertFalse(P3EdgeSelection.diagnosticWatchActive(1000, 1000, 0));
+        assertTrue(P3EdgeSelection.diagnosticWatchActive(1000, 1000, 24));
+        assertTrue(P3EdgeSelection.diagnosticWatchActive(1000, 1000, 30));
+        assertTrue(P3EdgeSelection.diagnosticWatchActive(1000, 1000, 60));
+        assertTrue(P3EdgeSelection.diagnosticWatchActive(10_999, 1000, 60));
+        assertTrue(P3EdgeSelection.diagnosticWatchActive(10_999, 1000, 24));
+        assertFalse(P3EdgeSelection.diagnosticWatchActive(11_000, 1000, 60));
+        assertFalse(P3EdgeSelection.diagnosticWatchActive(11_000, 1000, 30));
+        assertFalse(P3EdgeSelection.diagnosticWatchActive(999, 1000, 60));
+    }
 }
