@@ -19,7 +19,7 @@
     <string name="control_description_kglens">Ajusta a refração da borda dos cartões da tela de bloqueio quando a lente dinâmica está ativa.</string>
     <string name="control_description_kgoptics">Seleciona o material da lente dinâmica nos cartões da tela de bloqueio.</string>
     <string name="control_description_kgrim">Ajusta o contorno dos cartões da tela de bloqueio.</string>
-    <string name="control_description_kgsharedoptics">Experimento na borda das notificações KG: reutiliza o mesmo shader óptico Java da Now Bar. Para evitar borda dupla, desligue Contorno fixo (comparação) (sf.kgfixedrim=0) e aplique no userspace. Não modifica corpo, refração nem blur. Desligado é o padrão seguro.</string>
+    <string name="control_description_kgsharedoptics">Notificações KG reutilizam o shader óptico Java da Now Bar. Mantenha Contorno fixo (sf.kgfixedrim=1) ligado: a combinação foi aprovada no DZIF; desligar o contorno estrutural achatou o vidro. Não modifica corpo, refração nem blur. Ligado é o padrão aprovado.</string>
     <string name="control_description_kgwinblur">Permite rampas de desfoque da janela iniciadas por toque na tela de bloqueio parada.</string>
     <string name="control_description_lens">Ajusta o deslocamento da faixa de lente do pop-up em relação ao bisel.</string>
     <string name="control_description_lensgate">Seleciona quais toques ocultam a faixa de lente durante o movimento.</string>

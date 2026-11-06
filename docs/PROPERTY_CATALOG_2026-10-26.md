@@ -115,7 +115,7 @@ Observar que as propriedades `lightglass` e `shadelightglass` se aplicam a super
 | `perf` | 0 | L | Instrumentação de tempos de hooks, deve ter aviso de custo |
 | `trace` | 0 | L | Diagnóstico detalhado de árvores/janelas; evitar coleta permanente |
 | `edgepremul` | 3 | inteiro 0–4 | 3 = padrão: alpha premultiplicado PLUS com RGB de luz +50%; 0 = original/rollback; 1 = alpha premultiplicado SRC_OVER; 2 = PLUS +0%; 4 = PLUS +40% |
-| `kgsharedoptics` | 0 | booleano 0–1 | Experimento KG: 1 reutiliza a óptica Java da Now Bar no cartão de notificação, com `sf.kgfixedrim=0` para evitar borda dupla. Corpo, refração e blur não mudam; 0 é o padrão seguro. |
+| `kgsharedoptics` | 1 | booleano 0–1 | Notificação KG: 1 reutiliza a óptica Java da Now Bar junto com o contorno estrutural nativo (`sf.kgfixedrim=1`); essa combinação foi aprovada visualmente no DZIF. Desligar o contorno nativo eliminou a profundidade do vidro. Corpo, refração e blur não mudam. 0 desativa apenas a óptica Java adicional. |
 
 ## Perfis do SurfaceFlinger — C
 

@@ -22,12 +22,12 @@ public class TuningApprovedDefaultsTest {
         try {
             current.set(null, Collections.emptyMap());
             Tuning baseline = constructor.newInstance();
-            assertFalse(baseline.kgSharedOptics);
-            current.set(null, Collections.singletonMap("kgsharedoptics", "1"));
+            assertTrue(baseline.kgSharedOptics);
+            current.set(null, Collections.singletonMap("kgsharedoptics", "0"));
             Tuning experiment = constructor.newInstance();
-            assertTrue(experiment.kgSharedOptics);
+            assertFalse(experiment.kgSharedOptics);
             assertNotEquals(baseline.toString(), experiment.toString());
-            assertTrue(experiment.toString().contains("kgsharedoptics=true"));
+            assertTrue(experiment.toString().contains("kgsharedoptics=false"));
         } finally { current.set(null, old); }
     }
 
@@ -42,18 +42,18 @@ public class TuningApprovedDefaultsTest {
             assertEquals(0, t.semRadius); assertEquals(14, t.semRadiusLens);
             assertEquals(.55f, t.sfLens, 0f); assertEquals(0, t.semAlpha);
             assertEquals(12, t.kgBlurRadius); assertEquals(5, t.kgDarkFill);
-            assertFalse(t.kgSharedOptics);
+            assertTrue(t.kgSharedOptics);
             assertEquals(.18f, t.shadeLightGlass, 0f); assertEquals(0, t.liveDarkFill);
             assertFalse(t.headerTone); assertEquals(.08f, t.panelDim, 0f);
             assertEquals(70, t.panelBlurCap); assertEquals(7f, t.headerGap, 0f);
             assertEquals(.50f, t.mediaArt, 0f); assertEquals(.25f, t.qsMediaArt, 0f);
             Map<String, String> saved = new HashMap<>();
             saved.put("mediaart", "0.25"); saved.put("kgdarkfill", "14");
-            saved.put("kgsharedoptics", "1");
+            saved.put("kgsharedoptics", "0");
             current.set(null, saved);
             t = constructor.newInstance();
             assertEquals(.25f, t.mediaArt, 0f); assertEquals(14, t.kgDarkFill);
-            assertTrue(t.kgSharedOptics);
+            assertFalse(t.kgSharedOptics);
             assertEquals(.25f, t.qsMediaArt, 0f);
         } finally { current.set(null, old); }
     }

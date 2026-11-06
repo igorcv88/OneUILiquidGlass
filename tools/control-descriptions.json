@@ -620,8 +620,8 @@
     "Modo padrão 3: borda aditiva premultiplicada com luz RGB 1,5x. O modo 0 restaura a composição original; 1 usa composição normal; 2 soma luz a 1x; 4 soma a 1,4x."
   ],
   "kgsharedoptics": [
-    "Experimental KG notification edge: reuse the same Java optical shader as Now Bar. For a single edge owner, set Fixed outline (comparison) off too (sf.kgfixedrim=0) and apply in userspace. Does not change body tone, refraction, or blur. Off is the safe default.",
-    "Experimento na borda das notificações KG: reutiliza o mesmo shader óptico Java da Now Bar. Para evitar borda dupla, desligue Contorno fixo (comparação) (sf.kgfixedrim=0) e aplique no userspace. Não modifica corpo, refração nem blur. Desligado é o padrão seguro."
+    "KG notifications reuse the Now Bar's Java optical shader. Keep Fixed rim (sf.kgfixedrim=1) enabled: the combined appearance was approved on DZIF; disabling the structural rim flattened the glass. Does not change body tone, refraction, or blur. On is the approved default.",
+    "Notificações KG reutilizam o shader óptico Java da Now Bar. Mantenha Contorno fixo (sf.kgfixedrim=1) ligado: a combinação foi aprovada no DZIF; desligar o contorno estrutural achatou o vidro. Não modifica corpo, refração nem blur. Ligado é o padrão aprovado."
   ],
   "sf.kgfixedrim": [
     "On (default): preserve the outline and reflections that give the lens depth. Off: diagnostic only; removing all three makes the lock-screen card visually flat. Blur radii do not change.",

@@ -397,7 +397,7 @@ public final class Tuning {
         pillGlass = number("pillglass", 1f) >= 1f;
         pillBlur = Math.round(clamp(number("pillblur", 40f), 0f, 400f));
         kgOptics = Math.round(clamp(number("kgoptics", 1f), 0f, 1f));
-        kgSharedOptics = number("kgsharedoptics", 0f) >= 1f;
+        kgSharedOptics = number("kgsharedoptics", 1f) >= 1f;
         huOptics = Math.round(clamp(number("huoptics", 0f), 0f, 1f));
         float kl = number("kglens", 0.40f);
         kgLens = kl < 0f ? -1f : clamp(kl, 0.1f, 1.2f);
