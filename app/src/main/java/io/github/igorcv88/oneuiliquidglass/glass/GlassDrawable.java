@@ -132,8 +132,15 @@ public final class GlassDrawable extends Drawable {
     }
     /** Cached once on card creation / shade-state change. No SurfaceFlinger query in draw(). */
     private boolean p3EdgeCompatibility;
+    private boolean p3DrawStateReported;
     public void setP3EdgeCompatibility(boolean enabled) {
-        if (p3EdgeCompatibility != enabled) { p3EdgeCompatibility = enabled; invalidateSelf(); }
+        if (p3EdgeCompatibility != enabled) {
+            p3EdgeCompatibility = enabled;
+            // A reused pop-up drawable needs a fresh GLASS_EDGE_DRAWN trace for the new mode.
+            reportedEdgeDraw = false;
+            p3DrawStateReported = false;
+            invalidateSelf();
+        }
     }
     public void setGlint(float g) { if (glint != g) { glint = g; invalidateSelf(); } }
     /** Gain of the outer contour line in the LSPosed-only edge model (1: unchanged). */
@@ -218,6 +225,14 @@ public final class GlassDrawable extends Drawable {
     }
     private void drawGlass(Canvas canvas) {
         if (failed) { if (nativeDrawable != null) { nativeDrawable.setBounds(getBounds()); nativeDrawable.draw(canvas); } return; }
+        if (p3EdgeCompatibility && !p3DrawStateReported) {
+            p3DrawStateReported = true;
+            Probe.log("P3_EDGE_DRAW_STATE", "source=" + backdrop.name()
+                    + " edgeMode=" + P3EdgeSelection.effectiveMode(Tuning.get().edgePremulMode, p3EdgeCompatibility)
+                    + " shader=" + (shader != null) + " compositorLit=" + compositorLit
+                    + " sampled=" + (backdrop instanceof SampledBackdrop)
+                    + " hardware=" + canvas.isHardwareAccelerated());
+        }
         int save = canvas.save();
         try {
             Rect bounds = getBounds(); rect.set(bounds);
