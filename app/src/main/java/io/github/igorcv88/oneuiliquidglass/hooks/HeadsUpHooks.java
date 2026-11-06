@@ -125,6 +125,9 @@ public final class HeadsUpHooks {
     private boolean p3PopupWatching;
     private boolean p3PopupQueryInFlight;
     private int p3PopupWatchGeneration;
+    private int p3PopupDiagnosticHz, p3PopupSamples;
+    private long p3PopupStartedAt, p3PopupPreviousSampleAt, p3PopupQueryTotalUs;
+    private long p3PopupQueryMaxUs, p3PopupGapTotalMs, p3PopupGapMaxMs;
     /** SystemUI's StatusBarState (0 shade, 1 keyguard, 2 shade over keyguard); null until first set. */
     private Integer barState;
 
@@ -142,26 +145,47 @@ public final class HeadsUpHooks {
         return null;
     }
     private long p3PopupInterval(long now) {
+        if (p3PopupDiagnosticActive(now)) return P3EdgeSelection.POPUP_WATCH_DIAGNOSTIC_INTERVAL_MS;
         return P3EdgeSelection.popupWatchInterval(now, BackdropMotion.lastActive(), BackdropEvents.lastChange());
+    }
+    private boolean p3PopupDiagnosticActive(long now) {
+        return P3EdgeSelection.diagnosticWatchActive(now, p3PopupStartedAt, p3PopupDiagnosticHz);
     }
     private void startP3PopupWatch() {
         if (p3PopupWatching || visibleP3Popup() == null) return;
         p3PopupWatching = true;
-        long interval = p3PopupInterval(android.os.SystemClock.uptimeMillis());
+        p3PopupStartedAt = android.os.SystemClock.uptimeMillis();
+        p3PopupDiagnosticHz = P3DisplayProbe.popupWatchDiagnosticHz();
+        p3PopupSamples = 0;
+        p3PopupPreviousSampleAt = p3PopupQueryTotalUs = p3PopupQueryMaxUs = 0;
+        p3PopupGapTotalMs = p3PopupGapMaxMs = 0;
+        long interval = p3PopupInterval(p3PopupStartedAt);
         Probe.log("P3_POPUP_WATCH", "state=start intervalMs=" + interval
-                + " idleMs=" + P3EdgeSelection.POPUP_WATCH_INTERVAL_MS);
+                + " idleMs=" + P3EdgeSelection.POPUP_WATCH_INTERVAL_MS
+                + " diagnosticHz=" + p3PopupDiagnosticHz);
         main.postDelayed(p3PopupTick, interval);
     }
     /** A verified touchscreen gesture may change an in-app color mode without a task event. */
     private void wakeP3PopupWatchOnTouch() {
         if (!p3PopupWatching || p3PopupQueryInFlight) return;
+        // The diagnostic timer is already faster than a touch-triggered 48 ms wakeup.
+        if (p3PopupDiagnosticActive(android.os.SystemClock.uptimeMillis())) return;
         main.removeCallbacks(p3PopupTick);
         main.postDelayed(p3PopupTick, P3EdgeSelection.POPUP_WATCH_TOUCH_WAKE_MS);
     }
     private void stopP3PopupWatch() {
         if (!p3PopupWatching) return;
+        long elapsed = Math.max(1, android.os.SystemClock.uptimeMillis() - p3PopupStartedAt);
+        long gaps = Math.max(1, p3PopupSamples - 1);
+        Probe.log("P3_POPUP_WATCH_STATS", "diagnosticHz=" + p3PopupDiagnosticHz
+                + " elapsedMs=" + elapsed + " samples=" + p3PopupSamples
+                + " observedHz=" + String.format(java.util.Locale.ROOT, "%.1f", p3PopupSamples * 1000.0 / elapsed)
+                + " avgGapMs=" + p3PopupGapTotalMs / gaps + " maxGapMs=" + p3PopupGapMaxMs
+                + " avgQueryUs=" + p3PopupQueryTotalUs / Math.max(1, p3PopupSamples)
+                + " maxQueryUs=" + p3PopupQueryMaxUs);
         p3PopupWatching = false;
         p3PopupQueryInFlight = false;
+        p3PopupDiagnosticHz = 0;
         p3PopupWatchGeneration++;
         main.removeCallbacks(p3PopupTick);
         Probe.log("P3_POPUP_WATCH", "state=stop");
@@ -182,6 +206,16 @@ public final class HeadsUpHooks {
             main.post(() -> {
                 if (!p3PopupWatching || generation != p3PopupWatchGeneration) return;
                 p3PopupQueryInFlight = false;
+                long sampledAt = android.os.SystemClock.uptimeMillis();
+                if (p3PopupPreviousSampleAt > 0) {
+                    long gap = sampledAt - p3PopupPreviousSampleAt;
+                    p3PopupGapTotalMs += gap;
+                    p3PopupGapMaxMs = Math.max(p3PopupGapMaxMs, gap);
+                }
+                p3PopupPreviousSampleAt = sampledAt;
+                p3PopupSamples++;
+                p3PopupQueryTotalUs += queryUs;
+                p3PopupQueryMaxUs = Math.max(p3PopupQueryMaxUs, queryUs);
                 try {
                     boolean compatEnabled = enabled && P3DisplayProbe.edgeCompatEnabled();
                     boolean collapsed = !Boolean.TRUE.equals(shadeExpanded);
@@ -216,7 +250,9 @@ public final class HeadsUpHooks {
                     long now = android.os.SystemClock.uptimeMillis();
                     long remaining = p3PopupInterval(now) - (now - sampleStarted);
                     main.postDelayed(p3PopupTick,
-                            Math.max(P3EdgeSelection.POPUP_WATCH_MIN_GAP_MS, remaining));
+                            Math.max(p3PopupDiagnosticActive(now)
+                                    ? P3EdgeSelection.POPUP_WATCH_DIAGNOSTIC_MIN_GAP_MS
+                                    : P3EdgeSelection.POPUP_WATCH_MIN_GAP_MS, remaining));
                 }
             });
         });

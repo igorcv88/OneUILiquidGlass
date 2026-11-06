@@ -21,6 +21,7 @@ import java.lang.reflect.Method;
 public final class P3DisplayProbe {
     private static final String PROP = "debug.oulg.p3probe";
     private static final String EDGE_COMPAT_PROP = "debug.oulg.p3edgecompat";
+    private static final String POPUP_WATCH_HZ_PROP = "debug.oulg.p3watchhz";
 
     private static final class Sample {
         long physicalId;
@@ -66,6 +67,18 @@ public final class P3DisplayProbe {
             return "1".equals(value) || "true".equalsIgnoreCase(value);
         } catch (ReflectiveOperationException | RuntimeException | LinkageError ignored) {
             return false;
+        }
+    }
+
+    /** Opt-in, short-lived 60 Hz diagnostic; never enabled automatically or for the shade. */
+    public static int popupWatchDiagnosticHz() {
+        try {
+            Class<?> props = Class.forName("android.os.SystemProperties");
+            Object value = props.getMethod("get", String.class, String.class)
+                    .invoke(null, POPUP_WATCH_HZ_PROP, "0");
+            return "60".equals(value) ? 60 : 0;
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError ignored) {
+            return 0;
         }
     }
 
