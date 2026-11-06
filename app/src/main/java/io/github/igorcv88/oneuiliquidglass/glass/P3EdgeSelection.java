@@ -4,18 +4,12 @@ package io.github.igorcv88.oneuiliquidglass.glass;
 public final class P3EdgeSelection {
     public static final int DISPLAY_P3 = 9;
     public static final int COMPAT_EDGE_MODE = 3;
-    /** Quiet fallback: at most 3.34 physical-mode queries/sec, only for a visible heads-up. */
-    public static final long POPUP_WATCH_INTERVAL_MS = 300;
-    /** Brief, touch/task-triggered burst: 12.5 queries/sec off the UI thread. */
-    public static final long POPUP_WATCH_ACTIVE_INTERVAL_MS = 80;
-    public static final long POPUP_WATCH_ACTIVE_WINDOW_MS = 1200;
-    /** Sample shortly after a touch starts, then keep the fast cadence through its transition. */
-    public static final long POPUP_WATCH_TOUCH_WAKE_MS = 48;
+    /** Measured production cadence: only while a heads-up is visible, never on draw frames. */
+    public static final long POPUP_WATCH_INTERVAL_MS = 33;
     /** Never queue a follow-up query in a tight loop if SurfaceFlinger answered slowly. */
-    public static final long POPUP_WATCH_MIN_GAP_MS = 24;
-    /** A short opt-in comparison at 24/30/60 Hz; never used in normal operation. */
+    public static final long POPUP_WATCH_MIN_GAP_MS = 4;
+    /** Optional bounded 24/30/60 Hz comparison; the normal cadence remains 30 Hz. */
     public static final long POPUP_WATCH_DIAGNOSTIC_MAX_MS = 10_000;
-    public static final long POPUP_WATCH_DIAGNOSTIC_MIN_GAP_MS = 4;
 
     private P3EdgeSelection() {}
 
@@ -31,15 +25,6 @@ public final class P3EdgeSelection {
     public static boolean diagnosticWatchActive(long now, long started, int requestedHz) {
         return diagnosticWatchInterval(requestedHz) > 0 && now >= started
                 && now - started < POPUP_WATCH_DIAGNOSTIC_MAX_MS;
-    }
-
-    /** A foreground gesture or task change deserves faster checks; idle pop-ups stay cheap. */
-    public static long popupWatchInterval(long now, long lastTouch, long lastTaskChange) {
-        boolean recentTouch = lastTouch >= 0 && now >= lastTouch
-                && now - lastTouch < POPUP_WATCH_ACTIVE_WINDOW_MS;
-        boolean recentTask = lastTaskChange >= 0 && now >= lastTaskChange
-                && now - lastTaskChange < POPUP_WATCH_ACTIVE_WINDOW_MS;
-        return recentTouch || recentTask ? POPUP_WATCH_ACTIVE_INTERVAL_MS : POPUP_WATCH_INTERVAL_MS;
     }
 
     /** Never infer P3 from the app name; unknown compositor modes fail closed. */

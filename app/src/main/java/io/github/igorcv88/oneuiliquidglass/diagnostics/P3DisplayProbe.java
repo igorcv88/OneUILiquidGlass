@@ -70,7 +70,7 @@ public final class P3DisplayProbe {
         }
     }
 
-    /** Opt-in 24/30/60 Hz comparison; the default remains adaptive, shade is untouched. */
+    /** Opt-in 24/30/60 Hz comparison; the production heads-up watcher uses 30 Hz. */
     public static int popupWatchDiagnosticHz() {
         try {
             Class<?> props = Class.forName("android.os.SystemProperties");
