@@ -128,6 +128,9 @@ public final class HeadsUpHooks {
     private int p3PopupDiagnosticHz, p3PopupSamples;
     private long p3PopupStartedAt, p3PopupPreviousSampleAt, p3PopupQueryTotalUs;
     private long p3PopupQueryMaxUs, p3PopupGapTotalMs, p3PopupGapMaxMs;
+    private long p3PopupWorkerCpuTotalUs, p3PopupWorkerCpuMaxUs;
+    private long p3PopupMainCpuTotalUs, p3PopupMainCpuMaxUs;
+    private int p3PopupWorkerCpuSamples, p3PopupMainCpuSamples;
     /** SystemUI's StatusBarState (0 shade, 1 keyguard, 2 shade over keyguard); null until first set. */
     private Integer barState;
 
@@ -145,7 +148,7 @@ public final class HeadsUpHooks {
         return null;
     }
     private long p3PopupInterval(long now) {
-        if (p3PopupDiagnosticActive(now)) return P3EdgeSelection.POPUP_WATCH_DIAGNOSTIC_INTERVAL_MS;
+        if (p3PopupDiagnosticActive(now)) return P3EdgeSelection.diagnosticWatchInterval(p3PopupDiagnosticHz);
         return P3EdgeSelection.popupWatchInterval(now, BackdropMotion.lastActive(), BackdropEvents.lastChange());
     }
     private boolean p3PopupDiagnosticActive(long now) {
@@ -159,6 +162,9 @@ public final class HeadsUpHooks {
         p3PopupSamples = 0;
         p3PopupPreviousSampleAt = p3PopupQueryTotalUs = p3PopupQueryMaxUs = 0;
         p3PopupGapTotalMs = p3PopupGapMaxMs = 0;
+        p3PopupWorkerCpuTotalUs = p3PopupWorkerCpuMaxUs = 0;
+        p3PopupMainCpuTotalUs = p3PopupMainCpuMaxUs = 0;
+        p3PopupWorkerCpuSamples = p3PopupMainCpuSamples = 0;
         long interval = p3PopupInterval(p3PopupStartedAt);
         Probe.log("P3_POPUP_WATCH", "state=start intervalMs=" + interval
                 + " idleMs=" + P3EdgeSelection.POPUP_WATCH_INTERVAL_MS
@@ -168,7 +174,7 @@ public final class HeadsUpHooks {
     /** A verified touchscreen gesture may change an in-app color mode without a task event. */
     private void wakeP3PopupWatchOnTouch() {
         if (!p3PopupWatching || p3PopupQueryInFlight) return;
-        // The diagnostic timer is already faster than a touch-triggered 48 ms wakeup.
+        // Diagnostic intervals are already scheduled without a touch-triggered 48 ms postponement.
         if (p3PopupDiagnosticActive(android.os.SystemClock.uptimeMillis())) return;
         main.removeCallbacks(p3PopupTick);
         main.postDelayed(p3PopupTick, P3EdgeSelection.POPUP_WATCH_TOUCH_WAKE_MS);
@@ -182,7 +188,13 @@ public final class HeadsUpHooks {
                 + " observedHz=" + String.format(java.util.Locale.ROOT, "%.1f", p3PopupSamples * 1000.0 / elapsed)
                 + " avgGapMs=" + p3PopupGapTotalMs / gaps + " maxGapMs=" + p3PopupGapMaxMs
                 + " avgQueryUs=" + p3PopupQueryTotalUs / Math.max(1, p3PopupSamples)
-                + " maxQueryUs=" + p3PopupQueryMaxUs);
+                + " maxQueryUs=" + p3PopupQueryMaxUs
+                + " workerCpuSamples=" + p3PopupWorkerCpuSamples
+                + " workerCpuAvgUs=" + p3PopupWorkerCpuTotalUs / Math.max(1, p3PopupWorkerCpuSamples)
+                + " workerCpuMaxUs=" + p3PopupWorkerCpuMaxUs
+                + " mainCpuSamples=" + p3PopupMainCpuSamples
+                + " mainCpuAvgUs=" + p3PopupMainCpuTotalUs / Math.max(1, p3PopupMainCpuSamples)
+                + " mainCpuMaxUs=" + p3PopupMainCpuMaxUs);
         p3PopupWatching = false;
         p3PopupQueryInFlight = false;
         p3PopupDiagnosticHz = 0;
@@ -200,11 +212,16 @@ public final class HeadsUpHooks {
         long sampleStarted = android.os.SystemClock.uptimeMillis();
         p3PopupQueryInFlight = true;
         p3PopupWorker.execute(() -> {
+            long cpuStarted = android.os.Debug.threadCpuTimeNanos();
             long queryStarted = android.os.SystemClock.elapsedRealtimeNanos();
             int mode = P3DisplayProbe.activeColorMode(context);
             long queryUs = (android.os.SystemClock.elapsedRealtimeNanos() - queryStarted) / 1000;
+            long cpuEnded = android.os.Debug.threadCpuTimeNanos();
+            long workerCpuUs = cpuStarted >= 0 && cpuEnded >= cpuStarted
+                    ? (cpuEnded - cpuStarted) / 1000 : -1;
             main.post(() -> {
                 if (!p3PopupWatching || generation != p3PopupWatchGeneration) return;
+                long mainCpuStarted = android.os.Debug.threadCpuTimeNanos();
                 p3PopupQueryInFlight = false;
                 long sampledAt = android.os.SystemClock.uptimeMillis();
                 if (p3PopupPreviousSampleAt > 0) {
@@ -216,6 +233,11 @@ public final class HeadsUpHooks {
                 p3PopupSamples++;
                 p3PopupQueryTotalUs += queryUs;
                 p3PopupQueryMaxUs = Math.max(p3PopupQueryMaxUs, queryUs);
+                if (workerCpuUs >= 0) {
+                    p3PopupWorkerCpuSamples++;
+                    p3PopupWorkerCpuTotalUs += workerCpuUs;
+                    p3PopupWorkerCpuMaxUs = Math.max(p3PopupWorkerCpuMaxUs, workerCpuUs);
+                }
                 try {
                     boolean compatEnabled = enabled && P3DisplayProbe.edgeCompatEnabled();
                     boolean collapsed = !Boolean.TRUE.equals(shadeExpanded);
@@ -245,7 +267,15 @@ public final class HeadsUpHooks {
                     stopP3PopupWatch();
                     return;
                 }
-                if (visibleP3Popup() == null) stopP3PopupWatch();
+                State nextPopup = visibleP3Popup();
+                long mainCpuEnded = android.os.Debug.threadCpuTimeNanos();
+                if (mainCpuStarted >= 0 && mainCpuEnded >= mainCpuStarted) {
+                    long mainCpuUs = (mainCpuEnded - mainCpuStarted) / 1000;
+                    p3PopupMainCpuSamples++;
+                    p3PopupMainCpuTotalUs += mainCpuUs;
+                    p3PopupMainCpuMaxUs = Math.max(p3PopupMainCpuMaxUs, mainCpuUs);
+                }
+                if (nextPopup == null) stopP3PopupWatch();
                 else {
                     long now = android.os.SystemClock.uptimeMillis();
                     long remaining = p3PopupInterval(now) - (now - sampleStarted);

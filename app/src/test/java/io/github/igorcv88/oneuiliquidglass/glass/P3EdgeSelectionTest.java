@@ -68,13 +68,20 @@ public final class P3EdgeSelectionTest {
         assertEquals(idle, P3EdgeSelection.popupWatchInterval(now, -1, 5100));
     }
 
-    @Test public void experimental60HzIsExplicitAndTimeBound() {
-        assertEquals(17, P3EdgeSelection.POPUP_WATCH_DIAGNOSTIC_INTERVAL_MS);
+    @Test public void experimentalRatesAreExplicitAndTimeBound() {
+        assertEquals(0, P3EdgeSelection.diagnosticWatchInterval(0));
+        assertEquals(42, P3EdgeSelection.diagnosticWatchInterval(24));
+        assertEquals(33, P3EdgeSelection.diagnosticWatchInterval(30));
+        assertEquals(17, P3EdgeSelection.diagnosticWatchInterval(60));
+        assertEquals(0, P3EdgeSelection.diagnosticWatchInterval(120));
         assertFalse(P3EdgeSelection.diagnosticWatchActive(1000, 1000, 0));
-        assertFalse(P3EdgeSelection.diagnosticWatchActive(1000, 1000, 30));
+        assertTrue(P3EdgeSelection.diagnosticWatchActive(1000, 1000, 24));
+        assertTrue(P3EdgeSelection.diagnosticWatchActive(1000, 1000, 30));
         assertTrue(P3EdgeSelection.diagnosticWatchActive(1000, 1000, 60));
         assertTrue(P3EdgeSelection.diagnosticWatchActive(10_999, 1000, 60));
+        assertTrue(P3EdgeSelection.diagnosticWatchActive(10_999, 1000, 24));
         assertFalse(P3EdgeSelection.diagnosticWatchActive(11_000, 1000, 60));
+        assertFalse(P3EdgeSelection.diagnosticWatchActive(11_000, 1000, 30));
         assertFalse(P3EdgeSelection.diagnosticWatchActive(999, 1000, 60));
     }
 }

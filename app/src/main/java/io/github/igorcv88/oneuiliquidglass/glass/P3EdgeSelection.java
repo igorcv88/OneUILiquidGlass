@@ -13,15 +13,23 @@ public final class P3EdgeSelection {
     public static final long POPUP_WATCH_TOUCH_WAKE_MS = 48;
     /** Never queue a follow-up query in a tight loop if SurfaceFlinger answered slowly. */
     public static final long POPUP_WATCH_MIN_GAP_MS = 24;
-    /** 60 Hz diagnostic is capped at ten seconds of one visible pop-up, then auto-reverts. */
-    public static final long POPUP_WATCH_DIAGNOSTIC_INTERVAL_MS = 17;
+    /** A short opt-in comparison at 24/30/60 Hz; never used in normal operation. */
     public static final long POPUP_WATCH_DIAGNOSTIC_MAX_MS = 10_000;
     public static final long POPUP_WATCH_DIAGNOSTIC_MIN_GAP_MS = 4;
 
     private P3EdgeSelection() {}
 
+    public static long diagnosticWatchInterval(int requestedHz) {
+        switch (requestedHz) {
+            case 24: return 42;
+            case 30: return 33;
+            case 60: return 17;
+            default: return 0;
+        }
+    }
+
     public static boolean diagnosticWatchActive(long now, long started, int requestedHz) {
-        return requestedHz == 60 && now >= started
+        return diagnosticWatchInterval(requestedHz) > 0 && now >= started
                 && now - started < POPUP_WATCH_DIAGNOSTIC_MAX_MS;
     }
 

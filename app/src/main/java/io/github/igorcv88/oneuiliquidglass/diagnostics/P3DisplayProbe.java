@@ -70,12 +70,14 @@ public final class P3DisplayProbe {
         }
     }
 
-    /** Opt-in, short-lived 60 Hz diagnostic; never enabled automatically or for the shade. */
+    /** Opt-in 24/30/60 Hz comparison; the default remains adaptive, shade is untouched. */
     public static int popupWatchDiagnosticHz() {
         try {
             Class<?> props = Class.forName("android.os.SystemProperties");
             Object value = props.getMethod("get", String.class, String.class)
                     .invoke(null, POPUP_WATCH_HZ_PROP, "0");
+            if ("24".equals(value)) return 24;
+            if ("30".equals(value)) return 30;
             return "60".equals(value) ? 60 : 0;
         } catch (ReflectiveOperationException | RuntimeException | LinkageError ignored) {
             return 0;
