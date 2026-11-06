@@ -163,7 +163,7 @@ Observar que as propriedades `lightglass` e `shadelightglass` se aplicam a super
 | `sf.qslens` | 0.30 | Quick Settings: refração do fundo junto ao contorno (0 desliga a refração e o fundo refratado) |
 | `sf.qsbody` | 0.35 | Quick Settings: opacidade do fundo refratado no contorno |
 | `sf.qsdepth` | 18 | Quick Settings: profundidade (px) da luz vinda de um contorno branco |
-| `sf.debug` | 0 | Tinta diagnóstica magenta/ciano sobre programas elegíveis |
+| `sf.debug` | 0 | Modo de diagnóstico 0–2: 0 sem tinta; 1 magenta/ciano para programas reescritos; 2 mapa verde da luminância local na borda das notificações do bloqueio |
 | `sf.norewrite` | 0 | 1 desativa a reescrita dos shaders ao compilar |
 | `sf.optics` | 9 anunciado pela lib | R, handshake; já listado em Java |
 

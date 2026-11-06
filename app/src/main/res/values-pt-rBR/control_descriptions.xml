@@ -94,7 +94,7 @@
     <string name="control_description_semradiuslens">Controla o desfoque do sistema sob a lente dinâmica. Menos desfoque preserva detalhes para a refração.</string>
     <string name="control_description_semshape">Seleciona a geometria da região de desfoque do sistema.</string>
     <string name="control_description_sf_core">Ajusta o desfoque no centro dos pop-ups. As mudanças são aplicadas após reiniciar o userspace.</string>
-    <string name="control_description_sf_debug">Pinta programas de shader reescritos em magenta e ciano para diagnóstico. As mudanças são aplicadas após reiniciar o userspace.</string>
+    <string name="control_description_sf_debug">Modo de diagnóstico: 0 desligado, 1 magenta/ciano nos shaders reescritos, 2 mapa verde da luminância local nas bordas das notificações do bloqueio. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_edgeblur">Ajusta o desfoque da borda do pop-up e sua transição até o centro. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_hubloom">Reduz amostras muito claras no centro do pop-up. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_hublur">Multiplica o desfoque do compositor no pop-up sem alterar o desfoque básico. As mudanças são aplicadas após reiniciar o userspace.</string>

@@ -2388,6 +2388,7 @@ public final class HeadsUpHooks {
                 glass.setCallback(v);
                 Probe.log("GLASS_APPLIED", "viewId=" + Integer.toHexString(System.identityHashCode(v)) + " source=" + backdrop.name()
                         + " optics=" + (kind == Backdrop.Kind.SAMPLED ? "refraction" : "edge_shader")
+                        + " edgeMode=" + Tuning.get().edgePremulMode
                         + " leaving=" + exit.leaving(android.os.SystemClock.uptimeMillis()));
                 materialReported = false;
                 Probe.painters(row.get());

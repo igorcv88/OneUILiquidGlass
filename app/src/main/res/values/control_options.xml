@@ -20,12 +20,16 @@
     <string name="control_option_2212a1a4fd6a">Horizontal gestures</string>
     <string name="control_option_9a216516ec5f">Test grid</string>
     <string name="control_option_31d64f897e37">Hybrid</string>
+    <string name="control_option_7fa186bd9a0b">Identifies lens-rewritten shaders</string>
     <string name="control_option_e723a958ac2a">Same as overall blur</string>
     <string name="control_option_3e59ff2f3f00">Same as pop-up</string>
     <string name="control_option_9be0dc635d59">Limited slope, without folds</string>
     <string name="control_option_c908bfdb54ef">Smooth lens</string>
+    <string name="control_option_18f5e7ca18f6">Edge luminance</string>
     <string name="control_option_580a7b605fb0">Safer, but hides more often</string>
     <string name="control_option_26f136eba6ff">Lens tone map</string>
+    <string name="control_option_d08dd5f2deae">Green map of local light along the lock screen edge</string>
+    <string name="control_option_439524094087">Magenta/cyan markers</string>
     <string name="control_option_ce65364887ca">Lock screen material</string>
     <string name="control_option_b5ac2d86fb77">Pop-up material</string>
     <string name="control_option_966831833a8c">Measures the background when opening the shade</string>
@@ -43,6 +47,7 @@
     <string name="control_option_5e752f3cd7ac">Any touch</string>
     <string name="control_option_5a83874989ff">Four corners</string>
     <string name="control_option_808eb0b380d3">Single radius</string>
+    <string name="control_option_f1b4503c73c7">Normal rendering without diagnostic tint</string>
     <string name="control_option_929dc216ba9a">Follows the card fade</string>
     <string name="control_option_b21f94257814">No sampling</string>
     <string name="control_option_787bedf67271">No shape</string>

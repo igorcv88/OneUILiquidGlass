@@ -83,6 +83,16 @@ public final class CompositorValuesTest {
         assertTrue(inputs.size() >= SfLive.WRITABLE.size());
     }
 
+    @Test public void greenDiagnosticModeSurvivesRestartInputsAndHelperCommand() {
+        Map<String, String> green = Collections.singletonMap("sf.debug", "2");
+        assertEquals("2", CompositorValues.restartInputs(green, Collections.emptyMap()).get("sf.debug"));
+        assertEquals("2", CompositorValues.restartInputs(Collections.emptyMap(), green).get("sf.debug"));
+        assertEquals(green, SfLive.normalizeValues(green));
+        assertTrue(SfLive.setprops("/data/local/tmp/sfhook", green).get(2).endsWith(" setprops debug=2"));
+        assertTrue(CompositorValues.pending(green, Collections.emptyMap()).containsKey("sf.debug"));
+        assertTrue(CompositorValues.pending(green, green).isEmpty());
+    }
+
     @Test public void freshRestartDefaultsCanAllPassTheRootHelperValidator() {
         Map<String, String> defaults = CompositorValues.restartInputs(
                 Collections.emptyMap(), Collections.emptyMap());

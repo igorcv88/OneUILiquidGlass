@@ -164,6 +164,8 @@ public final class GlassDrawable extends Drawable {
      * to take its place.
      */
     private boolean compositorLit;
+    /** At most one trace per card, to distinguish an eligible shader from one actually drawn. */
+    private boolean reportedEdgeDraw;
     public void setCompositorLit(boolean on) { if (compositorLit != on) { compositorLit = on; invalidateSelf(); } }
     /** See {@link Backdrop#reassert()}. */
     public void reassertBackdrop() { if (!failed) backdrop.reassert(); }
@@ -248,6 +250,13 @@ public final class GlassDrawable extends Drawable {
             if (shader != null && !compositorLit) {
                 edgeUniforms(shader, bounds);
                 canvas.drawRect(rect, paint);
+                if (!reportedEdgeDraw && Probe.trace) {
+                    reportedEdgeDraw = true;
+                    Tuning t = Tuning.get();
+                    Probe.log("GLASS_EDGE_DRAWN", "mode=" + t.edgePremulMode
+                            + " blend=" + (t.edgePremulMode >= 2 ? "PLUS" : "SRC_OVER")
+                            + " source=" + backdrop.name() + " hardware=" + canvas.isHardwareAccelerated());
+                }
             }
         } catch (RuntimeException e) {
             failed = true; backdrop.release(); Probe.error("GLASS_DRAW_FAILED", e);

@@ -51,6 +51,27 @@ public class ControlModelTest {
     }
 
     @Test
+    public void compositorDiagnosticAcceptsAllThreeModesWithoutCoercingGreenToOff() {
+        SettingSpec debug = SettingsRegistry.get("sf.debug");
+        Controls.Control control = Controls.get("sf.debug");
+        assertEquals(SettingSpec.Type.ENUM, debug.type);
+        assertEquals("0", debug.defaultValue);
+        assertEquals("0,1,2", debug.choices);
+        assertEquals(Controls.Format.CHOICE, control.format);
+        for (String mode : new String[] {"0", "1", "2"}) {
+            assertEquals(mode, debug.validate(mode));
+            assertTrue(control.choices.containsKey(mode));
+        }
+        for (String invalid : new String[] {"-1", "3", "true", "2.0"}) {
+            try {
+                debug.validate(invalid);
+                fail("Accepted invalid shader diagnostic mode " + invalid);
+            } catch (IllegalArgumentException expected) {
+            }
+        }
+    }
+
+    @Test
     public void helperStateIsNeverAnEditableControl() {
         for (String key : new String[] {"sfrefract", "sf.optics", "sf.norewrite"})
             assertFalse(key, Controls.editable(key));

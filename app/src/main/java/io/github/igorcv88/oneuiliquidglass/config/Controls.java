@@ -786,9 +786,13 @@ public final class Controls {
                 .help("Desfoque do fundo que a lente dinâmica lê no contorno. Mais suaviza a luz e"
                         + " a refração; menos deixa a borda mais nítida.")
                 .show(BEHAV, Channel.NONE));
-        put(c("sf.debug", "Tinta de diagnóstico").fmt(Format.TOGGLE).in(TECH, TEC).all()
-                .help("Pinta em magenta e ciano os programas reescritos pela lente. Só para"
-                        + " diagnóstico." + restart));
+        put(c("sf.debug", "Tinta de diagnóstico").fmt(Format.CHOICE).in(TECH, TEC).all()
+                .choice("0", "Desligada", "Renderização normal, sem tinta diagnóstica")
+                .choice("1", "Marcação magenta/ciano", "Identifica os programas reescritos pela lente")
+                .choice("2", "Luminância da borda", "Mapa verde da luz local na borda do bloqueio")
+                .help("0: desliga a tinta. 1: magenta/ciano para identificar os programas reescritos."
+                        + " 2: mapa verde da luminância amostrada no contorno das notificações do bloqueio."
+                        + " Só para diagnóstico." + restart));
 
         // Técnico
         put(c("backdrop", "Origem do fundo").fmt(Format.CHOICE).in(TECH, TEC).all()

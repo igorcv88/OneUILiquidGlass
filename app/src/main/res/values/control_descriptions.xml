@@ -94,7 +94,7 @@
     <string name="control_description_semradiuslens">Controls system blur under the dynamic lens. Less blur leaves more detail for refraction.</string>
     <string name="control_description_semshape">Selects the geometry of the system blur region.</string>
     <string name="control_description_sf_core">Adjusts blur at the center of pop-ups. Changes apply after userspace restarts.</string>
-    <string name="control_description_sf_debug">Colors rewritten shader programs magenta and cyan for diagnostics. Changes apply after userspace restarts.</string>
+    <string name="control_description_sf_debug">Diagnostic mode: 0 off, 1 magenta/cyan for rewritten shaders, 2 green map of local edge luminance on lock screen notifications. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_edgeblur">Adjusts pop-up edge blur and its transition toward the center. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_hubloom">Reduces very bright samples in the pop-up center. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_hublur">Multiplies the compositor blur across the pop-up without changing base blur. Changes apply after userspace restarts.</string>
