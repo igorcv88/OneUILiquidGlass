@@ -94,7 +94,7 @@ int main(void) {
         assert depth[value].replace(f"oulg_glow(s, uv, 0.500, {float(value):.3f},",
                                     "oulg_glow(s, uv, 0.500, 16.000,") == depth["16"]
     assert "highp float reach = min(lmax, max(1.5, 0.90 * oulg_rad));" in dynamic
-    assert "mediump float rim = 1.60 * enter * exp(-0.5 * edgeDistance * edgeDistance);" in dynamic
+    assert "mediump float rim = 1.10 * gain * u * exp(-0.5 * edgeDistance * edgeDistance);" in dynamic
     assert "mediump float veil = 0.18 * enter * max(0.0, 1.0 - d / reach);" in dynamic
     assert "0.25 * oulg_rad" in dynamic, "other profiles must keep the medial-axis cap"
 
@@ -103,9 +103,9 @@ int main(void) {
         enter = min(0.50 * u, 0.28)
         if kg:
             reach = min(kg_reach, max(1.5, 0.90 * radius))
-            rim = 1.60 * enter * exp(-0.5 * (d / 1.8) ** 2)
+            rim = 1.10 * 0.50 * u * exp(-0.5 * (d / 1.8) ** 2)
             veil = 0.18 * enter * max(0., 1.0 - d / reach)
-            return min(rim + veil, 0.55)
+            return min(rim + veil, 0.60)
         lam = max(min(1.5 + (12.0 - 1.5) * u * u, radius / 4.), 0.5)
         x = max(0., min(1., (d - 2.5 * lam) / (1.5 * lam)))
         cutoff = 1.0 - x * x * (3.0 - 2.0 * x)
@@ -119,9 +119,10 @@ int main(void) {
     # The rim response itself must remain independent of the inward-veil support distance.
     def rim_at(luma, d):
         u = max(0., min(1., (luma - 0.10) / 0.90))
-        return 1.60 * min(0.50 * u, 0.28) * exp(-0.5 * (d / 1.8) ** 2)
+        return 1.10 * 0.50 * u * exp(-0.5 * (d / 1.8) ** 2)
     assert rim_at(0.64, 0.) > 5 * (light_at(0.64, 9., kg=True, kg_reach=24.) - rim_at(0.64, 9.))
     assert rim_at(1.0, 0.) > rim_at(0.31, 0.) > rim_at(0.0, 0.) == 0.0
+    assert rim_at(1.0, 0.) > rim_at(0.80, 0.) > rim_at(0.64, 0.), "rim must not saturate at the veil's luminance cap"
     for luma in (0.11, 0.31, 0.41, 0.64, 1.0):
         assert light_at(luma, 55., kg=True) < 1e-100, "no light seam at card's medial axis"
         assert all(light_at(luma, d + 1., kg=True) <= light_at(luma, d, kg=True)

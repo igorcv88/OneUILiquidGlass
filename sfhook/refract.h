@@ -171,9 +171,10 @@
 // floor, cap) reads the backdrop at the nearest point of the outline (oulg_eo: from the sample to a
 // point 2 px inside the outline, set by the field and mapped to texture space by main) and returns
 // the light reaching this pixel, (colour, amount). With u = (luma - floor) / (1 - floor) of that
-// edge sample, the light entering is min(gain x u, cap). Outside KG it decays inward as
+// edge sample, the general light entering is min(gain x u, cap). Outside KG it decays inward as
 // exp(-d/lambda), with lambda growing as u^2 and bounded by r/4. On KG the source is split into
-// a short, stronger rim (fixed Gaussian sigma 1.8 px) and a much weaker inward veil. Only that
+// a short, stronger rim (fixed Gaussian sigma 1.8 px, linear in u without the veil's cap) and
+// a much weaker inward veil (which keeps cap). Only that
 // veil uses lmax: an actual support distance in px, fading linearly to zero at d >= lmax,
 // capped at 0.9r
 // to avoid a seam where the nearest outline point jumps (medial axis). Increasing lmax changes
@@ -191,9 +192,9 @@
     "  if (oulg_pf > 0.5 && oulg_pf < 1.5) {\n" \
     "    highp float reach = min(lmax, max(1.5, 0.90 * oulg_rad));\n" \
     "    highp float edgeDistance = d / 1.8;\n" \
-    "    mediump float rim = 1.60 * enter * exp(-0.5 * edgeDistance * edgeDistance);\n" \
+    "    mediump float rim = 1.10 * gain * u * exp(-0.5 * edgeDistance * edgeDistance);\n" \
     "    mediump float veil = 0.18 * enter * max(0.0, 1.0 - d / reach);\n" \
-    "    lit = min(rim + veil, 0.55);\n" \
+    "    lit = min(rim + veil, 0.60);\n" \
     "  } else {\n" \
     "    highp float lam = max(min(1.5 + (lmax - 1.5) * u * u, 0.25 * oulg_rad), 0.5);\n" \
     "    lit = enter * exp(-d / lam) * (1.0 - smoothstep(2.5 * lam, 4.0 * lam, d));\n" \
