@@ -4,6 +4,8 @@ package io.github.igorcv88.oneuiliquidglass.glass;
 public final class P3EdgeSelection {
     public static final int DISPLAY_P3 = 9;
     public static final int COMPAT_EDGE_MODE = 3;
+    /** At most 3.34 physical-mode queries/sec, only while a heads-up is visible. */
+    public static final long POPUP_WATCH_INTERVAL_MS = 300;
 
     private P3EdgeSelection() {}
 
@@ -27,5 +29,13 @@ public final class P3EdgeSelection {
         return "setHeadsUp".equals(event) || "setPinned".equals(event)
                 || "onAttachedToWindow".equals(event) || "ATTACH".equals(event)
                 || "onAppearAnimationFinished".equals(event);
+    }
+
+    /** Never keep a periodic probe alive for hidden cards, the shade or the lockscreen. */
+    public static boolean watchPopup(boolean enabled, boolean glass, boolean pill,
+                                     boolean headsUp, boolean attached, boolean shown,
+                                     boolean shadeCollapsed, boolean unlocked) {
+        return enabled && glass && !pill && headsUp && attached && shown
+                && shadeCollapsed && unlocked;
     }
 }

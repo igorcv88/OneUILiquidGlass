@@ -40,4 +40,15 @@ public final class P3EdgeSelectionTest {
             assertEquals(mode == 9 ? 3 : 0, P3EdgeSelection.effectiveMode(0, compatible));
         }
     }
+
+    @Test public void backgroundWatchIsLimitedToVisibleHeadsUp() {
+        assertTrue(P3EdgeSelection.POPUP_WATCH_INTERVAL_MS >= 250);
+        assertTrue(P3EdgeSelection.watchPopup(true, true, false, true, true, true, true, true));
+        for (int disabled = 0; disabled < 8; disabled++) {
+            boolean[] flags = {true, true, false, true, true, true, true, true};
+            flags[disabled] = !flags[disabled];
+            assertFalse(P3EdgeSelection.watchPopup(flags[0], flags[1], flags[2], flags[3],
+                    flags[4], flags[5], flags[6], flags[7]));
+        }
+    }
 }
