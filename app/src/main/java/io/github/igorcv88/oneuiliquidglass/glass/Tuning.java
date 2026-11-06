@@ -446,7 +446,7 @@ public final class Tuning {
         Perf.enabled = perf;
         trace = number("trace", 0f) >= 1f;
         Probe.trace = trace;
-        edgePremulMode = Math.max(0, Math.min(4, Math.round(number("edgepremul", 0f))));
+        edgePremulMode = Math.max(0, Math.min(4, Math.round(number("edgepremul", 3f))));
         edgePremulSafe = edgePremulMode > 0;
         semShape = shape.equals("single") || shape.equals("path") || shape.equals("four") || shape.equals("none") ? shape : "auto";
     }

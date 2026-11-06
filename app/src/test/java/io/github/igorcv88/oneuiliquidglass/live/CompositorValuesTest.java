@@ -145,6 +145,8 @@ public final class CompositorValuesTest {
     }
 
     @Test public void setpropsCommandIsAllowlistedAndNumeric() {
+        assertEquals("sh '/d/oulg-live.sh' setprops kgfixedrim=1",
+                SfLive.setprops("/d", Collections.singletonMap("sf.kgfixedrim", "1")).get(2));
         Map<String, String> v = new LinkedHashMap<>();
         v.put("sf.kgcore", "96");
         v.put("sf.core", "");

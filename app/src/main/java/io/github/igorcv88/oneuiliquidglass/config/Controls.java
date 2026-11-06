@@ -588,6 +588,10 @@ public final class Controls {
         put(c("sf.kgline", "Contorno").fmt(Format.GAIN).in(LENS, ADV).on(KG)
                 .help("Linha de contorno da lente no bloqueio." + restart)
                 .show(DIDACTIC, Channel.RIM));
+        put(c("sf.kgfixedrim", "Contorno fixo (comparação)").fmt(Format.TOGGLE).in(LENS, ADV).on(KG)
+                .help("Desligado: só a luz dinâmica do fundo ilumina a borda."
+                        + " Ligado: restaura o contorno branco e reflexos fixos."
+                        + " Não altera os raios de desfoque." + restart));
         put(c("sf.kgrim", "Reflexo do aro").fmt(Format.GAIN).in(LENS, ADV).on(KG)
                 .help("Reflexão no aro da lente do bloqueio. É diferente do contorno do vidro"
                         + " padrão." + restart)
@@ -842,9 +846,9 @@ public final class Controls {
                         + " diagnóstico."));
         put(c("trace", "Registro detalhado de janelas").fmt(Format.TOGGLE).in(TECH, TEC).all()
                 .help("Registra a árvore de views e janelas. Gera muito log."));
-        put(c("edgepremul", "Alpha da borda (teste)").fmt(Format.COUNT)
+        put(c("edgepremul", "Borda aditiva (compatibilidade P3)").fmt(Format.COUNT)
                 .in(TECH, Tier.INTERNAL).all()
-                .help("0: original; 1: alpha válido normal; 2: soma de luz; 3: soma de luz com 50% mais RGB; 4: soma de luz com 40% mais RGB."));
+                .help("Padrão 3: composição aditiva e 1,5x RGB da luz; 0: restaura original; 1: alpha normal; 2: soma de luz; 4: soma com 1,4x RGB."));
 
         // State the app shows elsewhere; never an editable row.
         put(c("sfrefract", "Lente dinâmica").fmt(Format.READONLY).in(TECH, Tier.INTERNAL)

@@ -52,3 +52,25 @@ int main(void) {
     strip = lambda s: re.sub(r"oulg_glow\(s, uv, (?:0\.000|0\.900|2\.000), 18\.000,", "QS_GAIN", s)
     assert strip(text["0"]) == strip(text["0.90"]) == strip(text["2"])
     print("profile 3: gain 0/default/2, invalid fallback and other-profile isolation passed")
+
+    # KG now uses the same per-edge local glow as the shade. The optional fixed contour only
+    # affects the three reflection strengths, never the blur field or any other profile.
+    rim = {}
+    for mode in ("0", "1"):
+        out = temp / ("kgfixedrim_" + mode)
+        out.mkdir()
+        subprocess.run([str(exe), str(root / "tools/testdata/synthetic_dump.txt"), str(out), "0",
+                        "kgfixedrim=" + mode], check=True, stdout=subprocess.DEVNULL)
+        rim[mode] = (out / "mod_002.frag").read_text()
+    dynamic, legacy = rim["0"], rim["1"]
+    assert "oulg_glow(s, uv, 0.500, 12.000, 0.100, 0.280)" in dynamic
+    replacements = {
+        "clamp(0.720 * pow": "clamp(0.000 * pow",
+        "line = 0.620 * exp": "line = 0.000 * exp",
+        "rgb += 0.170 * band": "rgb += 0.000 * band",
+    }
+    for before, after in replacements.items():
+        assert before in legacy and after in dynamic, (before, after)
+        legacy = legacy.replace(before, after)
+    assert legacy == dynamic, "KG rim mode unexpectedly modified blur, body, or other profiles"
+    print("lockscreen: local-only edge light, fixed rim rollback and unchanged blur confirmed")

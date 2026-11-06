@@ -346,6 +346,9 @@ static void layered_blur(struct oulg_profile p[OULG_PROFILES]) {
     p[1].blur = prop_float("debug.oulg.sf.kgblur", OULG_GLOBAL_BLUR_DEFAULT);
     p[1].refract = prop_float("debug.oulg.sf.kgrefract", OULG_GLOBAL_REFRACT_DEFAULT);
     p[1].light = prop_float("debug.oulg.sf.kglight", OULG_KG_LIGHT_DEFAULT);
+    // The legacy white contour, Fresnel and specular were fixed and hid the local edge light.
+    // Set 1 to restore them while testing; 0 leaves only backdrop-dependent illumination.
+    oulg_kg_fixed_rim(&p[1], prop_float("debug.oulg.sf.kgfixedrim", 0.0f));
     p[2] = OULG_PROFILES_DEFAULT[2];
     p[2].cap = prop_float("debug.oulg.sf.shadecap", OULG_SHADE_CAP_DEFAULT);
     p[2].lift = prop_float("debug.oulg.sf.shadelift", OULG_SHADE_LIFT_DEFAULT);

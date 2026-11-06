@@ -15,6 +15,7 @@ static void put(const char *dir, const char *kind, int idx, const char *ext, con
 int main(int argc, char **argv) {
     int dbg = !(argc > 3 && strcmp(argv[3], "0") == 0);
     struct oulg_profile prof[OULG_PROFILES] = {OULG_PROFILES_DEFAULT[0], OULG_PROFILES_DEFAULT[1], OULG_PROFILES_DEFAULT[2], OULG_PROFILES_DEFAULT[3]};
+    float kgfixedrim = 0.0f;
     for (char *kv = argc > 4 ? strtok(argv[4], ",") : NULL; kv; kv = strtok(NULL, ",")) {
         char *eq = strchr(kv, '=');
         if (!eq) continue;
@@ -27,6 +28,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(kv, "flat")) prof[1].flat = v; else if (!strcmp(kv, "level")) prof[1].level = v;
         else if (!strcmp(kv, "cool")) prof[1].cool = v; else if (!strcmp(kv, "tilt")) prof[1].tilt = v;
         else if (!strcmp(kv, "line")) prof[1].line = v;
+        else if (!strcmp(kv, "kgfixedrim")) kgfixedrim = v;
         else if (!strcmp(kv, "ccap")) prof[1].ccap = v;
         else if (!strcmp(kv, "fcap")) prof[1].fcap = v;
         else if (!strcmp(kv, "cdim")) prof[1].cdim = v;
@@ -50,6 +52,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(kv, "hulight")) prof[0].light = v; else if (!strcmp(kv, "kglight")) prof[1].light = v;
         else if (!strcmp(kv, "shadelight")) prof[2].light = v;
     }
+    oulg_kg_fixed_rim(&prof[1], kgfixedrim);
     FILE *f = fopen(argv[1], "rb"); fseek(f, 0, SEEK_END); long n = ftell(f); fseek(f, 0, SEEK_SET);
     char *t = malloc(n + 1); if (fread(t, 1, n, f) != (size_t) n) return 1; t[n] = 0; fclose(f);
     const char *mark = "\n===== SRC n=";

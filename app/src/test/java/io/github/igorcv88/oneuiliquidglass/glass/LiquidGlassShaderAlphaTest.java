@@ -2,12 +2,13 @@ package io.github.igorcv88.oneuiliquidglass.glass;
 
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertEquals;
 
 import org.junit.Test;
 
 /** Source-contract checks; actual AGSL compilation and HWC display require an Android device. */
 public final class LiquidGlassShaderAlphaTest {
-    @Test public void experimentalPathIsOptInAndScopedToCompositorEdge() {
+    @Test public void productionEdgePathIsScopedToCompositorEdge() {
         String source = LiquidGlassShader.SOURCE;
         assertTrue(source.contains("uniform float edgePremulSafe;"));
         assertTrue(source.contains("uniform float edgeBrightness;"));
@@ -23,6 +24,7 @@ public final class LiquidGlassShaderAlphaTest {
         io.github.igorcv88.oneuiliquidglass.config.SettingSpec spec =
                 io.github.igorcv88.oneuiliquidglass.config.SettingsRegistry.get("edgepremul");
         assertTrue(spec != null);
+        assertEquals("3", spec.defaultValue);
         for (String value : new String[] {"0", "1", "2", "3", "4"})
             assertTrue(value.equals(spec.validate(value)));
         for (String value : new String[] {"5", "-1", "1.5"}) {

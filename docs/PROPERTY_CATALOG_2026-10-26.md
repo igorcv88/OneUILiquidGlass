@@ -114,7 +114,7 @@ Observar que as propriedades `lightglass` e `shadelightglass` se aplicam a super
 | `sf.optics` | 0 no parser; biblioteca anuncia 9 | R | Handshake da versão de óptica carregada; **indicador, não slider** |
 | `perf` | 0 | L | Instrumentação de tempos de hooks, deve ter aviso de custo |
 | `trace` | 0 | L | Diagnóstico detalhado de árvores/janelas; evitar coleta permanente |
-| `edgepremul` | 0 | inteiro experimental 0–4 | 0 = original; 1 = alpha premultiplicado SRC_OVER; 2 = alpha premultiplicado PLUS; 3 = PLUS com RGB de luz +50%; 4 = PLUS com RGB de luz +40% |
+| `edgepremul` | 3 | inteiro 0–4 | 3 = padrão: alpha premultiplicado PLUS com RGB de luz +50%; 0 = original/rollback; 1 = alpha premultiplicado SRC_OVER; 2 = PLUS +0%; 4 = PLUS +40% |
 
 ## Perfis do SurfaceFlinger — C
 
@@ -142,6 +142,7 @@ Observar que as propriedades `lightglass` e `shadelightglass` se aplicam a super
 | `sf.kgcool` | 0.50 | Lockscreen: matiz fria |
 | `sf.kgtilt` | 1.42 | Lockscreen: inclinação da luz (rad) |
 | `sf.kgline` | 0.62 | Lockscreen: contorno |
+| `sf.kgfixedrim` | 0 | Lockscreen: 0 remove linha, Fresnel e brilho especular fixos para deixar a luz local (`sf.kglight`) iluminar a borda; 1 restaura o contorno fixo antigo (A/B) |
 | `sf.kgcorecap` | 48 | Lockscreen: teto do raio efetivo do miolo (px) |
 | `sf.kggradient` | 1 | Lockscreen: transição contínua vidro-miolo (0–1; 0 usa curva anterior, junto de kgcorecap=62 restaura referência) |
 | `sf.kgband` | 0.85 | Lockscreen: largura da transição óptica (fração do raio do canto; 0 restaura v0.22; abaixo de ~0.42 fica no bisel mínimo) |

@@ -73,12 +73,9 @@
 //  - interior: an 80 px disc with 48 taps; vibrancy; a soft knee on bright backdrops; adaptive
 //    transmission (luma drawn halfway toward 0.40, dark areas lifted by scattered cool light rather
 //    than a gain); a luma-neutral cool tint;
-//  - rim reflection: Schlick's excess reflectance F(theta) mixes the refracted backdrop toward a
-//    cool environment, brighter on the upper (sky-facing) rim; v0.9's 1.2 rad tilt capped F at
-//    0.10, which left the rim grey (the device report);
-//  - a thin contour, the grazing edge of the same surface, 1.6 px from the outline;
-//  - a specular band inside the contour, peaked mid-bevel on the light-facing side (light from the
-//    upper left, as the module's edge optics), a fainter one opposite, fading over bright backdrops.
+//  - the dynamic local edge light shares the same backdrop-sampling oulg_glow with profile 2;
+//    the former fixed cool Fresnel, white contour and directional specular band are suppressed
+//    by default. debug.oulg.sf.kgfixedrim=1 restores them for device A/B without touching blur.
 #define OULG_FS_GLOBALS "highp float oulg_on, oulg_pf, oulg_br, oulg_bw, oulg_lw, oulg_t, oulg_k, oulg_bv, oulg_grad, oulg_dp, oulg_rad;\nhighp vec2 oulg_jx, oulg_jy, oulg_n, oulg_e, oulg_eo;\n"
 #define OULG_FS_BSPLINE \
     "mediump vec4 oulg_bspline(sampler2D s, highp vec2 uv) {\n" \
@@ -529,6 +526,14 @@ static const struct oulg_profile OULG_PROFILES_DEFAULT[OULG_PROFILES] = {
      OULG_QS_LIGHT_DEFAULT, OULG_QS_LWIDTH_DEFAULT, OULG_QS_LFLOOR_DEFAULT, OULG_QS_LCAP_DEFAULT,
      OULG_QS_LENS_DEFAULT, OULG_QS_BODY_DEFAULT},
 };
+// Keep the original fixed highlights available for A/B. In the dynamic mode, only the already
+// existing per-outline-sample light (oulg_glow) illuminates the keyguard's rim. Blur is untouched.
+static void oulg_kg_fixed_rim(struct oulg_profile *kg, float enabled) {
+    if (enabled >= 0.5f) return;
+    kg->rim = 0.0f;
+    kg->line = 0.0f;
+    kg->spec = 0.0f;
+}
 #define OULG_VS_RADII_AT "highp vec2 neighbor_radii = radii_and_neighbors.zw;\n"
 #define OULG_VS_POS_AT "gl_Position = vec4(devcoord, 0.0, 1.0);\n"
 #define OULG_FS_SAMPLE "texture(uTextureSampler_0_S1, vTransformedCoords_"
