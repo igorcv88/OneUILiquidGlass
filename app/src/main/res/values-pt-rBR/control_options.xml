@@ -20,12 +20,16 @@
     <string name="control_option_2212a1a4fd6a">Gestos laterais</string>
     <string name="control_option_9a216516ec5f">Grade de teste</string>
     <string name="control_option_31d64f897e37">Híbrida</string>
+    <string name="control_option_7fa186bd9a0b">Identifica os programas reescritos pela lente</string>
     <string name="control_option_e723a958ac2a">Igual ao desfoque geral</string>
     <string name="control_option_3e59ff2f3f00">Igual ao pop-up</string>
     <string name="control_option_9be0dc635d59">Inclinação limitada, sem dobras</string>
     <string name="control_option_c908bfdb54ef">Lente suave</string>
+    <string name="control_option_18f5e7ca18f6">Luminância da borda</string>
     <string name="control_option_580a7b605fb0">Mais seguro, some com mais frequência</string>
     <string name="control_option_26f136eba6ff">Mapa de tons da lente</string>
+    <string name="control_option_d08dd5f2deae">Mapa verde da luz local na borda do bloqueio</string>
+    <string name="control_option_439524094087">Marcação magenta/ciano</string>
     <string name="control_option_ce65364887ca">Material do bloqueio</string>
     <string name="control_option_b5ac2d86fb77">Material do pop-up</string>
     <string name="control_option_966831833a8c">Mede o fundo ao abrir a central</string>
@@ -43,6 +47,7 @@
     <string name="control_option_5e752f3cd7ac">Qualquer toque</string>
     <string name="control_option_5a83874989ff">Quatro cantos</string>
     <string name="control_option_808eb0b380d3">Raio único</string>
+    <string name="control_option_f1b4503c73c7">Renderização normal, sem tinta diagnóstica</string>
     <string name="control_option_929dc216ba9a">Segue o esmaecimento do cartão</string>
     <string name="control_option_b21f94257814">Sem amostragem</string>
     <string name="control_option_787bedf67271">Sem forma</string>

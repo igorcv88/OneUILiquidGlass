@@ -48,6 +48,8 @@ mkdir -p "$T/proc/sys/kernel/random"
 echo boot-test > "$T/proc/sys/kernel/random/boot_id"
 printf '4242 (surface flinger) S 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 123 0\n' > "$T/proc/4242/stat"
 run setprops core=48 >/dev/null
+run setprops kgfixedrim=1 >/dev/null
+[ "$(cat "$T/prop_debug.oulg.sf.kgfixedrim")" = 1 ] || { echo "FAIL: KG fixed-rim rollback not written"; exit 1; }
 printf 9 > "$T/prop_debug.oulg.sf.optics"
 s="$(run status)"; expect "$s" "sf_got=0"; expect "$s" "sf_rewrite_ok=0"; expect "$s" "sf_stable=0"
 expect "$s" "sf_generation=boot-test:4242:123"

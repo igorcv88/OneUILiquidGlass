@@ -11,6 +11,7 @@ final class ControlDescriptions {
             case "backdrop": return R.string.control_description_backdrop;
             case "blur": return R.string.control_description_blur;
             case "disp": return R.string.control_description_disp;
+            case "edgepremul": return R.string.control_description_edgepremul;
             case "headergap": return R.string.control_description_headergap;
             case "headertone": return R.string.control_description_headertone;
             case "huoptics": return R.string.control_description_huoptics;
@@ -26,6 +27,7 @@ final class ControlDescriptions {
             case "kglens": return R.string.control_description_kglens;
             case "kgoptics": return R.string.control_description_kgoptics;
             case "kgrim": return R.string.control_description_kgrim;
+            case "kgsharedoptics": return R.string.control_description_kgsharedoptics;
             case "kgwinblur": return R.string.control_description_kgwinblur;
             case "lens": return R.string.control_description_lens;
             case "lensgate": return R.string.control_description_lensgate;
@@ -115,7 +117,9 @@ final class ControlDescriptions {
             case "sf.kgcore": return R.string.control_description_sf_kgcore;
             case "sf.kgcorecap": return R.string.control_description_sf_kgcorecap;
             case "sf.kgcoredim": return R.string.control_description_sf_kgcoredim;
+            case "sf.kgdepth": return R.string.control_description_sf_kgdepth;
             case "sf.kgedgeblur": return R.string.control_description_sf_kgedgeblur;
+            case "sf.kgfixedrim": return R.string.control_description_sf_kgfixedrim;
             case "sf.kgflat": return R.string.control_description_sf_kgflat;
             case "sf.kgflatcap": return R.string.control_description_sf_kgflatcap;
             case "sf.kgglow": return R.string.control_description_sf_kgglow;

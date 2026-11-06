@@ -403,6 +403,12 @@ public final class Controls {
                 .help("Qual material a lente dinâmica usa nos cartões do bloqueio. Muda sem"
                         + " reiniciar.")
                 .show(BEHAV, Channel.NONE));
+        put(c("kgsharedoptics", "Óptica da Now Bar (comparação)").fmt(Format.TOGGLE).in(EDGES, ADV)
+                .on(KG).feature("edge")
+                .help("Desenha na notificação compacta a mesma óptica Java da Now Bar."
+                        + " Manter o contorno estrutural nativo ligado preserva a profundidade;"
+                        + " desligá-lo achatou o vidro nos testes do DZIF. Não altera o corpo nem o blur.")
+                .show(BEHAV, Channel.NONE));
         put(c("huoptics", "Material da lente no pop-up").fmt(Format.CHOICE).in(EDGES, ADV)
                 .on(HU)
                 .choice("0", "Material do pop-up", "Padrão")
@@ -588,6 +594,10 @@ public final class Controls {
         put(c("sf.kgline", "Contorno").fmt(Format.GAIN).in(LENS, ADV).on(KG)
                 .help("Linha de contorno da lente no bloqueio." + restart)
                 .show(DIDACTIC, Channel.RIM));
+        put(c("sf.kgfixedrim", "Contorno fixo (comparação)").fmt(Format.TOGGLE).in(LENS, ADV).on(KG)
+                .help("Ligado (padrão): mantém o contorno e os reflexos que dão relevo à lente."
+                        + " Desligado: remove os três para diagnóstico e deixa o cartão visualmente plano."
+                        + " Não altera os raios de desfoque." + restart));
         put(c("sf.kgrim", "Reflexo do aro").fmt(Format.GAIN).in(LENS, ADV).on(KG)
                 .help("Reflexão no aro da lente do bloqueio. É diferente do contorno do vidro"
                         + " padrão." + restart)
@@ -656,6 +666,12 @@ public final class Controls {
                 .show(BEHAV, Channel.NONE));
         put(c("sf.kglight", "Luz pela borda").fmt(Format.PERCENT_1).in(LENS, ADV).on(KG)
                 .help("Luz que entra pelo contorno dos cartões do bloqueio." + light)
+                .show(BEHAV, Channel.NONE));
+        put(c("sf.kgdepth", "Alcance da luz dinâmica").fmt(Format.PX).in(LENS, ADV).on(KG)
+                .help("Alcance máximo, em pixels, do véu fraco que entra pelo vidro do bloqueio."
+                        + " A borda luminosa é concentrada em poucos pixels e mantém sua resposta"
+                        + " dinâmica independentemente deste alcance. Em cada trecho, o brilho vem"
+                        + " do fundo: áreas escuras continuam apagadas. Padrão: 16 px." + restart)
                 .show(BEHAV, Channel.NONE));
         put(c("sf.shadelight", "Luz pela borda (lente)").fmt(Format.PERCENT_1).in(LENS, ADV).on(SH)
                 .help("Luz que entra pelo contorno dos cartões da central." + light)
@@ -776,9 +792,13 @@ public final class Controls {
                 .help("Desfoque do fundo que a lente dinâmica lê no contorno. Mais suaviza a luz e"
                         + " a refração; menos deixa a borda mais nítida.")
                 .show(BEHAV, Channel.NONE));
-        put(c("sf.debug", "Tinta de diagnóstico").fmt(Format.TOGGLE).in(TECH, TEC).all()
-                .help("Pinta em magenta e ciano os programas reescritos pela lente. Só para"
-                        + " diagnóstico." + restart));
+        put(c("sf.debug", "Tinta de diagnóstico").fmt(Format.CHOICE).in(TECH, TEC).all()
+                .choice("0", "Desligada", "Renderização normal, sem tinta diagnóstica")
+                .choice("1", "Marcação magenta/ciano", "Identifica os programas reescritos pela lente")
+                .choice("2", "Luminância da borda", "Mapa verde da luz local na borda do bloqueio")
+                .help("0: desliga a tinta. 1: magenta/ciano para identificar os programas reescritos."
+                        + " 2: mapa verde da luminância amostrada no contorno das notificações do bloqueio."
+                        + " Só para diagnóstico." + restart));
 
         // Técnico
         put(c("backdrop", "Origem do fundo").fmt(Format.CHOICE).in(TECH, TEC).all()
@@ -842,6 +862,9 @@ public final class Controls {
                         + " diagnóstico."));
         put(c("trace", "Registro detalhado de janelas").fmt(Format.TOGGLE).in(TECH, TEC).all()
                 .help("Registra a árvore de views e janelas. Gera muito log."));
+        put(c("edgepremul", "Borda aditiva (compatibilidade P3)").fmt(Format.COUNT)
+                .in(TECH, Tier.INTERNAL).all()
+                .help("Padrão 3: composição aditiva e 1,5x RGB da luz; 0: restaura original; 1: alpha normal; 2: soma de luz; 4: soma com 1,4x RGB."));
 
         // State the app shows elsewhere; never an editable row.
         put(c("sfrefract", "Lente dinâmica").fmt(Format.READONLY).in(TECH, Tier.INTERNAL)

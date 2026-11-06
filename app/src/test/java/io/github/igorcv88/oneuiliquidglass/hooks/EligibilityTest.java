@@ -74,6 +74,18 @@ public final class EligibilityTest {
         assertTrue(Eligibility.lens(Eligibility.BAR_KEYGUARD, true, false));
         assertTrue(Eligibility.keyguardOptics(Eligibility.BAR_KEYGUARD, false, true));
     }
+    @Test public void nowBarSharedEdgeExperimentIsScopedToTaggedKeyguardNotifications() {
+        // The existing compositor edge remains the owner unless the user explicitly asks for A/B.
+        assertTrue(Eligibility.compositorOwnsEdge(true, true, true, true, false));
+        // Now Bar optical overlay replaces that edge only on a confirmed, tagged KG lens card.
+        assertFalse(Eligibility.compositorOwnsEdge(true, true, true, true, true));
+        // The shade and pop-ups must keep their previous hand-off, including the expanded shade.
+        assertTrue(Eligibility.compositorOwnsEdge(true, true, false, true, true));
+        assertTrue(Eligibility.compositorOwnsEdge(true, true, true, false, true));
+        // Missing SF shader/tag confirmation never suppresses Java optics.
+        assertFalse(Eligibility.compositorOwnsEdge(false, true, true, true, false));
+        assertFalse(Eligibility.compositorOwnsEdge(true, false, true, true, false));
+    }
     @Test public void textToneOnlyWhileGlassIsDrawn() {
         assertTrue(Eligibility.textTone(true, true, false, true));
         // Module disabled with the hooks installed: native text.

@@ -34,4 +34,18 @@ for f in "$OUT"/mod_*.frag; do
   fi
 done
 [ $fail -eq 0 ] && echo "glsl: all rewrites compile and link"
+# The KG source-luminance probe is an opt-in shader path absent from production. Compile and link
+# its real generated GLSL too, so the diagnostic APK cannot ship a probe that fails at runtime.
+mkdir -p "$OUT/probe"
+"$OUT/rc" "$DUMP" "$OUT/probe" 2 >/dev/null
+for f in "$OUT/probe"/mod_*.frag; do
+  [ -e "$f" ] || continue
+  glslangValidator -S frag "$f" >"$OUT/log" 2>&1 || { echo "FAIL probe compile $(basename "$f")"; cat "$OUT/log"; fail=1; }
+  if grep -q voulg_tag "$f"; then
+    for v in "$OUT"/mod_*.vert "$OUT"/min_*.vert; do
+      glslangValidator -l "$v" "$f" >"$OUT/log" 2>&1 || { echo "FAIL probe link $(basename "$v") + $(basename "$f")"; cat "$OUT/log"; fail=1; }
+    done
+  fi
+done
+[ $fail -eq 0 ] && echo "glsl: source-luminance probe compiles and links"
 exit $fail

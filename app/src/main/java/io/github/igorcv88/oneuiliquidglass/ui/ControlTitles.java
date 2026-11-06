@@ -11,13 +11,16 @@ final class ControlTitles {
             case "Ajustar relógio e data": return R.string.control_title_4d394670dffa;
             case "Ajustar ícone pequeno": return R.string.control_title_5e2c27528f46;
             case "Alcance da luz": return R.string.control_title_46d2388cabed;
+            case "Alcance da luz dinâmica": return R.string.control_title_1a9d1f6ff979;
             case "Amostras do bloqueio": return R.string.control_title_9cbee42ce9d4;
             case "Amostras do pop-up": return R.string.control_title_e8d1e327dbeb;
+            case "Borda aditiva (compatibilidade P3)": return R.string.control_title_fe0c016c9945;
             case "Brilho do vidro escuro": return R.string.control_title_bf8389203ea5;
             case "Brilho especular": return R.string.control_title_f40464148fea;
             case "Brilho no topo": return R.string.control_title_6953361f458b;
             case "Contenção de brilho": return R.string.control_title_9c77baea15a5;
             case "Contorno": return R.string.control_title_4e1de10ed349;
+            case "Contorno fixo (comparação)": return R.string.control_title_34c73e681838;
             case "Contorno no vidro claro": return R.string.control_title_f6b5fd505d01;
             case "Contorno sobre fundo claro": return R.string.control_title_45d9db06c0ee;
             case "Contorno sobre fundo colorido": return R.string.control_title_b11c820a9f04;
@@ -143,6 +146,7 @@ final class ControlTitles {
             case "Ícone ligado · fundo claro": return R.string.control_title_99508c52e4b4;
             case "Ícone ligado · fundo colorido": return R.string.control_title_8f72472bf1f8;
             case "Índice de refração": return R.string.control_title_f2f3c60c5911;
+            case "Óptica da Now Bar (comparação)": return R.string.control_title_1cb1cc084b68;
             default: return 0;
         }
     }

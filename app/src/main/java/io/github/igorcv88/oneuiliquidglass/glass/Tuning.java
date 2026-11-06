@@ -161,6 +161,11 @@ public final class Tuning {
      */
     public final int kgOptics;
     /**
+     * Experimental KG edge hand-off: the Java optics shared with Now Bar may draw even when the
+     * SurfaceFlinger profile is active. It is opt-in to avoid duplicating the existing KG rim.
+     */
+    public final boolean kgSharedOptics;
+    /**
      * Opt-in preview of the lockscreen material on heads-up cards (debug.oulg.huoptics=1), for A/B
      * on the device. Default 0: heads-up cards keep the established material.
      */
@@ -315,6 +320,9 @@ public final class Tuning {
     public final boolean perf;
     /** Enables the view-tree and window diagnostic dumps (see {@link Probe#trace}). */
     public final boolean trace;
+    /** Experimental edge modes: 0 legacy, 1 premultiplied SRC_OVER, 2 PLUS x1, 3 PLUS x1.5, 4 PLUS x1.40. */
+    public final int edgePremulMode;
+    public final boolean edgePremulSafe;
     /** Bumped whenever any knob changes, so cached backdrop parameters are rebuilt. */
     public static volatile int generation;
 
@@ -389,6 +397,7 @@ public final class Tuning {
         pillGlass = number("pillglass", 1f) >= 1f;
         pillBlur = Math.round(clamp(number("pillblur", 40f), 0f, 400f));
         kgOptics = Math.round(clamp(number("kgoptics", 1f), 0f, 1f));
+        kgSharedOptics = number("kgsharedoptics", 1f) >= 1f;
         huOptics = Math.round(clamp(number("huoptics", 0f), 0f, 1f));
         float kl = number("kglens", 0.40f);
         kgLens = kl < 0f ? -1f : clamp(kl, 0.1f, 1.2f);
@@ -443,6 +452,8 @@ public final class Tuning {
         Perf.enabled = perf;
         trace = number("trace", 0f) >= 1f;
         Probe.trace = trace;
+        edgePremulMode = Math.max(0, Math.min(4, Math.round(number("edgepremul", 0f))));
+        edgePremulSafe = edgePremulMode > 0;
         semShape = shape.equals("single") || shape.equals("path") || shape.equals("four") || shape.equals("none") ? shape : "auto";
     }
 
@@ -527,7 +538,8 @@ public final class Tuning {
         return "backdrop=" + backdrop + " profile=" + profile + " lens=" + lens + " rimhz=" + rimHz + " rimblur=" + rimBlur
                 + " refract=" + refract + " ior=" + ior + " blur=" + blur + " sat=" + saturation
                 + " disp=" + dispersion + " hz=" + hz + " hzkg=" + keyguardHz + " tint=" + tintAlpha
-                + " semradius=" + semRadius + " semradiuslens=" + semRadiusLens + " sflens=" + sfLens + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " live=" + live + " liveradius=" + liveRadius + " liveshaderadius=" + liveShadeRadius + " liveoptics=" + liveOptics + " livesheen=" + liveSheen + " liveglint=" + liveGlint + " shadeglint=" + shadeGlint + " livelens=" + liveLens + " lensmaxage=" + lensMaxAge + " lenssettle=" + lensSettle + " lensgate=" + lensGate + " lenstransition=" + lensTransition + " kgblurpath=" + kgBlurPath + " shadeblurpath=" + shadeBlurPath + " shadefadecut=" + shadeFadeCut + " kgblurradius=" + kgBlurRadius + " pillglass=" + pillGlass + " pillblur=" + pillBlur + " kgoptics=" + kgOptics + " huoptics=" + huOptics + " kglens=" + kgLens + " shadetone=" + shadeTone + " shadeveil=" + shadeVeil + " shadeadaptive=" + shadeAdaptive + " shadecap=" + shadeCap + " shadelift=" + shadeLift + " veilmax=" + veilMax + " stylelo=" + styleLo + " stylehi=" + styleHi + " lightglass=" + lightGlass + " lighttone=" + Integer.toHexString(lightTone) + " lightedge=" + lightEdge + " lightoutline=" + lightOutline + " shadelightglass=" + shadeLightGlass + " shadedarkglass=" + shadeDarkGlass + " livedarkalpha=" + liveDarkAlpha + " livedarkfill=" + liveDarkFill + " liverim=" + liveRim + " kgdarkalpha=" + kgDarkAlpha + " kgdarkfill=" + kgDarkFill + " kgrim=" + kgRim + " kgglint=" + kgGlint + " textswap=" + textSwap + " headertone=" + headerTone + " icontone=" + iconTone + " popuptone=" + popupTone + " popuplock=" + popupLock + " orphandraw=" + orphanDraw + " shadescaleveil=" + shadeScaleVeil + " shadelocal=" + shadeLocal + " paneldim=" + panelDim + " panelblurcap=" + panelBlurCap + " panelnativegray=" + panelNativeGray + " panelcolor=" + Integer.toHexString(panelColor) + " sfoptics=" + sfOptics + " kgwinblur=" + kgWinBlur + " headergap=" + headerGap + " perf=" + perf + " trace=" + trace + " mediaart=" + mediaArt + " qsmediaart=" + qsMediaArt;
+                + " semradius=" + semRadius + " semradiuslens=" + semRadiusLens + " sflens=" + sfLens + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " live=" + live + " liveradius=" + liveRadius + " liveshaderadius=" + liveShadeRadius + " liveoptics=" + liveOptics + " livesheen=" + liveSheen + " liveglint=" + liveGlint + " shadeglint=" + shadeGlint + " livelens=" + liveLens + " lensmaxage=" + lensMaxAge + " lenssettle=" + lensSettle + " lensgate=" + lensGate + " lenstransition=" + lensTransition + " kgblurpath=" + kgBlurPath + " shadeblurpath=" + shadeBlurPath + " shadefadecut=" + shadeFadeCut + " kgblurradius=" + kgBlurRadius + " pillglass=" + pillGlass + " pillblur=" + pillBlur + " kgoptics=" + kgOptics + " huoptics=" + huOptics + " kglens=" + kgLens + " shadetone=" + shadeTone + " shadeveil=" + shadeVeil + " shadeadaptive=" + shadeAdaptive + " shadecap=" + shadeCap + " shadelift=" + shadeLift + " veilmax=" + veilMax + " stylelo=" + styleLo + " stylehi=" + styleHi + " lightglass=" + lightGlass + " lighttone=" + Integer.toHexString(lightTone) + " lightedge=" + lightEdge + " lightoutline=" + lightOutline + " shadelightglass=" + shadeLightGlass + " shadedarkglass=" + shadeDarkGlass + " livedarkalpha=" + liveDarkAlpha + " livedarkfill=" + liveDarkFill + " liverim=" + liveRim + " kgdarkalpha=" + kgDarkAlpha + " kgdarkfill=" + kgDarkFill + " kgrim=" + kgRim + " kgglint=" + kgGlint + " textswap=" + textSwap + " headertone=" + headerTone + " icontone=" + iconTone + " popuptone=" + popupTone + " popuplock=" + popupLock + " orphandraw=" + orphanDraw + " shadescaleveil=" + shadeScaleVeil + " shadelocal=" + shadeLocal + " paneldim=" + panelDim + " panelblurcap=" + panelBlurCap + " panelnativegray=" + panelNativeGray + " panelcolor=" + Integer.toHexString(panelColor) + " sfoptics=" + sfOptics + " kgwinblur=" + kgWinBlur + " headergap=" + headerGap + " perf=" + perf + " trace=" + trace + " mediaart=" + mediaArt + " qsmediaart=" + qsMediaArt + " edgepremul=" + edgePremulMode
+                + " kgsharedoptics=" + kgSharedOptics;
     }
 
     /** A hex RGB value (with or without #), or the fallback. */

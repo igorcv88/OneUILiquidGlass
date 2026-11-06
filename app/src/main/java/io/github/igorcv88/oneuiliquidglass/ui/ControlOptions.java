@@ -28,12 +28,16 @@ final class ControlOptions {
             case "Gestos laterais": return R.string.control_option_2212a1a4fd6a;
             case "Grade de teste": return R.string.control_option_9a216516ec5f;
             case "Híbrida": return R.string.control_option_31d64f897e37;
+            case "Identifica os programas reescritos pela lente": return R.string.control_option_7fa186bd9a0b;
             case "Igual ao desfoque geral": return R.string.control_option_e723a958ac2a;
             case "Igual ao pop-up": return R.string.control_option_3e59ff2f3f00;
             case "Inclinação limitada, sem dobras": return R.string.control_option_9be0dc635d59;
             case "Lente suave": return R.string.control_option_c908bfdb54ef;
+            case "Luminância da borda": return R.string.control_option_18f5e7ca18f6;
             case "Mais seguro, some com mais frequência": return R.string.control_option_580a7b605fb0;
             case "Mapa de tons da lente": return R.string.control_option_26f136eba6ff;
+            case "Mapa verde da luz local na borda do bloqueio": return R.string.control_option_d08dd5f2deae;
+            case "Marcação magenta/ciano": return R.string.control_option_439524094087;
             case "Material do bloqueio": return R.string.control_option_ce65364887ca;
             case "Material do pop-up": return R.string.control_option_b5ac2d86fb77;
             case "Mede o fundo ao abrir a central": return R.string.control_option_966831833a8c;
@@ -51,6 +55,7 @@ final class ControlOptions {
             case "Qualquer toque": return R.string.control_option_5e752f3cd7ac;
             case "Quatro cantos": return R.string.control_option_5a83874989ff;
             case "Raio único": return R.string.control_option_808eb0b380d3;
+            case "Renderização normal, sem tinta diagnóstica": return R.string.control_option_f1b4503c73c7;
             case "Segue o esmaecimento do cartão": return R.string.control_option_929dc216ba9a;
             case "Sem amostragem": return R.string.control_option_b21f94257814;
             case "Sem forma": return R.string.control_option_787bedf67271;

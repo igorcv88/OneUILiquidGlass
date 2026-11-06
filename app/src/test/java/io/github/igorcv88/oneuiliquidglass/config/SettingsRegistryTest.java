@@ -114,6 +114,8 @@ public class SettingsRegistryTest {
         }
         assertEquals("80", SettingsRegistry.get("liveradius").defaultValue);
         assertEquals("60", SettingsRegistry.get("liveshaderadius").defaultValue);
+        assertEquals("1", SettingsRegistry.get("sf.kgfixedrim").defaultValue);
+        assertEquals("1", SettingsRegistry.get("kgsharedoptics").defaultValue);
     }
 
     @Test
@@ -159,6 +161,7 @@ public class SettingsRegistryTest {
             {"sf.kgtone", "0"},
             {"sf.kgcoredim", "0"},
             {"sf.kglight", "0.50"},
+            {"sf.kgdepth", "16"},
             {"kgblurradius", "12"},
             {"kgdarkfill", "5"},
             {"sf.kgsat", "0.95"},

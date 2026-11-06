@@ -125,6 +125,11 @@ public final class GlassDrawable extends Drawable {
     private float glint = 1f;
     private boolean edgeEnabled = true;
     public void setEdgeEnabled(boolean enabled) { if (edgeEnabled != enabled) { edgeEnabled = enabled; invalidateSelf(); } }
+    /** Cached once on card creation / shade-state change. No SurfaceFlinger query in draw(). */
+    private boolean p3EdgeCompatibility;
+    public void setP3EdgeCompatibility(boolean enabled) {
+        if (p3EdgeCompatibility != enabled) { p3EdgeCompatibility = enabled; invalidateSelf(); }
+    }
     public void setGlint(float g) { if (glint != g) { glint = g; invalidateSelf(); } }
     /** Gain of the outer contour line in the LSPosed-only edge model (1: unchanged). */
     private float rimGain = 1f;
@@ -164,6 +169,8 @@ public final class GlassDrawable extends Drawable {
      * to take its place.
      */
     private boolean compositorLit;
+    /** At most one trace per card, to distinguish an eligible shader from one actually drawn. */
+    private boolean reportedEdgeDraw;
     public void setCompositorLit(boolean on) { if (compositorLit != on) { compositorLit = on; invalidateSelf(); } }
     /** See {@link Backdrop#reassert()}. */
     public void reassertBackdrop() { if (!failed) backdrop.reassert(); }
@@ -248,6 +255,15 @@ public final class GlassDrawable extends Drawable {
             if (shader != null && !compositorLit) {
                 edgeUniforms(shader, bounds);
                 canvas.drawRect(rect, paint);
+                if (!reportedEdgeDraw && Probe.trace) {
+                    reportedEdgeDraw = true;
+                    Tuning t = Tuning.get();
+                    int edgeMode = P3EdgeSelection.effectiveMode(t.edgePremulMode, p3EdgeCompatibility);
+                    Probe.log("GLASS_EDGE_DRAWN", "mode=" + edgeMode
+                            + " p3Compat=" + p3EdgeCompatibility
+                            + " blend=" + (edgeMode >= 2 ? "PLUS" : "SRC_OVER")
+                            + " source=" + backdrop.name() + " hardware=" + canvas.isHardwareAccelerated());
+                }
             }
         } catch (RuntimeException e) {
             failed = true; backdrop.release(); Probe.error("GLASS_DRAW_FAILED", e);
@@ -298,6 +314,16 @@ public final class GlassDrawable extends Drawable {
         s.setFloatUniform("shadow", spec.innerShadow * (lightStyle && Tuning.get().live ? lightEdge : 1f));
         // LSPosed-only cards over the live drawable blur take the light-only edge model.
         Tuning t = Tuning.get();
+        // This uniform exists only in SOURCE; REFRACT_SOURCE remains unchanged.
+        if (s == shader) {
+            int edgeMode = P3EdgeSelection.effectiveMode(t.edgePremulMode, p3EdgeCompatibility);
+            s.setFloatUniform("edgePremulSafe", edgeMode > 0 ? 1f : 0f);
+            s.setFloatUniform("edgeBrightness", edgeMode == 3 ? 1.5f : (edgeMode == 4 ? 1.40f : 1f));
+            // Mode 2 preserves additive highlights without relying on invalid RGB/alpha.
+            // This affects only the edge paint, not the whole display or blur layers.
+            paint.setBlendMode(edgeMode >= 2
+                    ? android.graphics.BlendMode.PLUS : android.graphics.BlendMode.SRC_OVER);
+        }
         boolean live = t.live && backdrop instanceof BackgroundBlurBridge;
         s.setFloatUniform("hairGain", edgeEnabled ? 1f : 0f);
         s.setFloatUniform("decor", edgeEnabled ? (live ? t.liveOptics : 1f) : 0f);

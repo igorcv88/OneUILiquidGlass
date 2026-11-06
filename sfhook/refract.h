@@ -73,12 +73,9 @@
 //  - interior: an 80 px disc with 48 taps; vibrancy; a soft knee on bright backdrops; adaptive
 //    transmission (luma drawn halfway toward 0.40, dark areas lifted by scattered cool light rather
 //    than a gain); a luma-neutral cool tint;
-//  - rim reflection: Schlick's excess reflectance F(theta) mixes the refracted backdrop toward a
-//    cool environment, brighter on the upper (sky-facing) rim; v0.9's 1.2 rad tilt capped F at
-//    0.10, which left the rim grey (the device report);
-//  - a thin contour, the grazing edge of the same surface, 1.6 px from the outline;
-//  - a specular band inside the contour, peaked mid-bevel on the light-facing side (light from the
-//    upper left, as the module's edge optics), a fainter one opposite, fading over bright backdrops.
+//  - the dynamic local edge light shares the same backdrop-sampling oulg_glow with profile 2;
+//    Fresnel, white contour and directional specular are retained because they convey the lens's
+//    curvature. debug.oulg.sf.kgfixedrim=0 suppresses them only for controlled A/B diagnostics.
 #define OULG_FS_GLOBALS "highp float oulg_on, oulg_pf, oulg_br, oulg_bw, oulg_lw, oulg_t, oulg_k, oulg_bv, oulg_grad, oulg_dp, oulg_rad;\nhighp vec2 oulg_jx, oulg_jy, oulg_n, oulg_e, oulg_eo;\n"
 #define OULG_FS_BSPLINE \
     "mediump vec4 oulg_bspline(sampler2D s, highp vec2 uv) {\n" \
@@ -174,26 +171,48 @@
 // floor, cap) reads the backdrop at the nearest point of the outline (oulg_eo: from the sample to a
 // point 2 px inside the outline, set by the field and mapped to texture space by main) and returns
 // the light reaching this pixel, (colour, amount). With u = (luma - floor) / (1 - floor) of that
-// edge sample, the light entering is min(gain x u, cap) and it decays inward as exp(-d / lambda),
-// d the depth from the outline and lambda = 1.5 + (depth - 1.5) u^2 px: a dark stretch adds nothing
-// (only the module's basal rim shows), a mid-grey one ~25 % of `depth`, a white one all of it. One
-// continuous field: no band of fixed width and no inner edge (the decay is monotonic from the
-// outline). lambda <= r / 4 and the light is cut smoothly between 2.5 and 4 lambda, so it is exactly
-// zero at depth r and beyond, where the nearest outline point jumps (medial axis of the inner rect).
+// edge sample, the general light entering is min(gain x u, cap). Outside KG it decays inward as
+// exp(-d/lambda), with lambda growing as u^2 and bounded by r/4. On KG the source is split into
+// a short, stronger rim (fixed Gaussian sigma 1.8 px, linear in u without the veil's cap) and
+// a much weaker inward veil (which keeps cap). Only that
+// veil uses lmax: an actual support distance in px, fading linearly to zero at d >= lmax,
+// capped at 0.9r
+// to avoid a seam where the nearest outline point jumps (medial axis). Increasing lmax changes
+// how far the veil reaches, never the intensity of the rim. Both terms still depend on the same
+// local backdrop luminance u; black produces neither. All light decreases monotonically inward.
 // The colour is white tinted 35 % toward the edge sample's hue. Moving content moves the light.
 #define OULG_FS_GLOW \
     "mediump vec4 oulg_glow(sampler2D s, highp vec2 uv, mediump float gain, highp float lmax, mediump float fl, mediump float cap) {\n" \
     "  mediump vec4 e = textureLod(s, uv + oulg_eo, 0.0);\n" \
     "  mediump vec3 rgb = e.rgb / max(e.a, 1e-3);\n" \
     "  mediump float u = clamp((dot(rgb, vec3(0.2126, 0.7152, 0.0722)) - fl) / (1.0 - fl), 0.0, 1.0);\n" \
-    "  highp float lam = max(min(1.5 + (lmax - 1.5) * u * u, 0.25 * oulg_rad), 0.5);\n" \
     "  highp float d = max(oulg_dp, 0.0);\n" \
-    "  mediump float lit = min(gain * u, cap) * exp(-d / lam) * (1.0 - smoothstep(2.5 * lam, 4.0 * lam, d));\n" \
+    "  mediump float enter = min(gain * u, cap);\n" \
+    "  mediump float lit;\n" \
+    "  if (oulg_pf > 0.5 && oulg_pf < 1.5) {\n" \
+    "    highp float reach = min(lmax, max(1.5, 0.90 * oulg_rad));\n" \
+    "    highp float edgeDistance = d / 1.8;\n" \
+    "    mediump float rim = 1.10 * gain * u * exp(-0.5 * edgeDistance * edgeDistance);\n" \
+    "    mediump float veil = 0.18 * enter * max(0.0, 1.0 - d / reach);\n" \
+    "    lit = min(rim + veil, 0.60);\n" \
+    "  } else {\n" \
+    "    highp float lam = max(min(1.5 + (lmax - 1.5) * u * u, 0.25 * oulg_rad), 0.5);\n" \
+    "    lit = enter * exp(-d / lam) * (1.0 - smoothstep(2.5 * lam, 4.0 * lam, d));\n" \
+    "  }\n" \
     "  mediump float m = max(max(rgb.r, rgb.g), max(rgb.b, 1e-3));\n" \
     "  return vec4(mix(vec3(1.0), clamp(rgb / m, 0.0, 1.0), 0.35), lit);\n" \
     "}\n" \
     "mediump vec4 oulg_over(mediump vec4 c, mediump vec4 g) {\n" \
     "  return vec4(c.rgb * (1.0 - g.a) + g.rgb * (g.a * c.a), c.a);\n" \
+    "}\n"
+// Diagnostic mode 2: display the actual backdrop luminance at the same outline coordinates read
+// by oulg_glow(), before premultiplied-alpha composition or the card's material. Green varies from
+// black (dark source) to bright green (light source). Compiled into the shader ONLY in mode 2.
+#define OULG_FS_KG_LUMA_PROBE \
+    "mediump vec4 oulg_kg_luma_probe(sampler2D s, highp vec2 uv) {\n" \
+    "  mediump vec4 e = textureLod(s, uv + oulg_eo, 0.0);\n" \
+    "  mediump float y = clamp(dot(e.rgb / max(e.a, 1e-3), vec3(0.2126, 0.7152, 0.0722)), 0.0, 1.0);\n" \
+    "  return vec4(0.0, y, 0.0, 1.0);\n" \
     "}\n"
 // One case of oulg_light (lo, hi, gain, depth, floor, cap), emitted only for profiles 0-2 whose gain
 // is above 0: with every gain at 0 oulg_light is the identity and those profiles draw as in v0.26.
@@ -270,9 +289,11 @@
     "  return oulg_material(oulg_br < 0.5 ? c : mix(c, oulg_body(s, uv), oulg_br / 6.0));\n" \
     "}\n" \
     "mediump vec4 oulg_sample(sampler2D s, highp vec2 uv, float bias) {\n" \
+    "  %s" \
     "  return oulg_on > 0.0 ? (oulg_pf > 2.5 ? oulg_edge(s, uv, texture(s, uv, bias)) : oulg_light(s, uv, oulg_pf > 1.5 ? oulg_tone(texture(s, uv, bias)) : oulg_lens(s, uv))) : texture(s, uv, bias);\n" \
     "}\n" \
     "mediump vec4 oulg_sample(sampler2D s, highp vec2 uv) {\n" \
+    "  %s" \
     "  return oulg_on > 0.0 ? (oulg_pf > 2.5 ? oulg_edge(s, uv, texture(s, uv)) : oulg_light(s, uv, oulg_pf > 1.5 ? oulg_tone(texture(s, uv)) : oulg_lens(s, uv))) : texture(s, uv);\n" \
     "}\n"
 // The field (gradient1, ramp1, core1, ccap1, core0, ramp0, edge0, edge0, core0, ramp0, ramp1, core1, ccap1, band1, blurexp1, core1, ccap1, lensbody1,
@@ -497,6 +518,7 @@ struct oulg_profile { float core; int taps; float ramp; float sat; float tone; f
 // carry text (profile 2). Gain 0 restores v0.26 exactly for that profile (no code is emitted).
 #define OULG_HU_LIGHT_DEFAULT 0.40f
 #define OULG_KG_LIGHT_DEFAULT 0.50f
+#define OULG_KG_LDEPTH_DEFAULT 16.0f
 #define OULG_SHADE_LIGHT_DEFAULT 0.30f
 #define OULG_EDGE_LDEPTH_DEFAULT 12.0f
 #define OULG_EDGE_LFLOOR_DEFAULT 0.10f
@@ -518,7 +540,7 @@ static const struct oulg_profile OULG_PROFILES_DEFAULT[OULG_PROFILES] = {
      OULG_KG_CCAP_DEFAULT, OULG_KG_FCAP_DEFAULT, OULG_KG_CDIM_DEFAULT, OULG_KG_GLOW_DEFAULT, 0.0f, OULG_KG_GRADIENT_DEFAULT,
      OULG_KG_BAND_DEFAULT, OULG_KG_LENSBODY_DEFAULT, OULG_KG_BLUREXP_DEFAULT, OULG_KG_EDGE_DEFAULT,
      OULG_GLOBAL_BLUR_DEFAULT, OULG_GLOBAL_REFRACT_DEFAULT,
-     OULG_KG_LIGHT_DEFAULT, OULG_EDGE_LDEPTH_DEFAULT, OULG_EDGE_LFLOOR_DEFAULT, OULG_EDGE_LCAP_DEFAULT, 0.0f, 0.0f},
+     OULG_KG_LIGHT_DEFAULT, OULG_KG_LDEPTH_DEFAULT, OULG_EDGE_LFLOOR_DEFAULT, OULG_EDGE_LCAP_DEFAULT, 0.0f, 0.0f},
     {0.0f, OULG_TAPS_DEFAULT, OULG_RAMP_DEFAULT, 1.0f, 0.0f, 0.0f, 0.0f, OULG_SHADE_CAP_DEFAULT, OULG_SHADE_LIFT_DEFAULT,
      0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 400.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f,
      OULG_GLOBAL_BLUR_DEFAULT, OULG_GLOBAL_REFRACT_DEFAULT,
@@ -529,6 +551,14 @@ static const struct oulg_profile OULG_PROFILES_DEFAULT[OULG_PROFILES] = {
      OULG_QS_LIGHT_DEFAULT, OULG_QS_LWIDTH_DEFAULT, OULG_QS_LFLOOR_DEFAULT, OULG_QS_LCAP_DEFAULT,
      OULG_QS_LENS_DEFAULT, OULG_QS_BODY_DEFAULT},
 };
+// Opt-in A/B probe: 0 suppresses all structural highlights, 1 preserves them. Removing all three
+// was visually destructive on the S25 Ultra. This helper never changes the body or blur field.
+static void oulg_kg_fixed_rim(struct oulg_profile *kg, float enabled) {
+    if (enabled >= 0.5f) return;
+    kg->rim = 0.0f;
+    kg->line = 0.0f;
+    kg->spec = 0.0f;
+}
 #define OULG_VS_RADII_AT "highp vec2 neighbor_radii = radii_and_neighbors.zw;\n"
 #define OULG_VS_POS_AT "gl_Position = vec4(devcoord, 0.0, 1.0);\n"
 #define OULG_FS_SAMPLE "texture(uTextureSampler_0_S1, vTransformedCoords_"
@@ -670,7 +700,7 @@ static int oulg_append(char *out, size_t cap, size_t *at, const char *fmt, ...) 
 
 // The shared library for one program. External (camera/video) textures allow neither textureLod nor
 // the filtered path: they get the globals and the field only, and keep their plain sample.
-static int oulg_lib(char *out, size_t cap, int external, const struct oulg_profile p[OULG_PROFILES]) {
+static int oulg_lib(char *out, size_t cap, int external, int debug, const struct oulg_profile p[OULG_PROFILES]) {
     size_t at = 0;
     if (!oulg_append(out, cap, &at, "%s", OULG_FS_GLOBALS)) return 0;
     if (!external) {
@@ -693,6 +723,7 @@ static int oulg_lib(char *out, size_t cap, int external, const struct oulg_profi
     if (!external && !oulg_append(out, cap, &at, OULG_FS_TONE_FMT, (double) p[2].cap, (double) p[2].lift)) return 0;
     if (!external) {
         if (!oulg_append(out, cap, &at, "%s", OULG_FS_GLOW)) return 0;
+        if (debug == 2 && !oulg_append(out, cap, &at, "%s", OULG_FS_KG_LUMA_PROBE)) return 0;
         if (!oulg_append(out, cap, &at, "%s", "mediump vec4 oulg_light(sampler2D s, highp vec2 uv, mediump vec4 c) {\n")) return 0;
         for (int i = 0; i < 3; i++)
             if (p[i].light > 0.0f && !oulg_append(out, cap, &at, OULG_FS_LIGHT_CASE_FMT, i - 0.5, i + 0.5, (double) p[i].light,
@@ -714,7 +745,9 @@ static int oulg_lib(char *out, size_t cap, int external, const struct oulg_profi
     if (!external && !oulg_append(out, cap, &at, OULG_FS_LENS_FMT, uniformBody, coreOn, coreOn,
                                   (double) p[1].sat, (double) p[1].tone, (double) p[1].flat, (double) p[1].fcap, (double) p[1].level, (double) p[1].cdim,
                                   cr / cl, cg / cl, cb / cl, (double) p[1].glow, (double) p[1].rim, (double) p[1].tilt, (double) p[1].line,
-                                  (double) p[1].spec)) return 0;
+                                  (double) p[1].spec,
+                                  debug == 2 ? "if (oulg_on > 0.0 && oulg_pf > 0.5 && oulg_pf < 1.5) return oulg_kg_luma_probe(s, uv);\n" : "",
+                                  debug == 2 ? "if (oulg_on > 0.0 && oulg_pf > 0.5 && oulg_pf < 1.5) return oulg_kg_luma_probe(s, uv);\n" : "")) return 0;
     return 1;
 }
 
@@ -767,7 +800,7 @@ static char *oulg_rewrite_fragment(const char *src, int debug, const struct oulg
         "  highp vec2 oulg_de = oulg_ij * (oulg_e / oulg_hs);\n"
         "  oulg_eo = oulg_tx * oulg_de.x + oulg_ty * oulg_de.y;\n"
         "}\n",
-        coords, coords, coords, debug ? "1.0" : "0.0");
+        coords, coords, coords, debug == 1 ? "1.0" : "0.0");
     if (n <= 0 || (size_t) n >= sizeof block) return NULL;
 
     // Splice from the end backwards so earlier offsets stay valid.
@@ -779,7 +812,7 @@ static char *oulg_rewrite_fragment(const char *src, int debug, const struct oulg
     if (!u) return NULL;
     u = oulg_insert_after(u, 1, "void main() {\n", block);
     char lib[16384];
-    if (!oulg_lib(lib, sizeof lib, external, p)) { free(u); return NULL; }
+    if (!oulg_lib(lib, sizeof lib, external, debug, p)) { free(u); return NULL; }
     char *v = oulg_insert_after(u, 1, OULG_FS_DECL_AT, OULG_FS_DECL);
     return oulg_insert_after(v, 1, OULG_FS_DECL, lib);
 }
@@ -835,7 +868,7 @@ static char *oulg_rewrite_clip(const char *src, int debug, const struct oulg_pro
         "  oulg_tc += oulg_dx * oulg_off.x + oulg_dy * oulg_off.y;\n"
         "  oulg_eo = oulg_dx * oulg_e.x + oulg_dy * oulg_e.y;\n"
         "}\n",
-        coords, coords, coords, rph, rect, rect, debug ? "1.0" : "0.0", rect, rect,
+        coords, coords, coords, rph, rect, rect, debug == 1 ? "1.0" : "0.0", rect, rect,
         flip ? "  oulg_off.y *= u_skRTFlip.y;\n  oulg_e.y *= u_skRTFlip.y;\n" : "");
     if (n <= 0 || (size_t) n >= sizeof block) return NULL;
     char *s = oulg_splice(src, (size_t) (final - src), 0, "output_S1.rgb = mix(output_S1.rgb, vec3(0.0, output_S1.a, output_S1.a), oulg_dbg * 0.6);\n");
@@ -850,7 +883,7 @@ static char *oulg_rewrite_clip(const char *src, int debug, const struct oulg_pro
     free(t);
     if (!u) return NULL;
     char lib[16384];
-    if (!oulg_lib(lib, sizeof lib, external, p)) { free(u); return NULL; }
+    if (!oulg_lib(lib, sizeof lib, external, debug, p)) { free(u); return NULL; }
     return oulg_insert_before(u, 1, "void main() {\n", lib);
 }
 

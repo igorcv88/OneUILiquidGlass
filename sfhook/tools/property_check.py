@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Compile the actual Android float parser on the host and exercise profile-3 shader gains."""
 from pathlib import Path
+from math import exp, sqrt
 import re
 import subprocess
 import tempfile
@@ -9,6 +10,7 @@ root = Path(__file__).resolve().parents[1]
 source = (root / "oulg_sf.c").read_text()
 parser = re.search(r"static float prop_float\(.*?\n\}", source, re.S).group(0)
 assert 'p[3].light = prop_float("debug.oulg.sf.qslight", OULG_QS_LIGHT_DEFAULT);' in source
+assert 'oulg_kg_fixed_rim(&p[1], prop_float("debug.oulg.sf.kgfixedrim", 1.0f));' in source
 with tempfile.TemporaryDirectory() as tmp:
     temp = Path(tmp)
     harness = r'''
@@ -52,3 +54,98 @@ int main(void) {
     strip = lambda s: re.sub(r"oulg_glow\(s, uv, (?:0\.000|0\.900|2\.000), 18\.000,", "QS_GAIN", s)
     assert strip(text["0"]) == strip(text["0.90"]) == strip(text["2"])
     print("profile 3: gain 0/default/2, invalid fallback and other-profile isolation passed")
+
+    # KG now uses the same per-edge local glow as the shade. The optional fixed contour only
+    # affects the three reflection strengths, never the blur field or any other profile.
+    rim = {}
+    for mode in ("0", "1", "default"):
+        out = temp / ("kgfixedrim_" + mode)
+        out.mkdir()
+        subprocess.run([str(exe), str(root / "tools/testdata/synthetic_dump.txt"), str(out), "0",
+                        "kgfixedrim=" + mode if mode != "default" else "none=0"], check=True, stdout=subprocess.DEVNULL)
+        rim[mode] = (out / "mod_002.frag").read_text()
+    dynamic, legacy = rim["0"], rim["1"]
+    assert rim["default"] == legacy, "Default KG optics must preserve the confirmed lens appearance"
+    assert "oulg_glow(s, uv, 0.500, 16.000, 0.100, 0.280)" in dynamic
+    replacements = {
+        "clamp(0.720 * pow": "clamp(0.000 * pow",
+        "line = 0.620 * exp": "line = 0.000 * exp",
+        "rgb += 0.170 * band": "rgb += 0.000 * band",
+    }
+    for before, after in replacements.items():
+        assert before in legacy and after in dynamic, (before, after)
+        legacy = legacy.replace(before, after)
+    assert legacy == dynamic, "KG rim mode unexpectedly modified blur, body, or other profiles"
+    print("lockscreen: original optics restored by default; local-only probe and unchanged blur confirmed")
+
+    # KG reach is literal support distance, separate from the bright dynamic rim. The slider
+    # must alter only the support argument, without affecting fixed rim, other profiles or material.
+    depth = {}
+    for value in ("4", "16", "24", "48", "49"):
+        out = temp / ("kgdepth_" + value)
+        out.mkdir()
+        subprocess.run([str(exe), str(root / "tools/testdata/synthetic_dump.txt"), str(out), "0",
+                        "kgdepth=" + value], check=True, stdout=subprocess.DEVNULL)
+        depth[value] = (out / "mod_002.frag").read_text()
+    assert depth["16"] == rim["default"]
+    assert depth["49"] == depth["16"], "invalid KG depth must fall back to default"
+    for value in ("4", "24", "48"):
+        assert f"oulg_glow(s, uv, 0.500, {float(value):.3f}, 0.100, 0.280)" in depth[value]
+        assert depth[value].replace(f"oulg_glow(s, uv, 0.500, {float(value):.3f},",
+                                    "oulg_glow(s, uv, 0.500, 16.000,") == depth["16"]
+    assert "highp float reach = min(lmax, max(1.5, 0.90 * oulg_rad));" in dynamic
+    assert "mediump float rim = 1.10 * gain * u * exp(-0.5 * edgeDistance * edgeDistance);" in dynamic
+    assert "mediump float veil = 0.18 * enter * max(0.0, 1.0 - d / reach);" in dynamic
+    assert "0.25 * oulg_rad" in dynamic, "other profiles must keep the medial-axis cap"
+
+    def light_at(luma, d, radius=55.0, kg=False, kg_reach=16.0):
+        u = max(0., min(1., (luma - 0.10) / 0.90))
+        enter = min(0.50 * u, 0.28)
+        if kg:
+            reach = min(kg_reach, max(1.5, 0.90 * radius))
+            rim = 1.10 * 0.50 * u * exp(-0.5 * (d / 1.8) ** 2)
+            veil = 0.18 * enter * max(0., 1.0 - d / reach)
+            return min(rim + veil, 0.60)
+        lam = max(min(1.5 + (12.0 - 1.5) * u * u, radius / 4.), 0.5)
+        x = max(0., min(1., (d - 2.5 * lam) / (1.5 * lam)))
+        cutoff = 1.0 - x * x * (3.0 - 2.0 * x)
+        return enter * exp(-d / lam) * cutoff
+
+    assert light_at(0.0, 0., kg=True) == 0.0
+    assert light_at(0.31, 1., kg=True) > light_at(0.31, 1., kg=False)
+    # At a fixed distance inside the card, 4/16/24 px must no longer render identically.
+    assert light_at(0.64, 8., kg=True, kg_reach=4.) < light_at(0.64, 8., kg=True, kg_reach=16.)
+    assert light_at(0.64, 8., kg=True, kg_reach=16.) < light_at(0.64, 8., kg=True, kg_reach=24.)
+    # The rim response itself must remain independent of the inward-veil support distance.
+    def rim_at(luma, d):
+        u = max(0., min(1., (luma - 0.10) / 0.90))
+        return 1.10 * 0.50 * u * exp(-0.5 * (d / 1.8) ** 2)
+    assert rim_at(0.64, 0.) > 5 * (light_at(0.64, 9., kg=True, kg_reach=24.) - rim_at(0.64, 9.))
+    assert rim_at(1.0, 0.) > rim_at(0.31, 0.) > rim_at(0.0, 0.) == 0.0
+    assert rim_at(1.0, 0.) > rim_at(0.80, 0.) > rim_at(0.64, 0.), "rim must not saturate at the veil's luminance cap"
+    for luma in (0.11, 0.31, 0.41, 0.64, 1.0):
+        assert light_at(luma, 55., kg=True) < 1e-100, "no light seam at card's medial axis"
+        assert all(light_at(luma, d + 1., kg=True) <= light_at(luma, d, kg=True)
+                   for d in range(55)), "light must decrease strictly inward"
+    print("lockscreen: independent dynamic rim, literal 4/16/24px veil reach, other-profile isolation passed")
+
+    # A dedicated source-luminance probe separates missing backdrop samples from a failed light
+    # blend on device. Mode 2 uses the same outline-coordinate texture read as oulg_glow. No probe
+    # source or extra sample is present in production (0) or tag-only (1) shader programs.
+    probe = {}
+    for mode in ("0", "1", "2"):
+        out = temp / ("debug_" + mode)
+        out.mkdir()
+        subprocess.run([str(exe), str(root / "tools/testdata/synthetic_dump.txt"), str(out), mode],
+                       check=True, stdout=subprocess.DEVNULL)
+        probe[mode] = (out / "mod_002.frag").read_text()
+    assert "oulg_kg_luma_probe" not in probe["0"]
+    assert "oulg_kg_luma_probe" not in probe["1"]
+    assert "oulg_kg_luma_probe" in probe["2"]
+    assert "textureLod(s, uv + oulg_eo, 0.0)" in probe["2"]
+    assert "oulg_dbg = 0.0;" in probe["2"] and "oulg_dbg = 1.0;" not in probe["2"]
+    assert "oulg_dbg = 1.0;" in probe["1"]
+    assert "oulg_dbg = 0.0;" in probe["0"]
+    # Only the selected profile is substituted: the optical body, blur and other profiles remain.
+    assert "if (oulg_on > 0.0 && oulg_pf > 0.5 && oulg_pf < 1.5) return oulg_kg_luma_probe(s, uv);" in probe["2"]
+    print("diagnostic: mode 2 reads real KG edge source; 0/1 omit probe and remain isolated")

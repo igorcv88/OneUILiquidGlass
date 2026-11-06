@@ -3,6 +3,7 @@
     <string name="control_description_backdrop">Seleciona a origem do fundo usada fora da lente dinâmica.</string>
     <string name="control_description_blur">Controla o desfoque aplicado ao fundo capturado por inteiro.</string>
     <string name="control_description_disp">Ajusta a diferença de deslocamento entre vermelho e azul na imagem capturada.</string>
+    <string name="control_description_edgepremul">O padrão 0 mantém a borda original fora de Display P3. Notificações em Display P3 usam automaticamente o modo aditivo 3 com luz RGB 1,5x; desative com debug.oulg.p3edgecompat=0. Modos manuais de diagnóstico: 1 usa mistura normal premultiplicada; 2 soma a 1x; 3 a 1,5x; 4 a 1,4x. Valores salvos são preservados.</string>
     <string name="control_description_headergap">Ajusta o espaço entre o cabeçalho e o título das notificações expandidas.</string>
     <string name="control_description_headertone">Adapta o relógio, a data e a operadora da central ao fundo.</string>
     <string name="control_description_huoptics">Seleciona o material da lente dinâmica nos pop-ups.</string>
@@ -18,6 +19,7 @@
     <string name="control_description_kglens">Ajusta a refração da borda dos cartões da tela de bloqueio quando a lente dinâmica está ativa.</string>
     <string name="control_description_kgoptics">Seleciona o material da lente dinâmica nos cartões da tela de bloqueio.</string>
     <string name="control_description_kgrim">Ajusta o contorno dos cartões da tela de bloqueio.</string>
+    <string name="control_description_kgsharedoptics">Notificações KG reutilizam o shader óptico Java da Now Bar. Mantenha Contorno fixo (sf.kgfixedrim=1) ligado: a combinação foi aprovada no DZIF; desligar o contorno estrutural achatou o vidro. Não modifica corpo, refração nem blur. Ligado é o padrão aprovado.</string>
     <string name="control_description_kgwinblur">Permite rampas de desfoque da janela iniciadas por toque na tela de bloqueio parada.</string>
     <string name="control_description_lens">Ajusta o deslocamento da faixa de lente do pop-up em relação ao bisel.</string>
     <string name="control_description_lensgate">Seleciona quais toques ocultam a faixa de lente durante o movimento.</string>
@@ -92,7 +94,7 @@
     <string name="control_description_semradiuslens">Controla o desfoque do sistema sob a lente dinâmica. Menos desfoque preserva detalhes para a refração.</string>
     <string name="control_description_semshape">Seleciona a geometria da região de desfoque do sistema.</string>
     <string name="control_description_sf_core">Ajusta o desfoque no centro dos pop-ups. As mudanças são aplicadas após reiniciar o userspace.</string>
-    <string name="control_description_sf_debug">Pinta programas de shader reescritos em magenta e ciano para diagnóstico. As mudanças são aplicadas após reiniciar o userspace.</string>
+    <string name="control_description_sf_debug">Modo de diagnóstico: 0 desligado, 1 magenta/ciano nos shaders reescritos, 2 mapa verde da luminância local nas bordas das notificações do bloqueio. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_edgeblur">Ajusta o desfoque da borda do pop-up e sua transição até o centro. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_hubloom">Reduz amostras muito claras no centro do pop-up. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_hublur">Multiplica o desfoque do compositor no pop-up sem alterar o desfoque básico. As mudanças são aplicadas após reiniciar o userspace.</string>
@@ -107,7 +109,9 @@
     <string name="control_description_sf_kgcore">Ajusta o desfoque no centro dos cartões da tela de bloqueio. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_kgcorecap">Limita o raio efetivo do desfoque interno da tela de bloqueio. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_kgcoredim">Escurece o centro dos cartões da tela de bloqueio. As mudanças são aplicadas após reiniciar o userspace.</string>
+    <string name="control_description_sf_kgdepth">Define o alcance máximo (px) do véu fraco que entra nos cartões do bloqueio. A borda luminosa reage ao fundo e continua estreita, sem depender deste ajuste. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_kgedgeblur">Ajusta o desfoque nas bordas dos cartões da tela de bloqueio. As mudanças são aplicadas após reiniciar o userspace.</string>
+    <string name="control_description_sf_kgfixedrim">Ligado (padrão): preserva o contorno e os reflexos que dão relevo à lente. Desligado: apenas diagnóstico; remover os três deixa o cartão visualmente plano. Não altera os raios de desfoque. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_kgflat">Ajusta a intensidade da uniformização do brilho do fundo na tela de bloqueio. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_kgflatcap">Limita a intensidade da uniformização do brilho na tela de bloqueio. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_kgglow">Ajusta a largura do brilho em volta do aro da lente na tela de bloqueio. As mudanças são aplicadas após reiniciar o userspace.</string>

@@ -1,0 +1,93 @@
+name: Experimental edge alpha APK
+
+# The test branch alone produces one short-lived, release-key-signed APK.
+# Do not include this workflow in a normal merge.
+on:
+  push:
+    branches:
+      - codex/edge-premul-experiment
+
+permissions:
+  contents: read
+
+concurrency:
+  group: oulg-edge-premul-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  signed-apk:
+    if: github.repository == 'igorcv88/OneUILiquidGlass'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      NDK_VERSION: '29.0.14206865'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Use current release version code for reversible replacement
+        run: |
+          set -euo pipefail
+          LATEST_PATCH="$(git tag --list 'v0.1.*' | sed -nE 's/^v0[.]1[.]([0-9]+)$/\1/p' | sort -n | tail -n 1)"
+          test -n "$LATEST_PATCH"
+          {
+            echo "VERSION_CODE=$((100 + LATEST_PATCH))"
+            echo "VERSION_NAME=0.1.${LATEST_PATCH}-edgepremul"
+          } >> "$GITHUB_ENV"
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Android SDK and NDK
+        run: |
+          set -euo pipefail
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;35.0.0" "ndk;$NDK_VERSION"
+      - name: Build SurfaceFlinger bundle
+        run: ANDROID_NDK="$ANDROID_HOME/ndk/$NDK_VERSION" sh sfhook/build.sh
+      - name: Unit tests, lint and release assembly
+        run: |
+          set -euo pipefail
+          chmod +x gradlew
+          ./gradlew testDebugUnitTest lintDebug assembleRelease \
+            -PreleaseVersionCode="$VERSION_CODE" \
+            -PreleaseVersionName="$VERSION_NAME"
+      - name: Sign with established release identity
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for value in KEYSTORE_BASE64 STORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            if [[ -z "${!value:-}" ]]; then
+              echo "::error::Required release signing secret missing: $value" >&2
+              exit 1
+            fi
+          done
+          printf '%s' "$KEYSTORE_BASE64" | tr -d '\r\n ' | base64 --decode > "$RUNNER_TEMP/oulg-edge-signing.keystore"
+          chmod 600 "$RUNNER_TEMP/oulg-edge-signing.keystore"
+          TOOLS="$ANDROID_HOME/build-tools/35.0.0"
+          "$TOOLS/zipalign" -P 16 -f 4 app/build/outputs/apk/release/app-release-unsigned.apk "$RUNNER_TEMP/edge-aligned.apk"
+          "$TOOLS/apksigner" sign \
+            --ks "$RUNNER_TEMP/oulg-edge-signing.keystore" \
+            --ks-key-alias "$KEY_ALIAS" \
+            --ks-pass env:STORE_PASSWORD \
+            --key-pass env:KEY_PASSWORD \
+            --out OneUILiquidGlass-edgepremul-signed.apk \
+            "$RUNNER_TEMP/edge-aligned.apk"
+          "$TOOLS/apksigner" verify --verbose --print-certs OneUILiquidGlass-edgepremul-signed.apk
+          "$TOOLS/aapt2" dump badging OneUILiquidGlass-edgepremul-signed.apk | head -n 1
+          sha256sum OneUILiquidGlass-edgepremul-signed.apk
+      - name: Remove temporary signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/oulg-edge-signing.keystore"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OneUILiquidGlass-edgepremul-signed
+          path: OneUILiquidGlass-edgepremul-signed.apk
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0

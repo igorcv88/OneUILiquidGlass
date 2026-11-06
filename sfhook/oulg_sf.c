@@ -270,11 +270,14 @@ static int compiles(GLuint shader, const char *text) {
 // program already paired with it fails to link and Skia retries it unrewritten.
 static int vertex_broken;
 
-// Debug tint, read when a shader is compiled: changing it needs a surfaceflinger restart with the
-// shader cache cleared. The lens strength travels in the tag, set live by the module.
+// Shader diagnostics, read at compile time (requires a SurfaceFlinger restart/cache refresh):
+// 1 is the established magenta/cyan tag proof; 2 paints the raw backdrop luminance sampled at the
+// KG outline in green, before material, opacity and glow composition. 0 is the production path.
+// The lens strength travels in the tag, set live by the module.
 static int debug_tint(void) {
     char v[PROP_VALUE_MAX] = {0};
-    return __system_property_get("debug.oulg.sf.debug", v) > 0 && v[0] == '1';
+    if (__system_property_get("debug.oulg.sf.debug", v) <= 0) return 0;
+    return v[0] == '2' && !v[1] ? 2 : v[0] == '1' && !v[1] ? 1 : 0;
 }
 
 static float prop_float(const char *name, float fallback) {
@@ -301,7 +304,8 @@ static float prop_float(const char *name, float fallback) {
 // of the refracted backdrop at the outline) and .qsdepth (penetration depth in px of light from a
 // white edge), the rest OULG_QS_* in refract.h. The edge
 // light of profiles 0-2: debug.oulg.sf.hulight, .kglight and .shadelight (gain; 0 restores v0.26
-// exactly). Which
+// exactly). KG additionally controls only the faint inward light veil's maximum reach with
+// .kgdepth (px), leaving the bright, local backdrop-reactive rim independent. Which
 // profile a card gets travels in its tag, set live by the module.
 // .kggradient (0..1, default 1) enables the continuous glass/body transition;
 // .kggradient=0 with .kgcorecap=62 restores the v0.21 lockscreen reference.
@@ -346,6 +350,10 @@ static void layered_blur(struct oulg_profile p[OULG_PROFILES]) {
     p[1].blur = prop_float("debug.oulg.sf.kgblur", OULG_GLOBAL_BLUR_DEFAULT);
     p[1].refract = prop_float("debug.oulg.sf.kgrefract", OULG_GLOBAL_REFRACT_DEFAULT);
     p[1].light = prop_float("debug.oulg.sf.kglight", OULG_KG_LIGHT_DEFAULT);
+    p[1].lwidth = prop_float("debug.oulg.sf.kgdepth", OULG_KG_LDEPTH_DEFAULT);
+    // The Fresnel/contour/specular are also the lens's depth cues. Removing all three on device
+    // flattened the keyguard card; preserve them by default, with 0 as an isolated A/B probe.
+    oulg_kg_fixed_rim(&p[1], prop_float("debug.oulg.sf.kgfixedrim", 1.0f));
     p[2] = OULG_PROFILES_DEFAULT[2];
     p[2].cap = prop_float("debug.oulg.sf.shadecap", OULG_SHADE_CAP_DEFAULT);
     p[2].lift = prop_float("debug.oulg.sf.shadelift", OULG_SHADE_LIFT_DEFAULT);

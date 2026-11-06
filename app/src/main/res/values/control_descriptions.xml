@@ -3,6 +3,7 @@
     <string name="control_description_backdrop">Selects the background source used outside the dynamic lens.</string>
     <string name="control_description_blur">Controls blur applied to the full captured background.</string>
     <string name="control_description_disp">Adjusts displacement between red and blue in the captured image.</string>
+    <string name="control_description_edgepremul">Default mode 0 keeps the original edge outside Display P3. Notifications on Display P3 automatically use additive mode 3 with 1.5x RGB light; disable with debug.oulg.p3edgecompat=0. Manual diagnostic modes: 1 uses premultiplied normal blending; 2 adds light at 1.0x; 3 at 1.5x; 4 at 1.4x. Saved values are preserved.</string>
     <string name="control_description_headergap">Adjusts the space between the header and title of expanded notifications.</string>
     <string name="control_description_headertone">Adapts the shade clock, date, and carrier text to the background.</string>
     <string name="control_description_huoptics">Selects the dynamic lens material used on pop-ups.</string>
@@ -18,6 +19,7 @@
     <string name="control_description_kglens">Adjusts edge refraction on lock screen cards when the dynamic lens is active.</string>
     <string name="control_description_kgoptics">Selects the dynamic lens material used on lock screen cards.</string>
     <string name="control_description_kgrim">Adjusts the outline of lock screen cards.</string>
+    <string name="control_description_kgsharedoptics">KG notifications reuse the Now Bar\'s Java optical shader. Keep Fixed rim (sf.kgfixedrim=1) enabled: the combined appearance was approved on DZIF; disabling the structural rim flattened the glass. Does not change body tone, refraction, or blur. On is the approved default.</string>
     <string name="control_description_kgwinblur">Allows touch-triggered window blur ramps on the stationary lock screen.</string>
     <string name="control_description_lens">Adjusts the displacement of the pop-up lens strip relative to the bevel.</string>
     <string name="control_description_lensgate">Selects which touches hide the lens strip during movement.</string>
@@ -92,7 +94,7 @@
     <string name="control_description_semradiuslens">Controls system blur under the dynamic lens. Less blur leaves more detail for refraction.</string>
     <string name="control_description_semshape">Selects the geometry of the system blur region.</string>
     <string name="control_description_sf_core">Adjusts blur at the center of pop-ups. Changes apply after userspace restarts.</string>
-    <string name="control_description_sf_debug">Colors rewritten shader programs magenta and cyan for diagnostics. Changes apply after userspace restarts.</string>
+    <string name="control_description_sf_debug">Diagnostic mode: 0 off, 1 magenta/cyan for rewritten shaders, 2 green map of local edge luminance on lock screen notifications. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_edgeblur">Adjusts pop-up edge blur and its transition toward the center. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_hubloom">Reduces very bright samples in the pop-up center. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_hublur">Multiplies the compositor blur across the pop-up without changing base blur. Changes apply after userspace restarts.</string>
@@ -107,7 +109,9 @@
     <string name="control_description_sf_kgcore">Adjusts blur in the center of lock screen cards. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_kgcorecap">Limits the effective inner blur radius on the lock screen. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_kgcoredim">Darkens the center of lock screen cards. Changes apply after userspace restarts.</string>
+    <string name="control_description_sf_kgdepth">Sets the maximum reach (px) of the faint inward light veil on lock screen cards. The bright, background-reactive rim stays narrow and unaffected by this setting. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_kgedgeblur">Adjusts blur at the edges of lock screen cards. Changes apply after userspace restarts.</string>
+    <string name="control_description_sf_kgfixedrim">On (default): preserve the outline and reflections that give the lens depth. Off: diagnostic only; removing all three makes the lock-screen card visually flat. Blur radii do not change. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_kgflat">Adjusts how strongly the lock screen background brightness is made uniform. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_kgflatcap">Limits the strength of lock screen brightness uniformity. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_kgglow">Adjusts the width of the lock screen lens rim glow. Changes apply after userspace restarts.</string>

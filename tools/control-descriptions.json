@@ -371,6 +371,10 @@
     "Adjusts light entering lock screen card edges from the background.",
     "Ajusta a luz do fundo que entra pelas bordas dos cartões da tela de bloqueio."
   ],
+  "sf.kgdepth": [
+    "Sets the maximum reach (px) of the faint inward light veil on lock screen cards. The bright, background-reactive rim stays narrow and unaffected by this setting.",
+    "Define o alcance máximo (px) do véu fraco que entra nos cartões do bloqueio. A borda luminosa reage ao fundo e continua estreita, sem depender deste ajuste."
+  ],
   "sf.shadelight": [
     "Adjusts light entering shade card edges from the background.",
     "Ajusta a luz do fundo que entra pelas bordas dos cartões da central."
@@ -392,8 +396,8 @@
     "Ajusta o alcance da luz de um fundo claro para dentro das cápsulas da central de controle."
   ],
   "sf.debug": [
-    "Colors rewritten shader programs magenta and cyan for diagnostics.",
-    "Pinta programas de shader reescritos em magenta e ciano para diagnóstico."
+    "Diagnostic mode: 0 off, 1 magenta/cyan for rewritten shaders, 2 green map of local edge luminance on lock screen notifications.",
+    "Modo de diagnóstico: 0 desligado, 1 magenta/ciano nos shaders reescritos, 2 mapa verde da luminância local nas bordas das notificações do bloqueio."
   ],
   "qs.lightfill": [
     "Adjusts capsule tint over light backgrounds.",
@@ -610,5 +614,17 @@
   "qs.idle": [
     "Retired setting kept for saved profiles; it no longer changes off discs.",
     "Ajuste descontinuado mantido nos perfis; ele não altera mais os discos desligados."
+  ],
+  "edgepremul": [
+    "Default mode 0 keeps the original edge outside Display P3. Notifications on Display P3 automatically use additive mode 3 with 1.5x RGB light; disable with debug.oulg.p3edgecompat=0. Manual diagnostic modes: 1 uses premultiplied normal blending; 2 adds light at 1.0x; 3 at 1.5x; 4 at 1.4x. Saved values are preserved.",
+    "O padrão 0 mantém a borda original fora de Display P3. Notificações em Display P3 usam automaticamente o modo aditivo 3 com luz RGB 1,5x; desative com debug.oulg.p3edgecompat=0. Modos manuais de diagnóstico: 1 usa mistura normal premultiplicada; 2 soma a 1x; 3 a 1,5x; 4 a 1,4x. Valores salvos são preservados."
+  ],
+  "kgsharedoptics": [
+    "KG notifications reuse the Now Bar's Java optical shader. Keep Fixed rim (sf.kgfixedrim=1) enabled: the combined appearance was approved on DZIF; disabling the structural rim flattened the glass. Does not change body tone, refraction, or blur. On is the approved default.",
+    "Notificações KG reutilizam o shader óptico Java da Now Bar. Mantenha Contorno fixo (sf.kgfixedrim=1) ligado: a combinação foi aprovada no DZIF; desligar o contorno estrutural achatou o vidro. Não modifica corpo, refração nem blur. Ligado é o padrão aprovado."
+  ],
+  "sf.kgfixedrim": [
+    "On (default): preserve the outline and reflections that give the lens depth. Off: diagnostic only; removing all three makes the lock-screen card visually flat. Blur radii do not change.",
+    "Ligado (padrão): preserva o contorno e os reflexos que dão relevo à lente. Desligado: apenas diagnóstico; remover os três deixa o cartão visualmente plano. Não altera os raios de desfoque."
   ]
 }

@@ -19,10 +19,12 @@ package io.github.igorcv88.oneuiliquidglass.glass;
  * card the compositor lights itself (sfhook profile 1) takes decor 0 and a thinner hairline, so its
  * rim is not lit twice.</p>
  *
- * <p>Output is premultiplied: rgb is added light (alpha 0 under src-over is additive) and alpha is
- * the thickness shadow. Rim, hairline and shadow terms are adapted from the author's WaEnhancerX
- * Community {@code LiquidLens}; its backdrop-sampling terms (refraction, backdrop dispersion,
- * saturation) are omitted because a cross-process compositor blur exposes no pixels.</p>
+ * <p>The legacy edge output uses additive RGB with independent shadow alpha, so light can be
+ * nonzero where alpha is zero. That violates AGSL's premultiplied-alpha contract, and is under
+ * investigation for wide-gamut hardware-composition losses. In DISPLAY_P3 notifications only,
+ * the opt-out guarded mode 3 raises alpha to cover all RGB values, adds the edge light and applies
+ * a 1.5x RGB gain. The standard edge mode remains 0 in other color modes and surfaces.
+ * Rim, hairline and shadow terms are adapted from WaEnhancerX Community LiquidLens.</p>
  *
  * <p>{@link #REFRACT_SOURCE} is the variant for a captured backdrop: the same geometry and edge
  * optics over backdrop pixels displaced by the Snell shift of a quarter-circle bevel.</p>
@@ -155,8 +157,10 @@ public final class LiquidGlassShader {
         }
         """;
 
-    /** Edge optics alone, composited over a compositor or shade blur (premultiplied, additive rgb). */
+    /** Edge optics over a compositor or shade blur. Mode 0 keeps legacy additive RGB. */
     public static final String SOURCE = COMMON + """
+        uniform float edgePremulSafe;
+        uniform float edgeBrightness;
         half4 main(float2 coord) {
             float2 hs = size * 0.5;
             float2 p = coord - origin - hs;
@@ -165,7 +169,17 @@ public final class LiquidGlassShader {
             if (cover <= 0.004) {
                 return half4(0.0);
             }
-            return edge(p, hs, d, outward(p, hs)) * half(cover);
+            half4 optics = edge(p, hs, d, outward(p, hs)) * half(cover);
+            if (edgeBrightness > 1.0) {
+                // Modes 3/4 preserve PLUS blending, applying only their requested edge RGB gain.
+                optics.rgb = clamp(optics.rgb * half(edgeBrightness), half3(0.0), half3(1.0));
+            }
+            if (edgePremulSafe > 0.5) {
+                // Diagnostic: preserve RGB light but satisfy premultiplied RGBA (rgb <= alpha).
+                half litAlpha = max(max(optics.r, optics.g), optics.b);
+                optics.a = max(optics.a, litAlpha);
+            }
+            return optics;
         }
         """;
 

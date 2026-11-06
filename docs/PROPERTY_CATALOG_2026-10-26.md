@@ -114,6 +114,8 @@ Observar que as propriedades `lightglass` e `shadelightglass` se aplicam a super
 | `sf.optics` | 0 no parser; biblioteca anuncia 9 | R | Handshake da versão de óptica carregada; **indicador, não slider** |
 | `perf` | 0 | L | Instrumentação de tempos de hooks, deve ter aviso de custo |
 | `trace` | 0 | L | Diagnóstico detalhado de árvores/janelas; evitar coleta permanente |
+| `edgepremul` | 0 | inteiro 0–4 | 0 = composição original no modo sRGB (padrão); somente a borda Java das notificações em DISPLAY_P3 recebe automaticamente o modo 3, se `debug.oulg.p3edgecompat` não for 0. Diagnóstico manual: 1 = alpha premultiplicado SRC_OVER; 2 = PLUS +0%; 3 = PLUS +50%; 4 = PLUS +40%. Configurações salvas não são substituídas. |
+| `kgsharedoptics` | 1 | booleano 0–1 | Notificação KG: 1 reutiliza a óptica Java da Now Bar junto com o contorno estrutural nativo (`sf.kgfixedrim=1`); essa combinação foi aprovada visualmente no DZIF. Desligar o contorno nativo eliminou a profundidade do vidro. Corpo, refração e blur não mudam. 0 desativa apenas a óptica Java adicional. |
 
 ## Perfis do SurfaceFlinger — C
 
@@ -141,6 +143,7 @@ Observar que as propriedades `lightglass` e `shadelightglass` se aplicam a super
 | `sf.kgcool` | 0.50 | Lockscreen: matiz fria |
 | `sf.kgtilt` | 1.42 | Lockscreen: inclinação da luz (rad) |
 | `sf.kgline` | 0.62 | Lockscreen: contorno |
+| `sf.kgfixedrim` | 1 | Lockscreen: 1 preserva linha, Fresnel e brilho especular estruturais (padrão); 0 remove os três somente para teste A/B, com perda confirmada de relevo visual |
 | `sf.kgcorecap` | 48 | Lockscreen: teto do raio efetivo do miolo (px) |
 | `sf.kggradient` | 1 | Lockscreen: transição contínua vidro-miolo (0–1; 0 usa curva anterior, junto de kgcorecap=62 restaura referência) |
 | `sf.kgband` | 0.85 | Lockscreen: largura da transição óptica (fração do raio do canto; 0 restaura v0.22; abaixo de ~0.42 fica no bisel mínimo) |
@@ -156,11 +159,12 @@ Observar que as propriedades `lightglass` e `shadelightglass` se aplicam a super
 | `sf.shadelift` | 0.45 | Perfil 2 shade: piso da luminância para texto escuro |
 | `sf.hulight` | 0.40 | Heads-up: luz que entra pelo contorno conforme o fundo ali (0 restaura v0.26) |
 | `sf.kglight` | 0.50 | Lockscreen: luz que entra pelo contorno conforme o fundo ali (0 restaura v0.26) |
+| `sf.kgdepth` | 16 | Lockscreen: alcance máximo (px) do véu fraco que entra no cartão. O brilho da borda é local, dinâmico e independente desse alcance; requer reinício do userspace. |
 | `sf.shadelight` | 0.30 | Perfil 2 shade: luz que entra pelo contorno conforme o fundo ali (0 restaura v0.26) |
 | `sf.qslens` | 0.30 | Quick Settings: refração do fundo junto ao contorno (0 desliga a refração e o fundo refratado) |
 | `sf.qsbody` | 0.35 | Quick Settings: opacidade do fundo refratado no contorno |
 | `sf.qsdepth` | 18 | Quick Settings: profundidade (px) da luz vinda de um contorno branco |
-| `sf.debug` | 0 | Tinta diagnóstica magenta/ciano sobre programas elegíveis |
+| `sf.debug` | 0 | Modo de diagnóstico 0–2: 0 sem tinta; 1 magenta/ciano para programas reescritos; 2 mapa verde da luminância local na borda das notificações do bloqueio |
 | `sf.norewrite` | 0 | 1 desativa a reescrita dos shaders ao compilar |
 | `sf.optics` | 9 anunciado pela lib | R, handshake; já listado em Java |
 

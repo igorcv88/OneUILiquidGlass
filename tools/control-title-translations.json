@@ -19,6 +19,7 @@
   "Contorno no vidro claro": "Light glass outline",
   "Sombra da borda no vidro claro": "Light glass edge shadow",
   "Material da lente no bloqueio": "Lock screen lens material",
+  "Óptica da Now Bar (comparação)": "Now Bar optics (comparison)",
   "Material da lente no pop-up": "Pop-up lens material",
   "Proteção de contraste": "Contrast protection",
   "Contraste medido no pop-up": "Measured pop-up contrast",
@@ -107,6 +108,7 @@
   "Espessura do preenchimento": "Fill thickness",
   "Fundo refratado": "Refracted background",
   "Alcance da luz": "Light reach",
+  "Alcance da luz dinâmica": "Dynamic light reach",
   "Desfoque da borda": "Edge blur",
   "Tinta de diagnóstico": "Diagnostic tint",
   "Origem do fundo": "Background source",
@@ -133,5 +135,7 @@
   "Véu sobre fundo colorido (descontinuado)": "Colored background veil (retired)",
   "Cor do véu escuro (descontinuado)": "Dark veil color (retired)",
   "Disco desligado (descontinuado)": "Off disc (retired)",
-  "Círculos ligados (descontinuado)": "On discs (retired)"
+  "Círculos ligados (descontinuado)": "On discs (retired)",
+  "Borda aditiva (compatibilidade P3)": "Additive edge (P3 compatibility)",
+  "Contorno fixo (comparação)": "Fixed rim (comparison)"
 }
