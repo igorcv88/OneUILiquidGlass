@@ -364,6 +364,18 @@ public final class Controls {
                 .hint("Linha clara em volta do cartão")
                 .help("Força da linha externa dos cartões do bloqueio.")
                 .show(FAITH, Channel.RIM));
+        put(c("popuplinegain", "Luz da linha externa").fmt(Format.GAIN).in(EDGES, ADV).on(HU)
+                .feature("edge").hint("Ajuste fino da linha, sem aumentar a largura")
+                .help("Multiplica somente a luz da linha externa Java do pop-up. Não muda Fresnel, reflexos internos, blur ou Now Bar.")
+                .show(BEHAV, Channel.NONE));
+        put(c("kglinegain", "Luz da linha externa").fmt(Format.GAIN).in(EDGES, ADV).on(KG)
+                .feature("edge").hint("Ajuste fino da linha no bloqueio")
+                .help("Multiplica somente a linha externa Java das notificações; a linha nativa da lente e a Now Bar continuam intactas.")
+                .show(BEHAV, Channel.NONE));
+        put(c("shadelinegain", "Luz da linha externa").fmt(Format.GAIN).in(EDGES, ADV).on(SH)
+                .feature("edge").hint("Ajuste fino da linha dos cartões da central")
+                .help("Multiplica somente a linha externa Java da central. Não muda brilho interno, preenchimento ou Now Bar.")
+                .show(BEHAV, Channel.NONE));
         put(c("liveglint", "Reflexo").fmt(Format.PERCENT_1).in(EDGES, STD).on(HU)
                 .feature("glint")
                 .hint("Brilho curto no canto iluminado")

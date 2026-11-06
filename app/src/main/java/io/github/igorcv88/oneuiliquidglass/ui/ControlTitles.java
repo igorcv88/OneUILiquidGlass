@@ -87,6 +87,7 @@ final class ControlTitles {
             case "Limite para texto claro (lente)": return R.string.control_title_ef3825b141ca;
             case "Limite para texto escuro": return R.string.control_title_7c47b0e7e366;
             case "Limite para texto escuro (lente)": return R.string.control_title_f54ebdc65a97;
+            case "Luz da linha externa": return R.string.control_title_5a234be298cb;
             case "Luz pela borda": return R.string.control_title_e5aac2df4c8e;
             case "Luz pela borda (lente)": return R.string.control_title_256e11955fd8;
             case "Material da lente no bloqueio": return R.string.control_title_924efb059063;

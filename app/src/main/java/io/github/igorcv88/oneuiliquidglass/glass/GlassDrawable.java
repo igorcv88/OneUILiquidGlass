@@ -125,6 +125,11 @@ public final class GlassDrawable extends Drawable {
     private float glint = 1f;
     private boolean edgeEnabled = true;
     public void setEdgeEnabled(boolean enabled) { if (edgeEnabled != enabled) { edgeEnabled = enabled; invalidateSelf(); } }
+    /** Only the outer notification contour; Fresnel, glint, inner reflections and blur keep their gain. */
+    private float notificationLineGain = 1f;
+    public void setNotificationLineGain(float gain) {
+        if (notificationLineGain != gain) { notificationLineGain = gain; invalidateSelf(); }
+    }
     /** Cached once on card creation / shade-state change. No SurfaceFlinger query in draw(). */
     private boolean p3EdgeCompatibility;
     public void setP3EdgeCompatibility(boolean enabled) {
@@ -261,6 +266,7 @@ public final class GlassDrawable extends Drawable {
                     int edgeMode = P3EdgeSelection.effectiveMode(t.edgePremulMode, p3EdgeCompatibility);
                     Probe.log("GLASS_EDGE_DRAWN", "mode=" + edgeMode
                             + " p3Compat=" + p3EdgeCompatibility
+                            + " notificationLineGain=" + notificationLineGain
                             + " blend=" + (edgeMode >= 2 ? "PLUS" : "SRC_OVER")
                             + " source=" + backdrop.name() + " hardware=" + canvas.isHardwareAccelerated());
                 }
@@ -326,6 +332,7 @@ public final class GlassDrawable extends Drawable {
         }
         boolean live = t.live && backdrop instanceof BackgroundBlurBridge;
         s.setFloatUniform("hairGain", edgeEnabled ? 1f : 0f);
+        s.setFloatUniform("notificationLineGain", notificationLineGain);
         s.setFloatUniform("decor", edgeEnabled ? (live ? t.liveOptics : 1f) : 0f);
         s.setFloatUniform("live", live ? 1f : 0f);
         s.setFloatUniform("sheen", edgeEnabled && live ? t.liveSheen : 0f);

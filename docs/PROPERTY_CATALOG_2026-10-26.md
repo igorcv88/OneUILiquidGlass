@@ -86,10 +86,13 @@ O interruptor `sfrefract` **não comprova** que o binário nativo foi carregado:
 | `livedarkalpha` | 20 | inteiro 0–255 | Alpha branco da região do pop-up escuro |
 | `livedarkfill` | 0 | inteiro 0–255 | Alpha preto do preenchimento do pop-up escuro |
 | `liverim` | 2 | 0–4 | Ganho isolado do contorno externo do pop-up |
+| `popuplinegain` | 1.08 | 0.5–1.5 | Pop-up: ganho adicional só da luz da linha externa Java, sem mudar espessura, reflexos ou Now Bar |
 | `kgdarkalpha` | 20 | inteiro 0–255 | Alpha branco da região escura da lockscreen |
 | `kgdarkfill` | 5 | inteiro 0–255 | Alpha preto interno da lockscreen |
 | `kgrim` | 2 | 0–4 | Contorno externo da lockscreen (APK) |
+| `kglinegain` | 0.92 | 0.5–1.5 | Notificações do bloqueio: luz da linha Java, independente da linha nativa do SurfaceFlinger e da Now Bar |
 | `kgglint` | 0.10 | 0–1 | Reflexo interno da lockscreen |
+| `shadelinegain` | 1.04 | 0.5–1.5 | Central de notificações: ganho exclusivo da luz da linha externa Java, sem mudar seu preenchimento |
 | `textswap` | 1 | booleano | Troca cor do texto em material claro/escuro oposto ao tema |
 | `headertone` | 0 | booleano | Ajusta relógio/data/operadora da central ao fundo |
 | `icontone` | 1 | booleano | Ajusta ícone monocromático da notificação ao texto |

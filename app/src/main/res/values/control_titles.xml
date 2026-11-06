@@ -79,6 +79,7 @@
     <string name="control_title_ef3825b141ca">Light text limit (lens)</string>
     <string name="control_title_7c47b0e7e366">Dark text threshold</string>
     <string name="control_title_f54ebdc65a97">Dark text limit (lens)</string>
+    <string name="control_title_5a234be298cb">Outer line brightness</string>
     <string name="control_title_e5aac2df4c8e">Edge lighting</string>
     <string name="control_title_256e11955fd8">Edge lighting (lens)</string>
     <string name="control_title_924efb059063">Lock screen lens material</string>
