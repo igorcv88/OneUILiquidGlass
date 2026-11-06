@@ -315,7 +315,7 @@ public final class Tuning {
     public final boolean perf;
     /** Enables the view-tree and window diagnostic dumps (see {@link Probe#trace}). */
     public final boolean trace;
-    /** Experimental edge modes: 0 legacy, 1 premultiplied SRC_OVER, 2 premultiplied PLUS. */
+    /** Experimental edge modes: 0 legacy, 1 premultiplied SRC_OVER, 2 premultiplied PLUS, 3 PLUS light x1.5. */
     public final int edgePremulMode;
     public final boolean edgePremulSafe;
     /** Bumped whenever any knob changes, so cached backdrop parameters are rebuilt. */
@@ -446,7 +446,7 @@ public final class Tuning {
         Perf.enabled = perf;
         trace = number("trace", 0f) >= 1f;
         Probe.trace = trace;
-        edgePremulMode = Math.max(0, Math.min(2, Math.round(number("edgepremul", 0f))));
+        edgePremulMode = Math.max(0, Math.min(3, Math.round(number("edgepremul", 0f))));
         edgePremulSafe = edgePremulMode > 0;
         semShape = shape.equals("single") || shape.equals("path") || shape.equals("four") || shape.equals("none") ? shape : "auto";
     }

@@ -10,6 +10,8 @@ public final class LiquidGlassShaderAlphaTest {
     @Test public void experimentalPathIsOptInAndScopedToCompositorEdge() {
         String source = LiquidGlassShader.SOURCE;
         assertTrue(source.contains("uniform float edgePremulSafe;"));
+        assertTrue(source.contains("uniform float edgeBrightness;"));
+        assertTrue(source.contains("optics.rgb * half(edgeBrightness)"));
         assertTrue(source.contains("if (edgePremulSafe > 0.5)"));
         assertTrue(source.contains("half litAlpha = max(max(optics.r, optics.g), optics.b);"));
         assertTrue(source.contains("optics.a = max(optics.a, litAlpha);"));
@@ -17,13 +19,13 @@ public final class LiquidGlassShaderAlphaTest {
         assertFalse(LiquidGlassShader.REFRACT_SOURCE.contains("edgePremulSafe"));
     }
 
-    @Test public void diagnosticSettingAcceptsOnlyThreeModes() {
+    @Test public void diagnosticSettingAcceptsOnlyFourModes() {
         io.github.igorcv88.oneuiliquidglass.config.SettingSpec spec =
                 io.github.igorcv88.oneuiliquidglass.config.SettingsRegistry.get("edgepremul");
         assertTrue(spec != null);
-        for (String value : new String[] {"0", "1", "2"})
+        for (String value : new String[] {"0", "1", "2", "3"})
             assertTrue(value.equals(spec.validate(value)));
-        for (String value : new String[] {"3", "-1", "1.5"}) {
+        for (String value : new String[] {"4", "-1", "1.5"}) {
             try {
                 spec.validate(value);
                 org.junit.Assert.fail("Accepted invalid diagnostic mode " + value);

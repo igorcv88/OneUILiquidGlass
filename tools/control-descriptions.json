@@ -612,7 +612,7 @@
     "Ajuste descontinuado mantido nos perfis; ele não altera mais os discos desligados."
   ],
   "edgepremul": [
-    "Experimental border alpha mode: 0 preserves original rendering, 1 uses premultiplied alpha with normal blending, and 2 uses premultiplied alpha with additive blending.",
-    "Modo experimental de alpha da borda: 0 mantém a renderização original, 1 usa alpha premultiplicado com composição normal e 2 usa alpha premultiplicado com soma de luz."
+    "Experimental border alpha mode: 0 original; 1 premultiplied with normal blending; 2 premultiplied with additive light; 3 identical to mode 2 with 50% more border light RGB.",
+    "Modo experimental de alpha da borda: 0 original; 1 alpha premultiplicado normal; 2 luz aditiva premultiplicada; 3 igual ao modo 2 com RGB da luz da borda 50% mais intenso."
   ]
 }

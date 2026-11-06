@@ -844,7 +844,7 @@ public final class Controls {
                 .help("Registra a árvore de views e janelas. Gera muito log."));
         put(c("edgepremul", "Alpha da borda (teste)").fmt(Format.COUNT)
                 .in(TECH, Tier.INTERNAL).all()
-                .help("0: original; 1: alpha válido com composição normal; 2: alpha válido com soma de luz."));
+                .help("0: original; 1: alpha válido normal; 2: soma de luz; 3: soma de luz com 50% mais RGB."));
 
         // State the app shows elsewhere; never an editable row.
         put(c("sfrefract", "Lente dinâmica").fmt(Format.READONLY).in(TECH, Tier.INTERNAL)
