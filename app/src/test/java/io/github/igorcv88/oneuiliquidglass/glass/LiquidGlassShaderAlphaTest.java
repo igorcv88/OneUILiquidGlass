@@ -19,13 +19,13 @@ public final class LiquidGlassShaderAlphaTest {
         assertFalse(LiquidGlassShader.REFRACT_SOURCE.contains("edgePremulSafe"));
     }
 
-    @Test public void diagnosticSettingAcceptsOnlyFourModes() {
+    @Test public void diagnosticSettingAcceptsOnlyFiveModes() {
         io.github.igorcv88.oneuiliquidglass.config.SettingSpec spec =
                 io.github.igorcv88.oneuiliquidglass.config.SettingsRegistry.get("edgepremul");
         assertTrue(spec != null);
-        for (String value : new String[] {"0", "1", "2", "3"})
+        for (String value : new String[] {"0", "1", "2", "3", "4"})
             assertTrue(value.equals(spec.validate(value)));
-        for (String value : new String[] {"4", "-1", "1.5"}) {
+        for (String value : new String[] {"5", "-1", "1.5"}) {
             try {
                 spec.validate(value);
                 org.junit.Assert.fail("Accepted invalid diagnostic mode " + value);

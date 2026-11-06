@@ -170,7 +170,7 @@ public final class LiquidGlassShader {
             }
             half4 optics = edge(p, hs, d, outward(p, hs)) * half(cover);
             if (edgeBrightness > 1.0) {
-                // Mode 3: same PLUS light as mode 2, with exactly 50% more RGB intensity.
+                // Modes 3/4 preserve PLUS blending, applying only their requested edge RGB gain.
                 optics.rgb = clamp(optics.rgb * half(edgeBrightness), half3(0.0), half3(1.0));
             }
             if (edgePremulSafe > 0.5) {

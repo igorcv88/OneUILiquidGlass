@@ -114,7 +114,7 @@ Observar que as propriedades `lightglass` e `shadelightglass` se aplicam a super
 | `sf.optics` | 0 no parser; biblioteca anuncia 9 | R | Handshake da versão de óptica carregada; **indicador, não slider** |
 | `perf` | 0 | L | Instrumentação de tempos de hooks, deve ter aviso de custo |
 | `trace` | 0 | L | Diagnóstico detalhado de árvores/janelas; evitar coleta permanente |
-| `edgepremul` | 0 | inteiro experimental 0–3 | 0 = original; 1 = alpha premultiplicado SRC_OVER; 2 = alpha premultiplicado PLUS; 3 = mesma composição PLUS com luz RGB 50% mais intensa |
+| `edgepremul` | 0 | inteiro experimental 0–4 | 0 = original; 1 = alpha premultiplicado SRC_OVER; 2 = alpha premultiplicado PLUS; 3 = PLUS com RGB de luz +50%; 4 = PLUS com RGB de luz +25% |
 
 ## Perfis do SurfaceFlinger — C
 

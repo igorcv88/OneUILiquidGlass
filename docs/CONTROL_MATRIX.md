@@ -89,7 +89,7 @@ Gerada por `ControlMatrixTest` a partir de `SettingsRegistry`, `Controls`, `Appl
 | `sf.optics` | Versão óptica anunciada | Pop-up, Bloqueio, Central | Técnico · internal | readonly · 0 | sfhook/oulg_sf.c, hooks/HeadsUpHooks, hooks/QuickSettingsEdgeLight | leitura | leitura | leitura | leitura |  | none | CM, CV |
 | `perf` | Medir tempo dos ganchos | Pop-up, Bloqueio, Central | Técnico · technical | boolean · 0 | diagnostics/Perf | ao vivo | ativo | ativo | ativo |  | none | CM |
 | `trace` | Registro detalhado de janelas | Pop-up, Bloqueio, Central | Técnico · technical | boolean · 0 | diagnostics/Probe | ao vivo | ativo | ativo | ativo |  | none | CM |
-| `edgepremul` | Alpha da borda (teste) | Pop-up, Bloqueio, Central | Técnico · internal | int · 0–3 · 0 | glass/GlassDrawable | leitura | ativo | ativo | ativo |  | none | CM, SC |
+| `edgepremul` | Alpha da borda (teste) | Pop-up, Bloqueio, Central | Técnico · internal | int · 0–4 · 0 | glass/GlassDrawable | leitura | ativo | ativo | ativo |  | none | CM, SC |
 | `sf.core` | Desfoque interno | Pop-up | Lente dinâmica · advanced | float · 0–128 · 56 | sfhook/oulg_sf.c | reinício | inativo: Usado com a lente dinâmica | ao reiniciar | inativo: Usado com a lente dinâmica |  | didactic · core_blur | CM, CV, LH, SC, PT |
 | `sf.taps` | Amostras do pop-up | Pop-up | Técnico · technical | int · 1–64 · 48 | sfhook/oulg_sf.c | reinício | inativo: Usado com a lente dinâmica | ao reiniciar | inativo: Usado com a lente dinâmica |  | none | CM, CV, LH, SC |
 | `sf.ramp` | Rampa do pop-up | Pop-up | Técnico · technical | float · 0.1–4 · 1 | sfhook/oulg_sf.c | reinício | inativo: Usado com a lente dinâmica | ao reiniciar | inativo: Usado com a lente dinâmica |  | none | CM, CV, LH, SC |
