@@ -159,6 +159,7 @@ Observar que as propriedades `lightglass` e `shadelightglass` se aplicam a super
 | `sf.shadelift` | 0.45 | Perfil 2 shade: piso da luminância para texto escuro |
 | `sf.hulight` | 0.40 | Heads-up: luz que entra pelo contorno conforme o fundo ali (0 restaura v0.26) |
 | `sf.kglight` | 0.50 | Lockscreen: luz que entra pelo contorno conforme o fundo ali (0 restaura v0.26) |
+| `sf.kgdepth` | 24 | Lockscreen: alcance (px) da iluminação local que entra a partir do contorno; padrão experimental para tons médios |
 | `sf.shadelight` | 0.30 | Perfil 2 shade: luz que entra pelo contorno conforme o fundo ali (0 restaura v0.26) |
 | `sf.qslens` | 0.30 | Quick Settings: refração do fundo junto ao contorno (0 desliga a refração e o fundo refratado) |
 | `sf.qsbody` | 0.35 | Quick Settings: opacidade do fundo refratado no contorno |

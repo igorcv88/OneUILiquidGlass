@@ -117,6 +117,7 @@ final class ControlDescriptions {
             case "sf.kgcore": return R.string.control_description_sf_kgcore;
             case "sf.kgcorecap": return R.string.control_description_sf_kgcorecap;
             case "sf.kgcoredim": return R.string.control_description_sf_kgcoredim;
+            case "sf.kgdepth": return R.string.control_description_sf_kgdepth;
             case "sf.kgedgeblur": return R.string.control_description_sf_kgedgeblur;
             case "sf.kgfixedrim": return R.string.control_description_sf_kgfixedrim;
             case "sf.kgflat": return R.string.control_description_sf_kgflat;

@@ -304,7 +304,7 @@ static float prop_float(const char *name, float fallback) {
 // of the refracted backdrop at the outline) and .qsdepth (penetration depth in px of light from a
 // white edge), the rest OULG_QS_* in refract.h. The edge
 // light of profiles 0-2: debug.oulg.sf.hulight, .kglight and .shadelight (gain; 0 restores v0.26
-// exactly). Which
+// exactly). KG additionally controls the depth of mid-tone edge light with .kgdepth (px). Which
 // profile a card gets travels in its tag, set live by the module.
 // .kggradient (0..1, default 1) enables the continuous glass/body transition;
 // .kggradient=0 with .kgcorecap=62 restores the v0.21 lockscreen reference.
@@ -349,6 +349,7 @@ static void layered_blur(struct oulg_profile p[OULG_PROFILES]) {
     p[1].blur = prop_float("debug.oulg.sf.kgblur", OULG_GLOBAL_BLUR_DEFAULT);
     p[1].refract = prop_float("debug.oulg.sf.kgrefract", OULG_GLOBAL_REFRACT_DEFAULT);
     p[1].light = prop_float("debug.oulg.sf.kglight", OULG_KG_LIGHT_DEFAULT);
+    p[1].lwidth = prop_float("debug.oulg.sf.kgdepth", OULG_KG_LDEPTH_DEFAULT);
     // The Fresnel/contour/specular are also the lens's depth cues. Removing all three on device
     // flattened the keyguard card; preserve them by default, with 0 as an isolated A/B probe.
     oulg_kg_fixed_rim(&p[1], prop_float("debug.oulg.sf.kgfixedrim", 1.0f));

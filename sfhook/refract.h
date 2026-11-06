@@ -172,10 +172,10 @@
 // point 2 px inside the outline, set by the field and mapped to texture space by main) and returns
 // the light reaching this pixel, (colour, amount). With u = (luma - floor) / (1 - floor) of that
 // edge sample, the light entering is min(gain x u, cap) and it decays inward as exp(-d / lambda),
-// d the depth from the outline and lambda = 1.5 + (depth - 1.5) u^2 px: a dark stretch adds nothing
-// (only the module's basal rim shows), a mid-grey one ~25 % of `depth`, a white one all of it. One
-// continuous field: no band of fixed width and no inner edge (the decay is monotonic from the
-// outline). lambda <= r / 4 and the light is cut smoothly between 2.5 and 4 lambda, so it is exactly
+// d the depth from the outline. Lambda grows with u^2 outside KG, with sqrt(u) on KG so midtone
+// light reaches farther in, while dark still adds none. One continuous field, with no fixed-width
+// band or inner edge: decay is monotonic. Lambda stays <= 0.25r to prevent a seam at the inner
+// medial axis. The light is cut smoothly between 2.5 and 4 lambda, exactly
 // zero at depth r and beyond, where the nearest outline point jumps (medial axis of the inner rect).
 // The colour is white tinted 35 % toward the edge sample's hue. Moving content moves the light.
 #define OULG_FS_GLOW \
@@ -183,7 +183,9 @@
     "  mediump vec4 e = textureLod(s, uv + oulg_eo, 0.0);\n" \
     "  mediump vec3 rgb = e.rgb / max(e.a, 1e-3);\n" \
     "  mediump float u = clamp((dot(rgb, vec3(0.2126, 0.7152, 0.0722)) - fl) / (1.0 - fl), 0.0, 1.0);\n" \
-    "  highp float lam = max(min(1.5 + (lmax - 1.5) * u * u, 0.25 * oulg_rad), 0.5);\n" \
+    "  mediump float kg = oulg_pf > 0.5 && oulg_pf < 1.5 ? 1.0 : 0.0;\n" \
+    "  highp float widthLuma = mix(u * u, sqrt(u), kg);\n" \
+    "  highp float lam = max(min(1.5 + (lmax - 1.5) * widthLuma, 0.25 * oulg_rad), 0.5);\n" \
     "  highp float d = max(oulg_dp, 0.0);\n" \
     "  mediump float lit = min(gain * u, cap) * exp(-d / lam) * (1.0 - smoothstep(2.5 * lam, 4.0 * lam, d));\n" \
     "  mediump float m = max(max(rgb.r, rgb.g), max(rgb.b, 1e-3));\n" \
@@ -505,6 +507,7 @@ struct oulg_profile { float core; int taps; float ramp; float sat; float tone; f
 // carry text (profile 2). Gain 0 restores v0.26 exactly for that profile (no code is emitted).
 #define OULG_HU_LIGHT_DEFAULT 0.40f
 #define OULG_KG_LIGHT_DEFAULT 0.50f
+#define OULG_KG_LDEPTH_DEFAULT 24.0f
 #define OULG_SHADE_LIGHT_DEFAULT 0.30f
 #define OULG_EDGE_LDEPTH_DEFAULT 12.0f
 #define OULG_EDGE_LFLOOR_DEFAULT 0.10f
@@ -526,7 +529,7 @@ static const struct oulg_profile OULG_PROFILES_DEFAULT[OULG_PROFILES] = {
      OULG_KG_CCAP_DEFAULT, OULG_KG_FCAP_DEFAULT, OULG_KG_CDIM_DEFAULT, OULG_KG_GLOW_DEFAULT, 0.0f, OULG_KG_GRADIENT_DEFAULT,
      OULG_KG_BAND_DEFAULT, OULG_KG_LENSBODY_DEFAULT, OULG_KG_BLUREXP_DEFAULT, OULG_KG_EDGE_DEFAULT,
      OULG_GLOBAL_BLUR_DEFAULT, OULG_GLOBAL_REFRACT_DEFAULT,
-     OULG_KG_LIGHT_DEFAULT, OULG_EDGE_LDEPTH_DEFAULT, OULG_EDGE_LFLOOR_DEFAULT, OULG_EDGE_LCAP_DEFAULT, 0.0f, 0.0f},
+     OULG_KG_LIGHT_DEFAULT, OULG_KG_LDEPTH_DEFAULT, OULG_EDGE_LFLOOR_DEFAULT, OULG_EDGE_LCAP_DEFAULT, 0.0f, 0.0f},
     {0.0f, OULG_TAPS_DEFAULT, OULG_RAMP_DEFAULT, 1.0f, 0.0f, 0.0f, 0.0f, OULG_SHADE_CAP_DEFAULT, OULG_SHADE_LIFT_DEFAULT,
      0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 400.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f,
      OULG_GLOBAL_BLUR_DEFAULT, OULG_GLOBAL_REFRACT_DEFAULT,

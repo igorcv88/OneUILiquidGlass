@@ -371,6 +371,10 @@
     "Adjusts light entering lock screen card edges from the background.",
     "Ajusta a luz do fundo que entra pelas bordas dos cartões da tela de bloqueio."
   ],
+  "sf.kgdepth": [
+    "Sets how far the sampled background light extends into lock screen cards; darker areas still emit less light.",
+    "Define até onde a luz amostrada do fundo entra nos cartões do bloqueio; áreas escuras continuam com menos iluminação."
+  ],
   "sf.shadelight": [
     "Adjusts light entering shade card edges from the background.",
     "Ajusta a luz do fundo que entra pelas bordas dos cartões da central."

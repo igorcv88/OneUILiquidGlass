@@ -667,6 +667,11 @@ public final class Controls {
         put(c("sf.kglight", "Luz pela borda").fmt(Format.PERCENT_1).in(LENS, ADV).on(KG)
                 .help("Luz que entra pelo contorno dos cartões do bloqueio." + light)
                 .show(BEHAV, Channel.NONE));
+        put(c("sf.kgdepth", "Alcance da luz dinâmica").fmt(Format.PX).in(LENS, ADV).on(KG)
+                .help("Até onde a luminosidade amostrada em cada trecho do contorno entra pelo"
+                        + " vidro do bloqueio. O efeito também depende do brilho do fundo: áreas"
+                        + " escuras continuam apagadas. Padrão experimental: 24 px." + restart)
+                .show(BEHAV, Channel.NONE));
         put(c("sf.shadelight", "Luz pela borda (lente)").fmt(Format.PERCENT_1).in(LENS, ADV).on(SH)
                 .help("Luz que entra pelo contorno dos cartões da central." + light)
                 .show(BEHAV, Channel.NONE));

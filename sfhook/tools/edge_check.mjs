@@ -33,7 +33,7 @@ const [work, refDir, png] = process.argv.slice(2);
 const W = 800, H = 520, CARD = { x: 40, y: 110, w: 720, h: 300, r: 145 };
 // The refract.h defaults this check is written against.
 const QS = { depth: 18.0, lens: 0.30 };
-const EDGE_DEPTH = 12.0;
+const EDGE_DEPTH = 12.0, KG_EDGE_DEPTH = 24.0;
 
 // Rewrites of the synthetic dump for one parameter set, built from a refract.h + refract_check.c.
 const exes = {};
@@ -279,11 +279,11 @@ for (const prog of PROGS) {
       const i = ((H - 1 - y) * W + x) * 4;
       let m = 0;
       for (let ch = 0; ch < 3; ch++) { m = Math.max(m, Math.abs(cur[i + ch] - dark[i + ch])); blackDiff = Math.max(blackDiff, Math.abs(curB[i + ch] - darkB[i + ch])); }
-      if (d > 4 * EDGE_DEPTH) deep = Math.max(deep, m);
+      if (d > 4 * (pf === 1 ? KG_EDGE_DEPTH : EDGE_DEPTH)) deep = Math.max(deep, m);
       else if (d >= 1 && d <= 3) { outline += (cur[i] - dark[i]) / 255; n++; }
     }
     outline /= Math.max(n, 1);
-    check(deep === 0, `profile ${pf} ${prog}: edge light changes the body (max ${deep}/255 past ${4 * EDGE_DEPTH} px)`);
+    check(deep === 0, `profile ${pf} ${prog}: edge light changes the body (max ${deep}/255 past ${4 * (pf === 1 ? KG_EDGE_DEPTH : EDGE_DEPTH)} px)`);
     check(blackDiff <= 1, `profile ${pf} ${prog}: edge light over black (${blackDiff}/255)`);
     check(outline > 0.02, `profile ${pf} ${prog}: no edge light over grey (${outline.toFixed(3)})`);
     let refDiff = null;
@@ -295,7 +295,7 @@ for (const prog of PROGS) {
       }
       check(refDiff === 0, `profile ${pf} ${prog}: gain 0 differs from the reference by ${refDiff}/255`);
     }
-    console.log(`profile ${pf} ${prog}: edge light over grey +${outline.toFixed(3)} at 1-3 px, past ${4 * EDGE_DEPTH} px ${deep}/255, over black ${blackDiff}/255`
+    console.log(`profile ${pf} ${prog}: edge light over grey +${outline.toFixed(3)} at 1-3 px, past ${4 * (pf === 1 ? KG_EDGE_DEPTH : EDGE_DEPTH)} px ${deep}/255, over black ${blackDiff}/255`
       + (refDiff === null ? '' : `, gain 0 vs reference ${refDiff}/255`));
   }
 }
