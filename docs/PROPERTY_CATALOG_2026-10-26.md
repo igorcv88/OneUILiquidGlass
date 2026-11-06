@@ -114,7 +114,7 @@ Observar que as propriedades `lightglass` e `shadelightglass` se aplicam a super
 | `sf.optics` | 0 no parser; biblioteca anuncia 9 | R | Handshake da versão de óptica carregada; **indicador, não slider** |
 | `perf` | 0 | L | Instrumentação de tempos de hooks, deve ter aviso de custo |
 | `trace` | 0 | L | Diagnóstico detalhado de árvores/janelas; evitar coleta permanente |
-| `edgepremul` | 3 | inteiro 0–4 | 3 = padrão: alpha premultiplicado PLUS com RGB de luz +50%; 0 = original/rollback; 1 = alpha premultiplicado SRC_OVER; 2 = PLUS +0%; 4 = PLUS +40% |
+| `edgepremul` | 0 | inteiro 0–4 | 0 = composição original no modo sRGB (padrão); somente a borda Java das notificações em DISPLAY_P3 recebe automaticamente o modo 3, se `debug.oulg.p3edgecompat` não for 0. Diagnóstico manual: 1 = alpha premultiplicado SRC_OVER; 2 = PLUS +0%; 3 = PLUS +50%; 4 = PLUS +40%. Configurações salvas não são substituídas. |
 | `kgsharedoptics` | 1 | booleano 0–1 | Notificação KG: 1 reutiliza a óptica Java da Now Bar junto com o contorno estrutural nativo (`sf.kgfixedrim=1`); essa combinação foi aprovada visualmente no DZIF. Desligar o contorno nativo eliminou a profundidade do vidro. Corpo, refração e blur não mudam. 0 desativa apenas a óptica Java adicional. |
 
 ## Perfis do SurfaceFlinger — C

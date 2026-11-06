@@ -39,6 +39,7 @@ import io.github.igorcv88.oneuiliquidglass.glass.ShadeTone;
 import io.github.igorcv88.oneuiliquidglass.glass.ToneGrid;
 import io.github.igorcv88.oneuiliquidglass.glass.GlassDrawable;
 import io.github.igorcv88.oneuiliquidglass.glass.GlassSpec;
+import io.github.igorcv88.oneuiliquidglass.glass.P3EdgeSelection;
 import io.github.igorcv88.oneuiliquidglass.glass.CornerGeometry;
 
 public final class HeadsUpHooks {
@@ -69,6 +70,8 @@ public final class HeadsUpHooks {
     private final boolean samsungBlur = SemBlurBridge.available();
     private final GlassSpec spec = new GlassSpec();
     private Boolean shadeExpanded;
+    /** One SurfaceFlinger color-mode sample for the current shade transition, not for each frame. */
+    private int shadeActiveColorMode = -1;
     /** Counts shade openings: the generation of the backdrop tone (shadetone=3). */
     private int shadeOpens;
     /**
@@ -1031,7 +1034,11 @@ public final class HeadsUpHooks {
                 }
                 // The blur is a view property: a card SystemUI does not redraw (the shade springing
                 // back to the lockscreen) would keep the expanded-shade blur. Re-decide now.
-                for (State s : new ArrayList<>(states.values())) { s.refreshLens(); s.invalidate(); }
+                for (State s : new ArrayList<>(states.values())) {
+                    if (s.glass != null && barState != Eligibility.BAR_SHADE)
+                        s.glass.setP3EdgeCompatibility(false);
+                    s.refreshLens(); s.invalidate();
+                }
                 if (Probe.trace) {
                     // Scrims settle after the state change; snapshot them once the animation is done.
                     int at = barState;
@@ -1068,6 +1075,27 @@ public final class HeadsUpHooks {
                 ? ((Number) height).floatValue() > 0.5f : null;
         if (next != null && !next.equals(shadeExpanded)) {
             shadeExpanded = next; Probe.log("SHADE", "expanded=" + next);
+            // A shade can reuse existing card drawables; switch their edge path before their
+            // next draw. The compositor query is once per transition, never on the draw path.
+            View colorAnchor = panelView == null ? null : panelView.get();
+            if (colorAnchor == null) {
+                for (State s : states.values()) {
+                    View v = s.background.get();
+                    if (v != null && v.isAttachedToWindow()) { colorAnchor = v; break; }
+                }
+            }
+            boolean p3Enabled = P3DisplayProbe.edgeCompatEnabled();
+            shadeActiveColorMode = p3Enabled && colorAnchor != null && barState != null
+                    && barState == Eligibility.BAR_SHADE
+                    ? P3DisplayProbe.activeColorMode(colorAnchor.getContext()) : -1;
+            boolean edgeCompat = P3EdgeSelection.eligible(barState != null
+                    && barState == Eligibility.BAR_SHADE, p3Enabled,
+                    shadeActiveColorMode);
+            for (State s : new ArrayList<>(states.values())) {
+                if (s.glass != null) s.glass.setP3EdgeCompatibility(edgeCompat && !s.pill);
+            }
+            Probe.log("P3_EDGE_ROUTE", "phase=" + (next ? "shadeOpen" : "shadeClose")
+                    + " mode=" + shadeActiveColorMode + " compat=" + edgeCompat);
             if (next) { shadeOpens++; beginShadeTone(controller); }
             else endShadeTone();
             if (Probe.trace && next) {
@@ -2380,6 +2408,15 @@ public final class HeadsUpHooks {
                 if (compBridge != null && !pill) safeTone(v);
                 if (semBridge != null) semBridge.setSuspended(stacked);
                 glass = new GlassDrawable(backdrop, v.getResources().getDisplayMetrics().density, spec);
+                // Heads-up cards can appear while the shade is closed, so an opening-only probe
+                // is insufficient. A new card samples the live compositor mode exactly once.
+                boolean p3Surface = !pill && barState != null && barState == Eligibility.BAR_SHADE;
+                boolean p3Enabled = p3Surface && P3DisplayProbe.edgeCompatEnabled();
+                int p3Mode = !p3Enabled ? -1 : Boolean.TRUE.equals(shadeExpanded)
+                        && shadeActiveColorMode >= 0 ? shadeActiveColorMode
+                        : P3DisplayProbe.activeColorMode(v.getContext());
+                boolean p3Compat = P3EdgeSelection.eligible(p3Surface, p3Enabled, p3Mode);
+                glass.setP3EdgeCompatibility(p3Compat);
                 glassWindow = new WeakReference<>(v.getWindowToken());
                 heldFor = null;
                 glass.setLightStyle(lightStyle, Tuning.get().lightEdge);
@@ -2392,8 +2429,10 @@ public final class HeadsUpHooks {
                 glass.setCallback(v);
                 Probe.log("GLASS_APPLIED", "viewId=" + Integer.toHexString(System.identityHashCode(v)) + " source=" + backdrop.name()
                         + " optics=" + (kind == Backdrop.Kind.SAMPLED ? "refraction" : "edge_shader")
-                        + " edgeMode=" + Tuning.get().edgePremulMode
+                        + " edgeMode=" + P3EdgeSelection.effectiveMode(Tuning.get().edgePremulMode, p3Compat)
                         + " leaving=" + exit.leaving(android.os.SystemClock.uptimeMillis()));
+                if (p3Surface) Probe.log("P3_EDGE_ROUTE", "phase=cardCreate mode=" + p3Mode
+                        + " compat=" + p3Compat + " enabled=" + p3Enabled);
                 materialReported = false;
                 Probe.painters(row.get());
             }

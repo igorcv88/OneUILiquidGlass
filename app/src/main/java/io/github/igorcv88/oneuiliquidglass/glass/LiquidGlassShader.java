@@ -21,8 +21,9 @@ package io.github.igorcv88.oneuiliquidglass.glass;
  *
  * <p>The legacy edge output uses additive RGB with independent shadow alpha, so light can be
  * nonzero where alpha is zero. That violates AGSL's premultiplied-alpha contract, and is under
- * investigation for wide-gamut hardware-composition losses. The default edgepremul mode 3
- * raises alpha to cover all RGB values, adds the edge light and applies a 1.5x RGB gain.
+ * investigation for wide-gamut hardware-composition losses. In DISPLAY_P3 notifications only,
+ * the opt-out guarded mode 3 raises alpha to cover all RGB values, adds the edge light and applies
+ * a 1.5x RGB gain. The standard edge mode remains 0 in other color modes and surfaces.
  * Rim, hairline and shadow terms are adapted from WaEnhancerX Community LiquidLens.</p>
  *
  * <p>{@link #REFRACT_SOURCE} is the variant for a captured backdrop: the same geometry and edge

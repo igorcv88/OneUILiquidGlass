@@ -3,7 +3,7 @@
     <string name="control_description_backdrop">Selects the background source used outside the dynamic lens.</string>
     <string name="control_description_blur">Controls blur applied to the full captured background.</string>
     <string name="control_description_disp">Adjusts displacement between red and blue in the captured image.</string>
-    <string name="control_description_edgepremul">Default mode 3: premultiplied additive edge with 1.5x RGB light. Mode 0 restores the original blending; 1 uses normal blending; 2 adds light at 1.0x; 4 adds light at 1.4x.</string>
+    <string name="control_description_edgepremul">Default mode 0 keeps the original edge outside Display P3. Notifications on Display P3 automatically use additive mode 3 with 1.5x RGB light; disable with debug.oulg.p3edgecompat=0. Manual diagnostic modes: 1 uses premultiplied normal blending; 2 adds light at 1.0x; 3 at 1.5x; 4 at 1.4x. Saved values are preserved.</string>
     <string name="control_description_headergap">Adjusts the space between the header and title of expanded notifications.</string>
     <string name="control_description_headertone">Adapts the shade clock, date, and carrier text to the background.</string>
     <string name="control_description_huoptics">Selects the dynamic lens material used on pop-ups.</string>

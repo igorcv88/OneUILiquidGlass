@@ -3,7 +3,7 @@
     <string name="control_description_backdrop">Seleciona a origem do fundo usada fora da lente dinâmica.</string>
     <string name="control_description_blur">Controla o desfoque aplicado ao fundo capturado por inteiro.</string>
     <string name="control_description_disp">Ajusta a diferença de deslocamento entre vermelho e azul na imagem capturada.</string>
-    <string name="control_description_edgepremul">Modo padrão 3: borda aditiva premultiplicada com luz RGB 1,5x. O modo 0 restaura a composição original; 1 usa composição normal; 2 soma luz a 1x; 4 soma a 1,4x.</string>
+    <string name="control_description_edgepremul">O padrão 0 mantém a borda original fora de Display P3. Notificações em Display P3 usam automaticamente o modo aditivo 3 com luz RGB 1,5x; desative com debug.oulg.p3edgecompat=0. Modos manuais de diagnóstico: 1 usa mistura normal premultiplicada; 2 soma a 1x; 3 a 1,5x; 4 a 1,4x. Valores salvos são preservados.</string>
     <string name="control_description_headergap">Ajusta o espaço entre o cabeçalho e o título das notificações expandidas.</string>
     <string name="control_description_headertone">Adapta o relógio, a data e a operadora da central ao fundo.</string>
     <string name="control_description_huoptics">Seleciona o material da lente dinâmica nos pop-ups.</string>

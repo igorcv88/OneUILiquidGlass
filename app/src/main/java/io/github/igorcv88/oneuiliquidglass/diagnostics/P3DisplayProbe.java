@@ -20,6 +20,15 @@ import java.lang.reflect.Method;
  */
 public final class P3DisplayProbe {
     private static final String PROP = "debug.oulg.p3probe";
+    private static final String EDGE_COMPAT_PROP = "debug.oulg.p3edgecompat";
+
+    private static final class Sample {
+        long physicalId;
+        int mode = -1;
+        String step = "display";
+        String error;
+        long queryUs;
+    }
 
     private P3DisplayProbe() {}
 
@@ -43,10 +52,40 @@ public final class P3DisplayProbe {
         }
     }
 
-    private static void query(Context context, String phase) {
-        long started = SystemClock.elapsedRealtimeNanos();
-        String step = "display";
+    /** A single read at card creation/notification-shade transition, never inside draw(). */
+    public static int activeColorMode(Context context) {
+        return sample(context).mode;
+    }
+
+    /** Emergency opt-out: setprop debug.oulg.p3edgecompat 0. Enabled by default. */
+    public static boolean edgeCompatEnabled() {
         try {
+            Class<?> props = Class.forName("android.os.SystemProperties");
+            String value = (String) props.getMethod("get", String.class, String.class)
+                    .invoke(null, EDGE_COMPAT_PROP, "1");
+            return "1".equals(value) || "true".equalsIgnoreCase(value);
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError ignored) {
+            return false;
+        }
+    }
+
+    private static void query(Context context, String phase) {
+        Sample result = sample(context);
+        if (result.error == null) {
+            Probe.log("P3_ACTIVE_MODE", "phase=" + phase + " id=" + result.physicalId
+                    + " mode=" + result.mode + " queryUs=" + result.queryUs
+                    + " source=SurfaceControl.DynamicDisplayInfo");
+        } else {
+            Probe.log("P3_ACTIVE_MODE_FAILED", "phase=" + phase + " step=" + result.step
+                    + " cause=" + result.error);
+        }
+    }
+
+    private static Sample sample(Context context) {
+        Sample result = new Sample();
+        long started = SystemClock.elapsedRealtimeNanos();
+        try {
+            if (context == null) throw new IllegalArgumentException("null context");
             Display display = context.getDisplay();
             if (display == null) {
                 DisplayManager dm = context.getSystemService(DisplayManager.class);
@@ -54,30 +93,28 @@ public final class P3DisplayProbe {
             }
             if (display == null) throw new IllegalStateException("no physical display");
 
-            step = "uniqueId";
+            result.step = "uniqueId";
             Method getUniqueId = Display.class.getMethod("getUniqueId");
             String unique = (String) getUniqueId.invoke(display);
             long physicalId = physicalDisplayId(unique);
+            result.physicalId = physicalId;
 
-            step = "dynamicInfo";
+            result.step = "dynamicInfo";
             Method getInfo = SurfaceControl.class.getMethod("getDynamicDisplayInfo", long.class);
             Object info = getInfo.invoke(null, physicalId);
             if (info == null) throw new IllegalStateException("null DynamicDisplayInfo");
 
-            step = "activeColorMode";
+            result.step = "activeColorMode";
             Field activeMode = info.getClass().getField("activeColorMode");
-            int mode = activeMode.getInt(info);
-            long us = (SystemClock.elapsedRealtimeNanos() - started) / 1000;
-            Probe.log("P3_ACTIVE_MODE", "phase=" + phase + " id=" + physicalId
-                    + " mode=" + mode + " queryUs=" + us + " source=SurfaceControl.DynamicDisplayInfo");
+            result.mode = activeMode.getInt(info);
         } catch (InvocationTargetException e) {
             Throwable target = e.getCause() == null ? e : e.getCause();
-            Probe.log("P3_ACTIVE_MODE_FAILED", "phase=" + phase + " step=" + step
-                    + " cause=" + target.getClass().getSimpleName());
+            result.error = target.getClass().getSimpleName();
         } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
-            Probe.log("P3_ACTIVE_MODE_FAILED", "phase=" + phase + " step=" + step
-                    + " cause=" + e.getClass().getSimpleName());
+            result.error = e.getClass().getSimpleName();
         }
+        result.queryUs = (SystemClock.elapsedRealtimeNanos() - started) / 1000;
+        return result;
     }
 
     static long physicalDisplayId(String unique) {
