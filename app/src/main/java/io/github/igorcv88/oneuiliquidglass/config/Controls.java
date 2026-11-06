@@ -842,9 +842,9 @@ public final class Controls {
                         + " diagnóstico."));
         put(c("trace", "Registro detalhado de janelas").fmt(Format.TOGGLE).in(TECH, TEC).all()
                 .help("Registra a árvore de views e janelas. Gera muito log."));
-        put(c("edgepremul", "Alpha da borda (teste)").fmt(Format.TOGGLE)
+        put(c("edgepremul", "Alpha da borda (teste)").fmt(Format.COUNT)
                 .in(TECH, Tier.INTERNAL).all()
-                .help("Teste temporário da transparência da luz do contorno; desligado por padrão."));
+                .help("0: original; 1: alpha válido com composição normal; 2: alpha válido com soma de luz."));
 
         // State the app shows elsewhere; never an editable row.
         put(c("sfrefract", "Lente dinâmica").fmt(Format.READONLY).in(TECH, Tier.INTERNAL)

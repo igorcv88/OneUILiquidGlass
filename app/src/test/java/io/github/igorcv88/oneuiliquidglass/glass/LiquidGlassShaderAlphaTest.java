@@ -17,6 +17,21 @@ public final class LiquidGlassShaderAlphaTest {
         assertFalse(LiquidGlassShader.REFRACT_SOURCE.contains("edgePremulSafe"));
     }
 
+    @Test public void diagnosticSettingAcceptsOnlyThreeModes() {
+        io.github.igorcv88.oneuiliquidglass.config.SettingSpec spec =
+                io.github.igorcv88.oneuiliquidglass.config.SettingsRegistry.get("edgepremul");
+        assertTrue(spec != null);
+        for (String value : new String[] {"0", "1", "2"})
+            assertTrue(value.equals(spec.validate(value)));
+        for (String value : new String[] {"3", "-1", "1.5"}) {
+            try {
+                spec.validate(value);
+                org.junit.Assert.fail("Accepted invalid diagnostic mode " + value);
+            } catch (IllegalArgumentException expected) {
+            }
+        }
+    }
+
     @Test public void alphaEnvelopeAdmitsBrightZeroShadowPixels() {
         // Mirrors the shader's optional alpha envelope after applying coverage.
         float[][] cases = {

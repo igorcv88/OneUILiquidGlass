@@ -299,7 +299,13 @@ public final class GlassDrawable extends Drawable {
         // LSPosed-only cards over the live drawable blur take the light-only edge model.
         Tuning t = Tuning.get();
         // This uniform exists only in SOURCE; REFRACT_SOURCE remains unchanged.
-        if (s == shader) s.setFloatUniform("edgePremulSafe", t.edgePremulSafe ? 1f : 0f);
+        if (s == shader) {
+            s.setFloatUniform("edgePremulSafe", t.edgePremulSafe ? 1f : 0f);
+            // Mode 2 preserves additive highlights without relying on invalid RGB/alpha.
+            // This affects only the edge paint, not the whole display or blur layers.
+            paint.setBlendMode(t.edgePremulMode == 2
+                    ? android.graphics.BlendMode.PLUS : android.graphics.BlendMode.SRC_OVER);
+        }
         boolean live = t.live && backdrop instanceof BackgroundBlurBridge;
         s.setFloatUniform("hairGain", edgeEnabled ? 1f : 0f);
         s.setFloatUniform("decor", edgeEnabled ? (live ? t.liveOptics : 1f) : 0f);

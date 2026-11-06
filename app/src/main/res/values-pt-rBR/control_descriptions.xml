@@ -3,7 +3,7 @@
     <string name="control_description_backdrop">Seleciona a origem do fundo usada fora da lente dinâmica.</string>
     <string name="control_description_blur">Controla o desfoque aplicado ao fundo capturado por inteiro.</string>
     <string name="control_description_disp">Ajusta a diferença de deslocamento entre vermelho e azul na imagem capturada.</string>
-    <string name="control_description_edgepremul">Experimento de alpha da borda. Ligado usa transparência premultiplicada na luz do contorno; desligado preserva a renderização original.</string>
+    <string name="control_description_edgepremul">Modo experimental de alpha da borda: 0 mantém a renderização original, 1 usa alpha premultiplicado com composição normal e 2 usa alpha premultiplicado com soma de luz.</string>
     <string name="control_description_headergap">Ajusta o espaço entre o cabeçalho e o título das notificações expandidas.</string>
     <string name="control_description_headertone">Adapta o relógio, a data e a operadora da central ao fundo.</string>
     <string name="control_description_huoptics">Seleciona o material da lente dinâmica nos pop-ups.</string>
