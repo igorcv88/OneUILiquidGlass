@@ -114,6 +114,7 @@ public class SettingsRegistryTest {
         }
         assertEquals("80", SettingsRegistry.get("liveradius").defaultValue);
         assertEquals("60", SettingsRegistry.get("liveshaderadius").defaultValue);
+        assertEquals("1", SettingsRegistry.get("sf.kgfixedrim").defaultValue);
     }
 
     @Test

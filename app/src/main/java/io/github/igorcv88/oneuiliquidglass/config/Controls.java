@@ -589,8 +589,8 @@ public final class Controls {
                 .help("Linha de contorno da lente no bloqueio." + restart)
                 .show(DIDACTIC, Channel.RIM));
         put(c("sf.kgfixedrim", "Contorno fixo (comparação)").fmt(Format.TOGGLE).in(LENS, ADV).on(KG)
-                .help("Desligado: só a luz dinâmica do fundo ilumina a borda."
-                        + " Ligado: restaura o contorno branco e reflexos fixos."
+                .help("Ligado (padrão): mantém o contorno e os reflexos que dão relevo à lente."
+                        + " Desligado: remove os três para diagnóstico e deixa o cartão visualmente plano."
                         + " Não altera os raios de desfoque." + restart));
         put(c("sf.kgrim", "Reflexo do aro").fmt(Format.GAIN).in(LENS, ADV).on(KG)
                 .help("Reflexão no aro da lente do bloqueio. É diferente do contorno do vidro"

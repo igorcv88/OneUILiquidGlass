@@ -142,7 +142,7 @@ Observar que as propriedades `lightglass` e `shadelightglass` se aplicam a super
 | `sf.kgcool` | 0.50 | Lockscreen: matiz fria |
 | `sf.kgtilt` | 1.42 | Lockscreen: inclinação da luz (rad) |
 | `sf.kgline` | 0.62 | Lockscreen: contorno |
-| `sf.kgfixedrim` | 0 | Lockscreen: 0 remove linha, Fresnel e brilho especular fixos para deixar a luz local (`sf.kglight`) iluminar a borda; 1 restaura o contorno fixo antigo (A/B) |
+| `sf.kgfixedrim` | 1 | Lockscreen: 1 preserva linha, Fresnel e brilho especular estruturais (padrão); 0 remove os três somente para teste A/B, com perda confirmada de relevo visual |
 | `sf.kgcorecap` | 48 | Lockscreen: teto do raio efetivo do miolo (px) |
 | `sf.kggradient` | 1 | Lockscreen: transição contínua vidro-miolo (0–1; 0 usa curva anterior, junto de kgcorecap=62 restaura referência) |
 | `sf.kgband` | 0.85 | Lockscreen: largura da transição óptica (fração do raio do canto; 0 restaura v0.22; abaixo de ~0.42 fica no bisel mínimo) |

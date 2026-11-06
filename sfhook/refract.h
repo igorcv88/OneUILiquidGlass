@@ -74,8 +74,8 @@
 //    transmission (luma drawn halfway toward 0.40, dark areas lifted by scattered cool light rather
 //    than a gain); a luma-neutral cool tint;
 //  - the dynamic local edge light shares the same backdrop-sampling oulg_glow with profile 2;
-//    the former fixed cool Fresnel, white contour and directional specular band are suppressed
-//    by default. debug.oulg.sf.kgfixedrim=1 restores them for device A/B without touching blur.
+//    Fresnel, white contour and directional specular are retained because they convey the lens's
+//    curvature. debug.oulg.sf.kgfixedrim=0 suppresses them only for controlled A/B diagnostics.
 #define OULG_FS_GLOBALS "highp float oulg_on, oulg_pf, oulg_br, oulg_bw, oulg_lw, oulg_t, oulg_k, oulg_bv, oulg_grad, oulg_dp, oulg_rad;\nhighp vec2 oulg_jx, oulg_jy, oulg_n, oulg_e, oulg_eo;\n"
 #define OULG_FS_BSPLINE \
     "mediump vec4 oulg_bspline(sampler2D s, highp vec2 uv) {\n" \
@@ -526,8 +526,8 @@ static const struct oulg_profile OULG_PROFILES_DEFAULT[OULG_PROFILES] = {
      OULG_QS_LIGHT_DEFAULT, OULG_QS_LWIDTH_DEFAULT, OULG_QS_LFLOOR_DEFAULT, OULG_QS_LCAP_DEFAULT,
      OULG_QS_LENS_DEFAULT, OULG_QS_BODY_DEFAULT},
 };
-// Keep the original fixed highlights available for A/B. In the dynamic mode, only the already
-// existing per-outline-sample light (oulg_glow) illuminates the keyguard's rim. Blur is untouched.
+// Opt-in A/B probe: 0 suppresses all structural highlights, 1 preserves them. Removing all three
+// was visually destructive on the S25 Ultra. This helper never changes the body or blur field.
 static void oulg_kg_fixed_rim(struct oulg_profile *kg, float enabled) {
     if (enabled >= 0.5f) return;
     kg->rim = 0.0f;

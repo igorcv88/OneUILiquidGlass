@@ -109,7 +109,7 @@
     <string name="control_description_sf_kgcorecap">Limita o raio efetivo do desfoque interno da tela de bloqueio. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_kgcoredim">Escurece o centro dos cartões da tela de bloqueio. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_kgedgeblur">Ajusta o desfoque nas bordas dos cartões da tela de bloqueio. As mudanças são aplicadas após reiniciar o userspace.</string>
-    <string name="control_description_sf_kgfixedrim">Desligado (padrão): só a luminosidade local do fundo ilumina a borda do bloqueio. Ligado: restaura o contorno branco e os reflexos fixos. Não altera os raios de desfoque. As mudanças são aplicadas após reiniciar o userspace.</string>
+    <string name="control_description_sf_kgfixedrim">Ligado (padrão): preserva o contorno e os reflexos que dão relevo à lente. Desligado: apenas diagnóstico; remover os três deixa o cartão visualmente plano. Não altera os raios de desfoque. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_kgflat">Ajusta a intensidade da uniformização do brilho do fundo na tela de bloqueio. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_kgflatcap">Limita a intensidade da uniformização do brilho na tela de bloqueio. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_kgglow">Ajusta a largura do brilho em volta do aro da lente na tela de bloqueio. As mudanças são aplicadas após reiniciar o userspace.</string>

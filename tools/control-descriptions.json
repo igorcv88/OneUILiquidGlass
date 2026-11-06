@@ -616,7 +616,7 @@
     "Modo padrão 3: borda aditiva premultiplicada com luz RGB 1,5x. O modo 0 restaura a composição original; 1 usa composição normal; 2 soma luz a 1x; 4 soma a 1,4x."
   ],
   "sf.kgfixedrim": [
-    "Off (default): local backdrop light alone shapes the lock-screen rim. On: restore the legacy fixed white outline and specular highlights. Does not change blur radii.",
-    "Desligado (padrão): só a luminosidade local do fundo ilumina a borda do bloqueio. Ligado: restaura o contorno branco e os reflexos fixos. Não altera os raios de desfoque."
+    "On (default): preserve the outline and reflections that give the lens depth. Off: diagnostic only; removing all three makes the lock-screen card visually flat. Blur radii do not change.",
+    "Ligado (padrão): preserva o contorno e os reflexos que dão relevo à lente. Desligado: apenas diagnóstico; remover os três deixa o cartão visualmente plano. Não altera os raios de desfoque."
   ]
 }

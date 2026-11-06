@@ -15,7 +15,7 @@ static void put(const char *dir, const char *kind, int idx, const char *ext, con
 int main(int argc, char **argv) {
     int dbg = !(argc > 3 && strcmp(argv[3], "0") == 0);
     struct oulg_profile prof[OULG_PROFILES] = {OULG_PROFILES_DEFAULT[0], OULG_PROFILES_DEFAULT[1], OULG_PROFILES_DEFAULT[2], OULG_PROFILES_DEFAULT[3]};
-    float kgfixedrim = 0.0f;
+    float kgfixedrim = 1.0f;
     for (char *kv = argc > 4 ? strtok(argv[4], ",") : NULL; kv; kv = strtok(NULL, ",")) {
         char *eq = strchr(kv, '=');
         if (!eq) continue;

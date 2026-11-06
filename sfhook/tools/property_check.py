@@ -9,6 +9,7 @@ root = Path(__file__).resolve().parents[1]
 source = (root / "oulg_sf.c").read_text()
 parser = re.search(r"static float prop_float\(.*?\n\}", source, re.S).group(0)
 assert 'p[3].light = prop_float("debug.oulg.sf.qslight", OULG_QS_LIGHT_DEFAULT);' in source
+assert 'oulg_kg_fixed_rim(&p[1], prop_float("debug.oulg.sf.kgfixedrim", 1.0f));' in source
 with tempfile.TemporaryDirectory() as tmp:
     temp = Path(tmp)
     harness = r'''
@@ -56,13 +57,14 @@ int main(void) {
     # KG now uses the same per-edge local glow as the shade. The optional fixed contour only
     # affects the three reflection strengths, never the blur field or any other profile.
     rim = {}
-    for mode in ("0", "1"):
+    for mode in ("0", "1", "default"):
         out = temp / ("kgfixedrim_" + mode)
         out.mkdir()
         subprocess.run([str(exe), str(root / "tools/testdata/synthetic_dump.txt"), str(out), "0",
-                        "kgfixedrim=" + mode], check=True, stdout=subprocess.DEVNULL)
+                        "kgfixedrim=" + mode if mode != "default" else "none=0"], check=True, stdout=subprocess.DEVNULL)
         rim[mode] = (out / "mod_002.frag").read_text()
     dynamic, legacy = rim["0"], rim["1"]
+    assert rim["default"] == legacy, "Default KG optics must preserve the confirmed lens appearance"
     assert "oulg_glow(s, uv, 0.500, 12.000, 0.100, 0.280)" in dynamic
     replacements = {
         "clamp(0.720 * pow": "clamp(0.000 * pow",
@@ -73,4 +75,4 @@ int main(void) {
         assert before in legacy and after in dynamic, (before, after)
         legacy = legacy.replace(before, after)
     assert legacy == dynamic, "KG rim mode unexpectedly modified blur, body, or other profiles"
-    print("lockscreen: local-only edge light, fixed rim rollback and unchanged blur confirmed")
+    print("lockscreen: original optics restored by default; local-only probe and unchanged blur confirmed")
