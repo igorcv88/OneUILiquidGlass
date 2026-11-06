@@ -22,6 +22,7 @@ import io.github.igorcv88.oneuiliquidglass.Config;
 import io.github.igorcv88.oneuiliquidglass.diagnostics.Perf;
 import io.github.igorcv88.oneuiliquidglass.diagnostics.Probe;
 import io.github.igorcv88.oneuiliquidglass.diagnostics.WindowSurvey;
+import io.github.igorcv88.oneuiliquidglass.diagnostics.P3DisplayProbe;
 import io.github.igorcv88.oneuiliquidglass.glass.Backdrop;
 import io.github.igorcv88.oneuiliquidglass.glass.BackdropMotion;
 import io.github.igorcv88.oneuiliquidglass.glass.BackgroundBlurBridge;
@@ -1092,7 +1093,10 @@ public final class HeadsUpHooks {
                 if (sample != null) break;
                 View v = state.background.get(); if (v != null && v.isAttachedToWindow()) sample = v;
             }
-            if (sample != null) Probe.scrims(sample.getRootView(), next ? "shadeExpanded" : "shadeCollapsed");
+            if (sample != null) {
+                P3DisplayProbe.onShadeChange(sample.getContext(), next);
+                Probe.scrims(sample.getRootView(), next ? "shadeExpanded" : "shadeCollapsed");
+            }
             else Probe.log("SHADE_PROBE_SKIPPED", "reason=noAttachedView");
         }
     }
