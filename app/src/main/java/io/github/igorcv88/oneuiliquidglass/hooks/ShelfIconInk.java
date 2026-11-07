@@ -1,5 +1,7 @@
 package io.github.igorcv88.oneuiliquidglass.hooks;
 
+import java.util.Locale;
+
 /** Tone of the collapsed notification shelf icon when the shelf's text is mirrored. */
 final class ShelfIconInk {
     private ShelfIconInk() { }
@@ -15,6 +17,26 @@ final class ShelfIconInk {
         int green = (argb >>> 8) & 0xff;
         int blue = argb & 0xff;
         return (red * 2126L + green * 7152L + blue * 722L) < 128L * 10000L;
+    }
+
+    /** Only the notification-count label is a valid source for shelf icon colour.
+     * The OEM shelf also contains unrelated actions (e.g. noti_setting), which can have the
+     * opposite ink and must never be cached as the icon's reference. */
+    static boolean isCountLabel(String resourceName, CharSequence text) {
+        if (text == null) return false;
+        String value = text.toString().trim().toLowerCase(Locale.ROOT);
+        if (value.isEmpty() || !Character.isDigit(value.codePointAt(0))) return false;
+        if (value.contains("notification") || value.contains("notifica")) return true;
+        if (resourceName == null) return false;
+        String id = resourceName.toLowerCase(Locale.ROOT);
+        return id.contains("more_notif") || id.contains("notification_count")
+                || id.contains("shelf_count") || id.contains("stack_count");
+    }
+
+    /** In automatic mode use the *drawn* label ink exactly, not a stale scene estimate. */
+    static int fromLabel(int labelColor, int mode, int fixed, int light, int dark) {
+        if (mode == 0) return labelColor;
+        return mirrored(darkText(labelColor), mode, fixed, light, dark);
     }
 
     /** When native text is light, shelfTone() mirrors it to dark text on light glass. */

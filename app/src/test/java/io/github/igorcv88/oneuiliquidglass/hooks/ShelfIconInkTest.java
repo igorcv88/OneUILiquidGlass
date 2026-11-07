@@ -35,4 +35,26 @@ public class ShelfIconInkTest {
         assertEquals(0xff000000, ShelfIconInk.mirrored(ShelfIconInk.darkText(0xff202020), 0, 0, 0, 0));
         assertEquals(0xffffffff, ShelfIconInk.mirrored(ShelfIconInk.darkText(0xffeeeeee), 0, 0, 0, 0));
     }
+
+    @Test public void onlyNotificationCountCanSupplyShelfInk() {
+        assertTrue(ShelfIconInk.isCountLabel("shelf_notification_count", "3 more notifications"));
+        assertTrue(ShelfIconInk.isCountLabel(null, "3 outras notificações"));
+        assertTrue(ShelfIconInk.isCountLabel("shelf_count", "3 weitere"));
+        assertFalse(ShelfIconInk.isCountLabel("noti_setting", "Notification settings"));
+        assertFalse(ShelfIconInk.isCountLabel("noti_setting", "3 settings"));
+        assertFalse(ShelfIconInk.isCountLabel("clear_all", "Clear"));
+        assertFalse(ShelfIconInk.isCountLabel("app_name_text", "3 tickets"));
+        assertFalse(ShelfIconInk.isCountLabel(null, null));
+    }
+
+    @Test public void automaticShelfInkCopiesRenderedLabelColorExactly() {
+        assertEquals(0xff1c2430, ShelfIconInk.fromLabel(0xff1c2430, 0,
+                0xff123456, 0xff556677, 0xff8899aa));
+        assertEquals(0xffe0e6ef, ShelfIconInk.fromLabel(0xffe0e6ef, 0,
+                0xff123456, 0xff556677, 0xff8899aa));
+        assertEquals(0xff123456, ShelfIconInk.fromLabel(0xff1c2430, 1,
+                0xff123456, 0xff556677, 0xff8899aa));
+        assertEquals(0xff556677, ShelfIconInk.fromLabel(0xff1c2430, 2,
+                0xff123456, 0xff556677, 0xff8899aa));
+    }
 }

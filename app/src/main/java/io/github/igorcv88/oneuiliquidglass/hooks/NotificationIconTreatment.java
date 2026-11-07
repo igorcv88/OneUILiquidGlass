@@ -226,6 +226,7 @@ final class NotificationIconTreatment {
     private long nextSourceCheck;
     private final IconRebindGuard rebindGuard = new IconRebindGuard();
     private WeakReference<View> protectedRow = new WeakReference<>(null);
+    private long nextGuardRecheck;
 
     private void skip(String reason) {
         if (Probe.trace && !reason.equals(lastSkip))
@@ -238,6 +239,7 @@ final class NotificationIconTreatment {
         if (row == null || mode == NotificationIconPolicy.OFF) {
             rebindGuard.reset();
             protectedRow.clear();
+            nextGuardRecheck = 0;
             restore(); skip("inactive"); return;
         }
         // Fail closed if Samsung repeatedly replaces our drawable on the same row. On some
@@ -245,9 +247,22 @@ final class NotificationIconTreatment {
         if (protectedRow.get() != row) {
             rebindGuard.reset();
             protectedRow = new WeakReference<>(row);
+            nextGuardRecheck = 0;
         }
-        if (rebindGuard.tripped()) return;
         long now = SystemClock.uptimeMillis();
+        if (rebindGuard.tripped()) {
+            // The guard must continue protecting this notification, but Samsung can recycle the
+            // same ExpandableNotificationRow for a different key. Recheck only once a second;
+            // otherwise a previous notification permanently disables every future icon here.
+            if (now < nextGuardRecheck) return;
+            nextGuardRecheck = now + 1000;
+            Object current = findEntry(row);
+            StatusBarNotification latest = findSbn(current);
+            if (latest == null) latest = findSbn(row);
+            if (latest == null || !rebindGuard.bindNotification(latest.getKey())) return;
+            nextSourceCheck = 0;
+            if (Probe.trace) Probe.log("ICON_TREAT_REARM", "reason=newNotification pkg=" + latest.getPackageName());
+        }
         long currentRevision = ConfigClient.revision();
         if (missingRow.get() == row && now < nextSourceCheck
                 && configRevision == -1) return;
@@ -283,6 +298,7 @@ final class NotificationIconTreatment {
             selectedMode = mode;
             configRevision = currentRevision;
             pkg = sbn.getPackageName();
+            rebindGuard.bindNotification(sbn.getKey());
             lastSkip = null;
             candidatesReported = false;
             row.addOnLayoutChangeListener(layoutObserver);

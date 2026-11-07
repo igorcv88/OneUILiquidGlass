@@ -7,6 +7,15 @@ final class IconRebindGuard {
     private long windowStart = -1;
     private int count;
     private boolean tripped;
+    private String notificationKey;
+
+    /** A recycled notification row may host a different SBN after the original circuit trip. */
+    boolean bindNotification(String key) {
+        if (key == null || key.equals(notificationKey)) return false;
+        reset();
+        notificationKey = key;
+        return true;
+    }
 
     boolean record(long now, int rebindings) {
         if (tripped) return true;
@@ -26,5 +35,6 @@ final class IconRebindGuard {
         windowStart = -1;
         count = 0;
         tripped = false;
+        notificationKey = null;
     }
 }

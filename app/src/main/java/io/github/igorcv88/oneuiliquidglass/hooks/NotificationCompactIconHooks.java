@@ -405,10 +405,13 @@ final class NotificationCompactIconHooks {
             int shelfInk = 0;
             if (tintShelf) {
                 Tuning palette = Tuning.get();
-                boolean darkLabel = labelInk != null ? ShelfIconInk.darkText(labelInk) : ShadeTone.lightText();
-                shelfInk = ShelfIconInk.mirrored(darkLabel,
-                        palette.notificationIconInkMode, palette.notificationIconFixedInk,
-                        palette.notificationIconLightInk, palette.notificationIconDarkInk);
+                shelfInk = labelInk != null
+                        ? ShelfIconInk.fromLabel(labelInk, palette.notificationIconInkMode,
+                                palette.notificationIconFixedInk, palette.notificationIconLightInk,
+                                palette.notificationIconDarkInk)
+                        : ShelfIconInk.mirrored(ShadeTone.lightText(), palette.notificationIconInkMode,
+                                palette.notificationIconFixedInk, palette.notificationIconLightInk,
+                                palette.notificationIconDarkInk);
             }
             if (ready == null || ready.bitmap == null) {
                 if (tintShelf) applyShelfFilter(v, shelfInk);
@@ -517,10 +520,11 @@ final class NotificationCompactIconHooks {
             shelfSuspendUntil = 0;
         }
 
-        /** A label colour belongs to the visible shelf, not to the last sampled shade scene. */
+        /** Follow only the actual "N more notifications" text, never shelf footer actions. */
         private Integer shelfLabelInk(ImageView icon) {
             TextView existing = shelfLabel.get();
-            if (existing != null && existing.isAttachedToWindow() && existing.getVisibility() == View.VISIBLE)
+            if (existing != null && existing.isAttachedToWindow() && existing.isShown()
+                    && ShelfIconInk.isCountLabel(resourceName(existing), existing.getText()))
                 return existing.getCurrentTextColor();
             long now = android.os.SystemClock.uptimeMillis();
             if (now < nextShelfLabelLookup) return null;
@@ -528,30 +532,36 @@ final class NotificationCompactIconHooks {
             for (ViewParent p = icon.getParent(); p instanceof View; p = p.getParent()) {
                 View parent = (View) p;
                 if ("NotificationShelf".equals(parent.getClass().getSimpleName())) {
-                    TextView label = visibleShelfLabel(parent, 0);
+                    TextView label = visibleShelfCountLabel(parent, 0);
                     shelfLabel = new WeakReference<>(label);
                     if (label != null) {
                         if (Probe.trace) Probe.log("ICON_TREAT_SHELF_LABEL", Foreground.describe(label)
                                 + " ink=" + Integer.toHexString(label.getCurrentTextColor()));
                         return label.getCurrentTextColor();
                     }
-                    if (Probe.trace) Probe.log("ICON_TREAT_SHELF_LABEL", "missing=true shelf=" + Foreground.describe(parent));
+                    if (Probe.trace) Probe.log("ICON_TREAT_SHELF_LABEL", "missingCount=true shelf=" + Foreground.describe(parent));
                     break;
                 }
             }
             return null;
         }
 
-        private TextView visibleShelfLabel(View view, int depth) {
+        private static String resourceName(View v) {
+            if (v.getId() == View.NO_ID) return null;
+            try { return v.getResources().getResourceEntryName(v.getId()); }
+            catch (RuntimeException ignored) { return null; }
+        }
+
+        private TextView visibleShelfCountLabel(View view, int depth) {
             if (depth > 7 || view.getVisibility() != View.VISIBLE) return null;
-            if (view instanceof TextView && ((TextView) view).getText() != null
-                    && ((TextView) view).getText().length() > 0) return (TextView) view;
+            if (view instanceof TextView && ShelfIconInk.isCountLabel(
+                    resourceName(view), ((TextView) view).getText())) return (TextView) view;
             if (!(view instanceof android.view.ViewGroup)) return null;
             android.view.ViewGroup group = (android.view.ViewGroup) view;
             for (int i = 0; i < group.getChildCount(); i++) {
                 View child = group.getChildAt(i);
                 if (child.getClass().getSimpleName().endsWith("ExpandableNotificationRow")) continue;
-                TextView found = visibleShelfLabel(child, depth + 1);
+                TextView found = visibleShelfCountLabel(child, depth + 1);
                 if (found != null) return found;
             }
             return null;
