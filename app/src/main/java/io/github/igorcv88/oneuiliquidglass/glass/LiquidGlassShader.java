@@ -19,6 +19,11 @@ package io.github.igorcv88.oneuiliquidglass.glass;
  * card the compositor lights itself (sfhook profile 1) takes decor 0 and a thinner hairline, so its
  * rim is not lit twice.</p>
  *
+ * <p>notificationLineGain scales only the outer line in both standard edge() and liveEdge(). Its
+ * default is 1 for Now Bar, QS and every non-notification drawable; HeadsUpHooks assigns a small
+ * per-notification surface gain. Fresnel, glints, internal reflections, geometry and blur stay as
+ * before. The compositor's native structural rim is independent.</p>
+ *
  * <p>The legacy edge output uses additive RGB with independent shadow alpha, so light can be
  * nonzero where alpha is zero. That violates AGSL's premultiplied-alpha contract, and is under
  * investigation for wide-gamut hardware-composition losses. In DISPLAY_P3 notifications only,
@@ -44,6 +49,7 @@ public final class LiquidGlassShader {
         uniform float specular;
         uniform float shadow;
         uniform float hairGain;
+        uniform float notificationLineGain;
         uniform float decor;
         uniform float live;
         uniform float sheen;
@@ -84,7 +90,7 @@ public final class LiquidGlassShader {
             float sigma = max(hair * 0.75, 1.1);
             float contour = exp(-(depth * depth) / (2.0 * sigma * sigma));
             // rimGain: the outer line alone (debug.oulg.liverim), independent of Fresnel and glint.
-            float contourGain = (0.06 + 0.28 * lit * lit) * rimGain;
+            float contourGain = (0.06 + 0.28 * lit * lit) * rimGain * notificationLineGain;
 
             float fw = b * 0.60;
             float ft = clamp(1.0 - depth / fw, 0.0, 1.0);
@@ -146,7 +152,7 @@ public final class LiquidGlassShader {
             float band = clamp(1.0 - depth / bandW, 0.0, 1.0);
             float lit = pow(max(facing, 0.0), 3.0) * band * runs;
             float back = pow(max(-facing, 0.0), 1.4) * band * runs * (1.0 - 0.82 * under * under);
-            float3 added = line * lineGain * specular * hairGain
+            float3 added = line * lineGain * specular * hairGain * notificationLineGain
                     + float3(1.0, 0.995, 0.98) * lit * 0.26 * specular * decor
                     + float3(0.95, 0.975, 1.0) * back * 0.10 * specular * decor;
 

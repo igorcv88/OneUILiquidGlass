@@ -25,6 +25,7 @@ final class ControlDescriptions {
             case "kgdarkfill": return R.string.control_description_kgdarkfill;
             case "kgglint": return R.string.control_description_kgglint;
             case "kglens": return R.string.control_description_kglens;
+            case "kglinegain": return R.string.control_description_kglinegain;
             case "kgoptics": return R.string.control_description_kgoptics;
             case "kgrim": return R.string.control_description_kgrim;
             case "kgsharedoptics": return R.string.control_description_kgsharedoptics;
@@ -57,6 +58,7 @@ final class ControlDescriptions {
             case "perf": return R.string.control_description_perf;
             case "pillblur": return R.string.control_description_pillblur;
             case "pillglass": return R.string.control_description_pillglass;
+            case "popuplinegain": return R.string.control_description_popuplinegain;
             case "popuplock": return R.string.control_description_popuplock;
             case "popuptone": return R.string.control_description_popuptone;
             case "profile": return R.string.control_description_profile;
@@ -156,6 +158,7 @@ final class ControlDescriptions {
             case "shadeglint": return R.string.control_description_shadeglint;
             case "shadelift": return R.string.control_description_shadelift;
             case "shadelightglass": return R.string.control_description_shadelightglass;
+            case "shadelinegain": return R.string.control_description_shadelinegain;
             case "shadelocal": return R.string.control_description_shadelocal;
             case "shadescaleveil": return R.string.control_description_shadescaleveil;
             case "shadetone": return R.string.control_description_shadetone;

@@ -79,6 +79,18 @@
     "Adjusts the outline of lock screen cards.",
     "Ajusta o contorno dos cartões da tela de bloqueio."
   ],
+  "popuplinegain": [
+    "Fine-tunes only the Java outer hairline light of heads-up notifications; default 1.30x. Does not alter the line's width, inner reflections, Fresnel, blur, or Now Bar. The native compositor's light is not changed.",
+    "Ajusta somente a luz da linha externa Java dos pop-ups; padrão 1,30x. Não altera largura, reflexos internos, Fresnel, blur ou Now Bar. A luz nativa do compositor permanece intacta."
+  ],
+  "kglinegain": [
+    "Fine-tunes only the Java outer hairline of lock screen notifications; default 0.80x. The SurfaceFlinger structural rim and Now Bar are unchanged; the final perceived thickness also depends on that native rim.",
+    "Ajusta somente a linha externa Java das notificações da tela de bloqueio; padrão 0,80x. O aro estrutural nativo do SurfaceFlinger e a Now Bar ficam inalterados; a espessura percebida também depende desse aro."
+  ],
+  "shadelinegain": [
+    "Fine-tunes only the outer hairline light on notification shade cards; default 1.30x. Does not change the fill, internal highlights, blur, or Now Bar.",
+    "Ajusta somente a luz da linha externa dos cartões da central; padrão 1,30x. Não altera preenchimento, reflexos internos, blur ou Now Bar."
+  ],
   "liveglint": [
     "Adjusts the highlight in the upper-left corner of pop-ups.",
     "Ajusta o reflexo no canto superior esquerdo dos pop-ups."

@@ -43,6 +43,7 @@ import io.github.igorcv88.oneuiliquidglass.glass.ToneGrid;
 import io.github.igorcv88.oneuiliquidglass.glass.GlassDrawable;
 import io.github.igorcv88.oneuiliquidglass.glass.GlassSpec;
 import io.github.igorcv88.oneuiliquidglass.glass.P3EdgeSelection;
+import io.github.igorcv88.oneuiliquidglass.glass.NotificationEdgeLineGain;
 import io.github.igorcv88.oneuiliquidglass.glass.CornerGeometry;
 
 public final class HeadsUpHooks {
@@ -2688,6 +2689,8 @@ public final class HeadsUpHooks {
             // second arc again. The user found them milky next to the wallpaper (25/10).
             boolean lock = !popup && !pill && lensSurface();
             Tuning tn = Tuning.get();
+            glass.setNotificationLineGain(NotificationEdgeLineGain.select(!pill, popup, lock,
+                    tn.popupLineGain, tn.lockscreenLineGain, tn.shadeLineGain));
             if (live && dark) fill = popup && !lightStyle ? tn.liveDarkFill << 24 : lock ? tn.kgDarkFill << 24 : 0;
             int tone = live && dark ? (popup ? (tn.liveDarkAlpha << 24 | 0xffffff) : lock ? (tn.kgDarkAlpha << 24 | 0xffffff)
                     : io.github.igorcv88.oneuiliquidglass.glass.MaterialMath.shadeDarkOpacity(spec.liveShadeDarkColor, tn.shadeDarkGlass))

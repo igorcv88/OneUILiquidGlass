@@ -79,6 +79,7 @@
     <string name="control_title_ef3825b141ca">Limite para texto claro (lente)</string>
     <string name="control_title_7c47b0e7e366">Limite para texto escuro</string>
     <string name="control_title_f54ebdc65a97">Limite para texto escuro (lente)</string>
+    <string name="control_title_5a234be298cb">Luz da linha externa</string>
     <string name="control_title_e5aac2df4c8e">Luz pela borda</string>
     <string name="control_title_256e11955fd8">Luz pela borda (lente)</string>
     <string name="control_title_924efb059063">Material da lente no bloqueio</string>

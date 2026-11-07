@@ -249,6 +249,8 @@ public final class Tuning {
      * a second arc inside the outline again, 25/10).
      */
     public final float liveRim;
+    /** Notification-only outer line: preserves the geometry and independent Fresnel/specular light. */
+    public final float popupLineGain, lockscreenLineGain, shadeLineGain;
     /**
      * Lockscreen cards, dark theme, LSPosed-only mode: region white alpha (debug.oulg.kgdarkalpha,
      * 0-255, default 20), black fill alpha (kgdarkfill, default 5), outer-line gain (kgrim, default
@@ -423,6 +425,9 @@ public final class Tuning {
         liveDarkAlpha = Math.round(clamp(number("livedarkalpha", 20f), 0f, 255f));
         liveDarkFill = Math.round(clamp(number("livedarkfill", 0f), 0f, 255f));
         liveRim = clamp(number("liverim", 2f), 0f, 4f);
+        popupLineGain = clamp(number("popuplinegain", 1.30f), 0.50f, 1.50f);
+        lockscreenLineGain = clamp(number("kglinegain", 0.80f), 0.50f, 1.50f);
+        shadeLineGain = clamp(number("shadelinegain", 1.30f), 0.50f, 1.50f);
         kgDarkAlpha = Math.round(clamp(number("kgdarkalpha", 20f), 0f, 255f));
         kgDarkFill = Math.round(clamp(number("kgdarkfill", 5f), 0f, 255f));
         kgRim = clamp(number("kgrim", 2f), 0f, 4f);
@@ -539,7 +544,8 @@ public final class Tuning {
                 + " refract=" + refract + " ior=" + ior + " blur=" + blur + " sat=" + saturation
                 + " disp=" + dispersion + " hz=" + hz + " hzkg=" + keyguardHz + " tint=" + tintAlpha
                 + " semradius=" + semRadius + " semradiuslens=" + semRadiusLens + " sflens=" + sfLens + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " live=" + live + " liveradius=" + liveRadius + " liveshaderadius=" + liveShadeRadius + " liveoptics=" + liveOptics + " livesheen=" + liveSheen + " liveglint=" + liveGlint + " shadeglint=" + shadeGlint + " livelens=" + liveLens + " lensmaxage=" + lensMaxAge + " lenssettle=" + lensSettle + " lensgate=" + lensGate + " lenstransition=" + lensTransition + " kgblurpath=" + kgBlurPath + " shadeblurpath=" + shadeBlurPath + " shadefadecut=" + shadeFadeCut + " kgblurradius=" + kgBlurRadius + " pillglass=" + pillGlass + " pillblur=" + pillBlur + " kgoptics=" + kgOptics + " huoptics=" + huOptics + " kglens=" + kgLens + " shadetone=" + shadeTone + " shadeveil=" + shadeVeil + " shadeadaptive=" + shadeAdaptive + " shadecap=" + shadeCap + " shadelift=" + shadeLift + " veilmax=" + veilMax + " stylelo=" + styleLo + " stylehi=" + styleHi + " lightglass=" + lightGlass + " lighttone=" + Integer.toHexString(lightTone) + " lightedge=" + lightEdge + " lightoutline=" + lightOutline + " shadelightglass=" + shadeLightGlass + " shadedarkglass=" + shadeDarkGlass + " livedarkalpha=" + liveDarkAlpha + " livedarkfill=" + liveDarkFill + " liverim=" + liveRim + " kgdarkalpha=" + kgDarkAlpha + " kgdarkfill=" + kgDarkFill + " kgrim=" + kgRim + " kgglint=" + kgGlint + " textswap=" + textSwap + " headertone=" + headerTone + " icontone=" + iconTone + " popuptone=" + popupTone + " popuplock=" + popupLock + " orphandraw=" + orphanDraw + " shadescaleveil=" + shadeScaleVeil + " shadelocal=" + shadeLocal + " paneldim=" + panelDim + " panelblurcap=" + panelBlurCap + " panelnativegray=" + panelNativeGray + " panelcolor=" + Integer.toHexString(panelColor) + " sfoptics=" + sfOptics + " kgwinblur=" + kgWinBlur + " headergap=" + headerGap + " perf=" + perf + " trace=" + trace + " mediaart=" + mediaArt + " qsmediaart=" + qsMediaArt + " edgepremul=" + edgePremulMode
-                + " kgsharedoptics=" + kgSharedOptics;
+                + " kgsharedoptics=" + kgSharedOptics + " popuplinegain=" + popupLineGain
+                + " kglinegain=" + lockscreenLineGain + " shadelinegain=" + shadeLineGain;
     }
 
     /** A hex RGB value (with or without #), or the fallback. */
