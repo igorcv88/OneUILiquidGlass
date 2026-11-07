@@ -28,7 +28,7 @@ public final class MainActivity extends Activity implements Host {
     protected void attachBaseContext(Context base) {
         super.attachBaseContext(AppLanguage.wrap(base));
     }
-    private static final int REQ_NOTIFY = 71, REQ_EXPORT = 91, REQ_IMPORT = 92;
+    private static final int REQ_NOTIFY = 71, REQ_EXPORT = 91, REQ_IMPORT = 92, REQ_ICON_IMPORT = 93;
     private final java.util.concurrent.ExecutorService io = java.util.concurrent.Executors.newSingleThreadExecutor();
     private final Handler handler = new Handler(Looper.getMainLooper());
     private AppModel model;
@@ -43,6 +43,7 @@ public final class MainActivity extends Activity implements Host {
     private int tab;
     private int pendingCount = 1, pendingDelay;
     private boolean permissionPending, imeVisible;
+    private String pendingIconPackage;
     private final Runnable poll = new Runnable() {
         @Override
         public void run() {
@@ -67,6 +68,7 @@ public final class MainActivity extends Activity implements Host {
             permissionPending = state.getBoolean("permissionPending");
             pendingCount = state.getInt("pendingCount", 1);
             pendingDelay = state.getInt("pendingDelay");
+            pendingIconPackage = state.getString("pendingIconPackage");
         }
         build(ui == null ? new Bundle() : ui);
         handleIntent(getIntent());
@@ -236,6 +238,7 @@ public final class MainActivity extends Activity implements Host {
         b.putBoolean("permissionPending", permissionPending);
         b.putInt("pendingCount", pendingCount);
         b.putInt("pendingDelay", pendingDelay);
+        b.putString("pendingIconPackage", pendingIconPackage);
     }
 
     @Override
@@ -420,11 +423,36 @@ public final class MainActivity extends Activity implements Host {
                 .addCategory(Intent.CATEGORY_OPENABLE), REQ_IMPORT);
     }
 
+    @Override public void importNotificationIcon(String packageName) {
+        if (!NotificationIconStore.validPackage(packageName)) {
+            feedback(getString(R.string.notification_icon_error));
+            return;
+        }
+        pendingIconPackage = packageName;
+        startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("image/png")
+                .addCategory(Intent.CATEGORY_OPENABLE), REQ_ICON_IMPORT);
+    }
+
     @Override
     protected void onActivityResult(int request, int result, Intent intent) {
         super.onActivityResult(request, result, intent);
         if (result != RESULT_OK || intent == null || intent.getData() == null) return;
         Uri uri = intent.getData();
+        if (request == REQ_ICON_IMPORT) {
+            String iconPackage = pendingIconPackage;
+            pendingIconPackage = null;
+            if (!NotificationIconStore.validPackage(iconPackage)) return;
+            io.execute(() -> {
+                try (java.io.InputStream in = getContentResolver().openInputStream(uri)) {
+                    NotificationIconStore.importPng(this, iconPackage, in);
+                    model.repo.iconAssetsChanged();
+                    deliver(() -> feedback(getString(R.string.notification_icon_saved)));
+                } catch (Exception e) {
+                    deliver(() -> feedback(getString(R.string.operation_failed, e.getMessage())));
+                }
+            });
+            return;
+        }
         if (request != REQ_EXPORT && request != REQ_IMPORT) return;
         boolean enabled = model.state().enabled;
         java.util.Map<String, String> values = model.repo.overrides();

@@ -1492,6 +1492,9 @@ public final class HeadsUpHooks {
     private final class State implements View.OnAttachStateChangeListener, ViewTreeObserver.OnPreDrawListener {
         final WeakReference<View> background;
         final WeakReference<View> row;
+        /** Package-aware small icon source, with no additional timer or observer. */
+        final NotificationIconTreatment notificationIcons = new NotificationIconTreatment();
+        boolean restoringNativeIcons;
         /** Positive control: exactly which path was drawn by the already approved notification. */
         final LiveRenderProbe renderControl = new LiveRenderProbe();
         GlassDrawable glass;
@@ -1883,6 +1886,10 @@ public final class HeadsUpHooks {
         }
         /** Swapped text and icon tone; the views are walked again every SWAP_WALK_MS while it is on (new inflations). */
         void setForeground(boolean swap) {
+            // Existing pre-draw/rebind path: cached identity checks only; decoding happens off-thread.
+            io.github.igorcv88.oneuiliquidglass.glass.Tuning tuning = Tuning.get();
+            notificationIcons.sync(glass != null && !restoringNativeIcons && !pill && tuning.iconTone && enabled
+                            ? row.get() : null, tuning.iconMode, ShadeTone.lightText() == swap);
             long now = android.os.SystemClock.uptimeMillis();
             String reason = swap == swapped ? null : swap ? "style" : "restore";
             // A child row that just got its own glass may still carry its group's swapped text
@@ -2870,6 +2877,8 @@ public final class HeadsUpHooks {
          * is handed back later if the card is shown without glass.
          */
         void release(boolean restore) {
+            notificationIcons.restore();
+            restoringNativeIcons = true;
             if (p3SettlePosted) { main.removeCallbacks(p3Settle); p3SettlePosted = false; }
             p3LastMode = -1;
             p3LastCompat = null;
@@ -2882,6 +2891,7 @@ public final class HeadsUpHooks {
             // background is drawn through material() -> release() on every frame, and restoring
             // here undid shelfTone() each redraw. shelfTone() restores it when the shade closes.
             if (!pill) setForeground(false);
+            restoringNativeIcons = false;
             if (glass == null) return;
             // The blur guard also blocked calls aimed at the row while this material was managed.
             boolean compositor = glassKind == Backdrop.Kind.SAMSUNG || glass.hybrid() || compBridge != null;

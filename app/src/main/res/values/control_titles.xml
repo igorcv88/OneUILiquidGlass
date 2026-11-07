@@ -98,6 +98,7 @@
     <string name="control_title_bd7dd59e7500">Dark glass opacity</string>
     <string name="control_title_1494f8d77260">Glass opacity · light background</string>
     <string name="control_title_08864d52ba04">Background source</string>
+    <string name="control_title_ba772fd6f59e">Notification icon source</string>
     <string name="control_title_abd91248a5f8">Switch to light glass above</string>
     <string name="control_title_78ce3c71cf94">Customize discs on colored background</string>
     <string name="control_title_826f38ede54d">Brightness and volume fill · light</string>

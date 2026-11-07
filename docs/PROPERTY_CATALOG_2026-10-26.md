@@ -96,6 +96,7 @@ O interruptor `sfrefract` **não comprova** que o binário nativo foi carregado:
 | `textswap` | 1 | booleano | Troca cor do texto em material claro/escuro oposto ao tema |
 | `headertone` | 0 | booleano | Ajusta relógio/data/operadora da central ao fundo |
 | `icontone` | 1 | booleano | Ajusta ícone monocromático da notificação ao texto |
+| `iconmode` | 1 | inteiro 0–3 | 0 desliga, 1 trata sistema e serviços, 2 também aplicativos com ícone original verificado, 3 força todos os ícones de aplicativo elegíveis |
 | `popuplock` | 1 | booleano | Estabiliza o contraste do pop-up: só muda com mudança real do fundo, confirmada por uma segunda leitura |
 | `orphandraw` | 1 | booleano | Aplica o tom das linhas minimizadas já no primeiro desenho da central |
 | `popuptone` | 1 | booleano | Véu medido do backdrop do pop-up APK-only |

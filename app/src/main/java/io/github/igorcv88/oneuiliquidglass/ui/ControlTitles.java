@@ -106,6 +106,7 @@ final class ControlTitles {
             case "Opacidade do vidro escuro": return R.string.control_title_bd7dd59e7500;
             case "Opacidade do vidro · fundo claro": return R.string.control_title_1494f8d77260;
             case "Origem do fundo": return R.string.control_title_08864d52ba04;
+            case "Origem dos ícones de notificações": return R.string.control_title_ba772fd6f59e;
             case "Passar ao vidro claro acima de": return R.string.control_title_abd91248a5f8;
             case "Personalizar discos no fundo colorido": return R.string.control_title_78ce3c71cf94;
             case "Preenchimento · brilho e volume · claro": return R.string.control_title_826f38ede54d;

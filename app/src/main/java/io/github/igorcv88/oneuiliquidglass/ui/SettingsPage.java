@@ -19,7 +19,7 @@ public final class SettingsPage implements Page {
     private final Theme t;
     private final ScrollView scroll;
     private final LinearLayout content;
-    private final LinearLayout themeRow, lensRow, syncRow, conflictsRow;
+    private final LinearLayout themeRow, lensRow, syncRow, conflictsRow, iconRow;
     private final View conflictsDivider;
     private final Toggle motion;
 
@@ -51,6 +51,14 @@ public final class SettingsPage implements Page {
         });
         look.addView(motionRow);
         content.addView(look, Ui.match());
+
+        content.addView(Ui.section(a, t, a.getString(R.string.notification_icons)));
+        LinearLayout iconCard = Ui.card(a, t);
+        iconRow = Ui.listRow(a, t, Icon.BELL, a.getString(R.string.notification_icons),
+                a.getString(R.string.notification_icons_desc), Ui.chevron(a, t));
+        iconRow.setOnClickListener(v -> new NotificationIconsSheet(host).show());
+        iconCard.addView(iconRow);
+        content.addView(iconCard, Ui.match());
 
         content.addView(Ui.section(a, t, host.activity().getString(R.string.glass)));
         LinearLayout glass = Ui.card(a, t);
@@ -194,6 +202,12 @@ public final class SettingsPage implements Page {
         String theme = m.ui.getString("theme", "system");
         Ui.setSubtitle(themeRow, theme.equals("light") ? host.activity().getString(R.string.light_theme) : theme.equals("dark") ? host.activity().getString(R.string.dark_theme) : host.activity().getString(R.string.follow_system));
         motion.set(m.ui.getBoolean("reduceMotion", false), false);
+        String iconMode = m.state().shown("iconmode");
+        int modeString = "0".equals(iconMode) ? R.string.notification_icon_off
+                : "2".equals(iconMode) ? R.string.notification_icon_originals
+                : "3".equals(iconMode) ? R.string.notification_icon_all
+                : R.string.notification_icon_system;
+        Ui.setSubtitle(iconRow, host.activity().getString(modeString));
         Mode mode = m.mode();
         SfLive.State lens = SfLive.state(m.lens.model().status);
         String lensText = mode == Mode.DYNAMIC_LENS ? host.activity().getString(R.string.active_feminine) : !m.lens.model().bundled ? host.activity().getString(R.string.unavailable_in_build)

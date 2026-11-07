@@ -494,6 +494,13 @@ public final class Controls {
         put(c("icontone", "Ajustar ícone pequeno").fmt(Format.TOGGLE).in(COLOR, ADV).all()
                 .help("O ícone monocromático da notificação acompanha a cor do texto.")
                 .show(BEHAV, Channel.NONE));
+        put(c("iconmode", "Origem dos ícones de notificações").fmt(Format.CHOICE).in(COLOR, ADV).all()
+                .choice("0", "Desativado", "Mantém os ícones como o sistema os desenhou")
+                .choice("1", "Sistema e serviços", "Padrão: preserva os aplicativos do usuário e seus packs")
+                .choice("2", "Sistema e originais confirmados", "Trata aplicativos comuns só quando o ícone exibido corresponde ao original")
+                .choice("3", "Todos", "Força o tratamento de ícones elegíveis, inclusive os personalizados")
+                .help("Preserva avatares, capas e imagens de mídia. Opções completas nas configurações.")
+                .show(BEHAV, Channel.NONE));
         put(c("shadescaleveil", "Véu durante animações").fmt(Format.PERCENT_255)
                 .in(COLOR, ADV).on(SH)
                 .help("Véu de reserva enquanto um cartão da central é redimensionado.")

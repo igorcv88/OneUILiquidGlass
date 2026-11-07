@@ -9,6 +9,7 @@
     <string name="control_description_huoptics">Selects the dynamic lens material used on pop-ups.</string>
     <string name="control_description_hz">Sets the pop-up capture rate in capture mode.</string>
     <string name="control_description_hzkg">Sets the lock screen capture rate when capture is needed.</string>
+    <string name="control_description_iconmode">Controls which notification app icons are converted to a background-free monochrome glyph. System and service icons are treated by default; user-selected icon packs are preserved.</string>
     <string name="control_description_icontone">Matches monochrome notification icons to the text color.</string>
     <string name="control_description_ior">Sets the refractive index used by the physical model.</string>
     <string name="control_description_kgblurpath">Selects where lock screen blur is drawn when the dynamic lens is active.</string>
