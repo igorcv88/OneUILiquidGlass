@@ -121,6 +121,13 @@ public final class ConfigRepository {
         return prefs.getLong("generation", 0);
     }
 
+    /** A locally imported icon changed; notify SystemUI without changing the selected settings. */
+    public synchronized void iconAssetsChanged() {
+        prefs.edit().putLong("generation", generation() + 1)
+                .putLong("lastChange", System.currentTimeMillis()).apply();
+        notifyChanged();
+    }
+
     public synchronized void replace(Map<String, String> values, boolean clear) {
         replace(values, clear, null);
     }

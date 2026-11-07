@@ -133,7 +133,7 @@ final class Foreground {
      * corner of the sender's avatar and stayed white on light glass (WhatsApp, device screenshot
      * 26/10): it is an icon view of its own, which the id test alone may miss.
      */
-    private static boolean smallIcon(View v) {
+    static boolean smallIcon(View v) {
         int id = v.getId();
         if (id == View.NO_ID || (id >>> 24) == 0 || !io.github.igorcv88.oneuiliquidglass.glass.Tuning.get().iconTone) return false;
         try {
@@ -674,7 +674,8 @@ final class Foreground {
             }
         } else if (v instanceof ImageView && (chevrons.containsKey(v) || chevronId(v))) {
             changed += chevron((ImageView)v,swap,lightText)?1:0;
-        } else if (v instanceof ImageView && (glyphs.containsKey(v) || smallIcon(v))) {
+        } else if (v instanceof ImageView && !NotificationIconTreatment.managed((ImageView) v)
+                && (glyphs.containsKey(v) || smallIcon(v))) {
             // icontone turned off live restores the glyphs already swapped.
             changed += glyph((ImageView) v, swap && io.github.igorcv88.oneuiliquidglass.glass.Tuning.get().iconTone, lightText) ? 1 : 0;
         } else if (v instanceof ImageView && (((ImageView) v).getImageTintList() != null || swapped.containsKey(v))) {

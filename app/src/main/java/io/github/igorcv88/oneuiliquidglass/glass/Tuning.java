@@ -264,6 +264,8 @@ public final class Tuning {
     public final boolean headerTone;
     /** A notification's monochrome small icon follows the text's swapped tone (debug.oulg.icontone). */
     public final boolean iconTone;
+    /** Notification app icon source: off, system, verified originals, all. */
+    public final int iconMode;
     /**
      * LSPosed-only pop-ups take a veil measured from the backdrop under them, as shade cards do
      * (debug.oulg.popuptone, default 1; 0: the plain tint, white text over a white app).
@@ -435,6 +437,7 @@ public final class Tuning {
         textSwap = number("textswap", 1f) >= 1f;
         headerTone = number("headertone", 0f) >= 1f;
         iconTone = number("icontone", 1f) >= 1f;
+        iconMode = io.github.igorcv88.oneuiliquidglass.config.NotificationIconPolicy.mode(number("iconmode", 1f));
         popupTone = number("popuptone", 1f) >= 1f;
         popupLock = number("popuplock", 1f) >= 1f;
         orphanDraw = number("orphandraw", 1f) >= 1f;
@@ -544,7 +547,7 @@ public final class Tuning {
                 + " refract=" + refract + " ior=" + ior + " blur=" + blur + " sat=" + saturation
                 + " disp=" + dispersion + " hz=" + hz + " hzkg=" + keyguardHz + " tint=" + tintAlpha
                 + " semradius=" + semRadius + " semradiuslens=" + semRadiusLens + " sflens=" + sfLens + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " live=" + live + " liveradius=" + liveRadius + " liveshaderadius=" + liveShadeRadius + " liveoptics=" + liveOptics + " livesheen=" + liveSheen + " liveglint=" + liveGlint + " shadeglint=" + shadeGlint + " livelens=" + liveLens + " lensmaxage=" + lensMaxAge + " lenssettle=" + lensSettle + " lensgate=" + lensGate + " lenstransition=" + lensTransition + " kgblurpath=" + kgBlurPath + " shadeblurpath=" + shadeBlurPath + " shadefadecut=" + shadeFadeCut + " kgblurradius=" + kgBlurRadius + " pillglass=" + pillGlass + " pillblur=" + pillBlur + " kgoptics=" + kgOptics + " huoptics=" + huOptics + " kglens=" + kgLens + " shadetone=" + shadeTone + " shadeveil=" + shadeVeil + " shadeadaptive=" + shadeAdaptive + " shadecap=" + shadeCap + " shadelift=" + shadeLift + " veilmax=" + veilMax + " stylelo=" + styleLo + " stylehi=" + styleHi + " lightglass=" + lightGlass + " lighttone=" + Integer.toHexString(lightTone) + " lightedge=" + lightEdge + " lightoutline=" + lightOutline + " shadelightglass=" + shadeLightGlass + " shadedarkglass=" + shadeDarkGlass + " livedarkalpha=" + liveDarkAlpha + " livedarkfill=" + liveDarkFill + " liverim=" + liveRim + " kgdarkalpha=" + kgDarkAlpha + " kgdarkfill=" + kgDarkFill + " kgrim=" + kgRim + " kgglint=" + kgGlint + " textswap=" + textSwap + " headertone=" + headerTone + " icontone=" + iconTone + " popuptone=" + popupTone + " popuplock=" + popupLock + " orphandraw=" + orphanDraw + " shadescaleveil=" + shadeScaleVeil + " shadelocal=" + shadeLocal + " paneldim=" + panelDim + " panelblurcap=" + panelBlurCap + " panelnativegray=" + panelNativeGray + " panelcolor=" + Integer.toHexString(panelColor) + " sfoptics=" + sfOptics + " kgwinblur=" + kgWinBlur + " headergap=" + headerGap + " perf=" + perf + " trace=" + trace + " mediaart=" + mediaArt + " qsmediaart=" + qsMediaArt + " edgepremul=" + edgePremulMode
-                + " kgsharedoptics=" + kgSharedOptics + " popuplinegain=" + popupLineGain
+                + " iconmode=" + iconMode + " kgsharedoptics=" + kgSharedOptics + " popuplinegain=" + popupLineGain
                 + " kglinegain=" + lockscreenLineGain + " shadelinegain=" + shadeLineGain;
     }
 
