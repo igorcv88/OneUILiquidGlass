@@ -63,7 +63,7 @@ final class NotificationCompactIconHooks {
         }
         XC_MethodHook updated = new XC_MethodHook() {
             @Override protected void afterHookedMethod(MethodHookParam param) {
-                if (!(param.thisObject instanceof ImageView)) return;
+                if (!type.isInstance(param.thisObject) || !(param.thisObject instanceof ImageView)) return;
                 ImageView image = (ImageView) param.thisObject;
                 State state = states.get(image);
                 if (state == null) {
