@@ -50,6 +50,13 @@ and restores native ImageView-level colour filters to prevent them overriding th
 If no `ICON_TREAT_ROUTE`/`APPLIED` events appear, inspect `ICON_TREAT_ENTRY_PROBE` to identify
 the actual firmware field instead of adding speculative package/icon fallbacks.
 
+The follow-up physical trace identified the actual row as
+`com.android.systemui.statusbar.notification.row.ExpandableNotificationRow`, with
+`mEntry=false`, `getEntry=false` and an `mEntryAdapter` field. This is a different association
+model, so the next build reads the adapter and retrieves its `StatusBarNotification` via
+`getSbn()`/equivalent. If the adapter exists but does not expose the SBN as expected, the
+trace emits `ICON_TREAT_ADAPTER_PROBE` with adapter type and SBN member availability.
+
 ## Device validation before merge
 
 1. Use the default mode with an IconPack Studio setup. Check WhatsApp/ChatGPT/Gmail or any

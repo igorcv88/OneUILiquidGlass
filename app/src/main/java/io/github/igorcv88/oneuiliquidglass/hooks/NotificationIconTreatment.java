@@ -181,7 +181,7 @@ final class NotificationIconTreatment {
             }
             if (sbn == null || sbn.getNotification() == null) {
                 restore(); missingRow = new WeakReference<>(row);
-                skip("sbnUnavailable"); return;
+                skip("sbnUnavailable"); probeEntry(row); return;
             }
             missingRow.clear();
             // Retained rows/entries may receive a different Notification and small icon.
@@ -236,6 +236,10 @@ final class NotificationIconTreatment {
             Object value = callOrNull(row, name);
             if (value != null) return value;
         }
+        // One UI 9 uses an entry-adapter-backed row. The adapter itself exposes the SBN;
+        // the row no longer provides mEntry/getEntry, as confirmed by the device trace.
+        Object adapter = Reflect.read(row, "mEntryAdapter");
+        if (adapter != null) return adapter;
         return null;
     }
 
@@ -279,6 +283,22 @@ final class NotificationIconTreatment {
                 + " mEntry=" + (Reflect.field(row.getClass(), "mEntry") != null)
                 + " getEntry=" + (Reflect.method(row.getClass(), "getEntry") != null)
                 + " fields=" + names);
+        Object adapter = Reflect.read(row, "mEntryAdapter");
+        if (adapter != null) {
+            // Restricted to type/member names. An adapter's private fields may differ by build.
+            StringBuilder methods = new StringBuilder();
+            for (String name : SBN_METHODS) if (Reflect.method(adapter.getClass(), name) != null) {
+                if (methods.length() > 0) methods.append(',');
+                methods.append(name);
+            }
+            StringBuilder fields = new StringBuilder();
+            for (String name : SBN_FIELDS) if (Reflect.field(adapter.getClass(), name) != null) {
+                if (fields.length() > 0) fields.append(',');
+                fields.append(name);
+            }
+            Probe.log("ICON_TREAT_ADAPTER_PROBE", "type=" + adapter.getClass().getName()
+                    + " sbnMethods=" + methods + " sbnFields=" + fields);
+        }
     }
 
     private boolean allCandidatesGone() {

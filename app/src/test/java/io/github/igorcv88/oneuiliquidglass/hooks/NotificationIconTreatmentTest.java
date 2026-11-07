@@ -11,10 +11,14 @@ public final class NotificationIconTreatmentTest {
     private static final class GetterEntryRow {
         @SuppressWarnings("unused") private Object getNotificationEntry() { return "getter-entry"; }
     }
+    private static final class AdapterEntryRow {
+        @SuppressWarnings("unused") private final Object mEntryAdapter = "adapter-entry";
+    }
 
     @Test public void resolvesFirmwareEntryFallbacks() {
         assertEquals("samsung-entry", NotificationIconTreatment.findEntry(new SamsungEntryRow()));
         assertEquals("getter-entry", NotificationIconTreatment.findEntry(new GetterEntryRow()));
+        assertEquals("adapter-entry", NotificationIconTreatment.findEntry(new AdapterEntryRow()));
         assertNull(NotificationIconTreatment.findEntry(new Object()));
     }
 
