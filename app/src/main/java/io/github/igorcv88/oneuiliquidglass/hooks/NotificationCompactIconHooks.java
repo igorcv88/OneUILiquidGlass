@@ -203,6 +203,12 @@ final class NotificationCompactIconHooks {
             }
             // The system owns the status/shelf icon's foreground colour. Re-read its current tint
             // instead of pinning white (a black status bar over a light app must remain black).
+            if (v.getColorFilter() != null || v.getImageTintList() != null) {
+                // Samsung may tint the ImageView itself; its native tint must win, and will also
+                // follow future status-bar light/dark transitions without extra module writes.
+                if (installed.getColorFilter() != null) installed.clearColorFilter();
+                return;
+            }
             int nextInk = currentInk(v);
             if (nextInk != ink || installed.getColorFilter() == null) {
                 ink = nextInk;

@@ -1602,6 +1602,7 @@ public final class HeadsUpHooks {
         }
         int toneErrors;
         boolean shelfIconSurveyed;
+        int shelfIconSurveyAttempts;
         /**
          * The notification shelf in the expanded shade ("N more notifications" under a collapsed
          * stack) is not a row and keeps SystemUI's own blur, but sits among the cards: its text
@@ -1613,8 +1614,9 @@ public final class HeadsUpHooks {
                 if (Probe.trace && !shelfIconSurveyed) {
                     View root = row.get();
                     if (root instanceof ViewGroup) {
-                        shelfIconSurveyed = true;
-                        surveyShelfIcons(root, 0, new int[] {0});
+                        int[] count = {0};
+                        surveyShelfIcons(root, 0, count);
+                        shelfIconSurveyed = count[0] > 0 || ++shelfIconSurveyAttempts >= 3;
                     }
                 }
                 Tuning t = Tuning.get();
