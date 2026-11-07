@@ -75,7 +75,7 @@ public class LiveSurfaceHooksTest {
         assertTrue(site.hooked(ToastFactory.class, "createToast"));
         assertTrue(site.hooked(PluginInstance.class, "loadPlugin"));
         assertTrue(site.hooked(OngoingActivityController.class, "onEntryRemoved"));
-        assertFalse(site.hooked(OngoingActivityController.class, "onEntryUpdated"));
+        assertTrue(site.hooked(OngoingActivityController.class, "onEntryUpdated"));
         for (java.lang.reflect.Method m : site.hooks.keySet()) {
             if (ToastHooks.PRESENTER.equals(m.getDeclaringClass().getName()))
                 assertTrue("only scoped presenter lifecycle", m.getName().equals("show") || m.getName().equals("hide"));
@@ -90,6 +90,17 @@ public class LiveSurfaceHooksTest {
         assertEquals(1, controller.removed);
         assertTrue(LiveRemovalDiagnostics.removalMethod("onEntryRemoved"));
         assertFalse(LiveRemovalDiagnostics.removalMethod("onEntryUpdated"));
+    }
+
+    @Test public void admissionProbeDoesNotChangeSamsungLifecycle() throws Exception {
+        OngoingActivityController controller = new OngoingActivityController();
+        site.call(controller, "onEntryUpdated", new Object());
+        assertTrue(site.hooked(OngoingActivityController.class, "onEntryUpdated"));
+        assertTrue(LiveAdmissionDiagnostics.interesting("com.sec.android.app.clockpackage"));
+        assertTrue(LiveAdmissionDiagnostics.interesting("com.igcv.gradus"));
+        assertFalse(LiveAdmissionDiagnostics.interesting("com.example.other"));
+        assertEquals("com.igcv.gradus", LiveAdmissionDiagnostics.packageFromKey("0|com.igcv.gradus|998|null|10432"));
+        assertNull(LiveAdmissionDiagnostics.packageFromKey("malformed"));
     }
 
     @Test public void chipBindThroughTheHooksGetsGlassAndConfigStarts() throws Exception {
