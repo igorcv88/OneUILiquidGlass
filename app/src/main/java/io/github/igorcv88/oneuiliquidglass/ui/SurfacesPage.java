@@ -255,7 +255,8 @@ public final class SurfacesPage implements Page {
     private Set<String> favorites() {
         Set<String> out = new LinkedHashSet<>();
         for (Controls.Control c : Controls.all())
-            if (c.on(surface) && Controls.editable(c.key) && host.model().ui.getBoolean("favorite." + c.key, false)) out.add(c.key);
+            if (c.on(surface) && !IconsPage.isIconKey(c.key) && Controls.editable(c.key)
+                    && host.model().ui.getBoolean("favorite." + c.key, false)) out.add(c.key);
         return out;
     }
 
@@ -316,7 +317,7 @@ public final class SurfacesPage implements Page {
         }
         list.addView(Ui.section(a, t, a.getString(R.string.surface_main)));
         List<String> primary = new ArrayList<>();
-        for (String k : Controls.primary(surface, mode)) if (!placed.contains(k)) primary.add(k);
+        for (String k : Controls.primary(surface, mode)) if (!placed.contains(k) && !IconsPage.isIconKey(k)) primary.add(k);
         list.addView(card(primary, placed), Ui.match());
 
         if (surface == Controls.Surface.SHADE && !placed.contains("mediaart")) {
@@ -351,7 +352,8 @@ public final class SurfacesPage implements Page {
             if (section == Controls.Section.LENS_TUNING && mode != Mode.DYNAMIC_LENS) continue;
             List<String> std = new ArrayList<>(), adv = new ArrayList<>();
             for (Controls.Control c : Controls.all()) {
-                if (c.section != section || !c.on(surface) || !Controls.editable(c.key) || placed.contains(c.key)) continue;
+                if (c.section != section || !c.on(surface) || !Controls.editable(c.key)
+                        || placed.contains(c.key) || IconsPage.isIconKey(c.key)) continue;
                 if (c.tier == Controls.Tier.STANDARD) std.add(c.key);
                 else if (c.tier == Controls.Tier.ADVANCED) adv.add(c.key);
             }
@@ -385,6 +387,7 @@ public final class SurfacesPage implements Page {
         List<String> technical = new ArrayList<>();
         for (Controls.Control c : Controls.all())
             if (c.on(surface) && Controls.editable(c.key) && !placed.contains(c.key)
+                    && !IconsPage.isIconKey(c.key)
                     && (c.section == Controls.Section.TECHNICAL || c.tier == Controls.Tier.TECHNICAL))
                 technical.add(c.key);
         if (!technical.isEmpty()) {
@@ -454,7 +457,7 @@ public final class SurfacesPage implements Page {
             List<String> std = new ArrayList<>(), adv = new ArrayList<>();
             for (String k : (String[]) g[2]) {
                 Controls.Control c = Controls.get(k);
-                if (c == null || !Controls.editable(k)) continue;
+                if (c == null || !Controls.editable(k) || IconsPage.isIconKey(k)) continue;
                 (c.tier == Controls.Tier.STANDARD ? std : adv).add(k);
             }
             if (std.isEmpty() && adv.isEmpty()) continue;
@@ -482,7 +485,8 @@ public final class SurfacesPage implements Page {
         List<String> remaining = new ArrayList<>();
         for (Controls.Control c : Controls.all())
             if (c.section == Controls.Section.QUICK_SETTINGS && c.on(surface)
-                    && Controls.editable(c.key) && !placed.contains(c.key)) remaining.add(c.key);
+                    && Controls.editable(c.key) && !placed.contains(c.key)
+                    && !IconsPage.isIconKey(c.key)) remaining.add(c.key);
         if (!remaining.isEmpty()) {
             String id = surface.id + ".qs.remaining";
             View[] d = Ui.disclosure(a, t, Icon.SHADE, a.getString(R.string.surface_other_settings),
@@ -519,7 +523,7 @@ public final class SurfacesPage implements Page {
 
     private void addRow(LinearLayout parent, String key, Set<String> placed) {
         Controls.Control c = Controls.get(key);
-        if (c == null || !Controls.editable(key)) return;
+        if (c == null || !Controls.editable(key) || IconsPage.isIconKey(key)) return;
         if (parent.getChildCount() > 0 && parent.getChildAt(parent.getChildCount() - 1) instanceof ControlRow)
             parent.addView(Ui.divider(host.activity(), t, t.dp(20)));
         ControlRow r = new ControlRow(host.activity(), host, c, surface);
@@ -532,7 +536,8 @@ public final class SurfacesPage implements Page {
         List<String> keys = new ArrayList<>();
         boolean shared = false;
         for (Controls.Control c : Controls.all())
-            if (c.on(surface) && Controls.editable(c.key) && c.tier != Controls.Tier.TECHNICAL) {
+            if (c.on(surface) && Controls.editable(c.key) && c.tier != Controls.Tier.TECHNICAL
+                    && !IconsPage.isIconKey(c.key)) {
                 keys.add(c.key);
                 shared |= c.surfaces.size() > 1;
             }

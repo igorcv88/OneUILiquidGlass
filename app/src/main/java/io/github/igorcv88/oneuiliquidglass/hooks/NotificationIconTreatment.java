@@ -13,7 +13,6 @@ import android.graphics.ColorFilter;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffColorFilter;
 import android.graphics.drawable.AdaptiveIconDrawable;
-import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.Handler;
@@ -60,8 +59,6 @@ final class NotificationIconTreatment {
     private static final java.util.Set<String> reported = new java.util.HashSet<>();
     private static final Set<String> entryProbed = Collections.synchronizedSet(new java.util.HashSet<>());
     private static final int SIZE = 128, SAMPLE = 24;
-    /** The Samsung icon slot remains untouched; only its artwork is inset. */
-    private static final float GLYPH_FRACTION = 0.76f;
     private static final int CACHE_LIMIT = 48;
     private static final java.util.LinkedHashMap<String, Resolved> sourceCache =
             new java.util.LinkedHashMap<String, Resolved>(CACHE_LIMIT, .75f, true) {
@@ -114,6 +111,11 @@ final class NotificationIconTreatment {
             color = ink;
             installed.setColorFilter(new PorterDuffColorFilter(ink, PorterDuff.Mode.SRC_IN));
             v.invalidate();
+        }
+
+        void scale(float fraction) {
+            if (installed instanceof NotificationGlyphDrawable)
+                ((NotificationGlyphDrawable) installed).scale(fraction);
         }
 
         void restore() {
@@ -212,7 +214,11 @@ final class NotificationIconTreatment {
         }
         if (resolved == null) { if (!pending) skip("noSource"); return; }
         if (resolved.bitmap == null) { skip("existingMono"); return; }
-        int ink = lightBackdrop ? Color.BLACK : Color.WHITE;
+        io.github.igorcv88.oneuiliquidglass.glass.Tuning tuning = io.github.igorcv88.oneuiliquidglass.glass.Tuning.get();
+        int ink = tuning.notificationIconInkMode == 1 ? tuning.notificationIconFixedInk
+                : tuning.notificationIconInkMode == 2
+                    ? (lightBackdrop ? tuning.notificationIconLightInk : tuning.notificationIconDarkInk)
+                    : (lightBackdrop ? Color.BLACK : Color.WHITE);
         boolean stale = false;
         for (Lease l : active) if (!l.current()) { l.restore(); stale = true; }
         if (stale) active.removeIf(l -> !l.current());
@@ -223,11 +229,15 @@ final class NotificationIconTreatment {
             if (image == null || !image.isAttachedToWindow() || image.getDrawable() == null) continue;
             Lease found = null;
             for (Lease l : active) if (l.view.get() == image) { found = l; break; }
-            if (found != null) { found.tone(ink); continue; }
+            if (found != null) {
+                found.tone(ink);
+                found.scale(tuning.notificationIconScale);
+                continue;
+            }
             // A new SystemUI rebind: foreground's old swapped record must not leak into our lease.
             Foreground.glyph(image, false, false);
-            BitmapDrawable replacement = new BitmapDrawable(image.getResources(), resolved.bitmap);
-            replacement.mutate();
+            NotificationGlyphDrawable replacement = new NotificationGlyphDrawable(resolved.bitmap,
+                    tuning.notificationIconScale);
             replacement.setColorFilter(new PorterDuffColorFilter(ink, PorterDuff.Mode.SRC_IN));
             active.add(new Lease(image, replacement, ink));
             if (Probe.trace) Probe.log("ICON_TREAT_APPLIED", "pkg=" + pkg + " source=" + resolved.source
@@ -508,8 +518,8 @@ final class NotificationIconTreatment {
         if (original == null) return null;
         try {
             Bitmap scaled = Bitmap.createBitmap(SIZE, SIZE, Bitmap.Config.ARGB_8888);
-            float factor = Math.min(SIZE * GLYPH_FRACTION / original.getWidth(),
-                    SIZE * GLYPH_FRACTION / original.getHeight());
+            float factor = Math.min(SIZE / (float) original.getWidth(),
+                    SIZE / (float) original.getHeight());
             float width = original.getWidth() * factor, height = original.getHeight() * factor;
             Canvas canvas = new Canvas(scaled);
             canvas.drawBitmap(original, null, new android.graphics.RectF((SIZE - width) / 2,
@@ -525,22 +535,7 @@ final class NotificationIconTreatment {
         if (d == null) return null;
         int[] px = pixels(d, SIZE);
         if (px == null || requireSmallSilhouette && !silhouette(px)) return null;
-        // Verify the original silhouette before resizing, so inset transparency does not make
-        // an opaque launcher disc look like a transparent notification symbol.
-        Bitmap original = whiteMask(px, SIZE);
-        try { return inset(original); }
-        finally { original.recycle(); }
-    }
-
-    private static Bitmap inset(Bitmap original) {
-        Bitmap result = Bitmap.createBitmap(SIZE, SIZE, Bitmap.Config.ARGB_8888);
-        float extent = SIZE * GLYPH_FRACTION;
-        float pad = (SIZE - extent) / 2f;
-        android.graphics.Paint paint = new android.graphics.Paint(
-                android.graphics.Paint.ANTI_ALIAS_FLAG | android.graphics.Paint.FILTER_BITMAP_FLAG);
-        new Canvas(result).drawBitmap(original, null,
-                new android.graphics.RectF(pad, pad, SIZE - pad, SIZE - pad), paint);
-        return result;
+        return whiteMask(px, SIZE);
     }
 
     private static Bitmap whiteMask(Bitmap source) {

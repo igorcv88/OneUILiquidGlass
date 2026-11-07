@@ -479,4 +479,10 @@
     <string name="preset_error_type">O valor de %1$s deve ser texto.</string>
     <string name="preset_error_value">O valor de %1$s é inválido.</string>
     <string name="error_invalid_setting">Não foi possível validar ou salvar o valor de %1$s.</string>
+    <string name="nav_icons">Ícones</string>
+    <string name="icons_notifications">Ícones das notificações</string>
+    <string name="icons_status_bar">Barra de status</string>
+    <string name="icons_quick_settings">Ícones da Central de controle</string>
+    <string name="icons_compatibility">Compatibilidade</string>
+    <string name="icons_library">Biblioteca e ícones pendentes</string>
 </resources>

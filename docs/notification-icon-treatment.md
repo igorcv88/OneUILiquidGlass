@@ -75,3 +75,31 @@ trace emits `ICON_TREAT_ADAPTER_PROBE` with adapter type and SBN member availabi
 Known limit: there is no Android-wide public flag proving a launcher icon came from IconPack
 Studio. Mode 2 uses a deliberately strict visual match and will skip false negatives. The safe
 default never attempts to alter user-installed app icons.
+
+## Separate icon controls (07/11 follow-up)
+
+The new Icons tab owns all icon-specific controls. The default notification card glyph scale
+is 0.76 and the separate status-bar *treated glyph* scale is 0.88, between the original
+0.76 and the stock full-size drawing. Neither property affects native preserved icons,
+and neither changes the width of a Samsung status-bar icon slot. Popup, lockscreen and
+shade use one notification-card size. The status-bar palette defaults to the native Samsung
+light/dark receiver; custom fixed and two-color modes are opt-in. The card palette defaults
+to the existing adaptive black/white behavior.
+
+For One UI 9's maximum count, the implementation follows the hook signatures documented
+in [OneUIX StatusBar.kt](https://github.com/SoClear/OneUIX/blob/main/hook/src/main/java/io/github/soclear/oneuix/hook/systemui/statusbar/StatusBar.kt):
+`NotificationIconContainer.shouldForceOverflow(int,float,int)` and the status-bar-only
+`NotificationIconContainerStatusBarViewModel.maxIcons`. This is an independent Java
+implementation using those Samsung integration points, with no OneUIX source copied.
+Unlike OneUIX's broader feature, this PR intentionally does **not** alter the separate
+FaceWidget lockscreen count. Value 0 preserves Samsung's default. Configuring a nonzero
+limit may require restarting SystemUI so the ViewModel constructor runs again. Actual
+capacity still depends on the reserved width around the camera, clock and system icons.
+
+Device tests: compare the treated and preserved app icons in the status bar at 0.88;
+change each size independently; test status overflow at stock/4/6/10; verify no lockscreen
+shelf regression; switch custom status colors over light/dark backgrounds, checking clock,
+battery, Wi-Fi/mobile signal and notification glyphs separately. On One UI 9 the battery
+may be a Compose view rather than a legacy BatteryMeterView; confirm coverage rather than
+assuming the color hook applies. Check `ICON_TREAT_STATUS_LIMIT`,
+`ICON_TREAT_STATUS_INK` and `ICON_TREAT_COMPACT_HOOK` events when tracing is enabled.

@@ -17,6 +17,11 @@ final class ControlDescriptions {
             case "huoptics": return R.string.control_description_huoptics;
             case "hz": return R.string.control_description_hz;
             case "hzkg": return R.string.control_description_hzkg;
+            case "iconcardsize": return R.string.control_description_iconcardsize;
+            case "icondarkink": return R.string.control_description_icondarkink;
+            case "iconfixedink": return R.string.control_description_iconfixedink;
+            case "iconinkmode": return R.string.control_description_iconinkmode;
+            case "iconlightink": return R.string.control_description_iconlightink;
             case "iconmode": return R.string.control_description_iconmode;
             case "icontone": return R.string.control_description_icontone;
             case "ior": return R.string.control_description_ior;
@@ -163,6 +168,12 @@ final class ControlDescriptions {
             case "shadelocal": return R.string.control_description_shadelocal;
             case "shadescaleveil": return R.string.control_description_shadescaleveil;
             case "shadetone": return R.string.control_description_shadetone;
+            case "statusdarkink": return R.string.control_description_statusdarkink;
+            case "statusfixedink": return R.string.control_description_statusfixedink;
+            case "statusiconsize": return R.string.control_description_statusiconsize;
+            case "statusinkmode": return R.string.control_description_statusinkmode;
+            case "statuslightink": return R.string.control_description_statuslightink;
+            case "statusmaxicons": return R.string.control_description_statusmaxicons;
             case "stylehi": return R.string.control_description_stylehi;
             case "stylelo": return R.string.control_description_stylelo;
             case "textswap": return R.string.control_description_textswap;

@@ -10,11 +10,11 @@ for line in text.splitlines():
  if key in rows: continue
  if key=='sf.optics': default='0'; domain='readonly'; desc='Indicador de versão; não comprova reescrita ou execução do shader.'
  rows[key]=(default,domain,desc or domain)
-assert len(rows)==161,len(rows)
+assert len(rows)==172,len(rows)
 # Literal bounds follow Tuning; native limits are deliberately conservative UI limits, not C clamps.
 bools=set('livelens shadeblur sfrefract liveblur kgwinblur kgsharedoptics pillglass textswap headertone icontone popuptone popuplock orphandraw shadelocal panelnativegray perf trace sf.norewrite sf.kgfixedrim qs.tilelight qs.tiledark qs.hideoffdiscs'.split())
 ints=set('qs.edgeblur rimhz hz hzkg tint lensmaxage lenssettle lenstransition liveradius liveshaderadius semradius semradiuslens semalpha kgblurpath shadeblurpath kgblurradius pillblur kgoptics huoptics livedarkalpha livedarkfill kgdarkalpha kgdarkfill shadescaleveil panelblurcap sf.taps sf.kgtaps edgepremul'.split())
-ints.add('iconmode')
+ints.update(('iconmode','statusmaxicons','iconinkmode','statusinkmode'))
 enums={'qs.lightstyle':'obsidian,light','backdrop':'auto,hybrid,capture,grid,off','profile':'lens,snell','lensgate':'directional,conservative','semcurve':'auto,spatial,dim,ultra,none','semshape':'auto,single,path,four,none','shadetone':'0,1,2,3','sf.debug':'0,1,2'}
 native={'core':(0,128),'taps':(1,64),'ramp':(.1,4),'hubloom':(0,2),'edgeblur':(0,48),'hublur':(0,2),'hubodylens':(0,.15),'hurefract':(0,1.2),'kgcore':(0,128),'kgtaps':(1,64),'kgramp':(.1,4),'kgsat':(0,2.5),'kgtone':(0,1),'kgrim':(0,2),'kgspec':(0,1),'kgflat':(0,1),'kglevel':(0,1),'kgcool':(0,1),'kgtilt':(0,3.141593),'kgline':(0,2),'kgcorecap':(0,128),'kgflatcap':(0,1),'kgcoredim':(0,1),'kgglow':(0,2),'kggradient':(0,1),'kgband':(0,1),'kgbodylens':(0,.15),'kgblurexp':(1,4),'kgedgeblur':(0,48),'kgblur':(0,2),'kgrefract':(0,1.2),'shadecap':(.2,1),'shadelift':(0,.8),'hulight':(0,1),'kglight':(0,1),'kgdepth':(1.5,48),'shadelight':(0,1),'qslens':(0,.5),'qsbody':(0,1),'qsdepth':(1.5,48),'qslight':(0,2)}
 native['kgfixedrim']=(0,1)
@@ -33,11 +33,17 @@ titles.update({'panelblurcap':'Limite de desfoque do fundo','panelnativegray':'V
                'qs.lightglasscolor':'Cor do vidro das cápsulas claras',
                'qs.lightoptics':'Iluminação da lente sobre fundo claro'})
 titles['iconmode']='Ícones de notificações'
+titles.update({'iconcardsize':'Tamanho dos ícones das notificações','statusiconsize':'Tamanho dos ícones da barra de status',
+               'statusmaxicons':'Máximo de ícones visíveis','iconinkmode':'Cor dos ícones nas notificações',
+               'iconfixedink':'Cor fixa nas notificações','iconlightink':'Ícones sobre fundo claro',
+               'icondarkink':'Ícones sobre fundo colorido','statusinkmode':'Cor da barra de status',
+               'statusfixedink':'Cor fixa da barra de status','statuslightink':'Barra de status sobre fundo claro',
+               'statusdarkink':'Barra de status sobre fundo colorido'})
 q=lambda x:json.dumps(str(x),ensure_ascii=False)
 lines=[]
 for key,(default,domain,desc) in rows.items():
  sf=key.startswith('sf.') and key!='sf.optics'
- typ='READONLY' if key=='sf.optics' else 'BOOLEAN' if key in bools else 'ENUM' if key in enums else 'RGB' if key in ('lighttone','qs.darkcolor','qs.lightcolor','qs.lightglasscolor','qs.tilelighton','qs.tilelightoff','qs.tilelightonink','qs.tilelightoffink','qs.tiledarkon','qs.tiledarkoff','qs.tiledarkonink','qs.tiledarkoffink','panelcolor','qs.sliderlightcolor','qs.sliderdarkcolor') else 'INT' if key in ints else 'FLOAT'
+ typ='READONLY' if key=='sf.optics' else 'BOOLEAN' if key in bools else 'ENUM' if key in enums else 'RGB' if key in ('lighttone','qs.darkcolor','qs.lightcolor','qs.lightglasscolor','qs.tilelighton','qs.tilelightoff','qs.tilelightonink','qs.tilelightoffink','qs.tiledarkon','qs.tiledarkoff','qs.tiledarkonink','qs.tiledarkoffink','panelcolor','qs.sliderlightcolor','qs.sliderdarkcolor','iconfixedink','iconlightink','icondarkink','statusfixedink','statuslightink','statusdarkink') else 'INT' if key in ints else 'FLOAT'
  default=default.replace('`','').split(' ')[0]
  # Live compositor inputs must be accepted by the app's fixed numeric helper protocol.
  # Validate at the catalogue boundary so regenerated Java cannot reintroduce ".90".
@@ -50,13 +56,15 @@ for key,(default,domain,desc) in rows.items():
    m=re.search(r'(-?\d+(?:\.\d+)?)[–−](\d+(?:\.\d+)?)',domain)
    if m:lo,hi=map(float,m.groups())
    elif key=='kglens':lo,hi=-1,1.2
+   elif key=='statusmaxicons':lo,hi=0,10
+   elif key in ('iconinkmode','statusinkmode'):lo,hi=0,2
   if key=='kglens': lo,hi=-1,1.2
   if key=='liveradius': default='80'
   if key=='liveshaderadius': default='60'
  scope='shade' if key.startswith('qs.') else 'headsup' if key in ('popuplock','popuplinegain') else 'shade' if key=='orphandraw' else 'keyguard' if key.startswith(('kg','pill','sf.kg')) or key=='hzkg' else 'shade' if key.startswith(('shade','sf.shade','sf.qs')) or key in ('headertone','paneldim','panelblurcap','panelnativegray','panelcolor') else 'headsup' if key.startswith(('hu','sf.hu')) or key in ('liveglint','liverim','livedarkalpha','livedarkfill','sf.core','sf.taps','sf.ramp','sf.edgeblur') else 'all'
  group='Central de controle' if key.startswith('qs.') else 'Compositor' if sf else 'Diagnóstico' if key in ('sf.optics','trace','perf','edgepremul') else 'Captura' if key in 'backdrop profile lens refract rimhz rimblur ior blur sat disp hz hzkg tint livelens lensmaxage lenssettle lenstransition lensgate lensregiondiff'.split() else 'Cor e contraste' if key in 'shadetone shadecap shadelift veilmax stylelo stylehi lightglass lighttone shadelightglass livedarkalpha livedarkfill kgdarkalpha kgdarkfill textswap headertone icontone popuptone popuplock orphandraw shadescaleveil shadelocal paneldim panelnativegray panelcolor semcurve semalpha'.split() else 'Bordas e luz' if key in 'liveoptics livesheen liveglint shadeglint liverim kgrim kgglint lightedge lightoutline sflens kglens kgoptics huoptics kgsharedoptics popuplinegain kglinegain shadelinegain'.split() else 'Blur e material'
  if key=='shadedarkglass': group='Cor e contraste'
- if key=='iconmode': group='Cor e contraste'
+ if key=='iconmode' or key.startswith(('icon','statusicon','statusmax','statusfixed','statuslight','statusdark')): group='Ícones'
  if key=='mediaart': scope='shade'
  unit='ms' if 'ms' in domain else 'Hz' if 'Hz' in domain else 'px' if 'px' in domain or sf and ('core' in key) else 'dp' if key=='headergap' else 'rad' if key=='sf.kgtilt' else ''
  advanced=sf or group in ('Captura','Diagnóstico') or key in ('semcurve','semshape','kgblurpath','shadeblurpath','kgwinblur','huoptics','kgsharedoptics')

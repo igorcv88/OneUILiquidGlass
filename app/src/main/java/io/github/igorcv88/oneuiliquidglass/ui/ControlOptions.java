@@ -10,6 +10,8 @@ final class ControlOptions {
         switch (value) {
             case "Acompanha o cartão durante gestos": return R.string.control_option_3c5d28cf50f3;
             case "Adaptativa": return R.string.control_option_8d954776f1cd;
+            case "Adaptativa original": return R.string.control_option_0a0e3b18cbfb;
+            case "Adaptação Samsung": return R.string.control_option_a33344113b2b;
             case "Automática": return R.string.control_option_20ec175d596a;
             case "Automático": return R.string.control_option_c9c992be184b;
             case "Caminho antigo; pode atrasar": return R.string.control_option_ea8c83e1957a;
@@ -18,9 +20,13 @@ final class ControlOptions {
             case "Captura completa": return R.string.control_option_78c9135a6847;
             case "Captura só a faixa da borda": return R.string.control_option_5f086ed5c78c;
             case "Contorno": return R.string.control_option_4e1de10ed349;
+            case "Cor fixa personalizada": return R.string.control_option_308ef5ac8d40;
+            case "Cores independentes para fundo claro e escuro": return R.string.control_option_e03b6581feae;
             case "Desativado": return R.string.control_option_8809a6227cfb;
             case "Desfoque mais largo e cores mais vivas": return R.string.control_option_9c6166ed846c;
             case "Desligada": return R.string.control_option_164bf4ddd36b;
+            case "Duas cores personalizadas": return R.string.control_option_ed7c90e94c1f;
+            case "Escolhe uma cor para fundo claro e outra para colorido": return R.string.control_option_408f8a407d99;
             case "Escurecida": return R.string.control_option_bc7b88d5097a;
             case "Espacial": return R.string.control_option_df4175832ef6;
             case "Exige a lente dinâmica": return R.string.control_option_5c59ae60921b;
@@ -37,6 +43,7 @@ final class ControlOptions {
             case "Lente suave": return R.string.control_option_c908bfdb54ef;
             case "Luminância da borda": return R.string.control_option_18f5e7ca18f6;
             case "Mais seguro, some com mais frequência": return R.string.control_option_580a7b605fb0;
+            case "Mantém a cor automática atual do sistema": return R.string.control_option_d0d686e5e4d9;
             case "Mantém os ícones como o sistema os desenhou": return R.string.control_option_b6339a07c37d;
             case "Mapa de tons da lente": return R.string.control_option_26f136eba6ff;
             case "Mapa verde da luz local na borda do bloqueio": return R.string.control_option_d08dd5f2deae;
@@ -56,6 +63,7 @@ final class ControlOptions {
             case "Padrão: preserva os aplicativos do usuário e seus packs": return R.string.control_option_bc563cb30bb5;
             case "Para comparar no aparelho": return R.string.control_option_efd3e6962023;
             case "Pode atrasar atrás do movimento": return R.string.control_option_cb302177b476;
+            case "Preto ou branco conforme o fundo, como atualmente": return R.string.control_option_797f1acc98bc;
             case "Qualquer toque": return R.string.control_option_5e752f3cd7ac;
             case "Quatro cantos": return R.string.control_option_5a83874989ff;
             case "Raio único": return R.string.control_option_808eb0b380d3;
@@ -64,6 +72,7 @@ final class ControlOptions {
             case "Sem amostragem": return R.string.control_option_b21f94257814;
             case "Sem forma": return R.string.control_option_787bedf67271;
             case "Sem proteção": return R.string.control_option_9af72f16deab;
+            case "Sistema": return R.string.control_option_c004160342cd;
             case "Sistema e originais confirmados": return R.string.control_option_340a3940c102;
             case "Sistema e serviços": return R.string.control_option_04ffe2381fff;
             case "Somente o desfoque do sistema": return R.string.control_option_655a7c7b8a0f;
@@ -72,6 +81,7 @@ final class ControlOptions {
             case "Todos": return R.string.control_option_a4114a83f4c6;
             case "Trata aplicativos comuns só quando o ícone exibido corresponde ao original": return R.string.control_option_84a1c49268ae;
             case "Ultra": return R.string.control_option_50050d5b621c;
+            case "Uma cor para todos os fundos": return R.string.control_option_fa23538ab231;
             case "Vidro padrão sem captura": return R.string.control_option_d20532b2986d;
             case "Véu fixo": return R.string.control_option_d7f8ab68ea2b;
             default: return 0;

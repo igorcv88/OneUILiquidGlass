@@ -14,6 +14,8 @@ final class ControlTitles {
             case "Alcance da luz dinâmica": return R.string.control_title_1a9d1f6ff979;
             case "Amostras do bloqueio": return R.string.control_title_9cbee42ce9d4;
             case "Amostras do pop-up": return R.string.control_title_e8d1e327dbeb;
+            case "Barra de status sobre fundo claro": return R.string.control_title_2c9365fef254;
+            case "Barra de status sobre fundo colorido": return R.string.control_title_de327df14533;
             case "Borda aditiva (compatibilidade P3)": return R.string.control_title_fe0c016c9945;
             case "Brilho do vidro escuro": return R.string.control_title_bf8389203ea5;
             case "Brilho especular": return R.string.control_title_f40464148fea;
@@ -26,11 +28,15 @@ final class ControlTitles {
             case "Contorno sobre fundo colorido": return R.string.control_title_b11c820a9f04;
             case "Contraste estável": return R.string.control_title_0b06eeda0ca8;
             case "Contraste medido no pop-up": return R.string.control_title_499d0bae04fb;
+            case "Cor da barra de status": return R.string.control_title_fb5a30ad181f;
             case "Cor do fundo da central": return R.string.control_title_182b2b4eb1bf;
             case "Cor do tom sobre fundo claro": return R.string.control_title_f506051bb466;
             case "Cor do vidro claro": return R.string.control_title_5e7c8fc5bf6b;
             case "Cor do vidro · fundo claro": return R.string.control_title_8446f961d406;
             case "Cor do véu escuro (descontinuado)": return R.string.control_title_2e9f89865f0a;
+            case "Cor dos ícones nas notificações": return R.string.control_title_2d57baa7425d;
+            case "Cor fixa da barra de status": return R.string.control_title_2bf54afbab32;
+            case "Cor fixa nas notificações": return R.string.control_title_2430177f4c6a;
             case "Corte do desfoque ao sumir": return R.string.control_title_4e96aab8ce76;
             case "Curva de cor do sistema": return R.string.control_title_4ad715209c69;
             case "Curva de destaque": return R.string.control_title_ee584b937380;
@@ -97,6 +103,7 @@ final class ControlTitles {
             case "Modelo de refração": return R.string.control_title_006548b15c01;
             case "Modo de reescrita": return R.string.control_title_ceaef40ab9b4;
             case "Multiplicador físico": return R.string.control_title_6a5669f01728;
+            case "Máximo de ícones visíveis": return R.string.control_title_a2faa45a9b05;
             case "Nível da uniformidade": return R.string.control_title_203fe4f25f20;
             case "Ocultar a faixa em": return R.string.control_title_b89e7df74a83;
             case "Opacidade da capa de mídia": return R.string.control_title_6e897db6ffb5;
@@ -125,6 +132,8 @@ final class ControlTitles {
             case "Saturação": return R.string.control_title_23907232c21c;
             case "Saturação da captura": return R.string.control_title_76f1a4366eb4;
             case "Sombra da borda no vidro claro": return R.string.control_title_5df7b3c6b57c;
+            case "Tamanho dos ícones da barra de status": return R.string.control_title_d6218cd33215;
+            case "Tamanho dos ícones das notificações": return R.string.control_title_6fb27e5b7855;
             case "Teto do desfoque interno": return R.string.control_title_936eb873bedb;
             case "Texto adaptativo": return R.string.control_title_68e6ea868975;
             case "Tinta de diagnóstico": return R.string.control_title_06a0b9a00436;
@@ -147,6 +156,8 @@ final class ControlTitles {
             case "Ícone desligado · fundo colorido": return R.string.control_title_2755ba3ed45e;
             case "Ícone ligado · fundo claro": return R.string.control_title_99508c52e4b4;
             case "Ícone ligado · fundo colorido": return R.string.control_title_8f72472bf1f8;
+            case "Ícones sobre fundo claro": return R.string.control_title_df08262ee913;
+            case "Ícones sobre fundo colorido": return R.string.control_title_be57a26ad171;
             case "Índice de refração": return R.string.control_title_f2f3c60c5911;
             case "Óptica da Now Bar (comparação)": return R.string.control_title_1cb1cc084b68;
             default: return 0;

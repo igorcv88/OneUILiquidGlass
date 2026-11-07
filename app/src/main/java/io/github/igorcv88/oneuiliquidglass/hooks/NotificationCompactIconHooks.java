@@ -5,7 +5,6 @@ import android.content.Context;
 import android.graphics.Color;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffColorFilter;
-import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.Handler;
 import android.os.Looper;
@@ -16,6 +15,7 @@ import android.view.ViewTreeObserver;
 import android.widget.ImageView;
 
 import java.lang.ref.WeakReference;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.Collections;
 import java.util.Set;
@@ -77,6 +77,112 @@ final class NotificationCompactIconHooks {
         hook(type, "setNotification", updated);
         hook(type, "set", updated);
         hook(type, "onAttachedToWindow", updated);
+        installStatusLimit();
+        installStatusInk();
+    }
+
+    /** Leave native light/dark transitions untouched unless the user selects a custom palette.
+     * Apply at Samsung's DarkReceiver boundary, before the clock, battery, connectivity and
+     * notification views each use the color. Missing OEM classes simply retain their defaults. */
+    private void installStatusInk() {
+        String[] names = {"com.android.systemui.statusbar.policy.QSClockIndicatorView",
+                "com.android.systemui.statusbar.policy.Clock",
+                "com.android.systemui.battery.BatteryMeterView",
+                "com.android.systemui.statusbar.StatusBarWifiView",
+                "com.android.systemui.statusbar.StatusBarMobileView", ICON_VIEW};
+        for (String name : names) {
+            Class<?> type;
+            try { type = Class.forName(name, false, loader); }
+            catch (ClassNotFoundException | LinkageError ignored) { continue; }
+            hook(type, "onDarkChanged", new XC_MethodHook() {
+                @Override protected void beforeHookedMethod(MethodHookParam p) {
+                    if (!enabled.getAsBoolean() || !(p.thisObject instanceof View)
+                            || !inStatusBar((View) p.thisObject)) return;
+                    Tuning tuning = Tuning.get();
+                    if (tuning.statusIconInkMode == 0) return;
+                    if (p.args.length != 3 || !(p.args[1] instanceof Float)
+                            || !(p.args[2] instanceof Integer)) return;
+                    boolean lightBackdrop = ((Float) p.args[1]) >= .5f;
+                    int color = tuning.statusIconInkMode == 1 ? tuning.statusIconFixedInk
+                            : lightBackdrop ? tuning.statusIconLightInk : tuning.statusIconDarkInk;
+                    p.args[2] = color;
+                    if (Probe.trace) Probe.log("ICON_TREAT_STATUS_INK", "class=" + type.getSimpleName()
+                            + " mode=" + tuning.statusIconInkMode + " color=" + Integer.toHexString(color));
+                }
+            });
+        }
+    }
+
+    private boolean inStatusBar(View target) {
+        View v = target;
+        for (int depth = 0; v != null && depth < 14; depth++) {
+            String n = v.getClass().getName();
+            if (n.contains("PhoneStatusBarView") || n.contains("CollapsedStatusBarView")) return true;
+            int id = v.getId();
+            if (id != View.NO_ID && id != 0) {
+                try {
+                    String resource = v.getResources().getResourceEntryName(id);
+                    if (resource.equals("status_bar") || resource.equals("status_bar_contents")) return true;
+                } catch (android.content.res.Resources.NotFoundException ignored) { }
+            }
+            ViewParent parent = v.getParent();
+            v = parent instanceof View ? (View) parent : null;
+        }
+        return false;
+    }
+
+    /** One UI 9 uses shouldForceOverflow(int,float,int) plus a Compose status-bar ViewModel.
+     * These are the integration points independently identified by OneUIX's StatusBar.kt.
+     * Do not touch its separate FaceWidget/lockscreen icon-count path. */
+    private void installStatusLimit() {
+        Class<?> container;
+        try { container = Class.forName("com.android.systemui.statusbar.phone.NotificationIconContainer", false, loader); }
+        catch (ClassNotFoundException | LinkageError e) {
+            Probe.log("ICON_TREAT_STATUS_LIMIT", "available=false reason=noContainer");
+            return;
+        }
+        hook(container, "shouldForceOverflow", new XC_MethodHook() {
+            @Override protected void beforeHookedMethod(MethodHookParam p) {
+                if (!container.isInstance(p.thisObject) || !enabled.getAsBoolean()) return;
+                if (Boolean.TRUE.equals(Reflect.read(p.thisObject, "mOnLockScreen"))
+                        || Boolean.TRUE.equals(Reflect.read(p.thisObject, "mInNotificationIconShelf"))) return;
+                // Only the One UI 8.5/9 overload uses this exact argument order.
+                if (p.args.length != 3 || !(p.args[0] instanceof Integer)
+                        || !(p.args[1] instanceof Float) || !(p.args[2] instanceof Integer)) return;
+                int requested = Tuning.get().statusMaxIcons;
+                if (requested <= 0) return; // Keep the untouched Samsung limit.
+                p.args[2] = requested;
+                if (Probe.trace) Probe.log("ICON_TREAT_STATUS_LIMIT", "route=shouldForceOverflow max=" + requested);
+            }
+        });
+
+        try {
+            Class<?> viewModel = Class.forName(
+                    "com.android.systemui.statusbar.notification.icon.ui.viewmodel.NotificationIconContainerStatusBarViewModel",
+                    false, loader);
+            Field maxIcons = Reflect.field(viewModel, "maxIcons");
+            if (maxIcons == null) {
+                Probe.log("ICON_TREAT_STATUS_LIMIT", "available=false reason=noViewModelMaxIcons");
+                return;
+            }
+            for (java.lang.reflect.Constructor<?> ctor : viewModel.getDeclaredConstructors()) {
+                try {
+                    XposedBridge.hookMethod(ctor, new XC_MethodHook() {
+                        @Override protected void afterHookedMethod(MethodHookParam p) {
+                            if (!enabled.getAsBoolean() || Tuning.get().statusMaxIcons <= 0) return;
+                            try {
+                                maxIcons.setInt(p.thisObject, Integer.MAX_VALUE);
+                                if (Probe.trace) Probe.log("ICON_TREAT_STATUS_LIMIT", "route=viewModelMaxIcons unlimited=true");
+                            } catch (IllegalAccessException | RuntimeException e) {
+                                Probe.log("ICON_TREAT_STATUS_LIMIT", "route=viewModelMaxIcons error=" + e.getClass().getSimpleName());
+                            }
+                        }
+                    });
+                } catch (RuntimeException | LinkageError e) { Probe.error("ICON_TREAT_COMPACT_HOOK_FAILED", e); }
+            }
+        } catch (ClassNotFoundException | LinkageError e) {
+            Probe.log("ICON_TREAT_STATUS_LIMIT", "available=false reason=noViewModel");
+        }
     }
 
     private void hook(Class<?> type, String name, XC_MethodHook callback) {
@@ -193,14 +299,16 @@ final class NotificationCompactIconHooks {
                 nativeDrawable = v.getDrawable();
                 nativeBackground = v.getBackground();
                 backgroundAlpha = nativeBackground == null ? 255 : nativeBackground.getAlpha();
-                BitmapDrawable replacement = new BitmapDrawable(v.getResources(), ready.bitmap);
-                replacement.mutate();
+                NotificationGlyphDrawable replacement = new NotificationGlyphDrawable(ready.bitmap,
+                        Tuning.get().statusIconScale);
                 installed = replacement;
                 v.setImageDrawable(replacement);
                 if (nativeBackground != null) nativeBackground.mutate().setAlpha(0);
                 if (Probe.trace) Probe.log("ICON_TREAT_COMPACT_APPLIED", "pkg=" + pkg
                         + " source=" + ready.source + " parent=" + ancestors(v));
             }
+            if (installed instanceof NotificationGlyphDrawable)
+                ((NotificationGlyphDrawable) installed).scale(Tuning.get().statusIconScale);
             // The system owns the status/shelf icon's foreground colour. Re-read its current tint
             // instead of pinning white (a black status bar over a light app must remain black).
             if (v.getColorFilter() != null || v.getImageTintList() != null) {
@@ -210,6 +318,12 @@ final class NotificationCompactIconHooks {
                 return;
             }
             int nextInk = currentInk(v);
+            Tuning tuning = Tuning.get();
+            if (tuning.statusIconInkMode == 1) nextInk = tuning.statusIconFixedInk;
+            else if (tuning.statusIconInkMode == 2) {
+                boolean lightBackdrop = (nextInk & 0x00ffffff) == 0x00000000;
+                nextInk = lightBackdrop ? tuning.statusIconLightInk : tuning.statusIconDarkInk;
+            }
             if (nextInk != ink || installed.getColorFilter() == null) {
                 ink = nextInk;
                 installed.setColorFilter(new PorterDuffColorFilter(ink, PorterDuff.Mode.SRC_IN));

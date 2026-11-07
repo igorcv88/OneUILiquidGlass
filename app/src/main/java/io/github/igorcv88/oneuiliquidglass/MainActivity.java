@@ -38,6 +38,7 @@ public final class MainActivity extends Activity implements Host {
     private TextView toast;
     private HomePage home;
     private SurfacesPage surfaces;
+    private IconsPage icons;
     private SettingsPage settings;
     private Page[] all;
     private int tab;
@@ -82,14 +83,17 @@ public final class MainActivity extends Activity implements Host {
     private void build(Bundle ui) {
         theme = new Theme(this, dark(), model.ui.getBoolean("reduceMotion", false));
         tab = ui.getInt("tab", tab);
+        if (ui.getInt("navVersion", 0) == 0 && tab == 2) tab = 3;
+        tab = Math.max(0, Math.min(3, tab));
         root = new FrameLayout(this);
         root.setBackgroundColor(theme.bg);
         pages = new FrameLayout(this);
         root.addView(pages, new FrameLayout.LayoutParams(-1, -1));
         home = new HomePage(this);
         surfaces = new SurfacesPage(this);
+        icons = new IconsPage(this);
         settings = new SettingsPage(this);
-        all = new Page[] {home, surfaces, settings};
+        all = new Page[] {home, surfaces, icons, settings};
         for (int i = 0; i < all.length; i++) {
             View v = all[i].view();
             v.setVisibility(i == tab ? View.VISIBLE : View.GONE);
@@ -105,8 +109,9 @@ public final class MainActivity extends Activity implements Host {
         };
         Bundle surfaceState = ui.getBundle("surfaces");
         if (surfaceState != null) surfaces.restore(surfaceState);
-        nav = new GlassNav(this, theme, new String[] {getString(R.string.nav_home), getString(R.string.nav_surfaces), getString(R.string.settings)},
-                new Icon[] {Icon.HOME, Icon.LAYERS, Icon.SETTINGS}, tab, this::go);
+        nav = new GlassNav(this, theme, new String[] {getString(R.string.nav_home), getString(R.string.nav_surfaces),
+                getString(R.string.nav_icons), getString(R.string.settings)},
+                new Icon[] {Icon.HOME, Icon.LAYERS, Icon.BELL, Icon.SETTINGS}, tab, this::go);
         FrameLayout.LayoutParams np = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
         root.addView(nav, np);
         nav.source(all[tab].view());
@@ -147,7 +152,7 @@ public final class MainActivity extends Activity implements Host {
         bindAll();
         if (scrolls != null)
             for (int i = 0; i < all.length && i < scrolls.length; i++) {
-                final int y = scrolls[i], index = i;
+                final int y = scrolls[i], index = ui.getInt("navVersion", 0) == 0 && i == 2 ? 3 : i;
                 if (index != 1) all[index].scroller().post(() -> all[index].scroller().scrollTo(0, y));
             }
     }
@@ -181,6 +186,7 @@ public final class MainActivity extends Activity implements Host {
     private Bundle saveUi() {
         Bundle b = new Bundle();
         b.putInt("tab", tab);
+        b.putInt("navVersion", 1);
         int[] scrolls = new int[all.length];
         for (int i = 0; i < all.length; i++) scrolls[i] = all[i].scroller().getScrollY();
         b.putIntArray("scrolls", scrolls);

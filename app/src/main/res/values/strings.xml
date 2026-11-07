@@ -479,4 +479,10 @@
     <string name="preset_error_type">The value for %1$s must be text.</string>
     <string name="preset_error_value">The value for %1$s is invalid.</string>
     <string name="error_invalid_setting">The value for %1$s could not be validated or saved.</string>
+    <string name="nav_icons">Icons</string>
+    <string name="icons_notifications">Notification symbols</string>
+    <string name="icons_status_bar">Status bar</string>
+    <string name="icons_quick_settings">Quick Settings icons</string>
+    <string name="icons_compatibility">Compatibility</string>
+    <string name="icons_library">Icon library and missing apps</string>
 </resources>

@@ -6,6 +6,8 @@
     <string name="control_title_1a9d1f6ff979">Dynamic light reach</string>
     <string name="control_title_9cbee42ce9d4">Lock screen samples</string>
     <string name="control_title_e8d1e327dbeb">Pop-up samples</string>
+    <string name="control_title_2c9365fef254">Status bar on light backgrounds</string>
+    <string name="control_title_de327df14533">Status bar on colored backgrounds</string>
     <string name="control_title_fe0c016c9945">Additive edge (P3 compatibility)</string>
     <string name="control_title_bf8389203ea5">Dark glass brightness</string>
     <string name="control_title_f40464148fea">Specular highlight</string>
@@ -18,11 +20,15 @@
     <string name="control_title_b11c820a9f04">Outline on colored background</string>
     <string name="control_title_0b06eeda0ca8">Stable contrast</string>
     <string name="control_title_499d0bae04fb">Measured pop-up contrast</string>
+    <string name="control_title_fb5a30ad181f">Status bar color</string>
     <string name="control_title_182b2b4eb1bf">Shade background color</string>
     <string name="control_title_f506051bb466">Tint color on light background</string>
     <string name="control_title_5e7c8fc5bf6b">Light glass color</string>
     <string name="control_title_8446f961d406">Glass color · light background</string>
     <string name="control_title_2e9f89865f0a">Dark veil color (retired)</string>
+    <string name="control_title_2d57baa7425d">Notification icon color</string>
+    <string name="control_title_2bf54afbab32">Fixed status bar color</string>
+    <string name="control_title_2430177f4c6a">Fixed notification color</string>
     <string name="control_title_4e96aab8ce76">Blur fade cutoff</string>
     <string name="control_title_4ad715209c69">System color curve</string>
     <string name="control_title_ee584b937380">Highlight curve</string>
@@ -89,6 +95,7 @@
     <string name="control_title_006548b15c01">Refraction model</string>
     <string name="control_title_ceaef40ab9b4">Rewrite mode</string>
     <string name="control_title_6a5669f01728">Physical multiplier</string>
+    <string name="control_title_a2faa45a9b05">Maximum visible icons</string>
     <string name="control_title_203fe4f25f20">Uniformity level</string>
     <string name="control_title_b89e7df74a83">Hide strip during</string>
     <string name="control_title_6e897db6ffb5">Media artwork opacity</string>
@@ -117,6 +124,8 @@
     <string name="control_title_23907232c21c">Saturation</string>
     <string name="control_title_76f1a4366eb4">Capture saturation</string>
     <string name="control_title_5df7b3c6b57c">Light glass edge shadow</string>
+    <string name="control_title_d6218cd33215">Status bar icon size</string>
+    <string name="control_title_6fb27e5b7855">Notification icon size</string>
     <string name="control_title_936eb873bedb">Inner blur limit</string>
     <string name="control_title_68e6ea868975">Adaptive text</string>
     <string name="control_title_06a0b9a00436">Diagnostic tint</string>
@@ -139,6 +148,8 @@
     <string name="control_title_2755ba3ed45e">Off icon · colored background</string>
     <string name="control_title_99508c52e4b4">On icon · light background</string>
     <string name="control_title_8f72472bf1f8">On icon · colored background</string>
+    <string name="control_title_df08262ee913">Icons on light backgrounds</string>
+    <string name="control_title_be57a26ad171">Icons on colored backgrounds</string>
     <string name="control_title_f2f3c60c5911">Refraction index</string>
     <string name="control_title_1cb1cc084b68">Now Bar optics (comparison)</string>
 </resources>

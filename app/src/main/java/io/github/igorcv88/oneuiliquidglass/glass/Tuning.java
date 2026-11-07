@@ -266,6 +266,14 @@ public final class Tuning {
     public final boolean iconTone;
     /** Notification app icon source: off, system, verified originals, all. */
     public final int iconMode;
+    /** Glyph scaling is independent of the status-bar slot geometry. */
+    public final float notificationIconScale, statusIconScale;
+    /** Zero preserves Samsung's static-icon overflow limit. */
+    public final int statusMaxIcons;
+    /** 0 = native/adaptive, 1 = fixed custom color, 2 = colors by backdrop. */
+    public final int notificationIconInkMode, statusIconInkMode;
+    public final int notificationIconFixedInk, notificationIconLightInk, notificationIconDarkInk;
+    public final int statusIconFixedInk, statusIconLightInk, statusIconDarkInk;
     /**
      * LSPosed-only pop-ups take a veil measured from the backdrop under them, as shade cards do
      * (debug.oulg.popuptone, default 1; 0: the plain tint, white text over a white app).
@@ -438,6 +446,17 @@ public final class Tuning {
         headerTone = number("headertone", 0f) >= 1f;
         iconTone = number("icontone", 1f) >= 1f;
         iconMode = io.github.igorcv88.oneuiliquidglass.config.NotificationIconPolicy.mode(number("iconmode", 1f));
+        notificationIconScale = clamp(number("iconcardsize", .76f), .40f, 1f);
+        statusIconScale = clamp(number("statusiconsize", .88f), .55f, 1f);
+        statusMaxIcons = Math.round(clamp(number("statusmaxicons", 0f), 0f, 10f));
+        notificationIconInkMode = Math.round(clamp(number("iconinkmode", 0f), 0f, 2f));
+        statusIconInkMode = Math.round(clamp(number("statusinkmode", 0f), 0f, 2f));
+        notificationIconFixedInk = iconColor("iconfixedink", "ffffff");
+        notificationIconLightInk = iconColor("iconlightink", "000000");
+        notificationIconDarkInk = iconColor("icondarkink", "ffffff");
+        statusIconFixedInk = iconColor("statusfixedink", "ffffff");
+        statusIconLightInk = iconColor("statuslightink", "000000");
+        statusIconDarkInk = iconColor("statusdarkink", "ffffff");
         popupTone = number("popuptone", 1f) >= 1f;
         popupLock = number("popuplock", 1f) >= 1f;
         orphanDraw = number("orphandraw", 1f) >= 1f;
@@ -588,6 +607,14 @@ public final class Tuning {
         String v = prop(key, "");
         if (v.isEmpty()) return fallback;
         try { return Float.parseFloat(v); } catch (NumberFormatException e) { return fallback; }
+    }
+
+    private static int iconColor(String key, String fallback) {
+        try {
+            return io.github.igorcv88.oneuiliquidglass.config.Rgba.argb(prop(key, fallback)) | 0xff000000;
+        } catch (IllegalArgumentException e) {
+            return io.github.igorcv88.oneuiliquidglass.config.Rgba.argb(fallback);
+        }
     }
 
     private static String prop(String key, String fallback) {
