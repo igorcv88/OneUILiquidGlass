@@ -3,6 +3,7 @@ package io.github.igorcv88.oneuiliquidglass.hooks;
 import android.app.Notification;
 import android.content.Context;
 import android.graphics.Color;
+import android.graphics.ColorFilter;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffColorFilter;
 import android.graphics.drawable.Drawable;
@@ -30,6 +31,7 @@ import io.github.igorcv88.oneuiliquidglass.config.ConfigClient;
 import io.github.igorcv88.oneuiliquidglass.config.NotificationIconPolicy;
 import io.github.igorcv88.oneuiliquidglass.diagnostics.Probe;
 import io.github.igorcv88.oneuiliquidglass.glass.Tuning;
+import io.github.igorcv88.oneuiliquidglass.glass.ShadeTone;
 
 /**
  * One UI uses StatusBarIconView outside notification rows: the status bar, the lockscreen shelf,
@@ -48,10 +50,13 @@ final class NotificationCompactIconHooks {
     private final WeakHashMap<ImageView, State> states = new WeakHashMap<>();
     private final ClassLoader loader;
     private final BooleanSupplier enabled;
+    private final BooleanSupplier shelfToneSwapped;
 
-    NotificationCompactIconHooks(ClassLoader loader, BooleanSupplier enabled) {
+    NotificationCompactIconHooks(ClassLoader loader, BooleanSupplier enabled,
+                                 BooleanSupplier shelfToneSwapped) {
         this.loader = loader;
         this.enabled = enabled;
+        this.shelfToneSwapped = shelfToneSwapped;
     }
 
     void install() {
@@ -164,6 +169,30 @@ final class NotificationCompactIconHooks {
             }
         });
 
+        // The numeric cap and physical-space cap are separate checks in Android's
+        // NotificationIconContainer. Log the latter's actual operands and result so we can
+        // tell whether Samsung has reserved only three icon slots. Forcing this result to
+        // false without changing geometry would render icons beyond the allocated region.
+        hook(container, "isOverflowing", new XC_MethodHook() {
+            private long lastLogged;
+            @Override protected void afterHookedMethod(MethodHookParam p) {
+                if (!Probe.trace || !enabled.getAsBoolean() || Tuning.get().statusMaxIcons <= 0
+                        || p.args.length != 4 || !(p.args[0] instanceof Boolean)
+                        || !(p.args[1] instanceof Float) || !(p.args[2] instanceof Float)
+                        || !(p.args[3] instanceof Float)
+                        || !Boolean.TRUE.equals(p.getResult()) || !(p.thisObject instanceof View)) return;
+                long now = android.os.SystemClock.uptimeMillis();
+                if (now - lastLogged < 900) return;
+                lastLogged = now;
+                View panel = (View) p.thisObject;
+                Probe.log("ICON_TREAT_STATUS_GEOMETRY", "overflow=true last=" + p.args[0]
+                        + " x=" + p.args[1] + " end=" + p.args[2]
+                        + " iconSize=" + p.args[3] + " width=" + panel.getWidth()
+                        + " actualWidth=" + Reflect.read(panel, "mActualLayoutWidth")
+                        + " parent=" + ancestors(panel));
+            }
+        });
+
         try {
             Class<?> viewModel = Class.forName(
                     "com.android.systemui.statusbar.notification.icon.ui.viewmodel.NotificationIconContainerStatusBarViewModel",
@@ -209,6 +238,16 @@ final class NotificationCompactIconHooks {
         Probe.log("ICON_TREAT_COMPACT_HOOK", "method=" + name + " count=" + count);
     }
 
+    private static String ancestors(View v) {
+        StringBuilder result = new StringBuilder();
+        for (ViewParent parent = v.getParent(); parent instanceof View && result.length() < 110;
+             parent = parent.getParent()) {
+            if (result.length() > 0) result.append('/');
+            result.append(parent.getClass().getSimpleName());
+        }
+        return result.toString();
+    }
+
     private final class State implements View.OnAttachStateChangeListener, ViewTreeObserver.OnPreDrawListener {
         final WeakReference<ImageView> ref;
         ViewTreeObserver observer;
@@ -223,6 +262,10 @@ final class NotificationCompactIconHooks {
         long rebindingWindow, suspendedUntil;
         int competingRebinds;
         String lastInkProbe;
+        ColorFilter originalShelfFilter, appliedShelfFilter;
+        int appliedShelfColor;
+        long shelfOverwriteWindow, shelfSuspendUntil;
+        int shelfOverwrites;
 
         State(ImageView view) { ref = new WeakReference<>(view); }
 
@@ -329,6 +372,20 @@ final class NotificationCompactIconHooks {
                     Probe.log("ICON_TREAT_COMPACT_INK", current);
                 }
             }
+            // The expanded notification shelf is a separate icon container. Samsung keeps
+            // writing its native (often white) ImageView filter even when HeadsUpHooks has
+            // switched its "N more notifications" label to dark text on a light glass card.
+            // Match the label only for shelf children; status bar and keyguard are untouched.
+            if (inNotificationShelf(v) && shelfToneSwapped.getAsBoolean()) {
+                Tuning palette = Tuning.get();
+                boolean lightSurface = ShadeTone.lightText(); // Shelf label is mirrored.
+                int shelfInk = ShelfIconInk.mirrored(lightSurface, palette.notificationIconInkMode,
+                        palette.notificationIconFixedInk, palette.notificationIconLightInk,
+                        palette.notificationIconDarkInk);
+                applyShelfFilter(v, shelfInk);
+                return;
+            }
+            restoreShelfFilter(v);
             // The system owns the status/shelf icon's foreground colour. Re-read its current tint
             // instead of pinning white (a black status bar over a light app must remain black).
             if (v.getColorFilter() != null || v.getImageTintList() != null) {
@@ -349,6 +406,51 @@ final class NotificationCompactIconHooks {
                 installed.setColorFilter(new PorterDuffColorFilter(ink, PorterDuff.Mode.SRC_IN));
                 v.invalidate();
             }
+        }
+
+        private void applyShelfFilter(ImageView v, int color) {
+            ColorFilter current = v.getColorFilter();
+            if (current == appliedShelfFilter && color == appliedShelfColor) return;
+            long now = android.os.SystemClock.uptimeMillis();
+            if (now < shelfSuspendUntil) return;
+            if (appliedShelfFilter != null && current != appliedShelfFilter) {
+                if (now - shelfOverwriteWindow > 700) {
+                    shelfOverwriteWindow = now;
+                    shelfOverwrites = 0;
+                }
+                if (++shelfOverwrites >= 8) {
+                    shelfSuspendUntil = now + 1200;
+                    if (Probe.trace) Probe.log("ICON_TREAT_SHELF_CONTESTED", "pkg=" + pkg);
+                    return;
+                }
+            }
+            originalShelfFilter = current == appliedShelfFilter ? originalShelfFilter : current;
+            appliedShelfColor = color;
+            appliedShelfFilter = new PorterDuffColorFilter(color, PorterDuff.Mode.SRC_IN);
+            v.setColorFilter(appliedShelfFilter);
+            if (Probe.trace) Probe.log("ICON_TREAT_SHELF_INK", "pkg=" + pkg
+                    + " color=" + Integer.toHexString(color) + " original=" + Integer.toHexString(currentInk(v)));
+        }
+
+        private void restoreShelfFilter(ImageView v) {
+            if (appliedShelfFilter == null) return;
+            if (v != null && v.getColorFilter() == appliedShelfFilter)
+                v.setColorFilter(originalShelfFilter);
+            appliedShelfFilter = null;
+            originalShelfFilter = null;
+            appliedShelfColor = 0;
+            shelfOverwrites = 0;
+            shelfSuspendUntil = 0;
+        }
+
+        private boolean inNotificationShelf(View v) {
+            for (ViewParent p = v.getParent(); p instanceof View; p = p.getParent()) {
+                String name = p.getClass().getSimpleName();
+                if ("SecShelfNotificationIconContainer".equals(name)
+                        || "NotificationShelf".equals(name)) return true;
+                if ("KeyguardRootView".equals(name) || "PhoneStatusBarView".equals(name)) return false;
+            }
+            return false;
         }
 
         private int[] pixels(Drawable drawable) {
@@ -372,19 +474,10 @@ final class NotificationCompactIconHooks {
             return color instanceof Integer && ((Integer) color) != 0 ? (Integer) color : Color.WHITE;
         }
 
-        private String ancestors(View v) {
-            StringBuilder result = new StringBuilder();
-            for (ViewParent parent = v.getParent(); parent instanceof View && result.length() < 110;
-                 parent = parent.getParent()) {
-                if (result.length() > 0) result.append('/');
-                result.append(parent.getClass().getSimpleName());
-            }
-            return result.toString();
-        }
-
         private void restore() {
             ImageView image = ref.get();
             if (image != null) {
+                restoreShelfFilter(image);
                 if (installed != null && image.getDrawable() == installed)
                     image.setImageDrawable(nativeDrawable);
                 if (nativeBackground != null && image.getBackground() == nativeBackground

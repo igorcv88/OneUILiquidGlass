@@ -390,7 +390,13 @@ public final class HeadsUpHooks {
             }
         };
         for (String n : new String[]{"onFinishInflate", "onNotificationUpdated", "setHeadsUp", "setPinned", "setHeadsUpAnimatingAway", "startAppearAnimation", "onAppearAnimationFinished", "setUserExpanded", "setOnKeyguard", "onAttachedToWindow"}) hook(rowClass, n, rowEvent);
-        compactIcons = new NotificationCompactIconHooks(loader, () -> enabled);
+        // The Samsung shelf's "N more notifications" label already follows this exact tone
+        // decision in State.shelfTone(). Its separate StatusBarIconViews must use the same
+        // decision; the status-bar/lockscreen views keep their native tint.
+        compactIcons = new NotificationCompactIconHooks(loader, () -> enabled,
+                () -> shadeConfigEnabled() && Tuning.get().textSwap && Tuning.get().shadeAdaptive
+                        && Boolean.TRUE.equals(shadeExpanded) && barState == Eligibility.BAR_SHADE
+                        && shadeScene != null && shadeScene == ShadeTone.lightText());
         compactIcons.install();
         // A cancelled appear/disappear animation (AOSP ActivatableNotificationView.cancelAppearDrawing,
         // and the animator cancel it runs) may end without onAppearAnimationFinished: the card stops
