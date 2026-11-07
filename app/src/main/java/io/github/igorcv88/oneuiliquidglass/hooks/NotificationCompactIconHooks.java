@@ -300,7 +300,7 @@ final class NotificationCompactIconHooks {
                 nativeBackground = v.getBackground();
                 backgroundAlpha = nativeBackground == null ? 255 : nativeBackground.getAlpha();
                 NotificationGlyphDrawable replacement = new NotificationGlyphDrawable(ready.bitmap,
-                        Tuning.get().statusIconScale);
+                        Tuning.get().statusIconScale, nativeDrawable);
                 installed = replacement;
                 v.setImageDrawable(replacement);
                 if (nativeBackground != null) nativeBackground.mutate().setAlpha(0);

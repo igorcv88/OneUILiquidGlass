@@ -6,31 +6,26 @@ import android.widget.ScrollView;
 
 import io.github.igorcv88.oneuiliquidglass.R;
 import io.github.igorcv88.oneuiliquidglass.config.Controls;
+import io.github.igorcv88.oneuiliquidglass.config.IconSettings;
 import io.github.igorcv88.oneuiliquidglass.ui.kit.Icon;
 import io.github.igorcv88.oneuiliquidglass.ui.kit.Theme;
 import io.github.igorcv88.oneuiliquidglass.ui.kit.Ui;
 
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 /** One destination for icon eligibility, sizes and both notification/status/QS palettes. */
 public final class IconsPage implements Page {
-    private static final Set<String> KEYS = new HashSet<>(Arrays.asList(
-            "iconmode", "icontone", "iconcardsize", "statusiconsize", "statusmaxicons",
-            "iconinkmode", "iconfixedink", "iconlightink", "icondarkink",
-            "statusinkmode", "statusfixedink", "statuslightink", "statusdarkink",
-            "qs.tilelightonink", "qs.tilelightoffink", "qs.tiledarkonink", "qs.tiledarkoffink"));
-
-    public static boolean isIconKey(String key) { return KEYS.contains(key); }
+    public static boolean isIconKey(String key) { return IconSettings.contains(key); }
 
     private final Host host;
     private final Theme theme;
     private final ScrollView scroll;
     private final LinearLayout content;
+    private final LinearLayout pendingSlot;
+    private final IconSizePreview preview;
     private final List<ControlRow> rows = new ArrayList<>();
+    private int displayedPending = -1;
     private final List<View> fixedNotification = new ArrayList<>(), dualNotification = new ArrayList<>();
     private final List<View> fixedStatus = new ArrayList<>(), dualStatus = new ArrayList<>();
 
@@ -42,6 +37,15 @@ public final class IconsPage implements Page {
         content = Ui.column(a);
         scroll.addView(content);
         content.addView(Ui.title(a, theme, a.getString(R.string.nav_icons)), Ui.match(theme.dp(8), theme.dp(4)));
+        pendingSlot = Ui.column(a);
+        content.addView(pendingSlot, Ui.match());
+        content.addView(Ui.section(a, theme, a.getString(R.string.icons_preview)));
+        LinearLayout previewCard = Ui.card(a, theme);
+        preview = new IconSizePreview(a, theme);
+        previewCard.addView(preview, Ui.match());
+        previewCard.addView(Ui.text(a, theme, a.getString(R.string.icons_preview_note),
+                Theme.CAPTION, theme.inkMuted, false), Ui.match());
+        content.addView(previewCard, Ui.match());
 
         section(R.string.icons_notifications,
                 "iconmode", "iconcardsize", "iconinkmode");
@@ -97,6 +101,18 @@ public final class IconsPage implements Page {
     }
     @Override public void bind() {
         io.github.igorcv88.oneuiliquidglass.config.ControlState state = host.model().state();
+        AppModel model = host.model();
+        int pending = model.pendingIcons().size();
+        if (displayedPending != pending) {
+            displayedPending = pending;
+            pendingSlot.removeAllViews();
+            if (pending != 0) pendingSlot.addView(Ui.notice(host.activity(), theme, Ui.Tone.INFO,
+                    host.activity().getResources().getQuantityString(R.plurals.icons_pending, pending, pending),
+                    host.activity().getString(R.string.home_apply), () -> InfoSheets.applyIcons(host)), Ui.match());
+        }
+        preview.update(model.appliedIcon("statusiconsize"), state.shown("statusiconsize"),
+                model.appliedIcon("iconcardsize"), state.shown("iconcardsize"),
+                model.appliedIcon("statusmaxicons"), state.shown("statusmaxicons"));
         for (ControlRow row : rows) row.bind(state, state.applicability());
         String notifications = state.shown("iconinkmode");
         String status = state.shown("statusinkmode");

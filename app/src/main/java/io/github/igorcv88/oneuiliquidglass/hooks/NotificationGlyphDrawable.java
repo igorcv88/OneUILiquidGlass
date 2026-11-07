@@ -13,10 +13,15 @@ import android.graphics.drawable.Drawable;
 final class NotificationGlyphDrawable extends Drawable {
     private final Bitmap bitmap;
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+    private final int intrinsicWidth, intrinsicHeight;
     private float fraction;
 
-    NotificationGlyphDrawable(Bitmap bitmap, float fraction) {
+    NotificationGlyphDrawable(Bitmap bitmap, float fraction, Drawable nativeDrawable) {
         this.bitmap = bitmap;
+        // The 128px bitmap is only the source resolution. Returning that as intrinsic size
+        // changes Samsung's ImageView measurements and can force repeated row relayouts.
+        intrinsicWidth = nativeDrawable == null ? -1 : nativeDrawable.getIntrinsicWidth();
+        intrinsicHeight = nativeDrawable == null ? -1 : nativeDrawable.getIntrinsicHeight();
         scale(fraction);
     }
 
@@ -36,8 +41,8 @@ final class NotificationGlyphDrawable extends Drawable {
         canvas.drawBitmap(bitmap, null, new RectF(x, y, x + w, y + h), paint);
     }
 
-    @Override public int getIntrinsicWidth() { return bitmap.getWidth(); }
-    @Override public int getIntrinsicHeight() { return bitmap.getHeight(); }
+    @Override public int getIntrinsicWidth() { return intrinsicWidth; }
+    @Override public int getIntrinsicHeight() { return intrinsicHeight; }
     @Override public void setAlpha(int alpha) { paint.setAlpha(alpha); invalidateSelf(); }
     @Override public void setColorFilter(ColorFilter filter) { paint.setColorFilter(filter); invalidateSelf(); }
     @Override public ColorFilter getColorFilter() { return paint.getColorFilter(); }

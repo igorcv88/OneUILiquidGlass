@@ -1917,7 +1917,7 @@ public final class HeadsUpHooks {
             // background. Samsung temporarily falls back to its native material while opening the
             // shade; restoring icons in that transition made the original icon flash for a frame.
             notificationIcons.sync(!pill && enabled ? row.get() : null,
-                    tuning.iconMode, ShadeTone.lightText() == swap);
+                    tuning.iconMode, lightBackdrop);
             long now = android.os.SystemClock.uptimeMillis();
             String reason = swap == swapped ? null : swap ? "style" : "restore";
             // A child row that just got its own glass may still carry its group's swapped text
@@ -2586,7 +2586,7 @@ public final class HeadsUpHooks {
             // closed. In particular, do not wait for the first visible glass pre-draw to start
             // the PackageManager lookup and bitmap work on the worker thread.
             if (enabled && !pill) notificationIcons.sync(r, Tuning.get().iconMode,
-                    ShadeTone.lightText() == swapped);
+                    lightBackdrop);
             if ("setHeadsUp".equals(event) && !isHeadsUp()) {
                 if (p3SettlePosted) { main.removeCallbacks(p3Settle); p3SettlePosted = false; }
                 p3LastSettleAt = 0;

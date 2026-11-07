@@ -161,6 +161,8 @@ final class NotificationIconTreatment {
     private boolean candidatesReported;
     private WeakReference<View> missingRow = new WeakReference<>(null);
     private long nextSourceCheck;
+    private final IconRebindGuard rebindGuard = new IconRebindGuard();
+    private WeakReference<View> protectedRow = new WeakReference<>(null);
 
     private void skip(String reason) {
         if (Probe.trace && !reason.equals(lastSkip))
@@ -170,7 +172,18 @@ final class NotificationIconTreatment {
 
     /** Called as part of the existing row's pre-draw, without installing an extra watcher. */
     void sync(View row, int mode, boolean lightBackdrop) {
-        if (row == null || mode == NotificationIconPolicy.OFF) { restore(); skip("inactive"); return; }
+        if (row == null || mode == NotificationIconPolicy.OFF) {
+            rebindGuard.reset();
+            protectedRow.clear();
+            restore(); skip("inactive"); return;
+        }
+        // Fail closed if Samsung repeatedly replaces our drawable on the same row. On some
+        // builds that produces thousands of ImageView writes per second on the UI thread.
+        if (protectedRow.get() != row) {
+            rebindGuard.reset();
+            protectedRow = new WeakReference<>(row);
+        }
+        if (rebindGuard.tripped()) return;
         long now = SystemClock.uptimeMillis();
         long currentRevision = ConfigClient.revision();
         if (missingRow.get() == row && now < nextSourceCheck
@@ -220,8 +233,16 @@ final class NotificationIconTreatment {
                     ? (lightBackdrop ? tuning.notificationIconLightInk : tuning.notificationIconDarkInk)
                     : (lightBackdrop ? Color.BLACK : Color.WHITE);
         boolean stale = false;
-        for (Lease l : active) if (!l.current()) { l.restore(); stale = true; }
+        int rebindings = 0;
+        for (Lease l : active) if (!l.current()) { l.restore(); stale = true; rebindings++; }
         if (stale) active.removeIf(l -> !l.current());
+        if (rebindGuard.record(now, rebindings)) {
+            String offending = pkg;
+            restore();
+            Probe.log("ICON_TREAT_CIRCUIT_BREAKER", "pkg=" + offending
+                    + " rebinds=" + rebindGuard.count() + " windowMs=" + IconRebindGuard.WINDOW_MS);
+            return;
+        }
         if (candidatesDirty || !candidates.isEmpty() && allCandidatesGone()) findCandidates(row);
         if (candidates.isEmpty()) { skip("noIconView"); return; }
         for (WeakReference<ImageView> ref : candidates) {
@@ -237,7 +258,7 @@ final class NotificationIconTreatment {
             // A new SystemUI rebind: foreground's old swapped record must not leak into our lease.
             Foreground.glyph(image, false, false);
             NotificationGlyphDrawable replacement = new NotificationGlyphDrawable(resolved.bitmap,
-                    tuning.notificationIconScale);
+                    tuning.notificationIconScale, image.getDrawable());
             replacement.setColorFilter(new PorterDuffColorFilter(ink, PorterDuff.Mode.SRC_IN));
             active.add(new Lease(image, replacement, ink));
             if (Probe.trace) Probe.log("ICON_TREAT_APPLIED", "pkg=" + pkg + " source=" + resolved.source

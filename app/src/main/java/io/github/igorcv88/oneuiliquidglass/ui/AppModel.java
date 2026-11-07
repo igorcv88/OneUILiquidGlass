@@ -224,6 +224,18 @@ public final class AppModel {
                 CompositorValues.baseline(p));
     }
 
+    public Map<String, String> pendingIcons() { return repo.pendingIcons(); }
+
+    public String appliedIcon(String key) {
+        SettingSpec spec = SettingsRegistry.get(key);
+        return spec == null ? "" : repo.appliedIcon(spec);
+    }
+
+    public void applyIcons() {
+        repo.applyIcons();
+        notifyChanged();
+    }
+
     /** The value the compositor last compiled (or was last sent) for a key; null when unknown. */
     public String compiledCompositor(String key) {
         Map<String, String> b = CompositorValues.baseline(lensPrefs());

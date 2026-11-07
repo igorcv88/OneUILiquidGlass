@@ -481,6 +481,14 @@
     <string name="error_invalid_setting">The value for %1$s could not be validated or saved.</string>
     <string name="nav_icons">Icons</string>
     <string name="icons_notifications">Notification symbols</string>
+    <string name="icons_apply_title">Apply icon changes?</string>
+    <string name="icons_apply_restart">Apply and restart System UI</string>
+    <string name="icons_preview">Size preview</string>
+    <string name="icons_preview_live">Applied</string>
+    <string name="icons_preview_edited">Selected</string>
+    <string name="icons_preview_note">Approximate size preview. The actual glyph depends on the app and Samsung’s icon slot.</string>
+    <plurals name="icons_pending"><item quantity="one">1 icon setting pending</item><item quantity="other">%d icon settings pending</item></plurals>
+    <plurals name="icons_apply_warning"><item quantity="one">Apply 1 icon setting and restart System UI once? Notifications and the status bar will disappear briefly.</item><item quantity="other">Apply %d icon settings and restart System UI once? Notifications and the status bar will disappear briefly.</item></plurals>
     <string name="icons_status_bar">Status bar</string>
     <string name="icons_quick_settings">Quick Settings icons</string>
     <string name="icons_compatibility">Compatibility</string>
