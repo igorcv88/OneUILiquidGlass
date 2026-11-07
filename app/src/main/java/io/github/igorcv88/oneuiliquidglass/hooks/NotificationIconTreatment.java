@@ -60,6 +60,15 @@ final class NotificationIconTreatment {
     private static final java.util.Set<String> reported = new java.util.HashSet<>();
     private static final Set<String> entryProbed = Collections.synchronizedSet(new java.util.HashSet<>());
     private static final int SIZE = 128, SAMPLE = 24;
+    /** The Samsung icon slot remains untouched; only its artwork is inset. */
+    private static final float GLYPH_FRACTION = 0.76f;
+    private static final int CACHE_LIMIT = 48;
+    private static final java.util.LinkedHashMap<String, Resolved> sourceCache =
+            new java.util.LinkedHashMap<String, Resolved>(CACHE_LIMIT, .75f, true) {
+                @Override protected boolean removeEldestEntry(java.util.Map.Entry<String, Resolved> eldest) {
+                    return size() > CACHE_LIMIT;
+                }
+            };
     private static final long SOURCE_RECHECK_MS = 250;
     private static final String[] ENTRY_FIELDS = {"mEntry", "mNotificationEntry", "notificationEntry", "entry"};
     private static final String[] ENTRY_METHODS = {"getEntry", "getNotificationEntry"};
@@ -121,7 +130,7 @@ final class NotificationIconTreatment {
         }
     }
 
-    private static final class Resolved {
+    static final class Resolved {
         final Bitmap bitmap;
         final String source;
         final boolean officialMatched;
@@ -362,8 +371,17 @@ final class NotificationIconTreatment {
         final int[] snapshot = shown;
         final Notification notification = sbn.getNotification();
         final Context context = row.getContext().getApplicationContext();
+        final String cacheKey = sourceKey(targetPkg, notification, mode, configRevision);
         final long ticket = ++revision;
         pending = true;
+        Resolved cached;
+        synchronized (sourceCache) { cached = sourceCache.get(cacheKey); }
+        if (cached != null) {
+            pending = false;
+            resolved = cached;
+            if (Probe.trace) Probe.log("ICON_TREAT_CACHE", "pkg=" + targetPkg + " source=" + cached.source);
+            return;
+        }
         worker.execute(() -> {
             Resolved next = null;
             boolean eligible = false;
@@ -386,6 +404,9 @@ final class NotificationIconTreatment {
             boolean report = eligible && next == null;
             if (report && revision == ticket) reportMissing(context, targetPkg);
             Resolved answer = next;
+            if (answer != null && revision == ticket) {
+                synchronized (sourceCache) { sourceCache.put(cacheKey, answer); }
+            }
             MainThread.handler.post(() -> {
                 if (revision != ticket || entry != currentEntry
                         || notificationIdentity != currentIdentity || bound.get() != row) return;
@@ -397,6 +418,42 @@ final class NotificationIconTreatment {
                 if (answer != null) row.invalidate();
             });
         });
+    }
+
+    static String sourceKey(String pkg, Notification notification, int mode, long configRevision) {
+        return pkg + ':' + mode + ':' + configRevision + ':'
+                + (notification.getSmallIcon() == null ? "none" : notification.getSmallIcon().toString());
+    }
+
+    /** Shared source policy for Samsung's separate status-bar and collapsed-shelf icon views.
+     * Must be called on the icon worker, never in a hook or pre-draw callback. */
+    static Resolved resolveCompact(Context context, StatusBarNotification sbn, int mode,
+                                   int[] nativeArtwork, long configRevision) {
+        String pkg = sbn.getPackageName();
+        if (!NotificationIconStore.validPackage(pkg) || sbn.getNotification() == null) return null;
+        String key = sourceKey(pkg, sbn.getNotification(), mode, configRevision);
+        synchronized (sourceCache) {
+            Resolved hit = sourceCache.get(key);
+            if (hit != null) return hit;
+        }
+        try {
+            PackageManager pm = context.getPackageManager();
+            ApplicationInfo info = pm.getApplicationInfo(pkg, 0);
+            boolean system = NotificationIconPolicy.systemService(pkg,
+                    (info.flags & (ApplicationInfo.FLAG_SYSTEM | ApplicationInfo.FLAG_UPDATED_SYSTEM_APP)) != 0);
+            Drawable official = pm.getApplicationIcon(info);
+            boolean match = nativeArtwork != null && sameOfficial(nativeArtwork, pixels(official, SAMPLE));
+            Bitmap custom = local(context, pkg);
+            Resolved answer = custom != null ? new Resolved(custom, "user", match)
+                    : NotificationIconPolicy.eligible(mode, system, match)
+                    ? resolve(context, pkg, official, sbn.getNotification(), nativeArtwork, match) : null;
+            if (answer != null) synchronized (sourceCache) { sourceCache.put(key, answer); }
+            return answer;
+        } catch (PackageManager.NameNotFoundException | RuntimeException | LinkageError e) {
+            if (Probe.trace) Probe.log("ICON_TREAT_COMPACT_SOURCE_FAILED", "pkg=" + pkg
+                    + " error=" + e.getClass().getSimpleName());
+            return null;
+        }
     }
 
     private static void reportMissing(Context context, String pkg) {
@@ -451,7 +508,8 @@ final class NotificationIconTreatment {
         if (original == null) return null;
         try {
             Bitmap scaled = Bitmap.createBitmap(SIZE, SIZE, Bitmap.Config.ARGB_8888);
-            float factor = Math.min(SIZE / (float) original.getWidth(), SIZE / (float) original.getHeight());
+            float factor = Math.min(SIZE * GLYPH_FRACTION / original.getWidth(),
+                    SIZE * GLYPH_FRACTION / original.getHeight());
             float width = original.getWidth() * factor, height = original.getHeight() * factor;
             Canvas canvas = new Canvas(scaled);
             canvas.drawBitmap(original, null, new android.graphics.RectF((SIZE - width) / 2,
@@ -467,7 +525,22 @@ final class NotificationIconTreatment {
         if (d == null) return null;
         int[] px = pixels(d, SIZE);
         if (px == null || requireSmallSilhouette && !silhouette(px)) return null;
-        return whiteMask(px, SIZE);
+        // Verify the original silhouette before resizing, so inset transparency does not make
+        // an opaque launcher disc look like a transparent notification symbol.
+        Bitmap original = whiteMask(px, SIZE);
+        try { return inset(original); }
+        finally { original.recycle(); }
+    }
+
+    private static Bitmap inset(Bitmap original) {
+        Bitmap result = Bitmap.createBitmap(SIZE, SIZE, Bitmap.Config.ARGB_8888);
+        float extent = SIZE * GLYPH_FRACTION;
+        float pad = (SIZE - extent) / 2f;
+        android.graphics.Paint paint = new android.graphics.Paint(
+                android.graphics.Paint.ANTI_ALIAS_FLAG | android.graphics.Paint.FILTER_BITMAP_FLAG);
+        new Canvas(result).drawBitmap(original, null,
+                new android.graphics.RectF(pad, pad, SIZE - pad, SIZE - pad), paint);
+        return result;
     }
 
     private static Bitmap whiteMask(Bitmap source) {

@@ -68,6 +68,8 @@ public final class HeadsUpHooks {
     private boolean drawHook;
     private boolean shadeHook;
     private QuickSettingsHooks quickSettings;
+    /** SystemUI's independent icon views in the top status bar and collapsed notification shelf. */
+    private NotificationCompactIconHooks compactIcons;
     /** Non-media live updates and toasts (laudo 02/11/2026); independent of notification state. */
     private io.github.igorcv88.oneuiliquidglass.hooks.ongoing.LiveSurfaceHooks ongoing;
     private boolean blurEnvironmentReported;
@@ -388,6 +390,8 @@ public final class HeadsUpHooks {
             }
         };
         for (String n : new String[]{"onFinishInflate", "setHeadsUp", "setPinned", "setHeadsUpAnimatingAway", "startAppearAnimation", "onAppearAnimationFinished", "setUserExpanded", "setOnKeyguard", "onAttachedToWindow"}) hook(rowClass, n, rowEvent);
+        compactIcons = new NotificationCompactIconHooks(loader, () -> enabled);
+        compactIcons.install();
         // A cancelled appear/disappear animation (AOSP ActivatableNotificationView.cancelAppearDrawing,
         // and the animator cancel it runs) may end without onAppearAnimationFinished: the card stops
         // leaving at once instead of at CardExit.MAX_EXIT_MS. It only ends the exit; it releases nothing.
@@ -1494,7 +1498,6 @@ public final class HeadsUpHooks {
         final WeakReference<View> row;
         /** Package-aware small icon source, with no additional timer or observer. */
         final NotificationIconTreatment notificationIcons = new NotificationIconTreatment();
-        boolean restoringNativeIcons;
         /** Positive control: exactly which path was drawn by the already approved notification. */
         final LiveRenderProbe renderControl = new LiveRenderProbe();
         GlassDrawable glass;
@@ -1598,6 +1601,7 @@ public final class HeadsUpHooks {
             }
         }
         int toneErrors;
+        boolean shelfIconSurveyed;
         /**
          * The notification shelf in the expanded shade ("N more notifications" under a collapsed
          * stack) is not a row and keeps SystemUI's own blur, but sits among the cards: its text
@@ -1606,11 +1610,30 @@ public final class HeadsUpHooks {
          */
         void shelfTone() {
             try {
+                if (Probe.trace && !shelfIconSurveyed) {
+                    View root = row.get();
+                    if (root instanceof ViewGroup) {
+                        shelfIconSurveyed = true;
+                        surveyShelfIcons(root, 0, new int[] {0});
+                    }
+                }
                 Tuning t = Tuning.get();
                 boolean on = shadeConfigEnabled() && t.textSwap && t.shadeAdaptive && Boolean.TRUE.equals(shadeExpanded) && barState != null
                         && barState == Eligibility.BAR_SHADE && shadeScene != null && shadeScene == ShadeTone.lightText();
                 setForeground(on);
             } catch (RuntimeException | LinkageError e) { if (toneErrors++ < 5) Probe.error("SHELF_TONE_FAILED", e); }
+        }
+        /** On unknown One UI shelf layouts, identify compact icon view classes without reading content. */
+        void surveyShelfIcons(View root, int depth, int[] count) {
+            if (depth > 12 || count[0] >= 10) return;
+            if (root instanceof android.widget.ImageView) {
+                count[0]++;
+                Probe.log("ICON_TREAT_SHELF_VIEW", Foreground.describe(root));
+            }
+            if (root instanceof ViewGroup) {
+                ViewGroup g = (ViewGroup) root;
+                for (int i = 0; i < g.getChildCount(); i++) surveyShelfIcons(g.getChildAt(i), depth + 1, count);
+            }
         }
         void tone(View v) {
             if (!surfaceEnabled() || !feature("tonemap")) { setNative(); return; }
@@ -1888,8 +1911,11 @@ public final class HeadsUpHooks {
         void setForeground(boolean swap) {
             // Existing pre-draw/rebind path: cached identity checks only; decoding happens off-thread.
             io.github.igorcv88.oneuiliquidglass.glass.Tuning tuning = Tuning.get();
-            notificationIcons.sync(glass != null && !restoringNativeIcons && !pill && enabled
-                            ? row.get() : null, tuning.iconMode, ShadeTone.lightText() == swap);
+            // Notification symbols belong to the notification, not to the lifetime of its glass
+            // background. Samsung temporarily falls back to its native material while opening the
+            // shade; restoring icons in that transition made the original icon flash for a frame.
+            notificationIcons.sync(!pill && enabled ? row.get() : null,
+                    tuning.iconMode, ShadeTone.lightText() == swap);
             long now = android.os.SystemClock.uptimeMillis();
             String reason = swap == swapped ? null : swap ? "style" : "restore";
             // A child row that just got its own glass may still carry its group's swapped text
@@ -2269,6 +2295,9 @@ public final class HeadsUpHooks {
                 // The shelf keeps its swapped text through release(); a detached shelf gives it back.
                 if (pill) setForeground(false);
             }
+            // The view is leaving this window; release its icon lease, not every time its glass
+            // changes backing drawable. A reattached row will be rebound on its next event.
+            notificationIcons.restore();
             if (observer != null && observer.isAlive()) observer.removeOnPreDrawListener(this);
             observer = null;
             if (wm != null && blurListener != null) {
@@ -2551,6 +2580,11 @@ public final class HeadsUpHooks {
         }
         private void onEvent(String event) {
             View v = background.get(), r = row.get(); if (v == null || r == null) return;
+            // Pre-resolve when SystemUI inflates/binds the row, usually while the shade is still
+            // closed. In particular, do not wait for the first visible glass pre-draw to start
+            // the PackageManager lookup and bitmap work on the worker thread.
+            if (enabled && !pill) notificationIcons.sync(r, Tuning.get().iconMode,
+                    ShadeTone.lightText() == swapped);
             if ("setHeadsUp".equals(event) && !isHeadsUp()) {
                 if (p3SettlePosted) { main.removeCallbacks(p3Settle); p3SettlePosted = false; }
                 p3LastSettleAt = 0;
@@ -2877,8 +2911,6 @@ public final class HeadsUpHooks {
          * is handed back later if the card is shown without glass.
          */
         void release(boolean restore) {
-            notificationIcons.restore();
-            restoringNativeIcons = true;
             if (p3SettlePosted) { main.removeCallbacks(p3Settle); p3SettlePosted = false; }
             p3LastMode = -1;
             p3LastCompat = null;
@@ -2891,7 +2923,6 @@ public final class HeadsUpHooks {
             // background is drawn through material() -> release() on every frame, and restoring
             // here undid shelfTone() each redraw. shelfTone() restores it when the shade closes.
             if (!pill) setForeground(false);
-            restoringNativeIcons = false;
             if (glass == null) return;
             // The blur guard also blocked calls aimed at the row while this material was managed.
             boolean compositor = glassKind == Backdrop.Kind.SAMSUNG || glass.hybrid() || compBridge != null;
