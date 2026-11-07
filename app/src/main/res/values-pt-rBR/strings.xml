@@ -487,8 +487,8 @@
     <string name="icons_preview_live">Aplicado</string>
     <string name="icons_preview_edited">Selecionado</string>
     <string name="icons_preview_note">Prévia aproximada. O desenho real depende do aplicativo e do espaço reservado pela Samsung.</string>
-    <plurals name="icons_pending"><item quantity="one">1 configuração de ícone pendente</item><item quantity="other">%d configurações de ícones pendentes</item></plurals>
-    <plurals name="icons_apply_warning"><item quantity="one">Aplicar 1 configuração de ícone e reiniciar a interface uma vez? As notificações e a barra de status vão desaparecer brevemente.</item><item quantity="other">Aplicar %d configurações de ícones e reiniciar a interface uma vez? As notificações e a barra de status vão desaparecer brevemente.</item></plurals>
+    <plurals name="icons_pending"><item quantity="one">%d configuração de ícone pendente</item><item quantity="other">%d configurações de ícones pendentes</item></plurals>
+    <plurals name="icons_apply_warning"><item quantity="one">Aplicar %d configuração de ícone e reiniciar a interface uma vez? As notificações e a barra de status vão desaparecer brevemente.</item><item quantity="other">Aplicar %d configurações de ícones e reiniciar a interface uma vez? As notificações e a barra de status vão desaparecer brevemente.</item></plurals>
     <string name="icons_status_bar">Barra de status</string>
     <string name="icons_quick_settings">Ícones da Central de controle</string>
     <string name="icons_compatibility">Compatibilidade</string>

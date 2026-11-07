@@ -487,8 +487,8 @@
     <string name="icons_preview_live">Applied</string>
     <string name="icons_preview_edited">Selected</string>
     <string name="icons_preview_note">Approximate size preview. The actual glyph depends on the app and Samsung’s icon slot.</string>
-    <plurals name="icons_pending"><item quantity="one">1 icon setting pending</item><item quantity="other">%d icon settings pending</item></plurals>
-    <plurals name="icons_apply_warning"><item quantity="one">Apply 1 icon setting and restart System UI once? Notifications and the status bar will disappear briefly.</item><item quantity="other">Apply %d icon settings and restart System UI once? Notifications and the status bar will disappear briefly.</item></plurals>
+    <plurals name="icons_pending"><item quantity="one">%d icon setting pending</item><item quantity="other">%d icon settings pending</item></plurals>
+    <plurals name="icons_apply_warning"><item quantity="one">Apply %d icon setting and restart System UI once? Notifications and the status bar will disappear briefly.</item><item quantity="other">Apply %d icon settings and restart System UI once? Notifications and the status bar will disappear briefly.</item></plurals>
     <string name="icons_status_bar">Status bar</string>
     <string name="icons_quick_settings">Quick Settings icons</string>
     <string name="icons_compatibility">Compatibility</string>
