@@ -389,7 +389,7 @@ public final class HeadsUpHooks {
                 catch (RuntimeException | LinkageError e) { Probe.error("ROW_PROBE_FAILED", e); }
             }
         };
-        for (String n : new String[]{"onFinishInflate", "setHeadsUp", "setPinned", "setHeadsUpAnimatingAway", "startAppearAnimation", "onAppearAnimationFinished", "setUserExpanded", "setOnKeyguard", "onAttachedToWindow"}) hook(rowClass, n, rowEvent);
+        for (String n : new String[]{"onFinishInflate", "onNotificationUpdated", "setHeadsUp", "setPinned", "setHeadsUpAnimatingAway", "startAppearAnimation", "onAppearAnimationFinished", "setUserExpanded", "setOnKeyguard", "onAttachedToWindow"}) hook(rowClass, n, rowEvent);
         compactIcons = new NotificationCompactIconHooks(loader, () -> enabled);
         compactIcons.install();
         // A cancelled appear/disappear animation (AOSP ActivatableNotificationView.cancelAppearDrawing,
