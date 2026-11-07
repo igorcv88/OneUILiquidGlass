@@ -425,9 +425,9 @@ public final class Tuning {
         liveDarkAlpha = Math.round(clamp(number("livedarkalpha", 20f), 0f, 255f));
         liveDarkFill = Math.round(clamp(number("livedarkfill", 0f), 0f, 255f));
         liveRim = clamp(number("liverim", 2f), 0f, 4f);
-        popupLineGain = clamp(number("popuplinegain", 1.08f), 0.50f, 1.50f);
-        lockscreenLineGain = clamp(number("kglinegain", 0.92f), 0.50f, 1.50f);
-        shadeLineGain = clamp(number("shadelinegain", 1.04f), 0.50f, 1.50f);
+        popupLineGain = clamp(number("popuplinegain", 1.11f), 0.50f, 1.50f);
+        lockscreenLineGain = clamp(number("kglinegain", 0.91f), 0.50f, 1.50f);
+        shadeLineGain = clamp(number("shadelinegain", 1.06f), 0.50f, 1.50f);
         kgDarkAlpha = Math.round(clamp(number("kgdarkalpha", 20f), 0f, 255f));
         kgDarkFill = Math.round(clamp(number("kgdarkfill", 5f), 0f, 255f));
         kgRim = clamp(number("kgrim", 2f), 0f, 4f);

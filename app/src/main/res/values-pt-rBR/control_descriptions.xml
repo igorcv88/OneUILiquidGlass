@@ -17,7 +17,7 @@
     <string name="control_description_kgdarkfill">Ajusta o preenchimento preto dentro dos cartões escuros da tela de bloqueio.</string>
     <string name="control_description_kgglint">Ajusta o reflexo no canto dos cartões da tela de bloqueio.</string>
     <string name="control_description_kglens">Ajusta a refração da borda dos cartões da tela de bloqueio quando a lente dinâmica está ativa.</string>
-    <string name="control_description_kglinegain">Ajusta somente a linha externa Java das notificações da tela de bloqueio; padrão 0,92x. O aro estrutural nativo do SurfaceFlinger e a Now Bar ficam inalterados; a espessura percebida também depende desse aro.</string>
+    <string name="control_description_kglinegain">Ajusta somente a linha externa Java das notificações da tela de bloqueio; padrão 0,91x. O aro estrutural nativo do SurfaceFlinger e a Now Bar ficam inalterados; a espessura percebida também depende desse aro.</string>
     <string name="control_description_kgoptics">Seleciona o material da lente dinâmica nos cartões da tela de bloqueio.</string>
     <string name="control_description_kgrim">Ajusta o contorno dos cartões da tela de bloqueio.</string>
     <string name="control_description_kgsharedoptics">Notificações KG reutilizam o shader óptico Java da Now Bar. Mantenha Contorno fixo (sf.kgfixedrim=1) ligado: a combinação foi aprovada no DZIF; desligar o contorno estrutural achatou o vidro. Não modifica corpo, refração nem blur. Ligado é o padrão aprovado.</string>
@@ -50,7 +50,7 @@
     <string name="control_description_perf">Registra o tempo dos hooks para diagnóstico; a medição tem custo de desempenho.</string>
     <string name="control_description_pillblur">Controla o desfoque do resumo de ícones de notificações da tela de bloqueio.</string>
     <string name="control_description_pillglass">Aplica vidro ao resumo de ícones de notificações da tela de bloqueio.</string>
-    <string name="control_description_popuplinegain">Ajusta somente a luz da linha externa Java dos pop-ups; padrão 1,08x. Não altera largura, reflexos internos, Fresnel, blur ou Now Bar. A luz nativa do compositor permanece intacta.</string>
+    <string name="control_description_popuplinegain">Ajusta somente a luz da linha externa Java dos pop-ups; padrão 1,11x. Não altera largura, reflexos internos, Fresnel, blur ou Now Bar. A luz nativa do compositor permanece intacta.</string>
     <string name="control_description_popuplock">Estabiliza o contraste do pop-up ao confirmar mudanças do fundo antes de trocar o tom.</string>
     <string name="control_description_popuptone">Mede o fundo para ajustar o contraste dos pop-ups.</string>
     <string name="control_description_profile">Seleciona o modelo de refração usado nos fundos capturados.</string>
@@ -150,7 +150,7 @@
     <string name="control_description_shadeglint">Ajusta o reflexo no canto dos cartões da central de notificações.</string>
     <string name="control_description_shadelift">Define o limite de luminância para clarear o fundo sob texto escuro.</string>
     <string name="control_description_shadelightglass">Ajusta a opacidade do vidro claro dos cartões da central de notificações.</string>
-    <string name="control_description_shadelinegain">Ajusta somente a luz da linha externa dos cartões da central; padrão 1,04x. Não altera preenchimento, reflexos internos, blur ou Now Bar.</string>
+    <string name="control_description_shadelinegain">Ajusta somente a luz da linha externa dos cartões da central; padrão 1,06x. Não altera preenchimento, reflexos internos, blur ou Now Bar.</string>
     <string name="control_description_shadelocal">Mede o fundo atrás de cada cartão em vez da tela inteira.</string>
     <string name="control_description_shadescaleveil">Ajusta o véu de contraste usado enquanto um cartão da central muda de tamanho.</string>
     <string name="control_description_shadetone">Seleciona como os cartões da central protegem o contraste do texto.</string>
