@@ -152,7 +152,15 @@ final class NotificationCompactIconHooks {
                 int requested = Tuning.get().statusMaxIcons;
                 if (requested <= 0) return; // Keep the untouched Samsung limit.
                 p.args[2] = requested;
-                if (Probe.trace) Probe.log("ICON_TREAT_STATUS_LIMIT", "route=shouldForceOverflow max=" + requested);
+                if (Probe.trace) {
+                    View panel = p.thisObject instanceof View ? (View) p.thisObject : null;
+                    Probe.log("ICON_TREAT_STATUS_LIMIT", "route=shouldForceOverflow max=" + requested
+                            + " arg0=" + p.args[0] + " arg1=" + p.args[1]
+                            + " maxStatic=" + Reflect.read(p.thisObject, "mMaxStaticIcons")
+                            + " width=" + (panel == null ? -1 : panel.getWidth())
+                            + " children=" + (panel instanceof android.view.ViewGroup
+                                    ? ((android.view.ViewGroup) panel).getChildCount() : -1));
+                }
             }
         });
 
@@ -214,6 +222,7 @@ final class NotificationCompactIconHooks {
         String pkg;
         long rebindingWindow, suspendedUntil;
         int competingRebinds;
+        String lastInkProbe;
 
         State(ImageView view) { ref = new WeakReference<>(view); }
 
@@ -309,6 +318,17 @@ final class NotificationCompactIconHooks {
             }
             if (installed instanceof NotificationGlyphDrawable)
                 ((NotificationGlyphDrawable) installed).scale(Tuning.get().statusIconScale);
+            if (Probe.trace) {
+                String current = "pkg=" + pkg + " parent=" + ancestors(v)
+                        + " nativeInk=" + Integer.toHexString(currentInk(v))
+                        + " viewFilter=" + (v.getColorFilter() != null)
+                        + " tintList=" + (v.getImageTintList() != null)
+                        + " statusMode=" + Tuning.get().statusIconInkMode;
+                if (!current.equals(lastInkProbe)) {
+                    lastInkProbe = current;
+                    Probe.log("ICON_TREAT_COMPACT_INK", current);
+                }
+            }
             // The system owns the status/shelf icon's foreground colour. Re-read its current tint
             // instead of pinning white (a black status bar over a light app must remain black).
             if (v.getColorFilter() != null || v.getImageTintList() != null) {
@@ -385,6 +405,7 @@ final class NotificationCompactIconHooks {
             pkg = null;
             suspendedUntil = 0;
             competingRebinds = 0;
+            lastInkProbe = null;
         }
     }
 }

@@ -1498,6 +1498,31 @@ public final class HeadsUpHooks {
         final WeakReference<View> row;
         /** Package-aware small icon source, with no additional timer or observer. */
         final NotificationIconTreatment notificationIcons = new NotificationIconTreatment();
+        /** Only mBackgroundNormal owns a row's icons. Samsung creates several background
+         * layers for the same row, with separate tone decisions; letting every layer replace
+         * the icons makes black/white controllers overwrite one another every pre-draw. */
+        boolean iconOwnerPreviously, iconOwnerLogged;
+
+        void syncNotificationIcons() {
+            View r = row.get(), v = background.get();
+            Object normal = r == null ? null : Reflect.read(r, "mBackgroundNormal");
+            boolean owner = !pill && r != null && NotificationIconOwner.isNormal(v, normal);
+            if (Probe.trace && (!iconOwnerLogged || owner != iconOwnerPreviously)
+                    && r != null && v != null) {
+                iconOwnerLogged = true;
+                Probe.log("ICON_TREAT_ROW_OWNER", "rowId="
+                        + Integer.toHexString(System.identityHashCode(r))
+                        + " bgId=" + Integer.toHexString(System.identityHashCode(v))
+                        + " role=" + (owner ? "normal" : "nonOwner")
+                        + " hasNormal=" + (normal instanceof View));
+            }
+            if (owner) {
+                notificationIcons.sync(enabled ? r : null, Tuning.get().iconMode, lightBackdrop);
+            } else if (iconOwnerPreviously) {
+                notificationIcons.restore();
+            }
+            iconOwnerPreviously = owner;
+        }
         /** Positive control: exactly which path was drawn by the already approved notification. */
         final LiveRenderProbe renderControl = new LiveRenderProbe();
         GlassDrawable glass;
@@ -1912,12 +1937,10 @@ public final class HeadsUpHooks {
         /** Swapped text and icon tone; the views are walked again every SWAP_WALK_MS while it is on (new inflations). */
         void setForeground(boolean swap) {
             // Existing pre-draw/rebind path: cached identity checks only; decoding happens off-thread.
-            io.github.igorcv88.oneuiliquidglass.glass.Tuning tuning = Tuning.get();
             // Notification symbols belong to the notification, not to the lifetime of its glass
             // background. Samsung temporarily falls back to its native material while opening the
             // shade; restoring icons in that transition made the original icon flash for a frame.
-            notificationIcons.sync(!pill && enabled ? row.get() : null,
-                    tuning.iconMode, lightBackdrop);
+            syncNotificationIcons();
             long now = android.os.SystemClock.uptimeMillis();
             String reason = swap == swapped ? null : swap ? "style" : "restore";
             // A child row that just got its own glass may still carry its group's swapped text
@@ -2585,8 +2608,7 @@ public final class HeadsUpHooks {
             // Pre-resolve when SystemUI inflates/binds the row, usually while the shade is still
             // closed. In particular, do not wait for the first visible glass pre-draw to start
             // the PackageManager lookup and bitmap work on the worker thread.
-            if (enabled && !pill) notificationIcons.sync(r, Tuning.get().iconMode,
-                    lightBackdrop);
+            if (enabled && !pill) syncNotificationIcons();
             if ("setHeadsUp".equals(event) && !isHeadsUp()) {
                 if (p3SettlePosted) { main.removeCallbacks(p3Settle); p3SettlePosted = false; }
                 p3LastSettleAt = 0;
