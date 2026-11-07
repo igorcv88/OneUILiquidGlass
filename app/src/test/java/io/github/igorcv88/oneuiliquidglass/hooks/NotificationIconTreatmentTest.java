@@ -4,6 +4,20 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public final class NotificationIconTreatmentTest {
+    private static final class SamsungEntryRow {
+        @SuppressWarnings("unused") private final Object mNotificationEntry = "samsung-entry";
+        @SuppressWarnings("unused") private Object getEntry() { return null; }
+    }
+    private static final class GetterEntryRow {
+        @SuppressWarnings("unused") private Object getNotificationEntry() { return "getter-entry"; }
+    }
+
+    @Test public void resolvesFirmwareEntryFallbacks() {
+        assertEquals("samsung-entry", NotificationIconTreatment.findEntry(new SamsungEntryRow()));
+        assertEquals("getter-entry", NotificationIconTreatment.findEntry(new GetterEntryRow()));
+        assertNull(NotificationIconTreatment.findEntry(new Object()));
+    }
+
     @Test public void recognizesSystemUiIconWithoutGlobalForegroundState() {
         assertTrue(Foreground.notificationIconCandidateId("com.android.systemui", "icon", "ImageView", "com.android.systemui"));
         assertTrue(Foreground.notificationIconCandidateId("com.android.systemui", "app_icon", "ImageView", "com.android.systemui"));

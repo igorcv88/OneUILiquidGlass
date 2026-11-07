@@ -9,6 +9,7 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.ColorFilter;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffColorFilter;
 import android.graphics.drawable.AdaptiveIconDrawable;
@@ -17,6 +18,7 @@ import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.service.notification.StatusBarNotification;
 import android.view.View;
 import android.view.ViewGroup;
@@ -31,9 +33,11 @@ import io.github.igorcv88.oneuiliquidglass.diagnostics.Probe;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.ref.WeakReference;
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.WeakHashMap;
 import java.util.concurrent.ExecutorService;
@@ -54,7 +58,13 @@ final class NotificationIconTreatment {
     }
     private static final Set<ImageView> managed = Collections.newSetFromMap(new WeakHashMap<>());
     private static final java.util.Set<String> reported = new java.util.HashSet<>();
+    private static final Set<String> entryProbed = Collections.synchronizedSet(new java.util.HashSet<>());
     private static final int SIZE = 128, SAMPLE = 24;
+    private static final long SOURCE_RECHECK_MS = 250;
+    private static final String[] ENTRY_FIELDS = {"mEntry", "mNotificationEntry", "notificationEntry", "entry"};
+    private static final String[] ENTRY_METHODS = {"getEntry", "getNotificationEntry"};
+    private static final String[] SBN_METHODS = {"getSbn", "getStatusBarNotification"};
+    private static final String[] SBN_FIELDS = {"mSbn", "sbn", "mStatusBarNotification", "statusBarNotification"};
 
     static boolean managed(ImageView image) { return managed.contains(image); }
 
@@ -62,6 +72,7 @@ final class NotificationIconTreatment {
         final WeakReference<ImageView> view;
         final Drawable nativeDrawable, background;
         final ColorStateList tint;
+        final ColorFilter imageFilter;
         final int bgAlpha;
         final Drawable installed;
         int color;
@@ -72,9 +83,11 @@ final class NotificationIconTreatment {
             background = v.getBackground();
             bgAlpha = background == null ? 255 : background.getAlpha();
             tint = v.getImageTintList();
+            imageFilter = v.getColorFilter();
             installed = replacement;
             color = ink;
             v.setImageTintList(null);
+            v.clearColorFilter();
             v.setImageDrawable(replacement);
             if (background != null) background.mutate().setAlpha(0);
             managed.add(v);
@@ -101,6 +114,7 @@ final class NotificationIconTreatment {
             if (v.getDrawable() == installed) {
                 v.setImageDrawable(nativeDrawable);
                 if (v.getImageTintList() == null) v.setImageTintList(tint);
+                v.setColorFilter(imageFilter);
             }
             if (background != null && v.getBackground() == background && background.getAlpha() == 0)
                 background.setAlpha(bgAlpha);
@@ -125,6 +139,7 @@ final class NotificationIconTreatment {
     private boolean candidatesDirty;
     private WeakReference<View> bound = new WeakReference<>(null);
     private Object entry;
+    private Object notificationIdentity;
     private String pkg;
     private int selectedMode = -1;
     private long configRevision = -1;
@@ -133,6 +148,8 @@ final class NotificationIconTreatment {
     private volatile long revision;
     private String lastSkip;
     private boolean candidatesReported;
+    private WeakReference<View> missingRow = new WeakReference<>(null);
+    private long nextSourceCheck;
 
     private void skip(String reason) {
         if (Probe.trace && !reason.equals(lastSkip))
@@ -143,25 +160,46 @@ final class NotificationIconTreatment {
     /** Called as part of the existing row's pre-draw, without installing an extra watcher. */
     void sync(View row, int mode, boolean lightBackdrop) {
         if (row == null || mode == NotificationIconPolicy.OFF) { restore(); skip("inactive"); return; }
-        Object currentEntry = Reflect.read(row, "mEntry");
-        if (currentEntry == null) {
-            try { currentEntry = Reflect.call(row, "getEntry"); }
-            catch (ReflectiveOperationException | RuntimeException ignored) { }
-        }
-        if (currentEntry == null) { restore(); skip("entryUnavailable"); return; }
+        long now = SystemClock.uptimeMillis();
         long currentRevision = ConfigClient.revision();
+        if (missingRow.get() == row && now < nextSourceCheck
+                && configRevision == -1) return;
+        boolean refreshSource = bound.get() != row || selectedMode != mode
+                || configRevision != currentRevision || now >= nextSourceCheck;
+        Object currentEntry = entry;
+        Object currentIdentity = notificationIdentity;
+        StatusBarNotification sbn = null;
+        if (refreshSource) {
+            nextSourceCheck = now + SOURCE_RECHECK_MS;
+            currentEntry = findEntry(row);
+            sbn = findSbn(currentEntry);
+            if (sbn == null) sbn = findSbn(row);
+            if (currentEntry == null && sbn == null) {
+                restore(); missingRow = new WeakReference<>(row);
+                skip("entryUnavailable"); probeEntry(row);
+                return;
+            }
+            if (sbn == null || sbn.getNotification() == null) {
+                restore(); missingRow = new WeakReference<>(row);
+                skip("sbnUnavailable"); return;
+            }
+            missingRow.clear();
+            // Retained rows/entries may receive a different Notification and small icon.
+            currentIdentity = sbn.getNotification();
+        }
         if (bound.get() != row || entry != currentEntry || selectedMode != mode
-                || configRevision != currentRevision) {
+                || configRevision != currentRevision || notificationIdentity != currentIdentity) {
             restore();
             bound = new WeakReference<>(row);
             entry = currentEntry;
+            notificationIdentity = currentIdentity;
             selectedMode = mode;
             configRevision = currentRevision;
             lastSkip = null;
             candidatesReported = false;
             row.addOnLayoutChangeListener(layoutObserver);
             findCandidates(row);
-            schedule(row, currentEntry, mode);
+            schedule(row, currentEntry, currentIdentity, sbn, mode);
         }
         if (resolved == null) { if (!pending) skip("noSource"); return; }
         if (resolved.bitmap == null) { skip("existingMono"); return; }
@@ -186,6 +224,61 @@ final class NotificationIconTreatment {
             if (Probe.trace) Probe.log("ICON_TREAT_APPLIED", "pkg=" + pkg + " source=" + resolved.source
                     + " " + Foreground.describe(image) + " ink=" + Integer.toHexString(ink));
         }
+    }
+
+    /** Samsung variants differ in whether their row exposes a field or a getter. */
+    static Object findEntry(Object row) {
+        for (String name : ENTRY_FIELDS) {
+            Object value = Reflect.read(row, name);
+            if (value != null) return value;
+        }
+        for (String name : ENTRY_METHODS) {
+            Object value = callOrNull(row, name);
+            if (value != null) return value;
+        }
+        return null;
+    }
+
+    private static Object callOrNull(Object value, String name) {
+        if (value == null) return null;
+        try { return Reflect.call(value, name); }
+        catch (ReflectiveOperationException | RuntimeException | LinkageError ignored) { return null; }
+    }
+
+    /** A few firmware rows expose SBN directly; prefer it even when an entry wrapper is absent. */
+    private static StatusBarNotification findSbn(Object value) {
+        if (value instanceof StatusBarNotification) return (StatusBarNotification) value;
+        for (String name : SBN_METHODS) {
+            Object result = callOrNull(value, name);
+            if (result instanceof StatusBarNotification) return (StatusBarNotification) result;
+        }
+        for (String name : SBN_FIELDS) {
+            Object result = Reflect.read(value, name);
+            if (result instanceof StatusBarNotification) return (StatusBarNotification) result;
+        }
+        return null;
+    }
+
+    /** Only class/member names, once per firmware row class while trace is explicitly enabled. */
+    private static void probeEntry(View row) {
+        if (!Probe.trace || !entryProbed.add(row.getClass().getName())) return;
+        StringBuilder names = new StringBuilder();
+        for (Class<?> c = row.getClass(); c != null && names.length() < 500; c = c.getSuperclass()) {
+            try {
+                for (Field field : c.getDeclaredFields()) {
+                    String name = field.getName().toLowerCase(Locale.ROOT);
+                    if (name.contains("entry") || name.contains("sbn") || name.contains("notif")) {
+                        if (names.length() > 0) names.append(',');
+                        names.append(field.getName());
+                        if (names.length() >= 500) break;
+                    }
+                }
+            } catch (RuntimeException | LinkageError ignored) { }
+        }
+        Probe.log("ICON_TREAT_ENTRY_PROBE", "row=" + row.getClass().getName()
+                + " mEntry=" + (Reflect.field(row.getClass(), "mEntry") != null)
+                + " getEntry=" + (Reflect.method(row.getClass(), "getEntry") != null)
+                + " fields=" + names);
     }
 
     private boolean allCandidatesGone() {
@@ -235,15 +328,8 @@ final class NotificationIconTreatment {
         }
     }
 
-    private void schedule(View row, Object currentEntry, int mode) {
-        final StatusBarNotification sbn;
-        Object value = null;
-        try { value = Reflect.call(currentEntry, "getSbn"); }
-        catch (ReflectiveOperationException | RuntimeException ignored) { }
-        if (!(value instanceof StatusBarNotification)) value = Reflect.read(currentEntry, "mSbn");
-        if (!(value instanceof StatusBarNotification)) value = Reflect.read(currentEntry, "sbn");
-        sbn = value instanceof StatusBarNotification ? (StatusBarNotification) value : null;
-        if (sbn == null || sbn.getNotification() == null) { skip("sbnUnavailable"); return; }
+    private void schedule(View row, Object currentEntry, Object currentIdentity,
+                          StatusBarNotification sbn, int mode) {
         final String targetPkg = sbn.getPackageName();
         if (!NotificationIconStore.validPackage(targetPkg)) return;
         pkg = targetPkg;
@@ -281,7 +367,8 @@ final class NotificationIconTreatment {
             if (report && revision == ticket) reportMissing(context, targetPkg);
             Resolved answer = next;
             MainThread.handler.post(() -> {
-                if (revision != ticket || entry != currentEntry || bound.get() != row) return;
+                if (revision != ticket || entry != currentEntry
+                        || notificationIdentity != currentIdentity || bound.get() != row) return;
                 pending = false;
                 resolved = answer;
                 if (Probe.trace) Probe.log("ICON_TREAT_ROUTE", "pkg=" + targetPkg + " mode=" + mode
@@ -421,7 +508,7 @@ final class NotificationIconTreatment {
         View root = bound.get();
         if (root != null) root.removeOnLayoutChangeListener(layoutObserver);
         candidatesDirty = false;
-        bound.clear(); entry = null; pkg = null;
+        bound.clear(); entry = null; notificationIdentity = null; pkg = null;
         selectedMode = -1; configRevision = -1; resolved = null; pending = false;
     }
 }

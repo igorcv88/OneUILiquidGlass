@@ -37,6 +37,19 @@ host-package cache. When trace is enabled, `ICON_TREAT_SKIP`, `ICON_TREAT_CANDID
 at most twelve `ICON_TREAT_VIEW` events per unresolved row identify the stage that failed,
 using only view classes/resource IDs, not message content.
 
+### Samsung One UI 9 physical test, 2026-11-07
+
+The first APK ran the hook but returned `ICON_TREAT_SKIP reason=entryUnavailable pkg=null mode=-1`
+on visible notifications; `inactive` also appeared on native/non-glass lifecycle passes.
+`mode=-1` here is the per-row unbound sentinel, **not** a reading of the user setting.
+The next revision accepts alternative Samsung `NotificationEntry` fields/getters or a direct
+`StatusBarNotification` on the row, and traces `ICON_TREAT_ENTRY_PROBE` once per unresolved
+row class (field names only; no message content). Source identity is checked at most every
+250 ms per row so retained rows refresh when their notification changes. The lease also clears
+and restores native ImageView-level colour filters to prevent them overriding the adaptive ink.
+If no `ICON_TREAT_ROUTE`/`APPLIED` events appear, inspect `ICON_TREAT_ENTRY_PROBE` to identify
+the actual firmware field instead of adding speculative package/icon fallbacks.
+
 ## Device validation before merge
 
 1. Use the default mode with an IconPack Studio setup. Check WhatsApp/ChatGPT/Gmail or any
