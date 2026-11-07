@@ -31,6 +31,12 @@ Optional `debug.oulg.trace=1` emits `ICON_TREAT_ROUTE`, `ICON_TREAT_APPLIED`,
 `ICON_TREAT_SOURCE_FAILED`, and `ICON_TREAT_REPORT_FAILED` with package/source metadata only.
 Turn trace off after a short reproduction; no trace is required for normal use.
 
+The notification-icon source classifier is independent of `icontone`, which controls the
+legacy foreground-colour adjustment. It does not rely on the global view-tree traversal's
+host-package cache. When trace is enabled, `ICON_TREAT_SKIP`, `ICON_TREAT_CANDIDATES`, and
+at most twelve `ICON_TREAT_VIEW` events per unresolved row identify the stage that failed,
+using only view classes/resource IDs, not message content.
+
 ## Device validation before merge
 
 1. Use the default mode with an IconPack Studio setup. Check WhatsApp/ChatGPT/Gmail or any

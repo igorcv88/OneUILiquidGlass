@@ -1888,7 +1888,7 @@ public final class HeadsUpHooks {
         void setForeground(boolean swap) {
             // Existing pre-draw/rebind path: cached identity checks only; decoding happens off-thread.
             io.github.igorcv88.oneuiliquidglass.glass.Tuning tuning = Tuning.get();
-            notificationIcons.sync(glass != null && !restoringNativeIcons && !pill && tuning.iconTone && enabled
+            notificationIcons.sync(glass != null && !restoringNativeIcons && !pill && enabled
                             ? row.get() : null, tuning.iconMode, ShadeTone.lightText() == swap);
             long now = android.os.SystemClock.uptimeMillis();
             String reason = swap == swapped ? null : swap ? "style" : "restore";

@@ -131,16 +131,24 @@ final class NotificationIconTreatment {
     private boolean pending;
     private Resolved resolved;
     private volatile long revision;
+    private String lastSkip;
+    private boolean candidatesReported;
+
+    private void skip(String reason) {
+        if (Probe.trace && !reason.equals(lastSkip))
+            Probe.log("ICON_TREAT_SKIP", "reason=" + reason + " pkg=" + pkg + " mode=" + selectedMode);
+        lastSkip = reason;
+    }
 
     /** Called as part of the existing row's pre-draw, without installing an extra watcher. */
     void sync(View row, int mode, boolean lightBackdrop) {
-        if (row == null || mode == NotificationIconPolicy.OFF) { restore(); return; }
+        if (row == null || mode == NotificationIconPolicy.OFF) { restore(); skip("inactive"); return; }
         Object currentEntry = Reflect.read(row, "mEntry");
         if (currentEntry == null) {
             try { currentEntry = Reflect.call(row, "getEntry"); }
             catch (ReflectiveOperationException | RuntimeException ignored) { }
         }
-        if (currentEntry == null) { restore(); return; }
+        if (currentEntry == null) { restore(); skip("entryUnavailable"); return; }
         long currentRevision = ConfigClient.revision();
         if (bound.get() != row || entry != currentEntry || selectedMode != mode
                 || configRevision != currentRevision) {
@@ -149,16 +157,20 @@ final class NotificationIconTreatment {
             entry = currentEntry;
             selectedMode = mode;
             configRevision = currentRevision;
+            lastSkip = null;
+            candidatesReported = false;
             row.addOnLayoutChangeListener(layoutObserver);
             findCandidates(row);
             schedule(row, currentEntry, mode);
         }
-        if (resolved == null || resolved.bitmap == null) return;
+        if (resolved == null) { if (!pending) skip("noSource"); return; }
+        if (resolved.bitmap == null) { skip("existingMono"); return; }
         int ink = lightBackdrop ? Color.BLACK : Color.WHITE;
         boolean stale = false;
         for (Lease l : active) if (!l.current()) { l.restore(); stale = true; }
         if (stale) active.removeIf(l -> !l.current());
         if (candidatesDirty || !candidates.isEmpty() && allCandidatesGone()) findCandidates(row);
+        if (candidates.isEmpty()) { skip("noIconView"); return; }
         for (WeakReference<ImageView> ref : candidates) {
             ImageView image = ref.get();
             if (image == null || !image.isAttachedToWindow() || image.getDrawable() == null) continue;
@@ -188,12 +200,19 @@ final class NotificationIconTreatment {
         candidatesDirty = false;
         candidates.clear();
         find(root, root, 0);
+        if (Probe.trace && !candidatesReported) {
+            candidatesReported = true;
+            Probe.log("ICON_TREAT_CANDIDATES", "pkg=" + pkg + " count=" + candidates.size()
+                    + " row=" + root.getClass().getSimpleName());
+            if (candidates.isEmpty()) surveyImages(root, root, 0, new int[] {0});
+        }
     }
 
     private void find(View root, View child, int depth) {
         if (depth > 18 || candidates.size() >= 12) return;
         if (child != root && child.getClass().getName().endsWith("ExpandableNotificationRow")) return;
-        if (child instanceof ImageView && Foreground.smallIcon(child))
+        if (child instanceof ImageView && Foreground.notificationIconCandidate(child,
+                root.getContext().getPackageName()))
             candidates.add(new WeakReference<>((ImageView) child));
         if (child instanceof ViewGroup) {
             ViewGroup g = (ViewGroup) child;
@@ -201,13 +220,30 @@ final class NotificationIconTreatment {
         }
     }
 
+    /** Trace-only bounded inventory of resource ids, never bitmap or message contents. */
+    private void surveyImages(View root, View child, int depth, int[] count) {
+        if (depth > 18 || count[0] >= 12) return;
+        if (child != root && child.getClass().getName().endsWith("ExpandableNotificationRow")) return;
+        if (child instanceof ImageView) {
+            count[0]++;
+            Probe.log("ICON_TREAT_VIEW", Foreground.describe(child));
+        }
+        if (child instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) child;
+            for (int i = 0; i < group.getChildCount(); i++)
+                surveyImages(root, group.getChildAt(i), depth + 1, count);
+        }
+    }
+
     private void schedule(View row, Object currentEntry, int mode) {
         final StatusBarNotification sbn;
-        try {
-            Object value = Reflect.call(currentEntry, "getSbn");
-            sbn = value instanceof StatusBarNotification ? (StatusBarNotification) value : null;
-        } catch (ReflectiveOperationException | RuntimeException e) { return; }
-        if (sbn == null || sbn.getNotification() == null) return;
+        Object value = null;
+        try { value = Reflect.call(currentEntry, "getSbn"); }
+        catch (ReflectiveOperationException | RuntimeException ignored) { }
+        if (!(value instanceof StatusBarNotification)) value = Reflect.read(currentEntry, "mSbn");
+        if (!(value instanceof StatusBarNotification)) value = Reflect.read(currentEntry, "sbn");
+        sbn = value instanceof StatusBarNotification ? (StatusBarNotification) value : null;
+        if (sbn == null || sbn.getNotification() == null) { skip("sbnUnavailable"); return; }
         final String targetPkg = sbn.getPackageName();
         if (!NotificationIconStore.validPackage(targetPkg)) return;
         pkg = targetPkg;

@@ -4,6 +4,20 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public final class NotificationIconTreatmentTest {
+    @Test public void recognizesSystemUiIconWithoutGlobalForegroundState() {
+        assertTrue(Foreground.notificationIconCandidateId("com.android.systemui", "icon", "ImageView", "com.android.systemui"));
+        assertTrue(Foreground.notificationIconCandidateId("com.android.systemui", "app_icon", "ImageView", "com.android.systemui"));
+        assertTrue(Foreground.notificationIconCandidateId("android", "icon", "ImageView", "com.android.systemui"));
+        assertTrue(Foreground.notificationIconCandidateId("com.android.systemui", "status_icon", "NotificationRowIconView", "com.android.systemui"));
+    }
+
+    @Test public void neverUsesAvatarMediaOrForeignIconViews() {
+        assertFalse(Foreground.notificationIconCandidateId("com.android.systemui", "conversation_icon", "ImageView", "com.android.systemui"));
+        assertFalse(Foreground.notificationIconCandidateId("com.android.systemui", "right_icon", "CachingIconView", "com.android.systemui"));
+        assertFalse(Foreground.notificationIconCandidateId("com.example.app", "icon", "ImageView", "com.android.systemui"));
+        assertFalse(Foreground.notificationIconCandidateId("com.android.systemui", "share_button", "ImageView", "com.android.systemui"));
+    }
+
     @Test public void smallTransparentSilhouetteQualifies() {
         int[] p = new int[100];
         for (int i = 0; i < 30; i++) p[i] = 0xffffffff;
