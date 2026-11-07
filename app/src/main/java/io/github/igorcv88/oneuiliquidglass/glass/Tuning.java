@@ -477,7 +477,10 @@ public final class Tuning {
         headerGap = clamp(number("headergap", 7f), 0f, 8f);
         perf = number("perf", 0f) >= 1f;
         Perf.enabled = perf;
-        trace = number("trace", 0f) >= 1f;
+        // A persisted UI preference of trace=0 must not mask an explicit temporary root
+        // diagnostic (`setprop debug.oulg.trace 1`). The snapshot provider takes precedence
+        // for normal controls, but tracing is opt-in through either independent switch.
+        trace = traceEnabled(number("trace", 0f) >= 1f, systemProp("trace", "0"));
         Probe.trace = trace;
         edgePremulMode = Math.max(0, Math.min(4, Math.round(number("edgepremul", 0f))));
         edgePremulSafe = edgePremulMode > 0;
@@ -607,6 +610,10 @@ public final class Tuning {
         String v = prop(key, "");
         if (v.isEmpty()) return fallback;
         try { return Float.parseFloat(v); } catch (NumberFormatException e) { return fallback; }
+    }
+
+    static boolean traceEnabled(boolean configEnabled, String debugProperty) {
+        return configEnabled || "1".equals(debugProperty);
     }
 
     private static int iconColor(String key, String fallback) {
