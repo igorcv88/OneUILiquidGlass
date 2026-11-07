@@ -17,7 +17,7 @@
     <string name="control_description_kgdarkfill">Adjusts the black fill inside dark lock screen cards.</string>
     <string name="control_description_kgglint">Adjusts the corner highlight on lock screen cards.</string>
     <string name="control_description_kglens">Adjusts edge refraction on lock screen cards when the dynamic lens is active.</string>
-    <string name="control_description_kglinegain">Fine-tunes only the Java outer hairline of lock screen notifications; default 0.92x. The SurfaceFlinger structural rim and Now Bar are unchanged; the final perceived thickness also depends on that native rim.</string>
+    <string name="control_description_kglinegain">Fine-tunes only the Java outer hairline of lock screen notifications; default 0.80x. The SurfaceFlinger structural rim and Now Bar are unchanged; the final perceived thickness also depends on that native rim.</string>
     <string name="control_description_kgoptics">Selects the dynamic lens material used on lock screen cards.</string>
     <string name="control_description_kgrim">Adjusts the outline of lock screen cards.</string>
     <string name="control_description_kgsharedoptics">KG notifications reuse the Now Bar\'s Java optical shader. Keep Fixed rim (sf.kgfixedrim=1) enabled: the combined appearance was approved on DZIF; disabling the structural rim flattened the glass. Does not change body tone, refraction, or blur. On is the approved default.</string>
@@ -50,7 +50,7 @@
     <string name="control_description_perf">Logs hook timing for diagnostics; measuring has a performance cost.</string>
     <string name="control_description_pillblur">Controls blur in the lock screen notification icon summary.</string>
     <string name="control_description_pillglass">Applies glass to the lock screen notification icon summary.</string>
-    <string name="control_description_popuplinegain">Fine-tunes only the Java outer hairline light of heads-up notifications; default 1.08x. Does not alter the line\'s width, inner reflections, Fresnel, blur, or Now Bar. The native compositor\'s light is not changed.</string>
+    <string name="control_description_popuplinegain">Fine-tunes only the Java outer hairline light of heads-up notifications; default 1.30x. Does not alter the line\'s width, inner reflections, Fresnel, blur, or Now Bar. The native compositor\'s light is not changed.</string>
     <string name="control_description_popuplock">Stabilizes pop-up contrast by confirming background changes before switching tone.</string>
     <string name="control_description_popuptone">Measures the background to adjust contrast on pop-ups.</string>
     <string name="control_description_profile">Selects the refraction model for captured backgrounds.</string>
@@ -150,7 +150,7 @@
     <string name="control_description_shadeglint">Adjusts the corner highlight on notification shade cards.</string>
     <string name="control_description_shadelift">Sets the background luminance threshold for lightening behind dark text.</string>
     <string name="control_description_shadelightglass">Adjusts light glass opacity on notification shade cards.</string>
-    <string name="control_description_shadelinegain">Fine-tunes only the outer hairline light on notification shade cards; default 1.04x. Does not change the fill, internal highlights, blur, or Now Bar.</string>
+    <string name="control_description_shadelinegain">Fine-tunes only the outer hairline light on notification shade cards; default 1.30x. Does not change the fill, internal highlights, blur, or Now Bar.</string>
     <string name="control_description_shadelocal">Measures the background behind each card instead of the whole screen.</string>
     <string name="control_description_shadescaleveil">Adjusts the fallback contrast veil while a shade card is resized.</string>
     <string name="control_description_shadetone">Selects how notification shade cards protect text contrast.</string>

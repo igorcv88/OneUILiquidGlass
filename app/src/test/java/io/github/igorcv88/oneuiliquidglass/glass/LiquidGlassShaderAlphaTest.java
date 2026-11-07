@@ -43,9 +43,9 @@ public final class LiquidGlassShaderAlphaTest {
         assertTrue(source.contains("* hairGain * notificationLineGain"));
         for (String key : new String[] {"popuplinegain", "kglinegain", "shadelinegain"})
             assertTrue(io.github.igorcv88.oneuiliquidglass.config.SettingsRegistry.get(key) != null);
-        assertEquals("1.08", io.github.igorcv88.oneuiliquidglass.config.SettingsRegistry.get("popuplinegain").defaultValue);
-        assertEquals("0.92", io.github.igorcv88.oneuiliquidglass.config.SettingsRegistry.get("kglinegain").defaultValue);
-        assertEquals("1.04", io.github.igorcv88.oneuiliquidglass.config.SettingsRegistry.get("shadelinegain").defaultValue);
+        assertEquals("1.30", io.github.igorcv88.oneuiliquidglass.config.SettingsRegistry.get("popuplinegain").defaultValue);
+        assertEquals("0.80", io.github.igorcv88.oneuiliquidglass.config.SettingsRegistry.get("kglinegain").defaultValue);
+        assertEquals("1.30", io.github.igorcv88.oneuiliquidglass.config.SettingsRegistry.get("shadelinegain").defaultValue);
     }
 
     @Test public void alphaEnvelopeAdmitsBrightZeroShadowPixels() {
