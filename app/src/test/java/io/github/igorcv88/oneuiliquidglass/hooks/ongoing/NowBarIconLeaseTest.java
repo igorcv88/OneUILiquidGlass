@@ -101,6 +101,29 @@ public class NowBarIconLeaseTest {
         assertEquals(nativeColor, disc.getCardBackgroundColor().getDefaultColor());
     }
 
+    @Test public void expandedNotificationHeaderLosesItsAdaptiveBackgroundAndRestoresIt() {
+        // The DZIF expanded view is a NotificationRowIconView inside a notification header,
+        // not the compact nowbar_icon's MaterialCardView.
+        ImageView headerIcon = new ImageView(activity);
+        headerIcon.setId(android.R.id.icon);
+        headerIcon.setImageResource(R.drawable.oulg_launcher);
+        Drawable original = headerIcon.getDrawable();
+        assertTrue(original instanceof AdaptiveIconDrawable);
+        NowBarIconLease lease = new NowBarIconLease();
+
+        lease.sync(headerIcon, true);
+        assertNotSame("the app's coloured adaptive background must be removed",
+                original, headerIcon.getDrawable());
+        assertFalse(headerIcon.getDrawable() instanceof AdaptiveIconDrawable);
+        Drawable monochrome = headerIcon.getDrawable();
+        lease.sync(headerIcon, true);
+        assertSame(monochrome, headerIcon.getDrawable());
+
+        lease.sync(headerIcon, false);
+        assertSame("the native icon returns when the glass gate closes",
+                original, headerIcon.getDrawable());
+    }
+
     @Test public void tintedAdaptiveGlyphFollowsContrastAndRestoresNativeTint() {
         FakeCardView disc = new FakeCardView(activity);
         ImageView icon = new ImageView(activity);

@@ -2,6 +2,7 @@ package io.github.igorcv88.oneuiliquidglass.hooks.ongoing;
 
 import android.content.ComponentName;
 import android.content.res.ColorStateList;
+import android.graphics.drawable.Drawable;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
@@ -105,6 +106,8 @@ final class NowBarHooks {
         ColorStateList nativeCardColor;
         final NativeRegionLease nativeRegion = new NativeRegionLease();
         final NowBarIconLease icon = new NowBarIconLease();
+        /** The expanded notification header inflates a separate AdaptiveIconDrawable. */
+        final NowBarIconLease expandedIcon = new NowBarIconLease();
         Float nativeElevation;
         boolean gradientHidden;
         WeakReference<View> hiddenGradient = new WeakReference<>(null);
@@ -246,6 +249,18 @@ final class NowBarHooks {
         ImageView icon = c.icon.target();
         if (icon == null || !LiveChipHooks.within(icon, card)) icon = findIcon(card);
         c.icon.sync(icon, shown);
+        // On DZIF the expanded card uses a NotificationRowIconView under
+        // expand_content_rootview, not the compact nowbar_icon. Its adaptive icon
+        // includes a coloured background; lease just its monochrome glyph.
+        ImageView expandedIcon = findExpandedIcon(card);
+        Drawable expandedBefore = expandedIcon == null ? null : expandedIcon.getDrawable();
+        c.expandedIcon.sync(expandedIcon, shown);
+        if (expandedIcon != null && expandedBefore != expandedIcon.getDrawable()) {
+            Drawable after = expandedIcon.getDrawable();
+            Probe.log("NOWBAR_EXPANDED_ICON", "glass=" + shown
+                    + " before=" + (expandedBefore == null ? "null" : expandedBefore.getClass().getSimpleName())
+                    + " after=" + (after == null ? "null" : after.getClass().getSimpleName()));
+        }
         // DZIF uses a different CardView for the EXPANDED ongoing app icon; the normal
         // nowbar_icon lease only clears its compact disc. Never touch MediaCardView.
         c.icon.syncExpandedDisc(findExpandedIconContainer(card), shown);
@@ -306,6 +321,17 @@ final class NowBarHooks {
     private static View findExpandedIconContainer(View card) {
         View v = NativeIds.find(card, "ongoing_app_expanded_icon_container");
         return v != null && NativeShape.cardLike(v) ? v : null;
+    }
+
+    /** Constrain the expanded glyph to the ongoing card's notification content. */
+    private static ImageView findExpandedIcon(View card) {
+        View expanded = NativeIds.find(card, "expand_content_rootview");
+        return expanded == null ? null : expandedHeaderIcon(expanded);
+    }
+
+    static ImageView expandedHeaderIcon(View expanded) {
+        View v = NativeIds.find(expanded, "icon");
+        return v instanceof ImageView ? (ImageView) v : null;
     }
 
     /** No changes to vector-only icons or sibling UI outside NowBarOngoingCardView. */

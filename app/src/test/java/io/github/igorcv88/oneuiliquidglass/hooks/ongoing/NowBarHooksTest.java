@@ -6,6 +6,7 @@ import android.app.Activity;
 import android.os.Looper;
 import android.view.View;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 import com.android.systemui.plugins.keyguardstatusview.NowBarItem;
 import com.android.systemui.shared.plugins.PluginInstance;
 import com.samsung.android.app.facewidget.presentation.NowBarMediaCardView;
@@ -107,6 +108,15 @@ public class NowBarHooksTest {
         assertNotNull(abi.viewMode); assertNotNull(abi.expandedColor); assertNotNull(abi.stackRefresh);
         assertNotNull(abi.expandedState); assertNotNull(abi.gradientVisible);
         assertEquals(a.class, abi.n.getDeclaringClass());
+    }
+
+    @Test public void expandedHeaderIconLookupStaysWithinTheExpandedContent() {
+        FrameLayout expanded = new FrameLayout(activity);
+        ImageView icon = new ImageView(activity);
+        icon.setId(android.R.id.icon);
+        expanded.addView(icon);
+        assertSame(icon, NowBarHooks.expandedHeaderIcon(expanded));
+        assertNull(NowBarHooks.expandedHeaderIcon(new FrameLayout(activity)));
     }
 
     @Test public void ongoingCardTakesGlassAndKeepsItAcrossBaseWriters() {

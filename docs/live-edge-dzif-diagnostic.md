@@ -1,5 +1,26 @@
 # Diagnóstico dirigido: pílula, botões da live update e ícone do Now Bar (DZIF)
 
+## Now Bar expandida: camada monocromática (07/11/2026)
+
+O `OULG_ICON_LIVE_FOLLOWUP.log.gz` mostrou **duas imagens distintas** no
+`NowBarOngoingCardView` do DZIF:
+
+- Compacta: `ImageView id=nowbar_icon`, dentro de
+  `MaterialCardView id=ongoing_app_icon_container`, já exibindo `VectorDrawable`
+  com filtro de cor.
+- Expandida: `NotificationRowIconView id=icon`, abaixo de
+  `expand_content_rootview`/`NotificationHeaderView`, ainda contendo
+  `AdaptiveIconDrawable` com `monochrome=true`. Nessa árvore não apareceu
+  `ongoing_app_expanded_icon_container`.
+
+Para a Now Bar expandida, o hook tem uma segunda lease, restrita à árvore de
+conteúdo expandido da carta ongoing. Ela extrai o drawable monocromático
+existente, mantém seu contraste e devolve o `AdaptiveIconDrawable` original
+quando o vidro para de ser mostrado. Não altera a notificação normal nem a
+Now Bar de mídia. O evento `NOWBAR_EXPANDED_ICON glass=true
+before=AdaptiveIconDrawable after=...` confirma a substituição; `glass=false`
+confirma restauração. A correção visual ainda requer teste físico no DZIF.
+
 O vidro principal da lock screen e os toasts estão aprovados. Esta instrumentação **não modifica a composição**: acrescenta somente snapshots de views quando `debug.oulg.trace=1`. Não fazer ajustes de fundo/tint por tentativa até identificar a camada exata.
 
 ## O que registrar
