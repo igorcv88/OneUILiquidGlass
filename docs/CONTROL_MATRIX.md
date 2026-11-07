@@ -77,7 +77,7 @@ Gerada por `ControlMatrixTest` a partir de `SettingsRegistry`, `Controls`, `Appl
 | `shadelinegain` | Luz da linha externa | Central | Bordas e reflexos · advanced | float · 0.5–1.5 · 1.30 | hooks/HeadsUpHooks | ao vivo | ativo | ativo | ativo | edge | behavior | CM, SC |
 | `textswap` | Texto adaptativo | Pop-up, Bloqueio, Central | Cor e contraste · standard | boolean · 1 | glass/ShadeTone, hooks/HeadsUpHooks | ao vivo | ativo | ativo | ativo |  | faithful · text_swap | CM, PT |
 | `headertone` | Ajustar relógio e data | Central | Cor e contraste · advanced | boolean · 0 | hooks/HeadsUpHooks | ao vivo | ativo | ativo | ativo |  | behavior | CM |
-| `icontone` | Ajustar ícone pequeno | Pop-up, Bloqueio, Central | Cor e contraste · advanced | boolean · 1 | hooks/Foreground | ao vivo | ativo | ativo | ativo |  | behavior | CM |
+| `icontone` | Ajustar ícone pequeno | Pop-up, Bloqueio, Central | Cor e contraste · advanced | boolean · 1 | hooks/Foreground, hooks/HeadsUpHooks | ao vivo | ativo | ativo | ativo |  | behavior | CM |
 | `iconmode` | Origem dos ícones de notificações | Pop-up, Bloqueio, Central | Cor e contraste · advanced | int · 0–3 · 1 | hooks/HeadsUpHooks | ao vivo | ativo | ativo | ativo |  | behavior | CM, SC |
 | `popuplock` | Contraste estável | Pop-up | Comportamento · advanced | boolean · 1 | hooks/HeadsUpHooks | ao vivo | ativo | ativo | ativo |  | behavior | CM |
 | `orphandraw` | Tom certo desde o primeiro quadro | Central | Comportamento · advanced | boolean · 1 | hooks/HeadsUpHooks | ao vivo | ativo | ativo | ativo |  | behavior | CM |
