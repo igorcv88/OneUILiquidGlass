@@ -187,6 +187,10 @@
     "Matches monochrome notification icons to the text color.",
     "Ajusta os ícones monocromáticos das notificações à cor do texto."
   ],
+  "iconmode": [
+    "Controls which notification app icons are converted to a background-free monochrome glyph. System and service icons are treated by default; user-selected icon packs are preserved.",
+    "Define quais ícones de aplicativos nas notificações serão convertidos em símbolos monocromáticos sem fundo. Ícones do sistema e de serviços são tratados por padrão; os packs escolhidos pelo usuário são preservados."
+  ],
   "shadescaleveil": [
     "Adjusts the fallback contrast veil while a shade card is resized.",
     "Ajusta o véu de contraste usado enquanto um cartão da central muda de tamanho."

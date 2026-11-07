@@ -1,5 +1,13 @@
 {
   "": "",
+  "Desativado": "Off",
+  "Força o tratamento de ícones elegíveis, inclusive os personalizados": "Forces treatment of eligible icons, including custom icons",
+  "Mantém os ícones como o sistema os desenhou": "Keeps icons as the system draws them",
+  "Padrão: preserva os aplicativos do usuário e seus packs": "Default: preserves user apps and their icon packs",
+  "Sistema e originais confirmados": "System and verified originals",
+  "Sistema e serviços": "System and services",
+  "Todos": "All",
+  "Trata aplicativos comuns só quando o ícone exibido corresponde ao original": "Treats regular apps only when the displayed icon matches the original",
   "Acompanha o cartão durante gestos": "Follows the card during gestures",
   "Adaptativa": "Adaptive",
   "Automática": "Automatic",

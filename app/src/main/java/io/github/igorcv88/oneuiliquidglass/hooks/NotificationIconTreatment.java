@@ -118,6 +118,11 @@ final class NotificationIconTreatment {
 
     private final List<Lease> active = new ArrayList<>();
     private final List<WeakReference<ImageView>> candidates = new ArrayList<>();
+    // A row layout/reinflation is the trigger for discovering new icon views. Avoid walking the
+    // entire notification view tree on every pre-draw when a template contains no small icon.
+    private final View.OnLayoutChangeListener layoutObserver = (view, left, top, right, bottom,
+            oldLeft, oldTop, oldRight, oldBottom) -> candidatesDirty = true;
+    private boolean candidatesDirty;
     private WeakReference<View> bound = new WeakReference<>(null);
     private Object entry;
     private String pkg;
@@ -144,6 +149,7 @@ final class NotificationIconTreatment {
             entry = currentEntry;
             selectedMode = mode;
             configRevision = currentRevision;
+            row.addOnLayoutChangeListener(layoutObserver);
             findCandidates(row);
             schedule(row, currentEntry, mode);
         }
@@ -152,7 +158,7 @@ final class NotificationIconTreatment {
         boolean stale = false;
         for (Lease l : active) if (!l.current()) { l.restore(); stale = true; }
         if (stale) active.removeIf(l -> !l.current());
-        if (candidates.isEmpty() || allCandidatesGone()) findCandidates(row);
+        if (candidatesDirty || !candidates.isEmpty() && allCandidatesGone()) findCandidates(row);
         for (WeakReference<ImageView> ref : candidates) {
             ImageView image = ref.get();
             if (image == null || !image.isAttachedToWindow() || image.getDrawable() == null) continue;
@@ -179,6 +185,7 @@ final class NotificationIconTreatment {
     }
 
     private void findCandidates(View root) {
+        candidatesDirty = false;
         candidates.clear();
         find(root, root, 0);
     }
@@ -375,6 +382,9 @@ final class NotificationIconTreatment {
         revision++;
         for (Lease lease : active) lease.restore();
         active.clear(); candidates.clear();
+        View root = bound.get();
+        if (root != null) root.removeOnLayoutChangeListener(layoutObserver);
+        candidatesDirty = false;
         bound.clear(); entry = null; pkg = null;
         selectedMode = -1; configRevision = -1; resolved = null; pending = false;
     }

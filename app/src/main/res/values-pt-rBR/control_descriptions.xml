@@ -9,6 +9,7 @@
     <string name="control_description_huoptics">Seleciona o material da lente dinâmica nos pop-ups.</string>
     <string name="control_description_hz">Define a frequência de captura do pop-up no modo de captura.</string>
     <string name="control_description_hzkg">Define a frequência de captura da tela de bloqueio quando necessária.</string>
+    <string name="control_description_iconmode">Define quais ícones de aplicativos nas notificações serão convertidos em símbolos monocromáticos sem fundo. Ícones do sistema e de serviços são tratados por padrão; os packs escolhidos pelo usuário são preservados.</string>
     <string name="control_description_icontone">Ajusta os ícones monocromáticos das notificações à cor do texto.</string>
     <string name="control_description_ior">Define o índice de refração usado pelo modelo físico.</string>
     <string name="control_description_kgblurpath">Seleciona onde o desfoque da tela de bloqueio é desenhado quando a lente dinâmica está ativa.</string>

@@ -17,6 +17,7 @@ final class ControlDescriptions {
             case "huoptics": return R.string.control_description_huoptics;
             case "hz": return R.string.control_description_hz;
             case "hzkg": return R.string.control_description_hzkg;
+            case "iconmode": return R.string.control_description_iconmode;
             case "icontone": return R.string.control_description_icontone;
             case "ior": return R.string.control_description_ior;
             case "kgblurpath": return R.string.control_description_kgblurpath;
