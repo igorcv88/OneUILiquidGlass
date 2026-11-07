@@ -4,6 +4,11 @@ package io.github.igorcv88.oneuiliquidglass.hooks;
 final class ShelfIconInk {
     private ShelfIconInk() { }
 
+    /** Native-only notification icons need the same shelf tint as replaced bitmap icons. */
+    static boolean shouldMirror(boolean inShelf, boolean shelfSwapped) {
+        return inShelf && shelfSwapped;
+    }
+
     /** When native text is light, shelfTone() mirrors it to dark text on light glass. */
     static int mirrored(boolean nativeLightText, int mode, int fixed, int light, int dark) {
         if (mode == 1) return fixed;

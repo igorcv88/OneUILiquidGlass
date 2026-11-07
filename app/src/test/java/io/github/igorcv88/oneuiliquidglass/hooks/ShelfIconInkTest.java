@@ -1,10 +1,18 @@
 package io.github.igorcv88.oneuiliquidglass.hooks;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 
 public class ShelfIconInkTest {
+    @Test public void shelfMirroringDoesNotDependOnSourceBitmap() {
+        // In particular a preserved Samsung native small icon must not bypass the shelf tone.
+        assertTrue(ShelfIconInk.shouldMirror(true, true));
+        assertFalse(ShelfIconInk.shouldMirror(false, true));
+        assertFalse(ShelfIconInk.shouldMirror(true, false));
+    }
     @Test public void whiteSamsungInkOnLightShelfBecomesBlack() {
         assertEquals(0xff000000, ShelfIconInk.mirrored(true, 0, 0, 0, 0));
     }

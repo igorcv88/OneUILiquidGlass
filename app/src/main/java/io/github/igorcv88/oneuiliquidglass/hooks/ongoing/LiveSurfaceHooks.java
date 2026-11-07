@@ -43,6 +43,7 @@ public final class LiveSurfaceHooks {
     final LiveCardHooks cards;
     final NowBarHooks nowBar;
     final ToastHooks toasts;
+    final LiveRemovalDiagnostics removals;
     private boolean environment;
 
     public LiveSurfaceHooks(ClassLoader loader, BooleanSupplier master, Consumer<Context> config) {
@@ -60,6 +61,7 @@ public final class LiveSurfaceHooks {
         cards = new LiveCardHooks(glass);
         nowBar = new NowBarHooks(glass, site);
         toasts = new ToastHooks(glass);
+        removals = new LiveRemovalDiagnostics(loader, site, glass, nowBar, main);
         nowBar.setInstaller(this::installPlugin);
     }
 
@@ -81,6 +83,7 @@ public final class LiveSurfaceHooks {
         installCards();
         installToasts();
         installNowBarBootstrap();
+        removals.install();
         Probe.log("LIVE_READY", "available=" + available + " optIn=" + ConfigClient.flag(LiveSurface.CHIP.flag)
                 + "/" + ConfigClient.flag(LiveSurface.NOWBAR.flag) + "/" + ConfigClient.flag(LiveSurface.TOAST.flag));
     }

@@ -12,6 +12,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.android.systemui.shared.plugins.PluginInstance;
 import com.android.systemui.statusbar.phone.ongoingactivity.OngoingActivityData;
 import com.android.systemui.statusbar.phone.ongoingactivity.OngoingActivityDataHelper;
+import com.android.systemui.statusbar.phone.ongoingactivity.OngoingActivityController;
 import com.android.systemui.statusbar.phone.ongoingactivity.OngoingCardAdapter;
 import com.android.systemui.statusbar.phone.ongoingactivity.ongoingchip.OngoingChipAdapter;
 import com.android.systemui.statusbar.phone.ongoingactivity.CardStackview.CardStackView;
@@ -73,12 +74,22 @@ public class LiveSurfaceHooksTest {
         assertFalse("the native verdict is called, not hooked", site.hooked(OngoingCardAdapter.class, "isMediaView"));
         assertTrue(site.hooked(ToastFactory.class, "createToast"));
         assertTrue(site.hooked(PluginInstance.class, "loadPlugin"));
+        assertTrue(site.hooked(OngoingActivityController.class, "onEntryRemoved"));
+        assertFalse(site.hooked(OngoingActivityController.class, "onEntryUpdated"));
         for (java.lang.reflect.Method m : site.hooks.keySet()) {
             if (ToastHooks.PRESENTER.equals(m.getDeclaringClass().getName()))
                 assertTrue("only scoped presenter lifecycle", m.getName().equals("show") || m.getName().equals("hide"));
             else assertFalse("no generic framework hook: " + m, DataLocator.framework(m.getDeclaringClass()));
         }
         for (LiveSurface s : LiveSurface.values()) assertTrue(s.name(), hooks.available(s));
+    }
+
+    @Test public void diagnosticRemovalHookDoesNotChangeSamsungLifecycle() throws Exception {
+        OngoingActivityController controller = new OngoingActivityController();
+        site.call(controller, "onEntryRemoved", new Object());
+        assertEquals(1, controller.removed);
+        assertTrue(LiveRemovalDiagnostics.removalMethod("onEntryRemoved"));
+        assertFalse(LiveRemovalDiagnostics.removalMethod("onEntryUpdated"));
     }
 
     @Test public void chipBindThroughTheHooksGetsGlassAndConfigStarts() throws Exception {

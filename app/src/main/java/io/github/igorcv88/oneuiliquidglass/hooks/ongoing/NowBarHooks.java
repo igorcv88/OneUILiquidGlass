@@ -163,6 +163,22 @@ final class NowBarHooks {
     }
     int loaderCount() { return loaders.size(); }
 
+    /** Trace-only inventory after an ongoing notification is removed; never mutates a card. */
+    String diagnosticSummary() {
+        int layers = 0, visible = 0, withItem = 0;
+        for (Map.Entry<View, Card> entry : new java.util.ArrayList<>(cards.entrySet())) {
+            View view = entry.getKey();
+            Card card = entry.getValue();
+            if (view == null) continue;
+            if (view.isAttachedToWindow() && view.isShown()) visible++;
+            if (card.item.get() != null) withItem++;
+            GlassLayer layer = card.layer.get();
+            if (layer != null && layer.getParent() != null) layers++;
+        }
+        return "cards=" + cards.size() + " visible=" + visible + " withItem=" + withItem
+                + " layers=" + layers;
+    }
+
     /** After d0(item) / e0(item, z) on the ongoing card, and N/U of the base with this card. */
     void cardBound(Abi abi, View card, Object item) {
         if (card == null || glass.writing() || card.getClass() != abi.ongoing) return;

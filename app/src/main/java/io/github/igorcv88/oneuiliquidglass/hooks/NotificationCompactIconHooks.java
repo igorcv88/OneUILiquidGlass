@@ -185,10 +185,21 @@ final class NotificationCompactIconHooks {
                 if (now - lastLogged < 900) return;
                 lastLogged = now;
                 View panel = (View) p.thisObject;
+                View garden = indicatorGarden(panel);
+                float slot = (Float) p.args[3];
+                int allocated = panel.getWidth();
+                int requested = Tuning.get().statusMaxIcons;
                 Probe.log("ICON_TREAT_STATUS_GEOMETRY", "overflow=true last=" + p.args[0]
                         + " x=" + p.args[1] + " end=" + p.args[2]
-                        + " iconSize=" + p.args[3] + " width=" + panel.getWidth()
+                        + " iconSize=" + slot + " width=" + allocated
                         + " actualWidth=" + Reflect.read(panel, "mActualLayoutWidth")
+                        + " requested=" + requested
+                        + " fitWithoutDot=" + (slot > 0 ? (int) (allocated / slot) : -1)
+                        + " fitWithDot=" + (slot > 0 ? Math.max(0, (int) (allocated / slot) - 1) : -1)
+                        + " requiredWithDot=" + (slot * (requested + 1))
+                        + " gardenWidth=" + (garden == null ? -1 : garden.getWidth())
+                        + " gardenMeasured=" + (garden == null ? -1 : garden.getMeasuredWidth())
+                        + " gardenMax=" + (garden == null ? "?" : Reflect.read(garden, "mMaxWidth"))
                         + " parent=" + ancestors(panel));
             }
         });
@@ -248,6 +259,16 @@ final class NotificationCompactIconHooks {
         return result.toString();
     }
 
+    /** The Samsung width budget, not just the numerical icon cap, constrains overflow. */
+    private static View indicatorGarden(View v) {
+        for (ViewParent p = v.getParent(); p instanceof View; p = p.getParent()) {
+            View parent = (View) p;
+            if ("IndicatorGardenMaxWidthFrameLayout".equals(parent.getClass().getSimpleName()))
+                return parent;
+        }
+        return null;
+    }
+
     private final class State implements View.OnAttachStateChangeListener, ViewTreeObserver.OnPreDrawListener {
         final WeakReference<ImageView> ref;
         ViewTreeObserver observer;
@@ -262,6 +283,7 @@ final class NotificationCompactIconHooks {
         long rebindingWindow, suspendedUntil;
         int competingRebinds;
         String lastInkProbe;
+        String lastShelfDecision;
         ColorFilter originalShelfFilter, appliedShelfFilter;
         int appliedShelfColor;
         long shelfOverwriteWindow, shelfSuspendUntil;
@@ -334,7 +356,34 @@ final class NotificationCompactIconHooks {
                     });
                 });
             }
-            if (ready == null || ready.bitmap == null) return;
+            // The shelf needs its dark/light glyph even when source resolution intentionally
+            // preserves Samsung's native monochrome drawable (bitmap=null). That path used to
+            // return before the shelf filter, leaving white icons on a light expanded shade.
+            boolean shelfChild = inNotificationShelf(v);
+            boolean mirrorShelf = ShelfIconInk.shouldMirror(shelfChild,
+                    shelfChild && shelfToneSwapped.getAsBoolean());
+            if (shelfChild && Probe.trace) {
+                String state = "pkg=" + pkg + " mirror=" + mirrorShelf
+                        + " source=" + (ready == null ? "pending" : ready.source)
+                        + " nativeInk=" + Integer.toHexString(currentInk(v))
+                        + " viewFilter=" + (v.getColorFilter() != null);
+                if (!state.equals(lastShelfDecision)) {
+                    lastShelfDecision = state;
+                    Probe.log("ICON_TREAT_SHELF_DECISION", state);
+                }
+            }
+            int shelfInk = 0;
+            if (mirrorShelf) {
+                Tuning palette = Tuning.get();
+                shelfInk = ShelfIconInk.mirrored(ShadeTone.lightText(),
+                        palette.notificationIconInkMode, palette.notificationIconFixedInk,
+                        palette.notificationIconLightInk, palette.notificationIconDarkInk);
+            }
+            if (ready == null || ready.bitmap == null) {
+                if (mirrorShelf) applyShelfFilter(v, shelfInk);
+                else restoreShelfFilter(v);
+                return;
+            }
             boolean rebound = installed != null && v.getDrawable() != installed;
             if (rebound) restore();
             if (v.getDrawable() != installed) {
@@ -376,15 +425,9 @@ final class NotificationCompactIconHooks {
             // writing its native (often white) ImageView filter even when HeadsUpHooks has
             // switched its "N more notifications" label to dark text on a light glass card.
             // Match the label only for shelf children; status bar and keyguard are untouched.
-            if (inNotificationShelf(v) && shelfToneSwapped.getAsBoolean()) {
-                Tuning palette = Tuning.get();
-                boolean lightSurface = ShadeTone.lightText(); // Shelf label is mirrored.
-                int shelfInk = ShelfIconInk.mirrored(lightSurface, palette.notificationIconInkMode,
-                        palette.notificationIconFixedInk, palette.notificationIconLightInk,
-                        palette.notificationIconDarkInk);
-                applyShelfFilter(v, shelfInk);
-                return;
-            }
+            // A native rebind above may restore the old view filter. Apply the shelf ink
+            // after replacement too, so the newly installed glyph is correct in its first frame.
+            if (mirrorShelf) { applyShelfFilter(v, shelfInk); return; }
             restoreShelfFilter(v);
             // The system owns the status/shelf icon's foreground colour. Re-read its current tint
             // instead of pinning white (a black status bar over a light app must remain black).
@@ -499,6 +542,7 @@ final class NotificationCompactIconHooks {
             suspendedUntil = 0;
             competingRebinds = 0;
             lastInkProbe = null;
+            lastShelfDecision = null;
         }
     }
 }

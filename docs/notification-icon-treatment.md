@@ -103,3 +103,41 @@ battery, Wi-Fi/mobile signal and notification glyphs separately. On One UI 9 the
 may be a Compose view rather than a legacy BatteryMeterView; confirm coverage rather than
 assuming the color hook applies. Check `ICON_TREAT_STATUS_LIMIT`,
 `ICON_TREAT_STATUS_INK` and `ICON_TREAT_COMPACT_HOOK` events when tracing is enabled.
+
+## Follow-up diagnostics: collapsed shelf, width and live ghost (07/11)
+
+- The native-only compact icon path returned before shelf ink correction. The shelf now gets
+  the same reversible filter even when its source was intentionally preserved, and the trace
+  records `ICON_TREAT_SHELF_DECISION` (`mirror`, `source`, `nativeInk`, `viewFilter`). Test a light
+  shade with the **collapsed** More notifications group; also expand it and verify the
+  individual notification icons and status bar remain untouched.
+- The status maximum (`max=5` in `ICON_TREAT_STATUS_LIMIT`) and the physical icon area are
+  separate. On DZIF the screen capture measured 216 px at 54 px/slot and an overflow dot.
+  `ICON_TREAT_STATUS_GEOMETRY` now logs the containing IndicatorGarden's measured/maximum
+  width and `fitWithDot`. It intentionally does not disable overflow: that would draw outside
+  the region Samsung actually reserved. Test while the camera privacy indicator, recording
+  dot, charging state, network indicator, and a live capsule appear or disappear.
+- A single notification may have a white *disc* supplied by its parent rather than a white
+  small-icon glyph. `ICON_TREAT_ROW_ICON_VISUAL` records the bounded candidate's drawable,
+  ImageView/parent background classes, alpha and tint, once per row binding. This is diagnostic
+  only, including for the LSPosed updated-module notification.
+- `LIVE_REMOVAL_HOOKS` confirms Samsung cancellation callbacks found on this firmware.
+  When trace is on, `LIVE_REMOVAL_STATE` takes read-only samples immediately and 500/1800 ms
+  after a callback. The counts (`tracked/shown/glass`) for chip, card and Now Bar, plus plugin
+  cards/layers, distinguish a retained Samsung activity from a retained module glass layer.
+  No forced dismissal is attempted; an old timer must not be mistaken for a newly posted timer.
+
+Short test (no SystemUI restart and no `logcat -c`; the diagnostic checks only need a new APK):
+
+```sh
+su -c 'setprop debug.oulg.trace 1'
+# Reproduce one collapsed shelf, status icon overflow and an ending live timer.
+su -c 'logcat -d -b main,system -v threadtime -s OULG:V' > /sdcard/Download/OULG_ICON_LIVE_FOLLOWUP.log
+gzip -c /sdcard/Download/OULG_ICON_LIVE_FOLLOWUP.log > /sdcard/Download/OULG_ICON_LIVE_FOLLOWUP.log.gz
+su -c 'setprop debug.oulg.trace 0'
+```
+
+If `LIVE_REMOVAL_HOOKS installed=0`, collect the existing Samsung log tags
+`OngoingActivityController` and `OngoingActivityDataHelper` for the same reproduction.
+They include notification information; inspect before sharing. Do not leave trace enabled
+for routine use, as it also activates unrelated expensive visual probes.

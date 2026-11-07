@@ -219,6 +219,7 @@ final class NotificationIconTreatment {
             notificationIdentity = currentIdentity;
             selectedMode = mode;
             configRevision = currentRevision;
+            pkg = sbn.getPackageName();
             lastSkip = null;
             candidatesReported = false;
             row.addOnLayoutChangeListener(layoutObserver);
@@ -357,8 +358,31 @@ final class NotificationIconTreatment {
             candidatesReported = true;
             Probe.log("ICON_TREAT_CANDIDATES", "pkg=" + pkg + " count=" + candidates.size()
                     + " row=" + root.getClass().getSimpleName());
+            // Inspect native icon discs without modifying them. Some Samsung notification
+            // templates use a background on the icon's parent, not the ImageView itself.
+            // Once per binding only; no notification text or bitmap pixels are collected.
+            int shown = 0;
+            for (WeakReference<ImageView> ref : candidates) {
+                ImageView image = ref.get();
+                if (image == null || shown++ >= 4) break;
+                View parent = image.getParent() instanceof View ? (View) image.getParent() : null;
+                Drawable background = image.getBackground();
+                Drawable parentBg = parent == null ? null : parent.getBackground();
+                Drawable icon = image.getDrawable();
+                Probe.log("ICON_TREAT_ROW_ICON_VISUAL", "pkg=" + pkg + " view=" + Foreground.describe(image)
+                        + " drawable=" + typeName(icon) + " tint=" + (image.getImageTintList() != null)
+                        + " filter=" + (image.getColorFilter() != null)
+                        + " background=" + typeName(background)
+                        + " bgAlpha=" + (background == null ? -1 : background.getAlpha())
+                        + " parentBackground=" + typeName(parentBg)
+                        + " parentBgAlpha=" + (parentBg == null ? -1 : parentBg.getAlpha()));
+            }
             if (candidates.isEmpty()) surveyImages(root, root, 0, new int[] {0});
         }
+    }
+
+    private static String typeName(Drawable drawable) {
+        return drawable == null ? "null" : drawable.getClass().getSimpleName();
     }
 
     private void find(View root, View child, int depth) {
