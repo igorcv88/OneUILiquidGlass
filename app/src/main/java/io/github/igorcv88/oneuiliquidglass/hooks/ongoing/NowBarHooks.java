@@ -2,6 +2,7 @@ package io.github.igorcv88.oneuiliquidglass.hooks.ongoing;
 
 import android.content.ComponentName;
 import android.content.res.ColorStateList;
+import android.graphics.drawable.AdaptiveIconDrawable;
 import android.graphics.drawable.Drawable;
 import android.view.View;
 import android.view.ViewGroup;
@@ -117,6 +118,9 @@ final class NowBarHooks {
         WeakReference<GlassLayer> layer = new WeakReference<>(null);
         /** Last native reason logged for this card: the same state is never logged twice. */
         String lastNative;
+        /** Trace-only, bounded diagnostic of the actual compact/expanded icon views. */
+        long nextIconProbe;
+        String lastIconProbe;
     }
 
     private final LiveGlass glass;
@@ -264,6 +268,7 @@ final class NowBarHooks {
         // DZIF uses a different CardView for the EXPANDED ongoing app icon; the normal
         // nowbar_icon lease only clears its compact disc. Never touch MediaCardView.
         c.icon.syncExpandedDisc(findExpandedIconContainer(card), shown);
+        traceIcons(card, c, icon, expandedIcon, shown);
         View gradient = c.gradient.get();
         View hidden = c.hiddenGradient.get();
         if (c.nativeGradientVisibility != null && (!shown || hidden != gradient)) {
@@ -332,6 +337,74 @@ final class NowBarHooks {
     static ImageView expandedHeaderIcon(View expanded) {
         View v = NativeIds.find(expanded, "icon");
         return v instanceof ImageView ? (ImageView) v : null;
+    }
+
+    /**
+     * The AOD plugin inflates distinct icon templates for compact/expanded Now Bar. The
+     * monochrome lease intentionally accepts only AdaptiveIconDrawable; if Samsung supplies a
+     * BitmapDrawable/VectorDrawable, there was previously no log explaining why it stayed native.
+     * This is a read-only diagnosis, restricted to Clock/Gradus, with no message content.
+     */
+    private static void traceIcons(View card, Card c, ImageView compact, ImageView expanded,
+                                   boolean shown) {
+        if (!Probe.trace) return;
+        long now = android.os.SystemClock.uptimeMillis();
+        if (now < c.nextIconProbe) return;
+        c.nextIconProbe = now + 2000;
+        Object item = c.item.get();
+        Object pkgValue = item == null ? null : NativeShape.call(item, "getNowBarPackage");
+        String pkg = pkgValue instanceof String ? (String) pkgValue : "unavailable";
+        if (!"com.sec.android.app.clockpackage".equals(pkg) && !"com.igcv.gradus".equals(pkg)) return;
+        View expandedRoot = NativeIds.find(card, "expand_content_rootview");
+        View iconContainer = findExpandedIconContainer(card);
+        String state = "pkg=" + pkg + " shown=" + shown
+                + " compact=" + iconState(compact)
+                + " expandedRoot=" + (expandedRoot == null ? "missing" : expandedRoot.getClass().getSimpleName())
+                + " expanded=" + iconState(expanded)
+                + " expandedDisc=" + (iconContainer == null ? "missing" : iconContainer.getClass().getSimpleName());
+        if (!state.equals(c.lastIconProbe)) {
+            c.lastIconProbe = state;
+            Probe.log("NOWBAR_ICON_DIAG", state);
+            if (expanded == null && expandedRoot != null)
+                Probe.log("NOWBAR_ICON_CANDIDATES", "pkg=" + pkg + " views=" + candidateIds(expandedRoot));
+        }
+    }
+
+    static String iconState(ImageView image) {
+        if (image == null) return "missing";
+        Drawable drawable = image.getDrawable();
+        String type = drawable == null ? "null" : drawable.getClass().getSimpleName();
+        boolean adaptiveMono = drawable instanceof AdaptiveIconDrawable
+                && ((AdaptiveIconDrawable) drawable).getMonochrome() != null;
+        return type + "{mono=" + adaptiveMono + ",state="
+                + (drawable != null && drawable.getConstantState() != null)
+                + ",attached=" + image.isAttachedToWindow()
+                + ",visible=" + image.isShown()
+                + ",imageTint=" + (image.getImageTintList() != null)
+                + ",filter=" + (image.getColorFilter() != null) + "}";
+    }
+
+    /** Only resource identifiers and view classes; at most eight entries and ten levels deep. */
+    private static String candidateIds(View root) {
+        StringBuilder out = new StringBuilder();
+        scanCandidates(root, out, new int[]{0}, 0);
+        return out.length() == 0 ? "none" : out.toString();
+    }
+
+    private static void scanCandidates(View v, StringBuilder out, int[] count, int depth) {
+        if (v == null || depth > 10 || count[0] >= 8) return;
+        if (v instanceof ImageView) {
+            if (out.length() > 0) out.append(',');
+            out.append(v.getClass().getSimpleName()).append(':');
+            try { out.append(v.getResources().getResourceEntryName(v.getId())); }
+            catch (RuntimeException e) { out.append("no-id"); }
+            count[0]++;
+        }
+        if (v instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) v;
+            for (int i = 0; i < group.getChildCount() && count[0] < 8; i++)
+                scanCandidates(group.getChildAt(i), out, count, depth + 1);
+        }
     }
 
     /** No changes to vector-only icons or sibling UI outside NowBarOngoingCardView. */

@@ -119,6 +119,17 @@ public class NowBarHooksTest {
         assertNull(NowBarHooks.expandedHeaderIcon(new FrameLayout(activity)));
     }
 
+    @Test public void iconDiagnosisDistinguishesNativeVectorFromAdaptiveMonochrome() {
+        assertEquals("missing", NowBarHooks.iconState(null));
+        ImageView icon = new ImageView(activity);
+        icon.setImageDrawable(new android.graphics.drawable.VectorDrawable());
+        String vector = NowBarHooks.iconState(icon);
+        assertTrue(vector, vector.startsWith("VectorDrawable{mono=false"));
+        icon.setImageResource(io.github.igorcv88.oneuiliquidglass.R.drawable.oulg_launcher);
+        String adaptive = NowBarHooks.iconState(icon);
+        assertTrue(adaptive, adaptive.startsWith("AdaptiveIconDrawable{mono=true"));
+    }
+
     @Test public void ongoingCardTakesGlassAndKeepsItAcrossBaseWriters() {
         NowBarOngoingCardView card = new NowBarOngoingCardView(activity);
         NowBarItem item = new NowBarItem("com.sec.android.app.clockpackage", null);
