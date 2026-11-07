@@ -1887,9 +1887,9 @@ public final class HeadsUpHooks {
         /** Swapped text and icon tone; the views are walked again every SWAP_WALK_MS while it is on (new inflations). */
         void setForeground(boolean swap) {
             // Existing pre-draw/rebind path: cached identity checks only; decoding happens off-thread.
-            io.github.igorcv88.oneuiliquidglass.glass.Tuning iconConfig = Tuning.get();
-            notificationIcons.sync(glass != null && !restoringNativeIcons && !pill && iconConfig.iconTone && enabled
-                            ? row.get() : null, iconConfig.iconMode, ShadeTone.lightText() == swap);
+            io.github.igorcv88.oneuiliquidglass.glass.Tuning tuning = Tuning.get();
+            notificationIcons.sync(glass != null && !restoringNativeIcons && !pill && tuning.iconTone && enabled
+                            ? row.get() : null, tuning.iconMode, ShadeTone.lightText() == swap);
             long now = android.os.SystemClock.uptimeMillis();
             String reason = swap == swapped ? null : swap ? "style" : "restore";
             // A child row that just got its own glass may still carry its group's swapped text
