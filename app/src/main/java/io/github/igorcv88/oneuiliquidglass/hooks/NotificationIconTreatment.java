@@ -79,15 +79,15 @@ final class NotificationIconTreatment {
         final Drawable nativeDrawable, background;
         final ColorStateList tint;
         final ColorFilter imageFilter;
-        final int bgAlpha;
         final Drawable installed;
+        Drawable suppressedBackground;
+        int suppressedAlpha;
         int color;
 
         Lease(ImageView v, Drawable replacement, int ink) {
             view = new WeakReference<>(v);
             nativeDrawable = v.getDrawable();
             background = v.getBackground();
-            bgAlpha = background == null ? 255 : background.getAlpha();
             tint = v.getImageTintList();
             imageFilter = v.getColorFilter();
             installed = replacement;
@@ -95,8 +95,30 @@ final class NotificationIconTreatment {
             v.setImageTintList(null);
             v.clearColorFilter();
             v.setImageDrawable(replacement);
-            if (background != null) background.mutate().setAlpha(0);
+            suppressBackground();
             managed.add(v);
+        }
+
+        /** Samsung can rebind the white icon disc without replacing the icon drawable. */
+        void suppressBackground() {
+            ImageView v = view.get();
+            if (v == null || v.getDrawable() != installed) return;
+            Drawable current = v.getBackground();
+            if (current != suppressedBackground) {
+                restoreSuppressedBackground();
+                suppressedBackground = current;
+                suppressedAlpha = current == null ? 255 : current.getAlpha();
+            }
+            if (current != null && current.getAlpha() != 0) {
+                if (Probe.trace) Probe.log("ICON_TREAT_BG_REBOUND", "view=" + Foreground.describe(v)
+                        + " alpha=" + current.getAlpha() + " replaced=" + (current != background));
+                current.mutate().setAlpha(0);
+            }
+        }
+
+        private void restoreSuppressedBackground() {
+            if (suppressedBackground != null && suppressedBackground.getAlpha() == 0)
+                suppressedBackground.setAlpha(suppressedAlpha);
         }
 
         boolean current() {
@@ -127,9 +149,49 @@ final class NotificationIconTreatment {
                 if (v.getImageTintList() == null) v.setImageTintList(tint);
                 v.setColorFilter(imageFilter);
             }
-            if (background != null && v.getBackground() == background && background.getAlpha() == 0)
-                background.setAlpha(bgAlpha);
+            restoreSuppressedBackground();
+            suppressedBackground = null;
         }
+    }
+
+    /** Samsung's dummy backing view has no icon drawable, so the normal glyph lease skips it. */
+    private static final class DummyBackgroundLease {
+        final WeakReference<ImageView> view;
+        Drawable background;
+        int alpha;
+
+        DummyBackgroundLease(ImageView image) { view = new WeakReference<>(image); suppress(); }
+
+        void suppress() {
+            ImageView image = view.get();
+            if (image == null) return;
+            Drawable current = image.getBackground();
+            if (current != background) {
+                restore();
+                background = current;
+                alpha = current == null ? 255 : current.getAlpha();
+            }
+            if (current != null && current.getAlpha() != 0) {
+                if (Probe.trace) Probe.log("ICON_TREAT_DUMMY_BG", "view=" + Foreground.describe(image)
+                        + " alpha=" + current.getAlpha());
+                current.mutate().setAlpha(0);
+            }
+        }
+
+        void restore() {
+            if (background != null && background.getAlpha() == 0) background.setAlpha(alpha);
+        }
+    }
+
+    static boolean dummyIconBackgroundId(String resourcePackage, String name) {
+        return "android".equals(resourcePackage) && "insignificant_icon_dummy_bg".equals(name);
+    }
+
+    private static boolean dummyIconBackground(ImageView view) {
+        try {
+            return dummyIconBackgroundId(view.getResources().getResourcePackageName(view.getId()),
+                    view.getResources().getResourceEntryName(view.getId()));
+        } catch (RuntimeException e) { return false; }
     }
 
     static final class Resolved {
@@ -142,6 +204,7 @@ final class NotificationIconTreatment {
     }
 
     private final List<Lease> active = new ArrayList<>();
+    private final List<DummyBackgroundLease> dummyBackgrounds = new ArrayList<>();
     private final List<WeakReference<ImageView>> candidates = new ArrayList<>();
     // A row layout/reinflation is the trigger for discovering new icon views. Avoid walking the
     // entire notification view tree on every pre-draw when a template contains no small icon.
@@ -248,10 +311,20 @@ final class NotificationIconTreatment {
         if (candidates.isEmpty()) { skip("noIconView"); return; }
         for (WeakReference<ImageView> ref : candidates) {
             ImageView image = ref.get();
-            if (image == null || !image.isAttachedToWindow() || image.getDrawable() == null) continue;
+            if (image == null || !image.isAttachedToWindow()) continue;
+            if (image.getDrawable() == null && dummyIconBackground(image)) {
+                DummyBackgroundLease found = null;
+                for (DummyBackgroundLease lease : dummyBackgrounds)
+                    if (lease.view.get() == image) { found = lease; break; }
+                if (found == null) dummyBackgrounds.add(new DummyBackgroundLease(image));
+                else found.suppress();
+                continue;
+            }
+            if (image.getDrawable() == null) continue;
             Lease found = null;
             for (Lease l : active) if (l.view.get() == image) { found = l; break; }
             if (found != null) {
+                found.suppressBackground();
                 found.tone(ink);
                 found.scale(tuning.notificationIconScale);
                 continue;
@@ -634,9 +707,11 @@ final class NotificationIconTreatment {
     }
 
     void restore() {
-        if (entry == null && bound.get() == null && active.isEmpty() && !pending) return;
+        if (entry == null && bound.get() == null && active.isEmpty() && dummyBackgrounds.isEmpty() && !pending) return;
         revision++;
         for (Lease lease : active) lease.restore();
+        for (DummyBackgroundLease lease : dummyBackgrounds) lease.restore();
+        dummyBackgrounds.clear();
         active.clear(); candidates.clear();
         View root = bound.get();
         if (root != null) root.removeOnLayoutChangeListener(layoutObserver);

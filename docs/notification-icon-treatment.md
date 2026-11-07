@@ -141,3 +141,43 @@ If `LIVE_REMOVAL_HOOKS installed=0`, collect the existing Samsung log tags
 `OngoingActivityController` and `OngoingActivityDataHelper` for the same reproduction.
 They include notification information; inspect before sharing. Do not leave trace enabled
 for routine use, as it also activates unrelated expensive visual probes.
+
+## DZIF physical follow-up at 17:11–17:13 (07/11)
+
+The previous trace resolved the remaining causes more precisely:
+
+- The shelf had `mirror=false` during multiple opening transitions, despite its native
+  black label over a light card. It briefly turned black when generation 13 committed
+  `scene=light`, and reverted at the following transition. The compact icon now reads
+  the visible `NotificationShelf` label's **current text colour** (cached per icon view)
+  and uses the same reversible tint for source-preserved and bitmap-substituted icons.
+  `ICON_TREAT_SHELF_LABEL` and `ICON_TREAT_SHELF_DECISION label=` distinguish an
+  available real label from the old scene-based fallback. The early shade fixes used
+  the related `Foreground.ownsTone` / `TEXT_ORPHAN` / `orphandraw` mechanism for nested
+  minimised *rows*, which are different from this `NotificationShelf` icon instance.
+- The low-battery SystemUI row contained opaque `BitmapDrawable` backgrounds on the
+  two `NotificationRowIconView` instances, plus a separate `CachingIconView` with
+  `android:insignificant_icon_dummy_bg`, `drawable=null`, and an opaque
+  `VectorDrawable` background. Glyph replacement previously hid each icon view's
+  original disc only once; Samsung could recreate it while the replacement remained.
+  Active leases now re-suppress a rebound background, and a dedicated reversible lease
+  hides **only** the Android dummy background while treatment is active. Observe
+  `ICON_TREAT_BG_REBOUND` and `ICON_TREAT_DUMMY_BG` for actual changes.
+- The 5-icon limit was already installed; DZIF continues to reserve **216 px** for a
+  notification icon container at **54 px** per slot, leaving only 3 icons with the
+  overflow dot. The surrounding indicator garden measured 617 px. The
+  `ICON_TREAT_STATUS_GEOMETRY allocation=` chain now reports the actual child/parent
+  layout widths, LayoutParams and linear-layout weights. Do not force the overflow
+  result false until the controlling width allocation is identified.
+- On keyguard entry, `State.tone` previously restored the text and edge style, but
+  could leave the previous shade's `measuredVeil` in the same reused card. A keyguard
+  transition now clears this stale tone/veil with `LOCK_TONE_RESET`. This does not yet
+  implement independent wallpaper classification: `LOCK_TONE_PROBE` takes one
+  **trace-only** capture after settling, recording full/row luminance and the current
+  surface without changing the lockscreen palette. Confirm capture quality before
+  applying an independent lockscreen colour decision.
+
+For next device test, open the shade over a **light app** with the compact group shown,
+then lock from a light and a dark shade, and reproduce a low-battery notification.
+Check the four `ICON_TREAT_...` events above and `LOCK_TONE_RESET` / `LOCK_TONE_PROBE`.
+Status-bar geometry must be sampled with at least five active notification icons.

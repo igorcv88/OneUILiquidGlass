@@ -1190,6 +1190,44 @@ public final class HeadsUpHooks {
             catch (ReflectiveOperationException | RuntimeException e) { Probe.error("SCRIM_CLAMP_FAILED", e); }
         }
     }
+    /** Trace-only independent lockscreen capture: never reuse the last shade/popup palette. */
+    private void probeLockScene() {
+        View anchor = null;
+        for (State state : new ArrayList<>(states.values())) {
+            View view = state.background.get();
+            if (view != null && view.isAttachedToWindow()) { anchor = view; break; }
+        }
+        if (anchor == null) {
+            Probe.log("LOCK_TONE_PROBE", "stage=noAnchor bar=" + barState);
+            return;
+        }
+        int lockBar = barState;
+        View target = anchor;
+        target.postDelayed(() -> {
+            if (barState == null || barState != lockBar || !target.isAttachedToWindow()) return;
+            ShadeTone.prefetch(target, -1, grid -> {
+                if (barState == null || barState != lockBar) return;
+                Probe.log("LOCK_TONE_PROBE", "stage=capture bar=" + lockBar
+                        + " available=" + (grid != null)
+                        + " whole=" + (grid == null ? -1 : grid.whole())
+                        + " priorShade=" + shadeScene);
+                if (grid == null) return;
+                int seen = 0;
+                for (State state : new ArrayList<>(states.values())) {
+                    View card = state.background.get();
+                    if (card == null || !card.isShown()) continue;
+                    int[] position = new int[2];
+                    card.getLocationOnScreen(position);
+                    Probe.log("LOCK_TONE_CARD", "id=" + Integer.toHexString(System.identityHashCode(card))
+                            + " y=" + position[1] + " height=" + card.getHeight()
+                            + " luma=" + grid.luma(position[1], position[1] + card.getHeight())
+                            + " swapped=" + state.swapped + " veil=" + Integer.toHexString(state.measuredVeil)
+                            + " surface=" + state.toneSurface);
+                    if (++seen == 4) break;
+                }
+            });
+        }, 300);
+    }
     private void installBarState() {
         Class<?> c = resolve("com.android.systemui.statusbar.StatusBarStateControllerImpl");
         hook(c, "setState", new XC_MethodHook() {
@@ -1202,6 +1240,8 @@ public final class HeadsUpHooks {
                 // Every card's optics timeline starts over on a state change (OPTICS lines).
                 for (State s : states.values()) { s.opticsLines = 0; s.finalSeen = false; s.lastOptics = null; }
                 if (barState == Eligibility.BAR_KEYGUARD) clampNotificationScrims();
+                if (Probe.trace && (barState == Eligibility.BAR_KEYGUARD
+                        || barState == Eligibility.BAR_SHADE_LOCKED)) probeLockScene();
                 if (Probe.trace && barState == Eligibility.BAR_KEYGUARD) {
                     // The overflow pill: every shelf, icon container or footer in the window once settled.
                     for (State s : states.values()) {
@@ -1671,6 +1711,25 @@ public final class HeadsUpHooks {
         void tone(View v) {
             if (!surfaceEnabled() || !feature("tonemap")) { setNative(); return; }
             Tuning t = Tuning.get();
+            if (barState != null && (barState == Eligibility.BAR_KEYGUARD
+                    || barState == Eligibility.BAR_SHADE_LOCKED)) {
+                // The shade and the lockscreen are different backdrops. Returning only the
+                // foreground to native left the last shade's measured veil on keyguard cards.
+                if (toneSurface != null || measuredVeil != 0 || swapped || lightStyle) {
+                    String previous = toneSurface;
+                    int previousVeil = measuredVeil;
+                    toneSurface = null;
+                    toneSource = null;
+                    setNative();
+                    if (Probe.trace) Probe.log("LOCK_TONE_RESET", "previous=" + previous
+                            + " veil=" + Integer.toHexString(previousVeil)
+                            + " bar=" + barState + " view=" + Foreground.describe(v));
+                } else {
+                    setForeground(false);
+                    setLightStyle(false);
+                }
+                return;
+            }
             if (t.shadeAdaptive && Boolean.TRUE.equals(shadeExpanded) && barState != null && barState == Eligibility.BAR_SHADE) { shadeTone(v); return; }
             // The compositor-lens mode (sfrefract) draws through the Samsung blur: the pop-up's text
             // tone follows the backdrop there too; its veil slot exists only on the live drawable.

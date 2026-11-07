@@ -26,4 +26,13 @@ public class ShelfIconInkTest {
         assertEquals(0xff445566, ShelfIconInk.mirrored(true, 2, 0, 0xff445566, 0xff778899));
         assertEquals(0xff778899, ShelfIconInk.mirrored(false, 2, 0, 0xff445566, 0xff778899));
     }
+
+    @Test public void labelColorWinsOverStaleShadeDecision() {
+        assertTrue(ShelfIconInk.darkText(0xff000000));
+        assertTrue(ShelfIconInk.darkText(0xff505050));
+        assertFalse(ShelfIconInk.darkText(0xffffffff));
+        assertFalse(ShelfIconInk.darkText(0xff94b8ff));
+        assertEquals(0xff000000, ShelfIconInk.mirrored(ShelfIconInk.darkText(0xff202020), 0, 0, 0, 0));
+        assertEquals(0xffffffff, ShelfIconInk.mirrored(ShelfIconInk.darkText(0xffeeeeee), 0, 0, 0, 0));
+    }
 }

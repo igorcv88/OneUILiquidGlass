@@ -4,6 +4,11 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public final class NotificationIconTreatmentTest {
+    @Test public void onlySamsungDummySmallIconBackgroundIsSuppressed() {
+        assertTrue(NotificationIconTreatment.dummyIconBackgroundId("android", "insignificant_icon_dummy_bg"));
+        assertFalse(NotificationIconTreatment.dummyIconBackgroundId("android", "icon"));
+        assertFalse(NotificationIconTreatment.dummyIconBackgroundId("com.example.app", "insignificant_icon_dummy_bg"));
+    }
     private static final class SamsungEntryRow {
         @SuppressWarnings("unused") private final Object mNotificationEntry = "samsung-entry";
         @SuppressWarnings("unused") private Object getEntry() { return null; }

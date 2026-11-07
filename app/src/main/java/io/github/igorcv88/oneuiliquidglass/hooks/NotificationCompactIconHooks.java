@@ -11,9 +11,11 @@ import android.os.Handler;
 import android.os.Looper;
 import android.service.notification.StatusBarNotification;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.ViewParent;
 import android.view.ViewTreeObserver;
 import android.widget.ImageView;
+import android.widget.TextView;
 
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Field;
@@ -200,7 +202,8 @@ final class NotificationCompactIconHooks {
                         + " gardenWidth=" + (garden == null ? -1 : garden.getWidth())
                         + " gardenMeasured=" + (garden == null ? -1 : garden.getMeasuredWidth())
                         + " gardenMax=" + (garden == null ? "?" : Reflect.read(garden, "mMaxWidth"))
-                        + " parent=" + ancestors(panel));
+                        + " parent=" + ancestors(panel)
+                        + " allocation=" + allocationChain(panel));
             }
         });
 
@@ -259,6 +262,25 @@ final class NotificationCompactIconHooks {
         return result.toString();
     }
 
+    /** Report the first actual layout limit; the garden itself has room on DZIF (617 px). */
+    private static String allocationChain(View start) {
+        StringBuilder result = new StringBuilder();
+        View current = start;
+        for (int depth = 0; depth < 9 && current != null; depth++) {
+            ViewGroup.LayoutParams params = current.getLayoutParams();
+            if (result.length() > 0) result.append('>');
+            result.append(current.getClass().getSimpleName())
+                    .append('[').append(current.getWidth()).append('/').append(current.getMeasuredWidth())
+                    .append(" lp=").append(params == null ? "null" : params.width);
+            if (params instanceof android.widget.LinearLayout.LayoutParams)
+                result.append(" wt=").append(((android.widget.LinearLayout.LayoutParams) params).weight);
+            result.append(" pad=").append(current.getPaddingLeft() + current.getPaddingRight()).append(']');
+            ViewParent parent = current.getParent();
+            current = parent instanceof View ? (View) parent : null;
+        }
+        return result.toString();
+    }
+
     /** The Samsung width budget, not just the numerical icon cap, constrains overflow. */
     private static View indicatorGarden(View v) {
         for (ViewParent p = v.getParent(); p instanceof View; p = p.getParent()) {
@@ -288,6 +310,8 @@ final class NotificationCompactIconHooks {
         int appliedShelfColor;
         long shelfOverwriteWindow, shelfSuspendUntil;
         int shelfOverwrites;
+        WeakReference<TextView> shelfLabel = new WeakReference<>(null);
+        long nextShelfLabelLookup;
 
         State(ImageView view) { ref = new WeakReference<>(view); }
 
@@ -360,10 +384,16 @@ final class NotificationCompactIconHooks {
             // preserves Samsung's native monochrome drawable (bitmap=null). That path used to
             // return before the shelf filter, leaving white icons on a light expanded shade.
             boolean shelfChild = inNotificationShelf(v);
+            Integer labelInk = shelfChild ? shelfLabelInk(v) : null;
             boolean mirrorShelf = ShelfIconInk.shouldMirror(shelfChild,
                     shelfChild && shelfToneSwapped.getAsBoolean());
+            // The compact shelf is also visible while shadeAdaptive is disabled (for example
+            // while transitioning from keyguard). Its black label then remains native even
+            // though the scene callback is false. The drawn label is the source of truth.
+            boolean tintShelf = shelfChild && (labelInk != null || mirrorShelf);
             if (shelfChild && Probe.trace) {
-                String state = "pkg=" + pkg + " mirror=" + mirrorShelf
+                String state = "pkg=" + pkg + " mirror=" + mirrorShelf + " tint=" + tintShelf
+                        + " label=" + (labelInk == null ? "missing" : Integer.toHexString(labelInk))
                         + " source=" + (ready == null ? "pending" : ready.source)
                         + " nativeInk=" + Integer.toHexString(currentInk(v))
                         + " viewFilter=" + (v.getColorFilter() != null);
@@ -373,14 +403,15 @@ final class NotificationCompactIconHooks {
                 }
             }
             int shelfInk = 0;
-            if (mirrorShelf) {
+            if (tintShelf) {
                 Tuning palette = Tuning.get();
-                shelfInk = ShelfIconInk.mirrored(ShadeTone.lightText(),
+                boolean darkLabel = labelInk != null ? ShelfIconInk.darkText(labelInk) : ShadeTone.lightText();
+                shelfInk = ShelfIconInk.mirrored(darkLabel,
                         palette.notificationIconInkMode, palette.notificationIconFixedInk,
                         palette.notificationIconLightInk, palette.notificationIconDarkInk);
             }
             if (ready == null || ready.bitmap == null) {
-                if (mirrorShelf) applyShelfFilter(v, shelfInk);
+                if (tintShelf) applyShelfFilter(v, shelfInk);
                 else restoreShelfFilter(v);
                 return;
             }
@@ -427,7 +458,7 @@ final class NotificationCompactIconHooks {
             // Match the label only for shelf children; status bar and keyguard are untouched.
             // A native rebind above may restore the old view filter. Apply the shelf ink
             // after replacement too, so the newly installed glyph is correct in its first frame.
-            if (mirrorShelf) { applyShelfFilter(v, shelfInk); return; }
+            if (tintShelf) { applyShelfFilter(v, shelfInk); return; }
             restoreShelfFilter(v);
             // The system owns the status/shelf icon's foreground colour. Re-read its current tint
             // instead of pinning white (a black status bar over a light app must remain black).
@@ -484,6 +515,46 @@ final class NotificationCompactIconHooks {
             appliedShelfColor = 0;
             shelfOverwrites = 0;
             shelfSuspendUntil = 0;
+        }
+
+        /** A label colour belongs to the visible shelf, not to the last sampled shade scene. */
+        private Integer shelfLabelInk(ImageView icon) {
+            TextView existing = shelfLabel.get();
+            if (existing != null && existing.isAttachedToWindow() && existing.getVisibility() == View.VISIBLE)
+                return existing.getCurrentTextColor();
+            long now = android.os.SystemClock.uptimeMillis();
+            if (now < nextShelfLabelLookup) return null;
+            nextShelfLabelLookup = now + 650;
+            for (ViewParent p = icon.getParent(); p instanceof View; p = p.getParent()) {
+                View parent = (View) p;
+                if ("NotificationShelf".equals(parent.getClass().getSimpleName())) {
+                    TextView label = visibleShelfLabel(parent, 0);
+                    shelfLabel = new WeakReference<>(label);
+                    if (label != null) {
+                        if (Probe.trace) Probe.log("ICON_TREAT_SHELF_LABEL", Foreground.describe(label)
+                                + " ink=" + Integer.toHexString(label.getCurrentTextColor()));
+                        return label.getCurrentTextColor();
+                    }
+                    if (Probe.trace) Probe.log("ICON_TREAT_SHELF_LABEL", "missing=true shelf=" + Foreground.describe(parent));
+                    break;
+                }
+            }
+            return null;
+        }
+
+        private TextView visibleShelfLabel(View view, int depth) {
+            if (depth > 7 || view.getVisibility() != View.VISIBLE) return null;
+            if (view instanceof TextView && ((TextView) view).getText() != null
+                    && ((TextView) view).getText().length() > 0) return (TextView) view;
+            if (!(view instanceof android.view.ViewGroup)) return null;
+            android.view.ViewGroup group = (android.view.ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                View child = group.getChildAt(i);
+                if (child.getClass().getSimpleName().endsWith("ExpandableNotificationRow")) continue;
+                TextView found = visibleShelfLabel(child, depth + 1);
+                if (found != null) return found;
+            }
+            return null;
         }
 
         private boolean inNotificationShelf(View v) {
