@@ -305,7 +305,7 @@ public final class MainActivity extends Activity implements Host {
     @Override
     public void preview(String key, String value, Controls.Channel channel) {
         model.draft(key, value);
-        if (io.github.igorcv88.oneuiliquidglass.ui.IconsPage.isIconKey(key)) model.notifyChanged();
+        if (IconsPage.isIconKey(key)) model.notifyChanged();
         surfaces.previewChanged(channel);
     }
 

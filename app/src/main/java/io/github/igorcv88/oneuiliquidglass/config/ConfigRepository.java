@@ -106,9 +106,13 @@ public final class ConfigRepository {
     /** Returns the effective value currently delivered to SystemUI, for the preview. */
     public String appliedIcon(SettingSpec spec) {
         String staged = prefs.getString(IconSettings.APPLIED_PREFIX + spec.key, null);
-        if (staged != null) return IconSettings.ABSENT.equals(staged) ? spec.defaultValue : staged;
+        if (staged != null) {
+            if (!IconSettings.ABSENT.equals(staged)) return staged;
+            String external = SystemPropertyReader.read(spec.key);
+            return external.isEmpty() ? spec.defaultValue : external;
+        }
         String saved = prefs.getString(PREFIX + spec.key, null);
-        return saved == null ? spec.defaultValue : saved;
+        return saved == null ? desired(spec) : saved;
     }
 
     /** Commit staged icon settings atomically; the caller then requests one SystemUI restart. */
