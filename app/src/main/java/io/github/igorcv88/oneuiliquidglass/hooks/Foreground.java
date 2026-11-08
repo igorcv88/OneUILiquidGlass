@@ -674,6 +674,14 @@ final class Foreground {
         Rec r = swapped.get(ink.key());
         return r == null || ink.color() != r.applied;
     }
+    /** Transfer icon colour ownership before the compact shelf lease saves native properties. */
+    static void releaseIconTone(ImageView view) {
+        InkAnimator.cancel(view);
+        glyph(view, false, false);
+        Rec record = swapped.remove(view);
+        if (record != null) new Icon(view).restore(record.saved);
+    }
+
     private static int walk(View v, boolean swap, boolean lightText, java.util.List<View> tracked) {
         int changed = 0;
         if (v instanceof TextView) {
@@ -693,6 +701,8 @@ final class Foreground {
                 if (record != null) record.custom = !standard(v, false);
                 shadowFor((TextView) v, swap && eligible);
             }
+        } else if (v instanceof ImageView && ShelfIconTint.owns((ImageView) v)) {
+            // The shade palette owns this glyph, including native-only monochrome icons.
         } else if (v instanceof ImageView && (chevrons.containsKey(v) || chevronId(v))) {
             changed += chevron((ImageView)v,swap,lightText)?1:0;
         } else if (v instanceof ImageView && !NotificationIconTreatment.managed((ImageView) v)

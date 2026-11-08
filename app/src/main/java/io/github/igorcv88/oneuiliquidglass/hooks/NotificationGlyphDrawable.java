@@ -15,6 +15,7 @@ final class NotificationGlyphDrawable extends Drawable {
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
     private final int intrinsicWidth, intrinsicHeight;
     private float fraction;
+    private final RectF target = new RectF();
 
     NotificationGlyphDrawable(Bitmap bitmap, float fraction, Drawable nativeDrawable) {
         this.bitmap = bitmap;
@@ -38,13 +39,15 @@ final class NotificationGlyphDrawable extends Drawable {
         float w = b.width() * fraction, h = b.height() * fraction;
         float x = b.left + (b.width() - w) / 2f;
         float y = b.top + (b.height() - h) / 2f;
-        canvas.drawBitmap(bitmap, null, new RectF(x, y, x + w, y + h), paint);
+        target.set(x, y, x + w, y + h);
+        canvas.drawBitmap(bitmap, null, target, paint);
     }
 
     @Override public int getIntrinsicWidth() { return intrinsicWidth; }
     @Override public int getIntrinsicHeight() { return intrinsicHeight; }
-    @Override public void setAlpha(int alpha) { paint.setAlpha(alpha); invalidateSelf(); }
-    @Override public void setColorFilter(ColorFilter filter) { paint.setColorFilter(filter); invalidateSelf(); }
+    @Override public void setAlpha(int alpha) { if (paint.getAlpha() == alpha) return; paint.setAlpha(alpha); invalidateSelf(); }
+    @Override public int getAlpha() { return paint.getAlpha(); }
+    @Override public void setColorFilter(ColorFilter filter) { if (paint.getColorFilter() == filter) return; paint.setColorFilter(filter); invalidateSelf(); }
     @Override public ColorFilter getColorFilter() { return paint.getColorFilter(); }
     @Override public int getOpacity() { return PixelFormat.TRANSLUCENT; }
 }

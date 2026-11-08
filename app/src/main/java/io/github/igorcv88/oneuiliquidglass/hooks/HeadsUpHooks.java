@@ -98,6 +98,9 @@ public final class HeadsUpHooks {
     private static final class ShadePalette {
         final int generation;
         final long sampledAt;
+        final long configRevision;
+        final int tuningGeneration;
+        final boolean nativeLightText;
         final float luma;
         final boolean scene, swap, lightBackdrop;
         final int ink;
@@ -112,13 +115,16 @@ public final class HeadsUpHooks {
                              boolean scene, Material material) {
             this.generation = generation;
             this.sampledAt = sampledAt;
+            this.configRevision = io.github.igorcv88.oneuiliquidglass.config.ConfigClient.revision();
+            this.tuningGeneration = Tuning.generation;
+            this.nativeLightText = ShadeTone.lightText();
             this.luma = luma;
             this.scene = scene;
             this.material = material;
             this.swap = material.swap;
             // The material already classified the shared scene; no second icon classifier.
             this.lightBackdrop = material.light;
-            this.ink = ShelfIconInk.inkForBackdrop(lightBackdrop);
+            this.ink = ShelfIconInk.sceneInk(nativeLightText, swap);
         }
 
         ShadePalette heldFor(int generation) {
@@ -343,8 +349,7 @@ public final class HeadsUpHooks {
             ToneGrid grid=snapshot.grid.forGeneration(shadeOpens);
             if(shadeGrid!=null&&grid.takenAt<=shadeGrid.takenAt)return;
             boolean light=snapshot.body==io.github.igorcv88.oneuiliquidglass.glass.QsScene.Tone.LIGHT_SCENE;
-            if(shadeScene==null||shadeScene!=light||shadeGrid==null)adoptGrid(grid,"shared-commit",light);
-            else {shadeGrid=grid;headerTone(grid);}
+            updateShadeGrid(grid, "shared-commit", light);
         });
     }
     private void resolveConfig(android.content.Context context) {
@@ -353,7 +358,9 @@ public final class HeadsUpHooks {
             if (quickSettings != null) quickSettings.refresh();
             if (ongoing != null) ongoing.refresh();
             if (!shadeConfigEnabled()) { panelDim(false); restoreHeader(); orphanTone(); }
-            else if (shadeGrid != null) headerTone(shadeGrid);
+            else if (shadeGrid != null && Tuning.get().shadeAdaptive
+                    && Boolean.TRUE.equals(shadeExpanded)) adoptGrid(shadeGrid, "config");
+            if (compactIcons != null) compactIcons.shadeToneChanged();
             for (State state : new ArrayList<>(states.values())) {
                 if (!enabled || !state.surfaceEnabled()) state.release();
                 state.invalidate();
@@ -437,7 +444,7 @@ public final class HeadsUpHooks {
         // decision; the status-bar/lockscreen views keep their native tint.
         compactIcons = new NotificationCompactIconHooks(loader, () -> enabled,
                 () -> Boolean.TRUE.equals(shadeExpanded) && barState == Eligibility.BAR_SHADE
-                        && shadeConfigEnabled() && shadePalette != null
+                        && shadeConfigEnabled() && Tuning.get().shadeAdaptive && shadePalette != null
                         && shadePalette.generation == shadeOpens ? shadePalette.ink : null);
         compactIcons.install();
         // A cancelled appear/disappear animation (AOSP ActivatableNotificationView.cancelAppearDrawing,
@@ -930,6 +937,9 @@ public final class HeadsUpHooks {
      * samples. Main thread.
      */
     private void backdropChanged() {
+        if (lastShadePalette != null
+                && BackdropEvents.foregroundChangedAt() > lastShadePalette.sampledAt)
+            lastShadePalette = null;
         // A task switch gets one immediate async color-mode sample; in-task transitions
         // (Direct -> Feed) are still covered by the bounded visible-popup watcher.
         if (p3PopupWatching) {
@@ -1010,8 +1020,7 @@ public final class HeadsUpHooks {
         if (quickSettings != null) quickSettings.shadeBackdrop(whole,
                 grid.luma(grid.top, grid.top + 4 * grid.band), grid.takenAt);
         boolean light=ShadeTone.decision(grid).body==io.github.igorcv88.oneuiliquidglass.glass.QsScene.Tone.LIGHT_SCENE;
-        if(shadeScene==null||shadeScene!=light||shadeGrid==null)adoptGrid(grid,"shared-resample",light);
-        else {shadeGrid=grid;headerTone(grid);}
+        updateShadeGrid(grid, "shared-resample", light);
 
     }
     /** Rows given the scene's text tone by orphanTone, restored when the shade closes. */
@@ -1118,6 +1127,22 @@ public final class HeadsUpHooks {
         composeHeader(grid);
         if(pv!=null)headerInk.update(pv.getRootView(),grid);
     }
+    /** Republish on a material/configuration decision, never just because another sample arrived. */
+    private void updateShadeGrid(ToneGrid grid, String source, boolean light) {
+        Material next = ShadeTone.materialFor(grid.whole(), light, true);
+        ShadePalette old = shadePalette;
+        if (old == null || shadeGrid == null || old.generation != shadeOpens
+                || old.scene != light
+                || old.swap != next.swap || old.lightBackdrop != next.light
+                || old.configRevision != io.github.igorcv88.oneuiliquidglass.config.ConfigClient.revision()
+                || old.tuningGeneration != Tuning.generation || old.nativeLightText != ShadeTone.lightText()) {
+            adoptGrid(grid, source, light);
+        } else {
+            shadeGrid = grid;
+            headerTone(grid);
+        }
+    }
+
     private void restoreHeader() {
         headerInk.clear();
         shadeHeaderGate.reset(); shadeHeaderLight = null;
@@ -1158,7 +1183,8 @@ public final class HeadsUpHooks {
         ToneGrid pre = preGrid;
         preGrid = null;
         long preAge = pre == null ? -1 : shadeOpenAt - pre.takenAt;
-        boolean preOk = pre != null && preValid(preGridGesture, pre);
+        boolean preOk = pre != null && preValid(preGridGesture, pre)
+                && BackdropEvents.foregroundChangedAt() <= pre.takenAt;
         Probe.log("SHADE_OPEN_BEGIN", "generation=" + generation + " adaptive=" + adaptive + " preAge=" + preAge + " preValid=" + preOk);
         if (!adaptive) return;
         ToneGrid current=ShadeTone.live();
@@ -1168,8 +1194,10 @@ public final class HeadsUpHooks {
             return;
         }
         if (preOk) { adoptGrid(pre.forGeneration(generation), "preopen"); return; }
-        if (prior != null && prior.sampledAt <= shadeOpenAt
-                && shadeOpenAt - prior.sampledAt <= SHADE_PALETTE_HOLD_MS) {
+        if (prior != null && paletteHoldValid(prior.sampledAt, shadeOpenAt,
+                BackdropEvents.foregroundChangedAt(), prior.configRevision,
+                io.github.igorcv88.oneuiliquidglass.config.ConfigClient.revision(),
+                prior.tuningGeneration, Tuning.generation, prior.nativeLightText, ShadeTone.lightText())) {
             // A secure lockscreen can interrupt capture for ~2 seconds after unlock.
             // Hold the last complete palette instead of drawing native-white first
             // and moving text/icons asynchronously. A new capture replaces it at once.
@@ -1194,13 +1222,26 @@ public final class HeadsUpHooks {
                 return;
             }
             if (grid == null) { Probe.log("SHADE_PREFETCH", "generation=" + generation + " state=unavailable tFromOpen=" + dt); return; }
+            if (BackdropEvents.foregroundChangedAt() > grid.takenAt || !Tuning.get().shadeAdaptive
+                    || barState == null || barState != Eligibility.BAR_SHADE) return;
             // A pre-open capture that landed meanwhile is as good and older-or-equal: keep the first.
             if (shadeGrid != null && shadeGrid.generation == generation) return;
             adoptGrid(grid, "sample");
         });
     }
+    static boolean paletteHoldValid(long sampledAt, long now, long foregroundAt,
+                                    long savedRevision, long revision, int savedTuning, int tuning,
+                                    boolean savedLightText, boolean lightText) {
+        return sampledAt <= now && now - sampledAt <= SHADE_PALETTE_HOLD_MS
+                && foregroundAt <= sampledAt && savedRevision == revision
+                && savedTuning == tuning && savedLightText == lightText;
+    }
+
     private void endShadeTone() {
         if (shadeOpenAt == 0) return;
+        // Withdraw before reconciliation, including direct lifecycle calls.
+        shadePalette = null;
+        shadeScene = null;
         // Closing withdraws the sole shade-ink owner; restore native shelf filters once.
         if (compactIcons != null) compactIcons.shadeToneChanged();
         Probe.log("SHADE_OPEN_END", "generation=" + shadeOpens + " durationMs=" + (android.os.SystemClock.uptimeMillis() - shadeOpenAt)
@@ -1831,7 +1872,7 @@ public final class HeadsUpHooks {
             String source;
             ToneGrid grid = shadeGrid;
             if (grid != null && grid.generation == shadeOpens) {
-                v.getLocationOnScreen(toneXy);
+                if (Tuning.get().shadeLocal) v.getLocationOnScreen(toneXy);
                 // One luminosity for the whole stack, from the whole screen: a card under a white
                 // patch of the wallpaper (a cloud) was veiled darker than the rest (device frame,
                 // 26/10). Each card's colour still comes from the live blur behind it.
@@ -1844,11 +1885,6 @@ public final class HeadsUpHooks {
                 // capture, shared with the shelf and the regular notification icons.
                 luma = shadePalette.luma;
                 source = "heldPalette";
-            } else if (first && toneAt > 0 && android.os.SystemClock.uptimeMillis() - toneAt <= HOLD_MS) {
-                // Measured moments ago (the pop-up this card was, or a reopened shade): that reading
-                // stands until this opening's capture lands, instead of native first and back.
-                luma = Float.NaN;
-                source = "held";
             } else if (first) {
                 luma = Float.NaN;
                 source = "native";
@@ -1866,6 +1902,7 @@ public final class HeadsUpHooks {
             if (changedSurface) pushToneVeil();
             if (source.equals("native")) setNative(); else if (!Float.isNaN(luma)) setTone(luma, changedSource);
             else setForeground(swapped);
+            if (changedSource && grid != null && source.equals("grid")) v.getLocationOnScreen(toneXy);
             if (changedSource) logTone("SHADE_TONE_APPLY", v, source, luma, grid != null && source.equals("grid") ? grid.bright(toneXy[1], toneXy[1] + v.getHeight()) : -1f,
                     " generation=" + shadeOpens + " tFromOpen=" + (android.os.SystemClock.uptimeMillis() - shadeOpenAt)
                     + (grid != null && source.equals("grid") ? " age=" + (android.os.SystemClock.uptimeMillis() - grid.takenAt) : ""));

@@ -83,12 +83,19 @@ final class NotificationCompactIconHooks {
                     states.put(image, state);
                     image.addOnAttachStateChangeListener(state);
                 }
+                String event = param.method.getName();
+                if ("setNotification".equals(event) || "set".equals(event))
+                    state.sourceRevision = Long.MIN_VALUE;
                 state.refresh();
             }
         };
         hook(type, "setNotification", updated);
         hook(type, "set", updated);
         hook(type, "onAttachedToWindow", updated);
+        // Reconcile at the OEM writer boundary, after tint/drawable updates and before drawing.
+        // No global ImageView hook: only StatusBarIconView methods declared in SystemUI.
+        for (String name : new String[] { "updateIconColor", "setStaticDrawableColor",
+                "setIconColor", "updateDrawable", "drawableStateChanged" }) hook(type, name, updated);
         installStatusLimit();
         installStatusInk();
     }
@@ -419,6 +426,9 @@ final class NotificationCompactIconHooks {
         final WeakReference<ImageView> ref;
         ViewTreeObserver observer;
         String key;
+        StatusBarNotification sourceSbn;
+        Notification sourceNotification;
+        long sourceRevision = Long.MIN_VALUE;
         int mode = -1;
         long ticket;
         NotificationIconTreatment.Resolved ready;
@@ -430,8 +440,8 @@ final class NotificationCompactIconHooks {
         int competingRebinds;
         String lastInkProbe;
         String lastShelfDecision;
-        ColorFilter originalShelfFilter, appliedShelfFilter;
-        int appliedShelfColor;
+        final ShelfIconTint shelfTint = new ShelfIconTint();
+        boolean refreshing;
         long shelfOverwriteWindow, shelfSuspendUntil;
         int shelfOverwrites;
  
@@ -467,6 +477,12 @@ final class NotificationCompactIconHooks {
         }
 
         void refresh() {
+            if (refreshing) return;
+            refreshing = true;
+            try { refreshNow(); } finally { refreshing = false; }
+        }
+
+        private void refreshNow() {
             ImageView v = ref.get();
             if (v == null) return;
             attach();
@@ -481,7 +497,14 @@ final class NotificationCompactIconHooks {
             }
             Notification n = sbn.getNotification();
             long config = ConfigClient.revision();
-            String nextKey = NotificationIconTreatment.sourceKey(sbn.getPackageName(), n, currentMode, config);
+            String nextKey = key;
+            if (nextKey == null || sourceSbn != sbn || sourceNotification != n
+                    || currentMode != mode || sourceRevision != config) {
+                nextKey = NotificationIconTreatment.sourceKey(sbn.getPackageName(), n, currentMode, config);
+                sourceSbn = sbn;
+                sourceNotification = n;
+                sourceRevision = config;
+            }
             if (!nextKey.equals(key) || currentMode != mode) {
                 restore();
                 key = nextKey;
@@ -489,6 +512,7 @@ final class NotificationCompactIconHooks {
                 pkg = sbn.getPackageName();
                 ready = null;
                 long task = ++ticket;
+                final String requestedKey = nextKey;
                 Context context = v.getContext().getApplicationContext();
                 // Snapshot before the worker, and only if this was still the framework drawable.
                 final int[] nativeSnapshot = v.getDrawable() == null ? null : pixels(v.getDrawable());
@@ -497,7 +521,7 @@ final class NotificationCompactIconHooks {
                             context, sbn, currentMode, nativeSnapshot, config);
                     main.post(() -> {
                         ImageView image = ref.get();
-                        if (image == null || ticket != task || !nextKey.equals(key)) return;
+                        if (image == null || ticket != task || !requestedKey.equals(key)) return;
                         ready = result;
                         if (Probe.trace) Probe.log("ICON_TREAT_COMPACT_ROUTE", "pkg=" + pkg
                                 + " source=" + (result == null ? "preserve" : result.source)
@@ -578,7 +602,7 @@ final class NotificationCompactIconHooks {
             // The expanded notification shelf is a separate icon container. Samsung keeps
             // writing its native (often white) ImageView filter even when HeadsUpHooks has
             // switched its "N more notifications" label to dark text on a light glass card.
-            // Match the label only for shelf children; status bar and keyguard are untouched.
+            // Follow the committed palette only for shelf children; status bar and keyguard are untouched.
             // A native rebind above may restore the old view filter. Apply the shelf ink
             // after replacement too, so the newly installed glyph is correct in its first frame.
             if (tintShelf) { applyShelfFilter(v, shelfInk); return; }
@@ -606,11 +630,10 @@ final class NotificationCompactIconHooks {
         }
 
         private void applyShelfFilter(ImageView v, int color) {
-            ColorFilter current = v.getColorFilter();
-            if (current == appliedShelfFilter && color == appliedShelfColor) return;
+            if (shelfTint.current(v, color)) return;
             long now = android.os.SystemClock.uptimeMillis();
             if (now < shelfSuspendUntil) return;
-            if (appliedShelfFilter != null && current != appliedShelfFilter) {
+            if (ShelfIconTint.owns(v)) {
                 if (now - shelfOverwriteWindow > 700) {
                     shelfOverwriteWindow = now;
                     shelfOverwrites = 0;
@@ -621,24 +644,19 @@ final class NotificationCompactIconHooks {
                     return;
                 }
             }
-            originalShelfFilter = current == appliedShelfFilter ? originalShelfFilter : current;
-            appliedShelfColor = color;
-            appliedShelfFilter = new PorterDuffColorFilter(color, PorterDuff.Mode.SRC_IN);
-            v.setColorFilter(appliedShelfFilter);
+            if (!shelfTint.apply(v, color)) return;
             if (Probe.trace) Probe.log("ICON_TREAT_SHELF_INK", "pkg=" + pkg
-                    + " color=" + Integer.toHexString(color) + " original=" + Integer.toHexString(currentInk(v))
+                    + " color=" + Integer.toHexString(color)
                     + " view=" + Integer.toHexString(System.identityHashCode(v))
                     + " drawable=" + (v.getDrawable() == null ? "none" : v.getDrawable().getClass().getSimpleName())
+                    + " drawableFilter=" + (v.getDrawable() == null ? "none"
+                            : v.getDrawable().getColorFilter() == v.getColorFilter() ? "owned" : "other")
+                    + " alpha=" + v.getImageAlpha() + " shown=" + v.isShown()
                     + " parent=" + ancestors(v));
         }
 
         private void restoreShelfFilter(ImageView v) {
-            if (appliedShelfFilter == null) return;
-            if (v != null && v.getColorFilter() == appliedShelfFilter)
-                v.setColorFilter(originalShelfFilter);
-            appliedShelfFilter = null;
-            originalShelfFilter = null;
-            appliedShelfColor = 0;
+            shelfTint.restore(v);
             shelfOverwrites = 0;
             shelfSuspendUntil = 0;
         }
@@ -694,6 +712,9 @@ final class NotificationCompactIconHooks {
             ticket++;
             restore();
             key = null;
+            sourceSbn = null;
+            sourceNotification = null;
+            sourceRevision = Long.MIN_VALUE;
             ready = null;
             mode = -1;
             pkg = null;
