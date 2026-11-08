@@ -21,6 +21,10 @@ final class NativeIds {
     private NativeIds() {}
 
     private static final Map<Resources, Map<String, Integer>> IDS = new WeakHashMap<>();
+    // Different notification RemoteViews under the same SystemUI Resources can have
+    // android:id/icon and com.android.systemui:id/icon. Remember a walk result on the
+    // specific expanded root, without overwriting the package-wide resolved id.
+    private static final Map<View, Map<String, Integer>> ROOT_IDS = new WeakHashMap<>();
     // Re-inflated DZIF plugin roots can use an id belonging to another package. Recheck a
     // failed lookup at most once per root/name/750 ms, never walk the card every pre-draw.
     private static final Map<View, Map<String, Long>> MISSES = new WeakHashMap<>();
@@ -29,7 +33,9 @@ final class NativeIds {
     /** The first view under root (root included) whose id has this entry name, or null. Main thread. */
     static View find(View root, String entryName) {
         if (root == null) return null;
-        int id = resolve(root, entryName);
+        Map<String, Integer> local = ROOT_IDS.get(root);
+        int id = local != null && local.containsKey(entryName)
+                ? local.get(entryName) : resolve(root, entryName);
         if (id != 0) {
             View direct = root.findViewById(id);
             if (direct != null) return direct;
@@ -42,7 +48,8 @@ final class NativeIds {
         if (retry != null && now < retry) return null;
         View found = walk(root, entryName, 0);
         if (found != null) {
-            remember(root.getResources(), entryName, found.getId());
+            if (local == null) { local = new HashMap<>(); ROOT_IDS.put(root, local); }
+            local.put(entryName, found.getId());
             if (byName != null) byName.remove(entryName);
         } else {
             if (byName == null) { byName = new HashMap<>(); MISSES.put(root, byName); }
@@ -118,5 +125,5 @@ final class NativeIds {
     }
 
     /** Tests: forget every resolved id. */
-    static void clearForTest() { IDS.clear(); MISSES.clear(); }
+    static void clearForTest() { IDS.clear(); ROOT_IDS.clear(); MISSES.clear(); }
 }
