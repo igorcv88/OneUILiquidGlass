@@ -15,7 +15,6 @@ import android.view.ViewGroup;
 import android.view.ViewParent;
 import android.view.ViewTreeObserver;
 import android.widget.ImageView;
-import android.widget.TextView;
 
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Field;
@@ -35,9 +34,6 @@ import io.github.igorcv88.oneuiliquidglass.config.NotificationIconPolicy;
 import io.github.igorcv88.oneuiliquidglass.diagnostics.Probe;
 import io.github.igorcv88.oneuiliquidglass.diagnostics.Perf;
 import io.github.igorcv88.oneuiliquidglass.glass.Tuning;
-import io.github.igorcv88.oneuiliquidglass.glass.ShadeTone;
-import io.github.igorcv88.oneuiliquidglass.glass.ToneGrid;
-import io.github.igorcv88.oneuiliquidglass.glass.Material;
 
 /**
  * One UI uses StatusBarIconView outside notification rows: the status bar, the lockscreen shelf,
@@ -58,36 +54,16 @@ final class NotificationCompactIconHooks {
     // The DZIF wrap-content frame grows, but its MATCH_PARENT linear host and icon
     // container can remain at Samsung's 216 px measurement. Restore their LPs on release.
     private final WeakHashMap<View, Integer> statusNativeLayoutWidths = new WeakHashMap<>();
-    // One collapsed notification shelf may hold several icons: only one search/650 ms
-    // across them; the count TextView keeps its own colour owner.
-    private WeakReference<TextView> sharedShelfLabel = new WeakReference<>(null);
-    private long nextShelfLabelLookup;
-    private int shelfLabelMisses;
     private final ClassLoader loader;
     private final BooleanSupplier enabled;
-    private final BooleanSupplier shelfToneSwapped;
-    /** The opening's already captured scene, shared with the notification text painter. */
-    private final Supplier<ToneGrid> shadeGrid;
-    private final Supplier<Boolean> shadeScene;
-    private ToneGrid sampledShelfGrid;
-    private Boolean sampledShelfBackdrop;
-    private Integer sampledShelfInk;
-    private long nextShelfInkAt;
-    private long lastShelfTraceAt;
+    /** Ink owned by the shade palette, or null when the expanded shade owns no palette. */
+    private final Supplier<Integer> shadeInk;
 
     NotificationCompactIconHooks(ClassLoader loader, BooleanSupplier enabled,
-                                 BooleanSupplier shelfToneSwapped) {
-        this(loader, enabled, shelfToneSwapped, () -> null, () -> null);
-    }
-
-    NotificationCompactIconHooks(ClassLoader loader, BooleanSupplier enabled,
-                                 BooleanSupplier shelfToneSwapped,
-                                 Supplier<ToneGrid> shadeGrid, Supplier<Boolean> shadeScene) {
+                                 Supplier<Integer> shadeInk) {
         this.loader = loader;
         this.enabled = enabled;
-        this.shelfToneSwapped = shelfToneSwapped;
-        this.shadeGrid = shadeGrid;
-        this.shadeScene = shadeScene;
+        this.shadeInk = shadeInk;
     }
 
     void install() {
@@ -428,147 +404,8 @@ final class NotificationCompactIconHooks {
         return null;
     }
 
-    /** Bind the actual count TextView from its owner, independent of the compact icon tree. */
-    void bindShelfLabel(View shelf) {
-        TextView existing = sharedShelfLabel.get();
-        if (shelf != null && existing != null && existing.isAttachedToWindow() && existing.isShown()
-                && existing.getRootView() == shelf.getRootView()
-                && ShelfIconInk.isCountLabel(resourceName(existing), existing.getText())) return;
-        long now = android.os.SystemClock.uptimeMillis();
-        if (shelf == null || !shelf.isAttachedToWindow() || now < nextShelfLabelLookup) return;
-        // HeadsUpHooks calls from every notification row; those are not shelf label owners.
-        // Do not let their scans consume the shared 650 ms lookup budget.
-        if (shelf.getClass().getSimpleName().endsWith("ExpandableNotificationRow")) return;
-        nextShelfLabelLookup = now + 650;
-        TextView match = visibleShelfCountLabel(shelf, 0);
-        if (match != null) {
-            sharedShelfLabel = new WeakReference<>(match);
-            shelfLabelMisses = 0;
-            if (Probe.trace) Probe.log("ICON_TREAT_SHELF_LABEL",
-                    Foreground.describe(match) + " source=NotificationShelf ink="
-                    + Integer.toHexString(match.getCurrentTextColor()));
-        }
-    }
-
-    private static String resourceName(View v) {
-        if (v.getId() == View.NO_ID) return null;
-        try { return v.getResources().getResourceEntryName(v.getId()); }
-        catch (RuntimeException ignored) { return null; }
-    }
-
-    private TextView visibleShelfCountLabel(View view, int depth) {
-        if (depth > 16 || view.getVisibility() != View.VISIBLE) return null;
-        if (view instanceof TextView && ShelfIconInk.isCountLabel(
-                resourceName(view), ((TextView) view).getText()) && view.isShown()) return (TextView) view;
-        if (!(view instanceof android.view.ViewGroup)) return null;
-        android.view.ViewGroup group = (android.view.ViewGroup) view;
-        for (int i = 0; i < group.getChildCount(); i++) {
-            View child = group.getChildAt(i);
-            if (child.getClass().getSimpleName().endsWith("ExpandableNotificationRow")) continue;
-            TextView found = visibleShelfCountLabel(child, depth + 1);
-            if (found != null) return found;
-        }
-        return null;
-    }
-
-    /** The real count text may be a window-level sibling, not a shelf child. */
-    TextView findShelfCountNear(ImageView icon) {
-        ViewParent ancestor = icon.getParent();
-        for (int depth = 0; depth < 14 && ancestor instanceof View; depth++) {
-            View node = (View) ancestor;
-            String owner = node.getClass().getSimpleName();
-            if ("SecShelfNotificationIconContainer".equals(owner)
-                    || "NotificationShelf".equals(owner)) {
-                TextView label = visibleShelfCountLabel(node, 0);
-                if (label != null) return label;
-            }
-            if ("NotificationShadeWindowView".equals(owner)
-                    || "KeyguardRootView".equals(owner)) break;
-            ancestor = node.getParent();
-        }
-        // Exactly one wider walk if the shelf host does not own the count label.
-        View window = icon.getRootView();
-        return window == null ? null : visibleShelfCountLabel(window, 0);
-    }
-
-    /** If Samsung draws the count outside TextView, follow the same per-card shade material
-     * decision as Foreground rather than the device-wide native theme. One luma read per shelf
-     * at most every 650 ms; no capture, pixel decoding or view traversal on pre-draw. */
-    Integer shelfSceneInk(ImageView icon) {
-        ToneGrid grid = shadeGrid.get();
-        Boolean scene = shadeScene.get();
-        String source = "shadeGrid";
-        // The count label is tinted by HeadsUpHooks.State.shelfTone(), which uses the
-        // *whole shade scene* and the text-swap setting. Sampling the shelf icon's
-        // own screen band can disagree with that decision after switching apps, and
-        // can preserve the preceding app's colour until the next lock/unlock.
-        // When the shade owns a scene, follow the same decision as its count text.
-        if (scene != null) {
-            int sceneInk = ShelfIconInk.sceneInk(ShadeTone.lightText(),
-                    shelfToneSwapped.getAsBoolean());
-            long now = android.os.SystemClock.uptimeMillis();
-            if (Probe.trace && (sampledShelfInk == null || sampledShelfInk != sceneInk
-                    || now - lastShelfTraceAt >= 2000)) {
-                lastShelfTraceAt = now;
-                Probe.log("ICON_TREAT_SHELF_SCENE", "source=shadeScene scene=" + scene
-                        + " swap=" + shelfToneSwapped.getAsBoolean()
-                        + " ink=" + Integer.toHexString(sceneInk));
-            }
-            sampledShelfGrid = grid;
-            sampledShelfBackdrop = scene;
-            sampledShelfInk = sceneInk;
-            return sceneInk;
-        }
-        // The notification shelf can draw while Samsung is still bringing the shade to its
-        // expanded state. The row tone has an already published full-display preview then;
-        // use that exact palette rather than falling back to native white for this frame.
-        if (grid == null || scene == null) {
-            grid = ShadeTone.live();
-            scene = ShadeTone.liveBodyLight(grid);
-            source = "sharedPreview";
-        }
-        long now = android.os.SystemClock.uptimeMillis();
-        if (grid == null || scene == null || !icon.isAttachedToWindow()) {
-            if (Probe.trace && now - lastShelfTraceAt >= 2000) {
-                lastShelfTraceAt = now;
-                Probe.log("ICON_TREAT_SHELF_SCENE", "source=unavailable grid=" + (grid != null)
-                        + " scene=" + scene + " attached=" + icon.isAttachedToWindow());
-            }
-            return null;
-        }
-        if (sampledShelfInk != null && sampledShelfGrid == grid
-                && scene.equals(sampledShelfBackdrop) && now < nextShelfInkAt)
-            return sampledShelfInk;
-        int[] position = new int[2];
-        icon.getLocationOnScreen(position);
-        int top = position[1];
-        float luma = grid.luma(top, top + Math.max(1, icon.getHeight()));
-        // The shelf may sit below the cropped panel bands during its entrance animation.
-        // The opening's whole-scene tone is still preferable to a fixed white fallback.
-        if (luma < 0f) luma = grid.whole();
-        if (luma < 0f) return null;
-        Material material = ShadeTone.materialFor(luma, scene, true);
-        int ink = ShelfIconInk.sceneInk(ShadeTone.lightText(), material.swap);
-        boolean changed = sampledShelfInk == null || sampledShelfInk != ink;
-        sampledShelfGrid = grid;
-        sampledShelfBackdrop = scene;
-        sampledShelfInk = ink;
-        nextShelfInkAt = now + 650;
-        if (Probe.trace && (changed || now - lastShelfTraceAt >= 2000)) {
-            lastShelfTraceAt = now;
-            Probe.log("ICON_TREAT_SHELF_SCENE", "source=" + source + " luma="
-                    + Math.round(luma * 100f) + " swap=" + material.swap
-                    + " ink=" + Integer.toHexString(ink));
-        }
-        return ink;
-    }
-
     /** One bounded reconciliation when the shade changes scene, not a redraw watchdog. */
     void shadeToneChanged() {
-        sampledShelfGrid = null;
-        sampledShelfBackdrop = null;
-        sampledShelfInk = null;
-        nextShelfInkAt = 0;
         // Samsung may keep the same attached icon view across shade openings. Its
         // pre-draw callback is not a dependable signal for a background-only change.
         for (State state : new java.util.ArrayList<>(states.values())) {
@@ -673,20 +510,14 @@ final class NotificationCompactIconHooks {
             // preserves Samsung's native monochrome drawable (bitmap=null). That path used to
             // return before the shelf filter, leaving white icons on a light expanded shade.
             boolean shelfChild = inNotificationShelf(v);
-            // Once the open shade has committed its scene, use the *same* swap
-            // decision as the count text. A previously cached TextView can still
-            // be animating from the last app when the new shade frame arrives.
-            Integer sceneInk = shelfChild && shadeScene.get() != null ? shelfSceneInk(v) : null;
-            Integer labelInk = shelfChild && sceneInk == null ? shelfLabelInk(v) : null;
-            boolean mirrorShelf = ShelfIconInk.shouldMirror(shelfChild,
-                    shelfChild && shelfToneSwapped.getAsBoolean());
-            // The compact shelf is also visible while shadeAdaptive is disabled (for example
-            // while transitioning from keyguard). Its black label then remains native even
-            // though the scene callback is false. The drawn label is the source of truth.
-            boolean tintShelf = shelfChild;
+            // One owner for the expanded shade's ink. Outside that opening,
+            // release our filter to Samsung; never recompute from an unrelated
+            // live frame or from the last cached count label as the shade closes.
+            Integer sharedInk = shelfChild ? shadeInk.get() : null;
+            boolean tintShelf = sharedInk != null;
             if (shelfChild && Probe.trace) {
-                String state = "pkg=" + pkg + " mirror=" + mirrorShelf + " tint=" + tintShelf
-                        + " label=" + (labelInk == null ? "missing" : Integer.toHexString(labelInk))
+                String state = "pkg=" + pkg + " tint=" + tintShelf
+                        + " owner=" + (tintShelf ? "shadePalette" : "native")
                         + " source=" + (ready == null ? "pending" : ready.source)
                         + " nativeInk=" + Integer.toHexString(currentInk(v))
                         + " viewFilter=" + (v.getColorFilter() != null);
@@ -698,17 +529,9 @@ final class NotificationCompactIconHooks {
             int shelfInk = 0;
             if (tintShelf) {
                 Tuning palette = Tuning.get();
-                Integer measuredInk = sceneInk != null ? sceneInk
-                        : labelInk == null ? shelfSceneInk(v) : null;
-                int derivedInk = measuredInk != null ? measuredInk
-                        : ShelfIconInk.sceneInk(ShadeTone.lightText(), mirrorShelf);
-                shelfInk = labelInk != null
-                        ? ShelfIconInk.fromLabel(labelInk, palette.notificationIconInkMode,
-                                palette.notificationIconFixedInk, palette.notificationIconLightInk,
-                                palette.notificationIconDarkInk)
-                        : ShelfIconInk.fromLabel(derivedInk, palette.notificationIconInkMode,
-                                palette.notificationIconFixedInk, palette.notificationIconLightInk,
-                                palette.notificationIconDarkInk);
+                shelfInk = ShelfIconInk.fromLabel(sharedInk, palette.notificationIconInkMode,
+                        palette.notificationIconFixedInk, palette.notificationIconLightInk,
+                        palette.notificationIconDarkInk);
             }
             if (ready == null || ready.bitmap == null) {
                 if (tintShelf) applyShelfFilter(v, shelfInk);
@@ -803,7 +626,10 @@ final class NotificationCompactIconHooks {
             appliedShelfFilter = new PorterDuffColorFilter(color, PorterDuff.Mode.SRC_IN);
             v.setColorFilter(appliedShelfFilter);
             if (Probe.trace) Probe.log("ICON_TREAT_SHELF_INK", "pkg=" + pkg
-                    + " color=" + Integer.toHexString(color) + " original=" + Integer.toHexString(currentInk(v)));
+                    + " color=" + Integer.toHexString(color) + " original=" + Integer.toHexString(currentInk(v))
+                    + " view=" + Integer.toHexString(System.identityHashCode(v))
+                    + " drawable=" + (v.getDrawable() == null ? "none" : v.getDrawable().getClass().getSimpleName())
+                    + " parent=" + ancestors(v));
         }
 
         private void restoreShelfFilter(ImageView v) {
@@ -817,64 +643,6 @@ final class NotificationCompactIconHooks {
             shelfSuspendUntil = 0;
         }
 
-
-        /** Follow only the actual "N more notifications" text, never shelf footer actions. */
-        private Integer shelfLabelInk(ImageView icon) {
-            TextView existing = sharedShelfLabel.get();
-            if (existing != null && existing.isAttachedToWindow() && existing.isShown()
-                    && existing.getRootView() == icon.getRootView()
-                    && ShelfIconInk.isCountLabel(resourceName(existing), existing.getText()))
-                return existing.getCurrentTextColor();
-            long now = android.os.SystemClock.uptimeMillis();
-            if (now < nextShelfLabelLookup) return null;
-            nextShelfLabelLookup = now + 650;
-            // Samsung can render the count as a sibling of the icon container, or outside
-            // NotificationShelf altogether. Search the icon's ancestors and then the window
-            // root *once per 650 ms*; skip notification rows and inspect only count labels.
-            TextView label = findShelfCountNear(icon);
-            if (label != null) {
-                sharedShelfLabel = new WeakReference<>(label);
-                shelfLabelMisses = 0;
-                if (Probe.trace) Probe.log("ICON_TREAT_SHELF_LABEL", Foreground.describe(label)
-                        + " source=sharedWindow ink=" + Integer.toHexString(label.getCurrentTextColor()));
-                return label.getCurrentTextColor();
-            }
-            if (Probe.trace && ++shelfLabelMisses <= 3) {
-                View window = icon.getRootView();
-                Probe.log("ICON_TREAT_SHELF_LABEL", "missingCount=true anchor="
-                        + Foreground.describe(icon.getParent() instanceof View
-                                ? (View) icon.getParent() : icon)
-                        + " window=" + (window == null ? "null" : window.getClass().getSimpleName())
-                        + " candidates=" + (window == null ? "" : shelfTextCandidates(window, 0, new int[]{0})));
-            }
-            return null;
-        }
-
-
-        private String shelfTextCandidates(View view, int depth, int[] count) {
-            if (depth > 7 || count[0] >= 6 || view.getVisibility() != View.VISIBLE) return "";
-            if (view instanceof TextView) {
-                TextView text = (TextView) view;
-                CharSequence value = text.getText();
-                count[0]++;
-                return (resourceName(text) == null ? "no-id" : resourceName(text))
-                        + "{len=" + (value == null ? 0 : value.length())
-                        + ",shown=" + text.isShown() + ",ink="
-                        + Integer.toHexString(text.getCurrentTextColor()) + "}";
-            }
-            if (!(view instanceof ViewGroup)) return "";
-            ViewGroup group = (ViewGroup) view;
-            StringBuilder list = new StringBuilder();
-            for (int i = 0; i < group.getChildCount() && count[0] < 6; i++) {
-                View child = group.getChildAt(i);
-                if (child.getClass().getSimpleName().endsWith("ExpandableNotificationRow")) continue;
-                String found = shelfTextCandidates(child, depth + 1, count);
-                if (found.isEmpty()) continue;
-                if (list.length() > 0) list.append(',');
-                list.append(found);
-            }
-            return list.toString();
-        }
 
         private boolean inNotificationShelf(View v) {
             for (ViewParent p = v.getParent(); p instanceof View; p = p.getParent()) {

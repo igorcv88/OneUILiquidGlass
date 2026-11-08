@@ -56,6 +56,11 @@ public class ShelfIconInkTest {
         assertEquals(0xffffffff, ShelfIconInk.sceneInk(false, true));
     }
 
+    @Test public void shadePaletteInkFollowsMaterialClassification() {
+        assertEquals(0xff000000, ShelfIconInk.inkForBackdrop(true));
+        assertEquals(0xffffffff, ShelfIconInk.inkForBackdrop(false));
+    }
+
     @Test public void automaticShelfInkCopiesRenderedLabelColorExactly() {
         assertEquals(0xff1c2430, ShelfIconInk.fromLabel(0xff1c2430, 0,
                 0xff123456, 0xff556677, 0xff8899aa));

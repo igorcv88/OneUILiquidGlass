@@ -44,6 +44,11 @@ final class ShelfIconInk {
         return nativeLightText != swapped ? 0xffffffff : 0xff000000;
     }
 
+    /** Convert the shade's single material decision to ink, without reclassifying backdrop. */
+    static int inkForBackdrop(boolean lightBackdrop) {
+        return lightBackdrop ? 0xff000000 : 0xffffffff;
+    }
+
     /** In automatic mode use the *drawn* label ink exactly, not a stale scene estimate. */
     static int fromLabel(int labelColor, int mode, int fixed, int light, int dark) {
         if (mode == 0) return labelColor;
