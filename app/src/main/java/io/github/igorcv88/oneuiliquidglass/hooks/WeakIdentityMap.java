@@ -46,6 +46,16 @@ final class WeakIdentityMap<K,V> {
         if(key==null)return false;
         prune();return entries.containsKey(new Key<>(key,null));
     }
+    /** Strong snapshot only for the duration of an event-driven invalidation. */
+    synchronized java.util.List<K> keys() {
+        prune();
+        java.util.List<K> result = new java.util.ArrayList<>(entries.size());
+        for (Key<K> key : entries.keySet()) {
+            K value = key.get();
+            if (value != null) result.add(value);
+        }
+        return result;
+    }
     synchronized int size() {prune();return entries.size();}
     synchronized void clear() {entries.clear();while(collected.poll()!=null){} }
 }

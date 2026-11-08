@@ -74,29 +74,29 @@ final class NotificationIconTreatment {
 
     static boolean managed(ImageView image) { return managed.contains(image); }
 
-    private static final class Lease {
+    static final class Lease {
         final WeakReference<ImageView> view;
         final Drawable nativeDrawable, background;
         final ColorStateList tint;
-        final ColorFilter imageFilter;
         final Drawable installed;
+        final ShelfIconTint inkLease = new ShelfIconTint();
         Drawable suppressedBackground;
         int suppressedAlpha;
-        int color;
+        int driftReports;
 
         Lease(ImageView v, Drawable replacement, int ink) {
             view = new WeakReference<>(v);
             nativeDrawable = v.getDrawable();
             background = v.getBackground();
             tint = v.getImageTintList();
-            imageFilter = v.getColorFilter();
             installed = replacement;
-            color = ink;
             v.setImageTintList(null);
-            v.clearColorFilter();
             v.setImageDrawable(replacement);
             suppressBackground();
             managed.add(v);
+            // Expansion can update ImageView's filter or tint the same drawable in place.
+            // Reuse the lease that checks both, including installation's inherited native filter.
+            inkLease.apply(v, ink);
         }
 
         /** Samsung can rebind the white icon disc without replacing the icon drawable. */
@@ -127,12 +127,15 @@ final class NotificationIconTreatment {
         }
 
         void tone(int ink) {
-            if (ink == color) return;
             ImageView v = view.get();
             if (v == null || v.getDrawable() != installed) return;
-            color = ink;
-            installed.setColorFilter(new PorterDuffColorFilter(ink, PorterDuff.Mode.SRC_IN));
-            v.invalidate();
+            if (Probe.trace && !inkLease.intact(v) && driftReports++ < 3)
+                Probe.log("ICON_TREAT_ROW_INK_DRIFT", "view="
+                        + Integer.toHexString(System.identityHashCode(v))
+                        + " glyph=" + installed.getClass().getSimpleName()
+                        + " tint=" + (v.getImageTintList() != null)
+                        + " ink=" + Integer.toHexString(ink));
+            inkLease.apply(v, ink);
         }
 
         void scale(float fraction) {
@@ -143,11 +146,11 @@ final class NotificationIconTreatment {
         void restore() {
             ImageView v = view.get();
             if (v == null) return;
+            inkLease.restore(v);
             managed.remove(v);
             if (v.getDrawable() == installed) {
                 v.setImageDrawable(nativeDrawable);
                 if (v.getImageTintList() == null) v.setImageTintList(tint);
-                v.setColorFilter(imageFilter);
             }
             restoreSuppressedBackground();
             suppressedBackground = null;
@@ -354,7 +357,6 @@ final class NotificationIconTreatment {
             Foreground.glyph(image, false, false);
             NotificationGlyphDrawable replacement = new NotificationGlyphDrawable(resolved.bitmap,
                     tuning.notificationIconScale, image.getDrawable());
-            replacement.setColorFilter(new PorterDuffColorFilter(ink, PorterDuff.Mode.SRC_IN));
             active.add(new Lease(image, replacement, ink));
             if (Probe.trace) Probe.log("ICON_TREAT_APPLIED", "pkg=" + pkg + " source=" + resolved.source
                     + " " + Foreground.describe(image) + " ink=" + Integer.toHexString(ink));
