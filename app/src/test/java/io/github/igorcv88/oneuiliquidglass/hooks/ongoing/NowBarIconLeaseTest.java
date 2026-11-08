@@ -101,6 +101,41 @@ public class NowBarIconLeaseTest {
         assertEquals(nativeColor, disc.getCardBackgroundColor().getDefaultColor());
     }
 
+    @Test public void vectorWithKnownInstalledPackageCanUseItsOfficialMonochromeGlyph() {
+        ImageView icon = new ImageView(activity);
+        Drawable original = new VectorDrawable();
+        icon.setImageDrawable(original);
+        NowBarIconLease lease = new NowBarIconLease();
+
+        lease.sync(icon, true, activity.getPackageName());
+        assertNotSame("a flattened launcher may use the app's official monochrome layer",
+                original, icon.getDrawable());
+        assertFalse(icon.getDrawable() instanceof AdaptiveIconDrawable);
+        Drawable mono = icon.getDrawable();
+        lease.sync(icon, true, activity.getPackageName());
+        assertSame("steady frame does not replace an already applied glyph", mono, icon.getDrawable());
+        lease.restore();
+        assertSame(original, icon.getDrawable());
+    }
+
+    @Test public void unknownPackageDoesNotTurnVectorIntoSolidForeground() {
+        ImageView icon = new ImageView(activity);
+        Drawable original = new VectorDrawable();
+        icon.setImageDrawable(original);
+        NowBarIconLease lease = new NowBarIconLease();
+        lease.sync(icon, true, "invalid.missing.package.for.oulg.test");
+        assertSame(original, icon.getDrawable());
+        lease.sync(icon, false);
+        assertSame(original, icon.getDrawable());
+    }
+
+    @Test public void emptySamsungPlaceholderRemainsEmptyEvenWithAnInstalledPackage() {
+        ImageView placeholder = new ImageView(activity);
+        NowBarIconLease lease = new NowBarIconLease();
+        lease.sync(placeholder, true, activity.getPackageName());
+        assertNull(placeholder.getDrawable());
+    }
+
     @Test public void expandedNotificationHeaderLosesItsAdaptiveBackgroundAndRestoresIt() {
         // The DZIF expanded view is a NotificationRowIconView inside a notification header,
         // not the compact nowbar_icon's MaterialCardView.

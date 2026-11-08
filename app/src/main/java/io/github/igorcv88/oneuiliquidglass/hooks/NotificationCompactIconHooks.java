@@ -171,6 +171,30 @@ final class NotificationCompactIconHooks {
             }
         });
 
+        // Status icons sometimes fall back to Samsung's native three-slot allocation after a
+        // shade/keyguard transition. Observe the *final* container geometry, not just the
+        // requested value passed to shouldForceOverflow (which may still be correct).
+        hook(container, "onLayout", new XC_MethodHook() {
+            private final WeakHashMap<View, String> last = new WeakHashMap<>();
+            @Override protected void afterHookedMethod(MethodHookParam p) {
+                if (!Probe.trace || !enabled.getAsBoolean() || !(p.thisObject instanceof ViewGroup)) return;
+                ViewGroup panel = (ViewGroup) p.thisObject;
+                if (!inStatusBar(panel)) return;
+                int shown = 0;
+                for (int i = 0; i < panel.getChildCount(); i++)
+                    if (panel.getChildAt(i).getVisibility() == View.VISIBLE) shown++;
+                String state = "width=" + panel.getWidth() + " measured=" + panel.getMeasuredWidth()
+                        + " children=" + panel.getChildCount() + " visible=" + shown
+                        + " maxStatic=" + Reflect.read(panel, "mMaxStaticIcons")
+                        + " actualWidth=" + Reflect.read(panel, "mActualLayoutWidth")
+                        + " lockscreen=" + Reflect.read(panel, "mOnLockScreen")
+                        + " shelf=" + Reflect.read(panel, "mInNotificationIconShelf")
+                        + " requested=" + Tuning.get().statusMaxIcons;
+                if (!state.equals(last.put(panel, state)))
+                    Probe.log("ICON_TREAT_STATUS_LAYOUT", state);
+            }
+        });
+
         // The numeric cap and physical-space cap are separate checks in Android's
         // NotificationIconContainer. Log the latter's actual operands and result so we can
         // tell whether Samsung has reserved only three icon slots. Forcing this result to
@@ -312,6 +336,7 @@ final class NotificationCompactIconHooks {
         int shelfOverwrites;
         WeakReference<TextView> shelfLabel = new WeakReference<>(null);
         long nextShelfLabelLookup;
+        int shelfLabelMisses;
 
         State(ImageView view) { ref = new WeakReference<>(view); }
 
@@ -533,13 +558,29 @@ final class NotificationCompactIconHooks {
                 View parent = (View) p;
                 if ("NotificationShelf".equals(parent.getClass().getSimpleName())) {
                     TextView label = visibleShelfCountLabel(parent, 0);
+                    String origin = "shelf";
+                    // On DZIF the visible counter may be owned by the enclosing notification
+                    // stack while the shelf icon container is a child of NotificationShelf.
+                    // Only an actual count label is eligible; rows and footer actions are skipped.
+                    if (label == null && parent.getParent() instanceof View) {
+                        View stack = (View) parent.getParent();
+                        if ("NotificationStackScrollLayout".equals(stack.getClass().getSimpleName())) {
+                            label = visibleShelfCountLabel(stack, 0);
+                            origin = "stack";
+                        }
+                    }
                     shelfLabel = new WeakReference<>(label);
                     if (label != null) {
+                        shelfLabelMisses = 0;
                         if (Probe.trace) Probe.log("ICON_TREAT_SHELF_LABEL", Foreground.describe(label)
-                                + " ink=" + Integer.toHexString(label.getCurrentTextColor()));
+                                + " source=" + origin + " ink=" + Integer.toHexString(label.getCurrentTextColor()));
                         return label.getCurrentTextColor();
                     }
-                    if (Probe.trace) Probe.log("ICON_TREAT_SHELF_LABEL", "missingCount=true shelf=" + Foreground.describe(parent));
+                    // A missing label means the scene-based fallback may disagree with the
+                    // actual counter. Sample nearby TextViews without logging notification text.
+                    if (Probe.trace && ++shelfLabelMisses <= 3)
+                        Probe.log("ICON_TREAT_SHELF_LABEL", "missingCount=true shelf=" + Foreground.describe(parent)
+                                + " candidates=" + shelfTextCandidates(parent, 0, new int[]{0}));
                     break;
                 }
             }
@@ -553,9 +594,9 @@ final class NotificationCompactIconHooks {
         }
 
         private TextView visibleShelfCountLabel(View view, int depth) {
-            if (depth > 7 || view.getVisibility() != View.VISIBLE) return null;
+            if (depth > 9 || view.getVisibility() != View.VISIBLE) return null;
             if (view instanceof TextView && ShelfIconInk.isCountLabel(
-                    resourceName(view), ((TextView) view).getText())) return (TextView) view;
+                    resourceName(view), ((TextView) view).getText()) && view.isShown()) return (TextView) view;
             if (!(view instanceof android.view.ViewGroup)) return null;
             android.view.ViewGroup group = (android.view.ViewGroup) view;
             for (int i = 0; i < group.getChildCount(); i++) {
@@ -565,6 +606,31 @@ final class NotificationCompactIconHooks {
                 if (found != null) return found;
             }
             return null;
+        }
+
+        private String shelfTextCandidates(View view, int depth, int[] count) {
+            if (depth > 7 || count[0] >= 6 || view.getVisibility() != View.VISIBLE) return "";
+            if (view instanceof TextView) {
+                TextView text = (TextView) view;
+                CharSequence value = text.getText();
+                count[0]++;
+                return (resourceName(text) == null ? "no-id" : resourceName(text))
+                        + "{len=" + (value == null ? 0 : value.length())
+                        + ",shown=" + text.isShown() + ",ink="
+                        + Integer.toHexString(text.getCurrentTextColor()) + "}";
+            }
+            if (!(view instanceof ViewGroup)) return "";
+            ViewGroup group = (ViewGroup) view;
+            StringBuilder list = new StringBuilder();
+            for (int i = 0; i < group.getChildCount() && count[0] < 6; i++) {
+                View child = group.getChildAt(i);
+                if (child.getClass().getSimpleName().endsWith("ExpandableNotificationRow")) continue;
+                String found = shelfTextCandidates(child, depth + 1, count);
+                if (found.isEmpty()) continue;
+                if (list.length() > 0) list.append(',');
+                list.append(found);
+            }
+            return list.toString();
         }
 
         private boolean inNotificationShelf(View v) {

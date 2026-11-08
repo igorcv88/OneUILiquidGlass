@@ -250,15 +250,18 @@ final class NowBarHooks {
         View container = c.container.get();
         c.nativeRegion.sync(container, shown && c.host.get() != container);
         if (container != null && NativeShape.cardLike(container) && c.host.get() != container) cardTransparent(container, c, shown);
+        Object item = c.item.get();
+        Object packageValue = item == null ? null : NativeShape.call(item, "getNowBarPackage");
+        String packageName = packageValue instanceof String ? (String) packageValue : null;
         ImageView icon = c.icon.target();
         if (icon == null || !LiveChipHooks.within(icon, card)) icon = findIcon(card);
-        c.icon.sync(icon, shown);
+        c.icon.sync(icon, shown, packageName);
         // On DZIF the expanded card uses a NotificationRowIconView under
         // expand_content_rootview, not the compact nowbar_icon. Its adaptive icon
         // includes a coloured background; lease just its monochrome glyph.
         ImageView expandedIcon = findExpandedIcon(card);
         Drawable expandedBefore = expandedIcon == null ? null : expandedIcon.getDrawable();
-        c.expandedIcon.sync(expandedIcon, shown);
+        c.expandedIcon.sync(expandedIcon, shown, packageName);
         if (expandedIcon != null && expandedBefore != expandedIcon.getDrawable()) {
             Drawable after = expandedIcon.getDrawable();
             Probe.log("NOWBAR_EXPANDED_ICON", "glass=" + shown
@@ -340,10 +343,10 @@ final class NowBarHooks {
     }
 
     /**
-     * The AOD plugin inflates distinct icon templates for compact/expanded Now Bar. The
-     * monochrome lease intentionally accepts only AdaptiveIconDrawable; if Samsung supplies a
-     * BitmapDrawable/VectorDrawable, there was previously no log explaining why it stayed native.
-     * This is a read-only diagnosis, restricted to Clock/Gradus, with no message content.
+     * The AOD plugin inflates distinct compact/expanded icons. Every eligible app can supply a
+     * different drawable (e.g. Clock's VectorDrawable or Maps' launcher bitmap), so an app-only
+     * probe missed the failing expanded views. This diagnostic reads no notification text and is
+     * capped per card to once per two seconds, with output only when the route changes.
      */
     private static void traceIcons(View card, Card c, ImageView compact, ImageView expanded,
                                    boolean shown) {
@@ -354,14 +357,17 @@ final class NowBarHooks {
         Object item = c.item.get();
         Object pkgValue = item == null ? null : NativeShape.call(item, "getNowBarPackage");
         String pkg = pkgValue instanceof String ? (String) pkgValue : "unavailable";
-        if (!"com.sec.android.app.clockpackage".equals(pkg) && !"com.igcv.gradus".equals(pkg)) return;
         View expandedRoot = NativeIds.find(card, "expand_content_rootview");
         View iconContainer = findExpandedIconContainer(card);
         String state = "pkg=" + pkg + " shown=" + shown
                 + " compact=" + iconState(compact)
                 + " expandedRoot=" + (expandedRoot == null ? "missing" : expandedRoot.getClass().getSimpleName())
                 + " expanded=" + iconState(expanded)
-                + " expandedDisc=" + (iconContainer == null ? "missing" : iconContainer.getClass().getSimpleName());
+                + " expandedDisc=" + (iconContainer == null ? "missing" : iconContainer.getClass().getSimpleName())
+                + " expandedParent=" + (expanded == null || expanded.getParent() == null
+                        ? "missing" : expanded.getParent().getClass().getSimpleName())
+                + " expandedBg=" + (expanded == null || expanded.getBackground() == null
+                        ? "none" : expanded.getBackground().getClass().getSimpleName());
         if (!state.equals(c.lastIconProbe)) {
             c.lastIconProbe = state;
             Probe.log("NOWBAR_ICON_DIAG", state);

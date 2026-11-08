@@ -1,6 +1,7 @@
 package io.github.igorcv88.oneuiliquidglass.hooks.ongoing;
 
 import android.content.res.ColorStateList;
+import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffColorFilter;
@@ -16,6 +17,7 @@ final class NowBarIconLease {
     // The ImageView stops owning the native drawable as soon as the monochrome glyph replaces it.
     // Keep it strongly for the active lease; only views/card references remain weak.
     private Drawable original;
+    private String activePackage;
     private WeakReference<Drawable> applied = new WeakReference<>(null);
     private WeakReference<View> disc = new WeakReference<>(null);
     private ColorStateList nativeDisc, nativeTint;
@@ -25,6 +27,9 @@ final class NowBarIconLease {
     private long generation, nextSample;
     private Boolean lightBackdrop;
     private int ink = Color.WHITE;
+    private WeakReference<ImageView> rejectedView = new WeakReference<>(null);
+    private WeakReference<Drawable> rejectedDrawable = new WeakReference<>(null);
+    private String rejectedPackage;
 
     private void contrast(ImageView target) {
         long now = android.os.SystemClock.uptimeMillis();
@@ -55,9 +60,15 @@ final class NowBarIconLease {
 
     ImageView target() { return image.get(); }
 
-    void sync(ImageView target, boolean glass) {
+    void sync(ImageView target, boolean glass) { sync(target, glass, null); }
+
+    /** The plugin can flatten an app's launcher into BitmapDrawable/VectorDrawable. When it
+     * does, try the installed package's official monochrome adaptive layer. Never tint the
+     * flattened bitmap itself: that would turn a colourful square into a solid square. */
+    void sync(ImageView target, boolean glass, String packageName) {
         if (!glass || target == null) { restore(); return; }
-        if (image.get() == target && target.getDrawable() == applied.get() && applied.get() != null) {
+        if (image.get() == target && target.getDrawable() == applied.get() && applied.get() != null
+                && java.util.Objects.equals(activePackage, packageName)) {
             if (target.getImageTintList() != null) {
                 nativeTint = target.getImageTintList();
                 target.setImageTintList(null);
@@ -68,13 +79,44 @@ final class NowBarIconLease {
         }
         restore();
         Drawable nativeIcon = target.getDrawable();
-        if (!(nativeIcon instanceof AdaptiveIconDrawable)) return;
-        Drawable glyph = ((AdaptiveIconDrawable) nativeIcon).getMonochrome();
-        if (glyph == null || glyph.getConstantState() == null) return;
-        Drawable mono = glyph.getConstantState().newDrawable(target.getResources()).mutate();
+        if (nativeIcon == null) return; // A blank Samsung placeholder must remain blank.
+        if (rejectedView.get() == target && rejectedDrawable.get() == nativeIcon
+                && java.util.Objects.equals(rejectedPackage, packageName)) return;
+        Drawable glyph = nativeIcon instanceof AdaptiveIconDrawable
+                ? ((AdaptiveIconDrawable) nativeIcon).getMonochrome() : null;
+        boolean fromApp = false;
+        if ((glyph == null || glyph.getConstantState() == null) && packageName != null) {
+            try {
+                Drawable launcher = target.getContext().getPackageManager().getApplicationIcon(packageName);
+                if (launcher instanceof AdaptiveIconDrawable) {
+                    glyph = ((AdaptiveIconDrawable) launcher).getMonochrome();
+                    fromApp = true;
+                }
+            } catch (PackageManager.NameNotFoundException | RuntimeException ignored) { }
+        }
+        if (glyph == null || glyph.getConstantState() == null) {
+            rejectedView = new WeakReference<>(target);
+            rejectedDrawable = new WeakReference<>(nativeIcon);
+            rejectedPackage = packageName;
+            return;
+        }
+        rejectedView.clear();
+        rejectedDrawable.clear();
+        rejectedPackage = null;
+        Drawable mono;
+        try {
+            mono = (fromApp ? glyph.getConstantState().newDrawable()
+                    : glyph.getConstantState().newDrawable(target.getResources())).mutate();
+        } catch (RuntimeException | LinkageError ignored) { return; }
+        if (io.github.igorcv88.oneuiliquidglass.diagnostics.Probe.trace && fromApp)
+            io.github.igorcv88.oneuiliquidglass.diagnostics.Probe.log("NOWBAR_ICON_FALLBACK",
+                    "pkg=" + packageName + " native="
+                            + (nativeIcon == null ? "null" : nativeIcon.getClass().getSimpleName())
+                            + " source=installedMonochrome");
         mono.setColorFilter(new PorterDuffColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN));
         image = new WeakReference<>(target);
         original = nativeIcon;
+        activePackage = packageName;
         applied = new WeakReference<>(mono);
         nativeTint = target.getImageTintList();
         target.setImageTintList(null);
@@ -143,6 +185,7 @@ final class NowBarIconLease {
         restoreExpandedDisc();
         image.clear();
         original = null;
+        activePackage = null;
         applied.clear();
     }
 
