@@ -431,7 +431,8 @@ final class NotificationCompactIconHooks {
     /** Bind the actual count TextView from its owner, independent of the compact icon tree. */
     void bindShelfLabel(View shelf) {
         TextView existing = sharedShelfLabel.get();
-        if (existing != null && existing.isAttachedToWindow() && existing.isShown()
+        if (shelf != null && existing != null && existing.isAttachedToWindow() && existing.isShown()
+                && existing.getRootView() == shelf.getRootView()
                 && ShelfIconInk.isCountLabel(resourceName(existing), existing.getText())) return;
         long now = android.os.SystemClock.uptimeMillis();
         if (shelf == null || !shelf.isAttachedToWindow() || now < nextShelfLabelLookup) return;
@@ -497,6 +498,27 @@ final class NotificationCompactIconHooks {
         ToneGrid grid = shadeGrid.get();
         Boolean scene = shadeScene.get();
         String source = "shadeGrid";
+        // The count label is tinted by HeadsUpHooks.State.shelfTone(), which uses the
+        // *whole shade scene* and the text-swap setting. Sampling the shelf icon's
+        // own screen band can disagree with that decision after switching apps, and
+        // can preserve the preceding app's colour until the next lock/unlock.
+        // When the shade owns a scene, follow the same decision as its count text.
+        if (scene != null) {
+            int sceneInk = ShelfIconInk.sceneInk(ShadeTone.lightText(),
+                    shelfToneSwapped.getAsBoolean());
+            long now = android.os.SystemClock.uptimeMillis();
+            if (Probe.trace && (sampledShelfInk == null || sampledShelfInk != sceneInk
+                    || now - lastShelfTraceAt >= 2000)) {
+                lastShelfTraceAt = now;
+                Probe.log("ICON_TREAT_SHELF_SCENE", "source=shadeScene scene=" + scene
+                        + " swap=" + shelfToneSwapped.getAsBoolean()
+                        + " ink=" + Integer.toHexString(sceneInk));
+            }
+            sampledShelfGrid = grid;
+            sampledShelfBackdrop = scene;
+            sampledShelfInk = sceneInk;
+            return sceneInk;
+        }
         // The notification shelf can draw while Samsung is still bringing the shade to its
         // expanded state. The row tone has an already published full-display preview then;
         // use that exact palette rather than falling back to native white for this frame.
@@ -539,6 +561,21 @@ final class NotificationCompactIconHooks {
                     + " ink=" + Integer.toHexString(ink));
         }
         return ink;
+    }
+
+    /** One bounded reconciliation when the shade changes scene, not a redraw watchdog. */
+    void shadeToneChanged() {
+        sampledShelfGrid = null;
+        sampledShelfBackdrop = null;
+        sampledShelfInk = null;
+        nextShelfInkAt = 0;
+        // Samsung may keep the same attached icon view across shade openings. Its
+        // pre-draw callback is not a dependable signal for a background-only change.
+        for (State state : new java.util.ArrayList<>(states.values())) {
+            ImageView image = state.ref.get();
+            if (image != null && image.isAttachedToWindow() && inNotificationShelf(image))
+                state.refresh();
+        }
     }
 
     private final class State implements View.OnAttachStateChangeListener, ViewTreeObserver.OnPreDrawListener {
@@ -636,7 +673,11 @@ final class NotificationCompactIconHooks {
             // preserves Samsung's native monochrome drawable (bitmap=null). That path used to
             // return before the shelf filter, leaving white icons on a light expanded shade.
             boolean shelfChild = inNotificationShelf(v);
-            Integer labelInk = shelfChild ? shelfLabelInk(v) : null;
+            // Once the open shade has committed its scene, use the *same* swap
+            // decision as the count text. A previously cached TextView can still
+            // be animating from the last app when the new shade frame arrives.
+            Integer sceneInk = shelfChild && shadeScene.get() != null ? shelfSceneInk(v) : null;
+            Integer labelInk = shelfChild && sceneInk == null ? shelfLabelInk(v) : null;
             boolean mirrorShelf = ShelfIconInk.shouldMirror(shelfChild,
                     shelfChild && shelfToneSwapped.getAsBoolean());
             // The compact shelf is also visible while shadeAdaptive is disabled (for example
@@ -657,14 +698,15 @@ final class NotificationCompactIconHooks {
             int shelfInk = 0;
             if (tintShelf) {
                 Tuning palette = Tuning.get();
-                Integer measuredInk = labelInk == null ? shelfSceneInk(v) : null;
-                int sceneInk = measuredInk != null ? measuredInk
+                Integer measuredInk = sceneInk != null ? sceneInk
+                        : labelInk == null ? shelfSceneInk(v) : null;
+                int derivedInk = measuredInk != null ? measuredInk
                         : ShelfIconInk.sceneInk(ShadeTone.lightText(), mirrorShelf);
                 shelfInk = labelInk != null
                         ? ShelfIconInk.fromLabel(labelInk, palette.notificationIconInkMode,
                                 palette.notificationIconFixedInk, palette.notificationIconLightInk,
                                 palette.notificationIconDarkInk)
-                        : ShelfIconInk.fromLabel(sceneInk, palette.notificationIconInkMode,
+                        : ShelfIconInk.fromLabel(derivedInk, palette.notificationIconInkMode,
                                 palette.notificationIconFixedInk, palette.notificationIconLightInk,
                                 palette.notificationIconDarkInk);
             }
@@ -780,6 +822,7 @@ final class NotificationCompactIconHooks {
         private Integer shelfLabelInk(ImageView icon) {
             TextView existing = sharedShelfLabel.get();
             if (existing != null && existing.isAttachedToWindow() && existing.isShown()
+                    && existing.getRootView() == icon.getRootView()
                     && ShelfIconInk.isCountLabel(resourceName(existing), existing.getText()))
                 return existing.getCurrentTextColor();
             long now = android.os.SystemClock.uptimeMillis();

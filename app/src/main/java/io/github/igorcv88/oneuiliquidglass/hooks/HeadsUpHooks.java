@@ -822,6 +822,8 @@ public final class HeadsUpHooks {
         float whole = grid.whole();
         Boolean previousScene = shadeScene;
         shadeScene = scene;
+        if (compactIcons != null && (previousScene == null || previousScene != scene))
+            compactIcons.shadeToneChanged();
         // The adjacent QS page shares this underlying app. It can use this freshly sampled scene
         // during the lateral gesture instead of briefly drawing Samsung's native discs/ink.
         if (quickSettings != null) quickSettings.shadeBackdrop(whole,
