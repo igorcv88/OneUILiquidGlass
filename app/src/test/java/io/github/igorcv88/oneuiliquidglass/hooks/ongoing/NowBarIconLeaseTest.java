@@ -176,11 +176,13 @@ public class NowBarIconLeaseTest {
         Drawable mono = icon.getDrawable();
         lease.sync(icon, true, activity.getPackageName());
         assertSame("steady frame does not replace an already applied glyph", mono, icon.getDrawable());
-        icon.setImageDrawable(new VectorDrawable()); // the Samsung writer rebound this view
+        Drawable rebound = new VectorDrawable(); // the Samsung writer rebound this view
+        icon.setImageDrawable(rebound);
         lease.sync(icon, true, activity.getPackageName());
         assertEquals("rebind cannot call PackageManager again", 1, resolves[0]);
         lease.restore();
-        assertSame(original, icon.getDrawable());
+        assertSame("reversion returns the last Samsung drawable, not the stale first one",
+                rebound, icon.getDrawable());
     }
 
     @Test public void unknownPackageDoesNotTurnVectorIntoSolidForeground() {
