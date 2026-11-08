@@ -21,14 +21,33 @@ final class NativeIds {
     private NativeIds() {}
 
     private static final Map<Resources, Map<String, Integer>> IDS = new WeakHashMap<>();
+    // Re-inflated DZIF plugin roots can use an id belonging to another package. Recheck a
+    // failed lookup at most once per root/name/750 ms, never walk the card every pre-draw.
+    private static final Map<View, Map<String, Long>> MISSES = new WeakHashMap<>();
+    private static final long MISS_RETRY_MS = 750;
 
     /** The first view under root (root included) whose id has this entry name, or null. Main thread. */
     static View find(View root, String entryName) {
         if (root == null) return null;
         int id = resolve(root, entryName);
-        if (id != 0) return root.findViewById(id);
+        if (id != 0) {
+            View direct = root.findViewById(id);
+            if (direct != null) return direct;
+        }
+        // getIdentifier may resolve SystemUI's "icon" id while a notification RemoteViews
+        // subtree contains android:id/icon. The resolved int must not suppress that fallback.
+        long now = android.os.SystemClock.uptimeMillis();
+        Map<String, Long> byName = MISSES.get(root);
+        Long retry = byName == null ? null : byName.get(entryName);
+        if (retry != null && now < retry) return null;
         View found = walk(root, entryName, 0);
-        if (found != null) remember(root.getResources(), entryName, found.getId());
+        if (found != null) {
+            remember(root.getResources(), entryName, found.getId());
+            if (byName != null) byName.remove(entryName);
+        } else {
+            if (byName == null) { byName = new HashMap<>(); MISSES.put(root, byName); }
+            byName.put(entryName, now + MISS_RETRY_MS);
+        }
         return found;
     }
 
@@ -99,5 +118,5 @@ final class NativeIds {
     }
 
     /** Tests: forget every resolved id. */
-    static void clearForTest() { IDS.clear(); }
+    static void clearForTest() { IDS.clear(); MISSES.clear(); }
 }

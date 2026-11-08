@@ -7,6 +7,7 @@ import android.graphics.PorterDuff;
 import android.graphics.PorterDuffColorFilter;
 import android.graphics.drawable.AdaptiveIconDrawable;
 import android.graphics.drawable.Drawable;
+import android.graphics.drawable.VectorDrawable;
 import android.view.View;
 import android.widget.ImageView;
 import java.lang.ref.WeakReference;
@@ -35,6 +36,8 @@ final class NowBarIconLease {
     private WeakReference<Drawable> applied = new WeakReference<>(null);
     private WeakReference<View> disc = new WeakReference<>(null);
     private ColorStateList nativeDisc, nativeTint;
+    private Drawable nativeIconBackground;
+    private int nativeIconBackgroundAlpha;
     /** DZIF has a SEPARATE MaterialCardView for the icon in the expanded Now Bar. */
     private WeakReference<View> expandedDisc = new WeakReference<>(null);
     private ColorStateList nativeExpandedDisc;
@@ -88,6 +91,7 @@ final class NowBarIconLease {
                 target.setImageTintList(null);
             }
             transparentDisc(target);
+            transparentIconBackground(target);
             contrast(target);
             return;
         }
@@ -108,6 +112,11 @@ final class NowBarIconLease {
                 }
             } catch (PackageManager.NameNotFoundException | RuntimeException ignored) { }
         }
+        // DZIF's Clock ongoing header supplies a genuine vector small-icon glyph and
+        // a separate opaque background on NotificationRowIconView. Only this verified
+        // native notification view may use the vector itself as a monochrome mask.
+        if ((glyph == null || glyph.getConstantState() == null) && nativeNotificationVector(target, nativeIcon))
+            glyph = nativeIcon;
         if (glyph == null || glyph.getConstantState() == null) {
             rejectedView = new WeakReference<>(target);
             rejectedDrawable = new WeakReference<>(nativeIcon);
@@ -136,7 +145,37 @@ final class NowBarIconLease {
         target.setImageTintList(null);
         target.setImageDrawable(mono);
         transparentDisc(target);
+        transparentIconBackground(target);
         contrast(target);
+    }
+
+    static boolean nativeNotificationVector(ImageView target, Drawable drawable) {
+        if (!(drawable instanceof VectorDrawable) || target == null
+                || !("com.android.internal.widget.NotificationRowIconView".equals(
+                        target.getClass().getName()))) return false;
+        try {
+            String id = target.getResources().getResourceEntryName(target.getId());
+            return "ongoing_activity_expand_left_image".equals(id)
+                    || "ongoing_activity_collapsed_icon".equals(id)
+                    || "icon".equals(id);
+        } catch (RuntimeException ignored) { return false; }
+    }
+
+    /** Remove only the icon ImageView's own native disc; preserve the drawable for restore. */
+    private void transparentIconBackground(ImageView target) {
+        Drawable current = target.getBackground();
+        if (current != nativeIconBackground) {
+            restoreIconBackground();
+            nativeIconBackground = current;
+            nativeIconBackgroundAlpha = current == null ? 255 : current.getAlpha();
+        }
+        if (current != null && current.getAlpha() != 0) current.mutate().setAlpha(0);
+    }
+
+    private void restoreIconBackground() {
+        if (nativeIconBackground != null && nativeIconBackground.getAlpha() == 0)
+            nativeIconBackground.setAlpha(nativeIconBackgroundAlpha);
+        nativeIconBackground = null;
     }
 
     private void transparentDisc(ImageView target) {
@@ -197,6 +236,7 @@ final class NowBarIconLease {
         nativeTint = null;
         restoreDisc();
         restoreExpandedDisc();
+        restoreIconBackground();
         image.clear();
         original = null;
         activePackage = null;

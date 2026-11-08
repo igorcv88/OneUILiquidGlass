@@ -25,12 +25,23 @@ final class ShelfIconInk {
     static boolean isCountLabel(String resourceName, CharSequence text) {
         if (text == null) return false;
         String value = text.toString().trim().toLowerCase(Locale.ROOT);
-        if (value.isEmpty() || !Character.isDigit(value.codePointAt(0))) return false;
+        if (value.isEmpty()) return false;
+        // One UI 9 sometimes omits the number entirely ("More notifications").
+        // Require count wording or an explicit shelf/count resource id, never generic
+        // notification actions such as "Notification settings".
+        if (value.equals("more notifications") || value.equals("mais notificações")
+                || value.equals("outras notificações")) return true;
+        if (!Character.isDigit(value.codePointAt(0))) return false;
         if (value.contains("notification") || value.contains("notifica")) return true;
         if (resourceName == null) return false;
         String id = resourceName.toLowerCase(Locale.ROOT);
         return id.contains("more_notif") || id.contains("notification_count")
                 || id.contains("shelf_count") || id.contains("stack_count");
+    }
+
+    /** Native white on a dark scene, native black on a light one; swap on scene inversion. */
+    static int sceneInk(boolean nativeLightText, boolean swapped) {
+        return nativeLightText != swapped ? 0xffffffff : 0xff000000;
     }
 
     /** In automatic mode use the *drawn* label ink exactly, not a stale scene estimate. */

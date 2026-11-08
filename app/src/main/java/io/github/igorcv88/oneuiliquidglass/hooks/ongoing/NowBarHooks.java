@@ -103,12 +103,17 @@ final class NowBarHooks {
     /** Per card: the item it shows, the layers found, the native CardView values put aside. */
     private static final class Card {
         WeakReference<Object> item = new WeakReference<>(null);
+        WeakReference<Object> packageItem = new WeakReference<>(null);
+        String iconPackage;
         WeakReference<View> host = new WeakReference<>(null), container = new WeakReference<>(null), gradient = new WeakReference<>(null);
         ColorStateList nativeCardColor;
         final NativeRegionLease nativeRegion = new NativeRegionLease();
         final NowBarIconLease icon = new NowBarIconLease();
         /** The expanded notification header inflates a separate AdaptiveIconDrawable. */
         final NowBarIconLease expandedIcon = new NowBarIconLease();
+        // DZIF can inflate a second ongoing icon (Clock's right image or the app's
+        // separate left_icon). Each lease owns only its exact ImageView.
+        final NowBarIconLease expandedOtherIcon = new NowBarIconLease();
         Float nativeElevation;
         boolean gradientHidden;
         WeakReference<View> hiddenGradient = new WeakReference<>(null);
@@ -193,6 +198,10 @@ final class NowBarHooks {
         if (c == null) { c = new Card(); c.abi = abi; cards.put(card, c); }
         if (item != null) c.item = new WeakReference<>(item);
         Object it = c.item.get();
+        if (c.packageItem.get() != it) {
+            c.iconPackage = iconPackage(it);
+            c.packageItem = new WeakReference<>(it);
+        }
         LiveEligibility.Verdict verdict = LiveEligibility.nowBar(card, it);
         View container = view(abi.container, card);
         if (container == null) { release(card, c, "noContainer"); return; }
@@ -250,9 +259,7 @@ final class NowBarHooks {
         View container = c.container.get();
         c.nativeRegion.sync(container, shown && c.host.get() != container);
         if (container != null && NativeShape.cardLike(container) && c.host.get() != container) cardTransparent(container, c, shown);
-        Object item = c.item.get();
-        Object packageValue = item == null ? null : NativeShape.call(item, "getNowBarPackage");
-        String packageName = packageValue instanceof String ? (String) packageValue : null;
+        String packageName = c.iconPackage;
         ImageView icon = c.icon.target();
         if (icon == null || !LiveChipHooks.within(icon, card)) icon = findIcon(card);
         c.icon.sync(icon, shown, packageName);
@@ -262,6 +269,9 @@ final class NowBarHooks {
         ImageView expandedIcon = findExpandedIcon(card);
         Drawable expandedBefore = expandedIcon == null ? null : expandedIcon.getDrawable();
         c.expandedIcon.sync(expandedIcon, shown, packageName);
+        View expandedRoot = NativeIds.find(card, "expand_content_rootview");
+        ImageView other = expandedRoot == null ? null : expandedOtherIcon(expandedRoot, expandedIcon);
+        c.expandedOtherIcon.sync(other, shown, packageName);
         if (expandedIcon != null && expandedBefore != expandedIcon.getDrawable()) {
             Drawable after = expandedIcon.getDrawable();
             Probe.log("NOWBAR_EXPANDED_ICON", "glass=" + shown
@@ -270,7 +280,7 @@ final class NowBarHooks {
         }
         // DZIF uses a different CardView for the EXPANDED ongoing app icon; the normal
         // nowbar_icon lease only clears its compact disc. Never touch MediaCardView.
-        c.icon.syncExpandedDisc(findExpandedIconContainer(card), shown);
+        c.icon.syncExpandedDisc(findExpandedIconContainer(card, expandedIcon), shown);
         traceIcons(card, c, icon, expandedIcon, shown);
         View gradient = c.gradient.get();
         View hidden = c.hiddenGradient.get();
@@ -326,20 +336,67 @@ final class NowBarHooks {
      * runs only on that one view (DZIF simpleperf 04/11: the previous walk ran reflection on every
      * node and dominated SystemUI's main thread).
      */
-    private static View findExpandedIconContainer(View card) {
+    private static View findExpandedIconContainer(View card, ImageView icon) {
         View v = NativeIds.find(card, "ongoing_app_expanded_icon_container");
-        return v != null && NativeShape.cardLike(v) ? v : null;
+        if (v != null && NativeShape.cardLike(v)) return v;
+        // Alternate Samsung layouts put a separate, icon-sized CardView directly
+        // around the notification header's icon. Never clear the whole ongoing card.
+        if (icon == null) return null;
+        View root = NativeIds.find(card, "expand_content_rootview");
+        for (android.view.ViewParent p = icon.getParent(); p instanceof View && p != root;
+             p = p.getParent()) {
+            View candidate = (View) p;
+            if (!NativeShape.cardLike(candidate)) continue;
+            int w = candidate.getWidth(), h = candidate.getHeight();
+            if (w > 0 && h > 0 && icon.getWidth() > 0 && icon.getHeight() > 0
+                    && w <= icon.getWidth() * 3 && h <= icon.getHeight() * 3) return candidate;
+        }
+        return null;
     }
 
-    /** Constrain the expanded glyph to the ongoing card's notification content. */
+    /** Constrain every lookup to the ongoing card's expanded notification content. */
     private static ImageView findExpandedIcon(View card) {
         View expanded = NativeIds.find(card, "expand_content_rootview");
         return expanded == null ? null : expandedHeaderIcon(expanded);
     }
 
     static ImageView expandedHeaderIcon(View expanded) {
-        View v = NativeIds.find(expanded, "icon");
-        return v instanceof ImageView ? (ImageView) v : null;
+        // Clock's ID is different from Gradus/standard Android notification headers.
+        for (String id : new String[]{"ongoing_activity_expand_left_image", "icon", "left_icon"}) {
+            View v = NativeIds.find(expanded, id);
+            if (v instanceof ImageView) return (ImageView) v;
+        }
+        return null;
+    }
+
+    static ImageView expandedOtherIcon(View expanded, ImageView primary) {
+        for (String id : new String[]{"ongoing_activity_expand_right_image", "right_icon",
+                "left_icon", "icon"}) {
+            View v = NativeIds.find(expanded, id);
+            if (v instanceof ImageView && v != primary) return (ImageView) v;
+        }
+        return null;
+    }
+
+    /** Samsung sometimes exposes a display label in getNowBarPackage (e.g. "Timer").
+     * Never query PackageManager with a UI label; use a separately verified package field. */
+    static String iconPackage(Object item) {
+        if (item == null) return null;
+        for (String method : new String[]{"getPackageName", "getAppPackageName",
+                "getNotificationPackage", "getSourcePackage", "getNowBarPackage"}) {
+            Object value = NativeShape.call(item, method);
+            if (value instanceof String && packageName((String) value)) return (String) value;
+        }
+        for (String field : new String[]{"mPackageName", "packageName",
+                "mAppPackageName", "mNotificationPackage"}) {
+            Object value = io.github.igorcv88.oneuiliquidglass.hooks.Reflect.read(item, field);
+            if (value instanceof String && packageName((String) value)) return (String) value;
+        }
+        return null;
+    }
+
+    private static boolean packageName(String value) {
+        return value.matches("[a-zA-Z_][a-zA-Z_0-9]*(\\.[a-zA-Z_][a-zA-Z_0-9]*)+");
     }
 
     /**
@@ -358,7 +415,7 @@ final class NowBarHooks {
         Object pkgValue = item == null ? null : NativeShape.call(item, "getNowBarPackage");
         String pkg = pkgValue instanceof String ? (String) pkgValue : "unavailable";
         View expandedRoot = NativeIds.find(card, "expand_content_rootview");
-        View iconContainer = findExpandedIconContainer(card);
+        View iconContainer = findExpandedIconContainer(card, expanded);
         String state = "pkg=" + pkg + " shown=" + shown
                 + " compact=" + iconState(compact)
                 + " expandedRoot=" + (expandedRoot == null ? "missing" : expandedRoot.getClass().getSimpleName())

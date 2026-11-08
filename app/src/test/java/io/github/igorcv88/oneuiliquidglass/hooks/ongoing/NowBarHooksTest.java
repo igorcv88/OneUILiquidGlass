@@ -119,6 +119,13 @@ public class NowBarHooksTest {
         assertNull(NowBarHooks.expandedHeaderIcon(new FrameLayout(activity)));
     }
 
+    @Test public void packageResolutionRejectsDisplayLabelsBeforeLookingUpInstalledIcons() {
+        assertNull(NowBarHooks.iconPackage(new NowBarItem("Timer", null)));
+        assertNull(NowBarHooks.iconPackage(new NowBarItem("GRADUS Treino", null)));
+        assertEquals("com.sec.android.app.clockpackage",
+                NowBarHooks.iconPackage(new NowBarItem("com.sec.android.app.clockpackage", null)));
+    }
+
     @Test public void iconDiagnosisDistinguishesNativeVectorFromAdaptiveMonochrome() {
         assertEquals("missing", NowBarHooks.iconState(null));
         ImageView icon = new ImageView(activity);

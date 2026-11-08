@@ -46,6 +46,23 @@ public class NowBarIconLeaseTest {
         assertNotEquals(0, originalColor);
     }
 
+    @Test public void nativeIconDiscRebindingIsHiddenAndRestored() {
+        ImageView header = new ImageView(activity);
+        header.setImageResource(R.drawable.oulg_launcher);
+        android.graphics.drawable.ColorDrawable background =
+                new android.graphics.drawable.ColorDrawable(0xff3142a7);
+        header.setBackground(background);
+        NowBarIconLease lease = new NowBarIconLease();
+        lease.sync(header, true);
+        assertEquals(0, background.getAlpha());
+        background.setAlpha(255); // Samsung rebinds its opaque disc
+        lease.sync(header, true);
+        assertEquals(0, background.getAlpha());
+        lease.restore();
+        assertSame(background, header.getBackground());
+        assertEquals(255, background.getAlpha());
+    }
+
     @Test public void expandedDiscRestoresImmediatelyOnGlassGateOff() {
         FakeCardView expanded = new FakeCardView(activity);
         NowBarIconLease lease = new NowBarIconLease();
@@ -86,6 +103,24 @@ public class NowBarIconLeaseTest {
                 io.github.igorcv88.oneuiliquidglass.hooks.Reflect.read(lease, "original"));
         assertEquals(0xff6644aa, disc.getCardBackgroundColor().getDefaultColor());
         assertNotEquals(0, nativeColor);
+    }
+
+    @Test public void verifiedSamsungRowVectorIsMonochromeAndItsDiscCleared() {
+        com.android.internal.widget.NotificationRowIconView icon =
+                new com.android.internal.widget.NotificationRowIconView(activity);
+        icon.setId(android.R.id.icon);
+        android.graphics.drawable.VectorDrawable vector =
+                new android.graphics.drawable.VectorDrawable();
+        icon.setImageDrawable(vector);
+        icon.setBackground(new android.graphics.drawable.ColorDrawable(0xff2244aa));
+        NowBarIconLease lease = new NowBarIconLease();
+
+        lease.sync(icon, true);
+        assertNotSame("only verified notification vectors are leased", vector, icon.getDrawable());
+        assertEquals(0, icon.getBackground().getAlpha());
+        lease.restore();
+        assertSame(vector, icon.getDrawable());
+        assertEquals(255, icon.getBackground().getAlpha());
     }
 
     @Test public void vectorOnlyIconIsNeverReplaced() {

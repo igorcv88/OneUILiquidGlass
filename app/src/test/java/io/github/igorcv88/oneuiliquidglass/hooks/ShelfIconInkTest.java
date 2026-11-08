@@ -40,11 +40,20 @@ public class ShelfIconInkTest {
         assertTrue(ShelfIconInk.isCountLabel("shelf_notification_count", "3 more notifications"));
         assertTrue(ShelfIconInk.isCountLabel(null, "3 outras notificações"));
         assertTrue(ShelfIconInk.isCountLabel("shelf_count", "3 weitere"));
+        assertTrue("DZIF omits the count prefix", ShelfIconInk.isCountLabel(null, "More notifications"));
+        assertTrue(ShelfIconInk.isCountLabel(null, "Mais notificações"));
         assertFalse(ShelfIconInk.isCountLabel("noti_setting", "Notification settings"));
         assertFalse(ShelfIconInk.isCountLabel("noti_setting", "3 settings"));
         assertFalse(ShelfIconInk.isCountLabel("clear_all", "Clear"));
         assertFalse(ShelfIconInk.isCountLabel("app_name_text", "3 tickets"));
         assertFalse(ShelfIconInk.isCountLabel(null, null));
+    }
+
+    @Test public void nativeAndInvertedShelfScenesShareOneInkDecision() {
+        assertEquals(0xffffffff, ShelfIconInk.sceneInk(true, false));
+        assertEquals(0xff000000, ShelfIconInk.sceneInk(true, true));
+        assertEquals(0xff000000, ShelfIconInk.sceneInk(false, false));
+        assertEquals(0xffffffff, ShelfIconInk.sceneInk(false, true));
     }
 
     @Test public void automaticShelfInkCopiesRenderedLabelColorExactly() {
