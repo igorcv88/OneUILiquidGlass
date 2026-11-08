@@ -111,6 +111,7 @@ final class NowBarHooks {
         final NowBarIconLease icon = new NowBarIconLease();
         /** The expanded notification header inflates a separate AdaptiveIconDrawable. */
         final NowBarIconLease expandedIcon = new NowBarIconLease();
+        final NowBarIconVisibilityBridge expandedBridge = new NowBarIconVisibilityBridge();
         /** One-shot lease: Samsung sometimes binds the expanded header before its first layout. */
         WeakReference<ImageView> pendingExpanded = new WeakReference<>(null);
         View.OnLayoutChangeListener pendingExpandedLayout;
@@ -281,8 +282,11 @@ final class NowBarHooks {
         if (!deferUnmeasuredExpanded(icon, shown, packageName)) {
             cancelPendingExpanded(c);
             c.expandedIcon.sync(icon, shown, packageName);
+            c.expandedBridge.sync(icon, NativeIds.find(card, "expand_content_rootview"),
+                    shown, packageName);
             return;
         }
+        c.expandedBridge.restore();
         if (c.pendingExpanded.get() == icon && c.pendingExpandedLayout != null) return;
         cancelPendingExpanded(c);
         if (c.expandedIcon.target() != null) c.expandedIcon.restore();
@@ -296,6 +300,8 @@ final class NowBarHooks {
             if (owner == null || cards.get(owner) != c || c.host.get() == null
                     || !v.isAttachedToWindow() || !LiveChipHooks.within(v, owner)) return;
             c.expandedIcon.sync((ImageView) v, true, c.iconPackage);
+            c.expandedBridge.sync((ImageView) v,
+                    NativeIds.find(owner, "expand_content_rootview"), true, c.iconPackage);
             if (Probe.trace) Probe.log("NOWBAR_EXPANDED_READY", "size="
                     + v.getWidth() + "x" + v.getHeight() + " once=true");
         };

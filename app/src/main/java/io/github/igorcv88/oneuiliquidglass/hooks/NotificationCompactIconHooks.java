@@ -26,6 +26,7 @@ import java.util.WeakHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.BooleanSupplier;
+import java.util.function.Supplier;
 
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
@@ -34,6 +35,8 @@ import io.github.igorcv88.oneuiliquidglass.config.NotificationIconPolicy;
 import io.github.igorcv88.oneuiliquidglass.diagnostics.Probe;
 import io.github.igorcv88.oneuiliquidglass.glass.Tuning;
 import io.github.igorcv88.oneuiliquidglass.glass.ShadeTone;
+import io.github.igorcv88.oneuiliquidglass.glass.ToneGrid;
+import io.github.igorcv88.oneuiliquidglass.glass.Material;
 
 /**
  * One UI uses StatusBarIconView outside notification rows: the status bar, the lockscreen shelf,
@@ -62,12 +65,27 @@ final class NotificationCompactIconHooks {
     private final ClassLoader loader;
     private final BooleanSupplier enabled;
     private final BooleanSupplier shelfToneSwapped;
+    /** The opening's already captured scene, shared with the notification text painter. */
+    private final Supplier<ToneGrid> shadeGrid;
+    private final Supplier<Boolean> shadeScene;
+    private ToneGrid sampledShelfGrid;
+    private Boolean sampledShelfBackdrop;
+    private Integer sampledShelfInk;
+    private long nextShelfInkAt;
 
     NotificationCompactIconHooks(ClassLoader loader, BooleanSupplier enabled,
                                  BooleanSupplier shelfToneSwapped) {
+        this(loader, enabled, shelfToneSwapped, () -> null, () -> null);
+    }
+
+    NotificationCompactIconHooks(ClassLoader loader, BooleanSupplier enabled,
+                                 BooleanSupplier shelfToneSwapped,
+                                 Supplier<ToneGrid> shadeGrid, Supplier<Boolean> shadeScene) {
         this.loader = loader;
         this.enabled = enabled;
         this.shelfToneSwapped = shelfToneSwapped;
+        this.shadeGrid = shadeGrid;
+        this.shadeScene = shadeScene;
     }
 
     void install() {
@@ -470,6 +488,36 @@ final class NotificationCompactIconHooks {
         return window == null ? null : visibleShelfCountLabel(window, 0);
     }
 
+    /** If Samsung draws the count outside TextView, follow the same per-card shade material
+     * decision as Foreground rather than the device-wide native theme. One luma read per shelf
+     * at most every 650 ms; no capture, pixel decoding or view traversal on pre-draw. */
+    Integer shelfSceneInk(ImageView icon) {
+        ToneGrid grid = shadeGrid.get();
+        Boolean scene = shadeScene.get();
+        if (grid == null || scene == null || !icon.isAttachedToWindow()) return null;
+        long now = android.os.SystemClock.uptimeMillis();
+        if (sampledShelfInk != null && sampledShelfGrid == grid
+                && scene.equals(sampledShelfBackdrop) && now < nextShelfInkAt)
+            return sampledShelfInk;
+        int[] position = new int[2];
+        icon.getLocationOnScreen(position);
+        int top = position[1];
+        float luma = grid.luma(top, top + Math.max(1, icon.getHeight()));
+        if (luma < 0f) return null;
+        Material material = ShadeTone.materialFor(luma, scene, true);
+        int ink = ShelfIconInk.sceneInk(ShadeTone.lightText(), material.swap);
+        boolean changed = sampledShelfInk == null || sampledShelfInk != ink;
+        sampledShelfGrid = grid;
+        sampledShelfBackdrop = scene;
+        sampledShelfInk = ink;
+        nextShelfInkAt = now + 650;
+        if (Probe.trace && changed)
+            Probe.log("ICON_TREAT_SHELF_SCENE", "source=shadeGrid luma="
+                    + Math.round(luma * 100f) + " swap=" + material.swap
+                    + " ink=" + Integer.toHexString(ink));
+        return ink;
+    }
+
     private final class State implements View.OnAttachStateChangeListener, ViewTreeObserver.OnPreDrawListener {
         final WeakReference<ImageView> ref;
         ViewTreeObserver observer;
@@ -582,7 +630,9 @@ final class NotificationCompactIconHooks {
             int shelfInk = 0;
             if (tintShelf) {
                 Tuning palette = Tuning.get();
-                int sceneInk = ShelfIconInk.sceneInk(ShadeTone.lightText(), mirrorShelf);
+                Integer measuredInk = labelInk == null ? shelfSceneInk(v) : null;
+                int sceneInk = measuredInk != null ? measuredInk
+                        : ShelfIconInk.sceneInk(ShadeTone.lightText(), mirrorShelf);
                 shelfInk = labelInk != null
                         ? ShelfIconInk.fromLabel(labelInk, palette.notificationIconInkMode,
                                 palette.notificationIconFixedInk, palette.notificationIconLightInk,

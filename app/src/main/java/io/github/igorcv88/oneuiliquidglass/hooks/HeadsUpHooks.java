@@ -396,7 +396,9 @@ public final class HeadsUpHooks {
         compactIcons = new NotificationCompactIconHooks(loader, () -> enabled,
                 () -> shadeConfigEnabled() && Tuning.get().textSwap && Tuning.get().shadeAdaptive
                         && Boolean.TRUE.equals(shadeExpanded) && barState == Eligibility.BAR_SHADE
-                        && shadeScene != null && shadeScene == ShadeTone.lightText());
+                        && shadeScene != null && shadeScene == ShadeTone.lightText(),
+                () -> Boolean.TRUE.equals(shadeExpanded) ? shadeGrid : null,
+                () -> Boolean.TRUE.equals(shadeExpanded) ? shadeScene : null);
         compactIcons.install();
         // A cancelled appear/disappear animation (AOSP ActivatableNotificationView.cancelAppearDrawing,
         // and the animator cancel it runs) may end without onAppearAnimationFinished: the card stops
