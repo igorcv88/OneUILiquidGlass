@@ -573,7 +573,7 @@ final class NotificationCompactIconHooks {
         // pre-draw callback is not a dependable signal for a background-only change.
         for (State state : new java.util.ArrayList<>(states.values())) {
             ImageView image = state.ref.get();
-            if (image != null && image.isAttachedToWindow() && inNotificationShelf(image))
+            if (image != null && image.isAttachedToWindow() && state.inNotificationShelf(image))
                 state.refresh();
         }
     }
