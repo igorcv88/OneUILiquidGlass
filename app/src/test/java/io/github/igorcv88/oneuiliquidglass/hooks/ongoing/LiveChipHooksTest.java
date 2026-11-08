@@ -50,6 +50,14 @@ public class LiveChipHooksTest {
     }
     private RecyclerView.ViewHolder holder() { return new RecyclerView.ViewHolder(new FrameLayout(activity)); }
 
+    @Test public void defaultIconPolicyTreatsClockButPreservesUserAppPacks() {
+        assertTrue(LiveChipHooks.shouldTreatChipPackage("com.sec.android.app.clockpackage", 1));
+        assertTrue(LiveChipHooks.shouldTreatChipPackage("android", 1));
+        assertFalse(LiveChipHooks.shouldTreatChipPackage("com.igcv.gradus", 1));
+        assertFalse(LiveChipHooks.shouldTreatChipPackage("com.sec.android.app.clockpackage", 0));
+        assertTrue(LiveChipHooks.shouldTreatChipPackage("com.igcv.gradus", 3));
+    }
+
     @Test public void firstBindWrapsTheNativeChipBeforeAnyFrame() {
         OngoingActivityDataHelper.add(new OngoingActivityData("com.sec.android.app.clockpackage", false));
         RecyclerView.ViewHolder h = holder();

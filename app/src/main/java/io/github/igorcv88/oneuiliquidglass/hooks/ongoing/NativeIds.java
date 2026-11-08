@@ -27,8 +27,35 @@ final class NativeIds {
     private static final Map<View, Map<String, Integer>> ROOT_IDS = new WeakHashMap<>();
     // Re-inflated DZIF plugin roots can use an id belonging to another package. Recheck a
     // failed lookup at most once per root/name/750 ms, never walk the card every pre-draw.
-    private static final Map<View, Map<String, Long>> MISSES = new WeakHashMap<>();
+    private static final Map<View, Map<String, Miss>> MISSES = new WeakHashMap<>();
     private static final long MISS_RETRY_MS = 750;
+    private static final class Miss {
+        final long retryAt;
+        final int children;
+        Miss(long retryAt, int children) { this.retryAt = retryAt; this.children = children; }
+    }
+
+    /** A shallow, allocation-free layout signature: an inflated descendant invalidates a miss. */
+    static int childrenSignature(View root) {
+        if (!(root instanceof ViewGroup)) return 0;
+        ViewGroup group = (ViewGroup) root;
+        int signature = group.getChildCount();
+        for (int i = 0; i < group.getChildCount(); i++) {
+            View child = group.getChildAt(i);
+            signature = signature * 31 + System.identityHashCode(child);
+            if (child instanceof ViewGroup) {
+                ViewGroup nested = (ViewGroup) child;
+                signature = signature * 31 + nested.getChildCount();
+                for (int j = 0; j < nested.getChildCount(); j++) {
+                    View descendant = nested.getChildAt(j);
+                    signature = signature * 31 + System.identityHashCode(descendant);
+                    if (descendant instanceof ViewGroup)
+                        signature = signature * 31 + ((ViewGroup) descendant).getChildCount();
+                }
+            }
+        }
+        return signature;
+    }
 
     /** The first view under root (root included) whose id has this entry name, or null. Main thread. */
     static View find(View root, String entryName) {
@@ -43,9 +70,10 @@ final class NativeIds {
         // getIdentifier may resolve SystemUI's "icon" id while a notification RemoteViews
         // subtree contains android:id/icon. The resolved int must not suppress that fallback.
         long now = android.os.SystemClock.uptimeMillis();
-        Map<String, Long> byName = MISSES.get(root);
-        Long retry = byName == null ? null : byName.get(entryName);
-        if (retry != null && now < retry) return null;
+        Map<String, Miss> byName = MISSES.get(root);
+        Miss retry = byName == null ? null : byName.get(entryName);
+        if (retry != null && now < retry.retryAt
+                && childrenSignature(root) == retry.children) return null;
         View found = walk(root, entryName, 0);
         if (found != null) {
             if (local == null) { local = new HashMap<>(); ROOT_IDS.put(root, local); }
@@ -53,7 +81,7 @@ final class NativeIds {
             if (byName != null) byName.remove(entryName);
         } else {
             if (byName == null) { byName = new HashMap<>(); MISSES.put(root, byName); }
-            byName.put(entryName, now + MISS_RETRY_MS);
+            byName.put(entryName, new Miss(now + MISS_RETRY_MS, childrenSignature(root)));
         }
         return found;
     }

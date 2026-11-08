@@ -260,21 +260,30 @@ final class NowBarHooks {
         View container = c.container.get();
         c.nativeRegion.sync(container, shown && c.host.get() != container);
         if (container != null && NativeShape.cardLike(container) && c.host.get() != container) cardTransparent(container, c, shown);
+        View expandedRoot = NativeIds.find(card, "expand_content_rootview");
         String packageName = c.iconPackage;
+        if (packageName == null && verifiedClockHeader(c.item.get(), expandedRoot)) {
+            // The AOD plugin's "Timer" is a display label, not an installable package.
+            // Accept it only alongside Clock's measured DZIF header resource.
+            packageName = "com.sec.android.app.clockpackage";
+            c.iconPackage = packageName;
+        }
         ImageView icon = c.icon.target();
         if (icon == null || !LiveChipHooks.within(icon, card)) icon = findIcon(card);
         c.icon.sync(icon, shown, packageName);
-        // On DZIF the expanded card uses a NotificationRowIconView under
-        // expand_content_rootview, not the compact nowbar_icon. Its adaptive icon
-        // includes a coloured background; lease just its monochrome glyph.
-        ImageView expandedIcon = findExpandedIcon(card);
+        // The expanded header and its secondary/info glyphs share one luma decision.
+        ImageView expandedIcon = expandedRoot == null ? null : expandedHeaderIcon(expandedRoot);
         Drawable expandedBefore = expandedIcon == null ? null : expandedIcon.getDrawable();
         c.expandedIcon.sync(expandedIcon, shown, packageName);
-        View expandedRoot = NativeIds.find(card, "expand_content_rootview");
         ImageView other = expandedRoot == null ? null : expandedOtherIcon(expandedRoot, expandedIcon);
-        c.expandedOtherIcon.sync(other, shown, packageName);
+        c.expandedOtherIcon.syncWithoutSampling(other, shown, packageName);
         ImageView info = expandedRoot == null ? null : expandedInfoIcon(expandedRoot, expandedIcon, other);
-        c.expandedInfoIcon.sync(info, shown, packageName);
+        c.expandedInfoIcon.syncWithoutSampling(info, shown, packageName);
+        Boolean backdrop = c.expandedIcon.sampledBackdrop();
+        if (backdrop != null) {
+            c.expandedOtherIcon.applyTone(backdrop);
+            c.expandedInfoIcon.applyTone(backdrop);
+        }
         if (expandedIcon != null && expandedBefore != expandedIcon.getDrawable()) {
             Drawable after = expandedIcon.getDrawable();
             Probe.log("NOWBAR_EXPANDED_ICON", "glass=" + shown
@@ -401,6 +410,17 @@ final class NowBarHooks {
             if (value instanceof String && packageName((String) value)) return (String) value;
         }
         return null;
+    }
+
+    /** Display labels cannot establish identity alone; also require Clock's DZIF header. */
+    private static boolean verifiedClockHeader(Object item, View expandedRoot) {
+        if (item == null || expandedRoot == null) return false;
+        Object label = NativeShape.call(item, "getNowBarPackage");
+        if (!(label instanceof String)) return false;
+        String text = (String) label;
+        if (!("Timer".equalsIgnoreCase(text) || "Clock".equalsIgnoreCase(text)
+                || "Relógio".equalsIgnoreCase(text))) return false;
+        return NativeIds.find(expandedRoot, "ongoing_activity_expand_left_image") instanceof ImageView;
     }
 
     private static boolean packageName(String value) {

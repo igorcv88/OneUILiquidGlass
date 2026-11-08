@@ -47,6 +47,10 @@ final class NowBarIconLease {
     private WeakReference<ImageView> rejectedView = new WeakReference<>(null);
     private WeakReference<Drawable> rejectedDrawable = new WeakReference<>(null);
     private String rejectedPackage;
+    // Samsung recreates the same native vector on binds. Resolve the installed adaptive
+    // monochrome layer once per package, not through PackageManager on every rebind.
+    private String resolvedPackage;
+    private Drawable.ConstantState resolvedOfficialMono;
 
     private void contrast(ImageView target) {
         long now = android.os.SystemClock.uptimeMillis();
@@ -79,10 +83,21 @@ final class NowBarIconLease {
 
     void sync(ImageView target, boolean glass) { sync(target, glass, null); }
 
+    /** Secondary icons share the expanded header's sampled tone; they do not sample twice. */
+    void syncWithoutSampling(ImageView target, boolean glass, String packageName) {
+        sync(target, glass, packageName, false);
+    }
+
+    Boolean sampledBackdrop() { return lightBackdrop; }
+
     /** The plugin can flatten an app's launcher into BitmapDrawable/VectorDrawable. When it
      * does, try the installed package's official monochrome adaptive layer. Never tint the
      * flattened bitmap itself: that would turn a colourful square into a solid square. */
     void sync(ImageView target, boolean glass, String packageName) {
+        sync(target, glass, packageName, true);
+    }
+
+    private void sync(ImageView target, boolean glass, String packageName, boolean sample) {
         if (!glass || target == null) { restore(); return; }
         if (image.get() == target && target.getDrawable() == applied.get() && applied.get() != null
                 && java.util.Objects.equals(activePackage, packageName)) {
@@ -92,7 +107,7 @@ final class NowBarIconLease {
             }
             transparentDisc(target);
             transparentIconBackground(target);
-            contrast(target);
+            if (sample) contrast(target);
             return;
         }
         restore();
@@ -104,19 +119,28 @@ final class NowBarIconLease {
                 ? ((AdaptiveIconDrawable) nativeIcon).getMonochrome() : null;
         boolean fromApp = false;
         if ((glyph == null || glyph.getConstantState() == null) && packageName != null) {
-            try {
-                Drawable launcher = installedIconSource.resolve(target, packageName);
-                if (launcher instanceof AdaptiveIconDrawable) {
-                    glyph = ((AdaptiveIconDrawable) launcher).getMonochrome();
-                    fromApp = true;
-                }
-            } catch (PackageManager.NameNotFoundException | RuntimeException ignored) { }
+            if (!packageName.equals(resolvedPackage)) {
+                resolvedPackage = packageName;
+                resolvedOfficialMono = null;
+                try {
+                    Drawable launcher = installedIconSource.resolve(target, packageName);
+                    if (launcher instanceof AdaptiveIconDrawable) {
+                        Drawable official = ((AdaptiveIconDrawable) launcher).getMonochrome();
+                        if (official != null) resolvedOfficialMono = official.getConstantState();
+                    }
+                } catch (PackageManager.NameNotFoundException | RuntimeException ignored) { }
+            }
+            if (resolvedOfficialMono != null) {
+                glyph = resolvedOfficialMono.newDrawable();
+                fromApp = true;
+            }
         }
         // DZIF's Clock ongoing header supplies a genuine vector small-icon glyph and
         // a separate opaque background on NotificationRowIconView. Only this verified
         // native notification view may use the vector itself as a monochrome mask.
-        if ((glyph == null || glyph.getConstantState() == null) && nativeNotificationVector(target, nativeIcon))
-            glyph = nativeIcon;
+        if ((glyph == null || glyph.getConstantState() == null)
+                && (nativeNotificationVector(target, nativeIcon)
+                || clockVector(target, nativeIcon, packageName))) glyph = nativeIcon;
         if (glyph == null || glyph.getConstantState() == null) {
             rejectedView = new WeakReference<>(target);
             rejectedDrawable = new WeakReference<>(nativeIcon);
@@ -146,7 +170,18 @@ final class NowBarIconLease {
         target.setImageDrawable(mono);
         transparentDisc(target);
         transparentIconBackground(target);
-        contrast(target);
+        if (sample) contrast(target);
+    }
+
+    /** One UI 9 Clock owns these two plain ImageViews outside notification rows. */
+    static boolean clockVector(ImageView target, Drawable drawable, String packageName) {
+        if (!"com.sec.android.app.clockpackage".equals(packageName)
+                || !(drawable instanceof VectorDrawable) || target == null) return false;
+        try {
+            String id = target.getResources().getResourceEntryName(target.getId());
+            return "nowbar_icon".equals(id) || "capsule_item_app_icon".equals(id)
+                    || "ongoing_activity_expand_left_image".equals(id);
+        } catch (RuntimeException ignored) { return false; }
     }
 
     static boolean nativeNotificationVector(ImageView target, Drawable drawable) {
@@ -227,6 +262,10 @@ final class NowBarIconLease {
     }
 
     void restore() {
+        // Invisible/empty placeholders run through onSync too; avoid a no-op release each frame.
+        if (original == null && image.get() == null && nativeDisc == null
+                && nativeExpandedDisc == null && nativeIconBackground == null
+                && nativeTint == null) return;
         generation++;
         nextSample = 0;
         lightBackdrop = null;

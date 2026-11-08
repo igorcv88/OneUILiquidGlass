@@ -2,6 +2,10 @@ package io.github.igorcv88.oneuiliquidglass.hooks.ongoing;
 
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageView;
+import java.lang.ref.WeakReference;
+import io.github.igorcv88.oneuiliquidglass.config.NotificationIconPolicy;
+import io.github.igorcv88.oneuiliquidglass.glass.Tuning;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -36,8 +40,44 @@ final class LiveChipHooks {
             this.adapter = adapter; this.holder = holder; this.position = position; this.data = data;
         }
     }
+    /** Package-level fail-closed gate; never flatten user icon packs in the default mode. */
+    static boolean shouldTreatChipPackage(String pkg, int mode) {
+        return pkg != null && mode != NotificationIconPolicy.OFF
+                && (mode == NotificationIconPolicy.ALL
+                || NotificationIconPolicy.systemService(pkg, false)
+                || "com.sec.android.app.clockpackage".equals(pkg));
+    }
+
     private final ArrayDeque<Frame> frames = new ArrayDeque<>();
     private final java.util.WeakHashMap<Object, String> lastBindTrace = new java.util.WeakHashMap<>();
+    private final java.util.WeakHashMap<View, ChipIcon> icons = new java.util.WeakHashMap<>();
+
+    /** The actual capsule app icon is outside the notification row's icon hook. */
+    private static final class ChipIcon {
+        final NowBarIconLease lease = new NowBarIconLease();
+        final LiveGlass.Options options = new LiveGlass.Options();
+        WeakReference<ImageView> image = new WeakReference<>(null);
+        String packageName;
+        ChipIcon() {
+            options.onShown = this::sync;
+            options.onSync = options.onShown;
+        }
+        void bind(Object data) {
+            Object pkg = Reflect.read(data, "mPackageName");
+            packageName = pkg instanceof String ? (String) pkg : null;
+        }
+        void sync(View host, boolean shown) {
+            int mode = Tuning.get().iconMode;
+            boolean eligible = shouldTreatChipPackage(packageName, mode);
+            ImageView target = image.get();
+            if (eligible && (target == null || !within(target, host))) {
+                View found = NativeIds.find(host, "capsule_item_app_icon");
+                target = found instanceof ImageView ? (ImageView) found : null;
+                image = new WeakReference<>(target);
+            }
+            lease.sync(target, shown && eligible, eligible ? packageName : null);
+        }
+    }
     private final LiveGlass glass;
     private Locator locator;
 
@@ -93,7 +133,13 @@ final class LiveChipHooks {
         Set<View> hosts = new LinkedHashSet<>(f.written);
         View item = itemView(holder);
         if (item != null) for (View h : glass.hosts(LiveSurface.CHIP)) if (within(h, item)) hosts.add(h);
-        for (View h : hosts) glass.offer(h, LiveSurface.CHIP, data, verdict, RECHECK);
+        for (View h : hosts) {
+            ChipIcon icon = icons.get(h);
+            if (icon == null) { icon = new ChipIcon(); icons.put(h, icon); }
+            icon.bind(verdict.ok() ? data : null);
+            glass.offer(h, LiveSurface.CHIP, data, verdict, RECHECK, icon.options);
+            if (!glass.applied(h)) icon.sync(h, false);
+        }
         if (Probe.trace) {
             String signature = verdict + "/" + (held != null ? "holder" : "index")
                     + "/" + System.identityHashCode(data) + "/" + hosts.size();

@@ -123,6 +123,25 @@ public class NowBarIconLeaseTest {
         assertEquals(255, icon.getBackground().getAlpha());
     }
 
+    @Test public void clockVectorNeverConvertsUnverifiedAppsIntoMonochrome() {
+        ImageView icon = new ImageView(activity);
+        icon.setImageDrawable(new VectorDrawable());
+        assertFalse(NowBarIconLease.clockVector(icon, icon.getDrawable(),
+                "com.igcv.gradus"));
+        assertFalse(NowBarIconLease.clockVector(icon, icon.getDrawable(), null));
+    }
+
+    @Test public void secondaryIconReusesTheHeaderToneWithoutSampling() {
+        ImageView secondary = new ImageView(activity);
+        secondary.setImageResource(R.drawable.oulg_launcher);
+        NowBarIconLease lease = new NowBarIconLease();
+        lease.syncWithoutSampling(secondary, true, null);
+        lease.applyTone(true);
+        assertTrue(lease.sampledBackdrop());
+        lease.restore();
+        assertNull(lease.sampledBackdrop());
+    }
+
     @Test public void vectorOnlyIconIsNeverReplaced() {
         FakeCardView disc = new FakeCardView(activity);
         ImageView icon = new ImageView(activity);
@@ -143,8 +162,10 @@ public class NowBarIconLeaseTest {
         Drawable installedLauncher = activity.getDrawable(R.drawable.oulg_launcher);
         assertTrue(installedLauncher instanceof AdaptiveIconDrawable);
         assertNotNull(((AdaptiveIconDrawable) installedLauncher).getMonochrome());
+        int[] resolves = {0};
         NowBarIconLease lease = new NowBarIconLease((target, packageName) -> {
             assertEquals(activity.getPackageName(), packageName);
+            resolves[0]++;
             return installedLauncher;
         });
 
@@ -155,6 +176,9 @@ public class NowBarIconLeaseTest {
         Drawable mono = icon.getDrawable();
         lease.sync(icon, true, activity.getPackageName());
         assertSame("steady frame does not replace an already applied glyph", mono, icon.getDrawable());
+        icon.setImageDrawable(new VectorDrawable()); // the Samsung writer rebound this view
+        lease.sync(icon, true, activity.getPackageName());
+        assertEquals("rebind cannot call PackageManager again", 1, resolves[0]);
         lease.restore();
         assertSame(original, icon.getDrawable());
     }
