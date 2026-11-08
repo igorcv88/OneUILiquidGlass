@@ -20,8 +20,12 @@ final class ShelfIconTint {
     static boolean owns(ImageView view) { return owners.contains(view); }
 
     boolean current(ImageView view, int color) {
+        return ink == color && intact(view);
+    }
+
+    boolean intact(ImageView view) {
         Drawable d = view.getDrawable();
-        return applied != null && ink == color && view.getColorFilter() == applied
+        return applied != null && view.getColorFilter() == applied
                 && d == drawable.get() && (d == null || d.getColorFilter() == applied);
     }
 

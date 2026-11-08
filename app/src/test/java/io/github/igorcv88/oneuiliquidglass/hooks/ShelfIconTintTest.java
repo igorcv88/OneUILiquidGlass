@@ -27,6 +27,9 @@ public class ShelfIconTintTest {
         ShelfIconTint lease = new ShelfIconTint();
         assertTrue(lease.apply(view, Color.BLACK));
         ColorFilter applied = view.getColorFilter();
+        assertTrue(lease.intact(view));
+        assertFalse("a new palette is not an OEM overwrite", lease.current(view, Color.WHITE));
+        assertTrue(lease.intact(view));
         view.getDrawable().setColorFilter(new PorterDuffColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN));
         assertSame(applied, view.getColorFilter());
         assertFalse(lease.current(view, Color.BLACK));

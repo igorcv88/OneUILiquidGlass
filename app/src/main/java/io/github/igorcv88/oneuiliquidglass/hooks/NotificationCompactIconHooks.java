@@ -627,7 +627,7 @@ final class NotificationCompactIconHooks {
             if (shelfTint.current(v, color)) return;
             long now = android.os.SystemClock.uptimeMillis();
             if (now < shelfSuspendUntil) return;
-            if (ShelfIconTint.owns(v)) {
+            if (ShelfIconTint.owns(v) && !shelfTint.intact(v)) {
                 if (now - shelfOverwriteWindow > 700) {
                     shelfOverwriteWindow = now;
                     shelfOverwrites = 0;
@@ -638,6 +638,9 @@ final class NotificationCompactIconHooks {
                     return;
                 }
             }
+            String beforeView = Probe.trace ? filterDescription(v.getColorFilter()) : null;
+            String beforeDrawable = Probe.trace && v.getDrawable() != null
+                    ? filterDescription(v.getDrawable().getColorFilter()) : null;
             if (!shelfTint.apply(v, color)) return;
             if (Probe.trace) Probe.log("ICON_TREAT_SHELF_INK", "pkg=" + pkg
                     + " color=" + Integer.toHexString(color)
@@ -645,8 +648,20 @@ final class NotificationCompactIconHooks {
                     + " drawable=" + (v.getDrawable() == null ? "none" : v.getDrawable().getClass().getSimpleName())
                     + " drawableFilter=" + (v.getDrawable() == null ? "none"
                             : v.getDrawable().getColorFilter() == v.getColorFilter() ? "owned" : "other")
+                    + " beforeView=" + beforeView + " beforeDrawable=" + beforeDrawable
+                    + " drawableId=" + Integer.toHexString(System.identityHashCode(v.getDrawable()))
                     + " alpha=" + v.getImageAlpha() + " shown=" + v.isShown()
+                    + " visibleState=" + Reflect.read(v, "mVisibleState")
+                    + " iconAmount=" + Reflect.read(v, "mIconAppearAmount")
+                    + " dotAmount=" + Reflect.read(v, "mDotAppearAmount")
+                    + " decorColor=" + Reflect.read(v, "mDecorColor")
                     + " parent=" + ancestors(v));
+        }
+
+        private String filterDescription(ColorFilter filter) {
+            return filter == null ? "none" : filter instanceof PorterDuffColorFilter
+                    ? Integer.toHexString(((PorterDuffColorFilter) filter).getColor())
+                    : filter.getClass().getSimpleName();
         }
 
         private void restoreShelfFilter(ImageView v) {
