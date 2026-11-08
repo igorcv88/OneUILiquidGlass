@@ -462,7 +462,9 @@ final class QuickSettingsEdgeLight {
                             "width=" + ow + " height=" + oh + " radius=" + radius + " tag=" + tag);
             }
             watch(v);
-            e.bridge.drawable.setAlpha(alpha);
+            // The same alpha is submitted on successive Compose draws. Rewriting it can
+            // invalidate the OEM blur region even when the visual state did not change.
+            if (e.bridge.drawable.getAlpha() != alpha) e.bridge.drawable.setAlpha(alpha);
             // The inner box grown back to the outer one: the RenderNode reports these bounds whatever
             // the inner clip, and the light band then sits on Samsung's outline.
             e.bridge.draw((android.graphics.Canvas) raw, new Rect(Math.round(-out+envelope[0]), Math.round(-out+envelope[1]),
@@ -536,7 +538,8 @@ final class QuickSettingsEdgeLight {
         }
         alpha = edgeAlpha(f);
         if (!sf || suppressed) releaseAll();
-        else for (Edge e : nodes.values()) if (e.bridge != null) e.bridge.drawable.setAlpha(alpha);
+        else for (Edge e : nodes.values()) if (e.bridge != null && e.bridge.drawable.getAlpha() != alpha)
+            e.bridge.drawable.setAlpha(alpha);
         observe(false);
     }
 
