@@ -150,11 +150,15 @@ final class NowBarIconLease {
     }
 
     static boolean nativeNotificationVector(ImageView target, Drawable drawable) {
-        if (!(drawable instanceof VectorDrawable) || target == null
-                || !("com.android.internal.widget.NotificationRowIconView".equals(
-                        target.getClass().getName()))) return false;
+        if (!(drawable instanceof VectorDrawable) || target == null) return false;
         try {
             String id = target.getResources().getResourceEntryName(target.getId());
+            // These two exact Samsung IDs carry small, single-ink symbols even on plain
+            // ImageView; never tint media art, progress bars or arbitrary app vectors.
+            if ("ongoing_activity_secondary_info_icon".equals(id)
+                    || "ongoing_activity_expand_right_image".equals(id)) return true;
+            if (!"com.android.internal.widget.NotificationRowIconView".equals(
+                    target.getClass().getName())) return false;
             return "ongoing_activity_expand_left_image".equals(id)
                     || "ongoing_activity_collapsed_icon".equals(id)
                     || "icon".equals(id);

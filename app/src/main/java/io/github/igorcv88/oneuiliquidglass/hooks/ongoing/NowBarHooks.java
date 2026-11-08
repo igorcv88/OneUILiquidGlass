@@ -114,6 +114,7 @@ final class NowBarHooks {
         // DZIF can inflate a second ongoing icon (Clock's right image or the app's
         // separate left_icon). Each lease owns only its exact ImageView.
         final NowBarIconLease expandedOtherIcon = new NowBarIconLease();
+        final NowBarIconLease expandedInfoIcon = new NowBarIconLease();
         Float nativeElevation;
         boolean gradientHidden;
         WeakReference<View> hiddenGradient = new WeakReference<>(null);
@@ -272,6 +273,8 @@ final class NowBarHooks {
         View expandedRoot = NativeIds.find(card, "expand_content_rootview");
         ImageView other = expandedRoot == null ? null : expandedOtherIcon(expandedRoot, expandedIcon);
         c.expandedOtherIcon.sync(other, shown, packageName);
+        ImageView info = expandedRoot == null ? null : expandedInfoIcon(expandedRoot, expandedIcon, other);
+        c.expandedInfoIcon.sync(info, shown, packageName);
         if (expandedIcon != null && expandedBefore != expandedIcon.getDrawable()) {
             Drawable after = expandedIcon.getDrawable();
             Probe.log("NOWBAR_EXPANDED_ICON", "glass=" + shown
@@ -378,6 +381,11 @@ final class NowBarHooks {
         return null;
     }
 
+    static ImageView expandedInfoIcon(View expanded, ImageView primary, ImageView secondary) {
+        View v = NativeIds.find(expanded, "ongoing_activity_secondary_info_icon");
+        return v instanceof ImageView && v != primary && v != secondary ? (ImageView) v : null;
+    }
+
     /** Samsung sometimes exposes a display label in getNowBarPackage (e.g. "Timer").
      * Never query PackageManager with a UI label; use a separately verified package field. */
     static String iconPackage(Object item) {
@@ -420,6 +428,9 @@ final class NowBarHooks {
                 + " compact=" + iconState(compact)
                 + " expandedRoot=" + (expandedRoot == null ? "missing" : expandedRoot.getClass().getSimpleName())
                 + " expanded=" + iconState(expanded)
+                + " right=" + iconState(expandedRoot == null ? null : expandedOtherIcon(expandedRoot, expanded))
+                + " info=" + iconState(expandedRoot == null ? null : expandedInfoIcon(
+                        expandedRoot, expanded, expandedOtherIcon(expandedRoot, expanded)))
                 + " expandedDisc=" + (iconContainer == null ? "missing" : iconContainer.getClass().getSimpleName())
                 + " expandedParent=" + (expanded == null || expanded.getParent() == null
                         ? "missing" : expanded.getParent().getClass().getSimpleName())
