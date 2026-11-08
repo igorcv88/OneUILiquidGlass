@@ -1694,6 +1694,9 @@ public final class HeadsUpHooks {
                 boolean on = shadeConfigEnabled() && t.textSwap && t.shadeAdaptive && Boolean.TRUE.equals(shadeExpanded) && barState != null
                         && barState == Eligibility.BAR_SHADE && shadeScene != null && shadeScene == ShadeTone.lightText();
                 setForeground(on);
+                // The counter's icon container may be in a different One UI subtree.
+                // Share the text owner's exact colour with its compact glyphs.
+                if (compactIcons != null) compactIcons.bindShelfLabel(row.get());
             } catch (RuntimeException | LinkageError e) { if (toneErrors++ < 5) Probe.error("SHELF_TONE_FAILED", e); }
         }
         /** On unknown One UI shelf layouts, identify compact icon view classes without reading content. */

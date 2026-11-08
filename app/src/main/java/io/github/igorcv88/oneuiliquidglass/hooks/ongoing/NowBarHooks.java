@@ -287,6 +287,10 @@ final class NowBarHooks {
         if (expandedIcon != null && expandedBefore != expandedIcon.getDrawable()) {
             Drawable after = expandedIcon.getDrawable();
             Probe.log("NOWBAR_EXPANDED_ICON", "glass=" + shown
+                    + " pkg=" + (packageName == null ? "unresolved" : packageName)
+                    + " target=" + expandedIcon.getClass().getSimpleName()
+                    + " alpha=" + expandedIcon.getAlpha()
+                    + " size=" + expandedIcon.getWidth() + "x" + expandedIcon.getHeight()
                     + " before=" + (expandedBefore == null ? "null" : expandedBefore.getClass().getSimpleName())
                     + " after=" + (after == null ? "null" : after.getClass().getSimpleName()));
         }

@@ -7,6 +7,7 @@ import android.graphics.drawable.DrawableWrapper;
 import android.graphics.Rect;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageView;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.List;
@@ -74,6 +75,38 @@ final class LiveCardHooks {
     /** Bound items checked for a still-listed previous item (live updates are a handful). */
     private static final int LIST_LIMIT = 32;
     private final WeakHashMap<View, Classification> roots = new WeakHashMap<>();
+    /** One reversible Clock icon lease per L2 card; never retained across recycled roots. */
+    private final WeakHashMap<View, CardIcon> cardIcons = new WeakHashMap<>();
+    private static final String CLOCK_PACKAGE = "com.sec.android.app.clockpackage";
+
+    static boolean shouldTreatCardIcon(String pkg, int mode) {
+        // Only the DZIF Clock's measured dummy capsule vector is verified here.
+        // User app packs and Gradus's separate notification-header icon stay native.
+        return CLOCK_PACKAGE.equals(pkg) && mode != io.github.igorcv88.oneuiliquidglass.config.NotificationIconPolicy.OFF;
+    }
+
+    private static final class CardIcon {
+        final NowBarIconLease lease = new NowBarIconLease();
+        WeakReference<ImageView> image = new WeakReference<>(null);
+        String packageName;
+        void bind(Object data) {
+            Object value = data == null ? null
+                    : io.github.igorcv88.oneuiliquidglass.hooks.Reflect.read(data, "mPackageName");
+            packageName = value instanceof String ? (String) value : null;
+        }
+        void sync(View root, boolean shown) {
+            boolean eligible = shown && shouldTreatCardIcon(packageName,
+                    io.github.igorcv88.oneuiliquidglass.glass.Tuning.get().iconMode);
+            if (!eligible || root == null) { lease.restore(); return; }
+            ImageView icon = image.get();
+            if (icon == null || !LiveChipHooks.within(icon, root)) {
+                View found = NativeIds.find(root, "dummy_capsule_item_app_icon");
+                icon = found instanceof ImageView ? (ImageView) found : null;
+                image = new WeakReference<>(icon);
+            }
+            lease.sync(icon, true, packageName);
+        }
+    }
     /** Fill views changeCardBg wrote, by the root they belong to (found by structure otherwise). */
     private final WeakHashMap<View, WeakReference<View>> writtenFill = new WeakHashMap<>();
     /**
@@ -215,18 +248,40 @@ final class LiveCardHooks {
         LiveGlass.Options options = new LiveGlass.Options();
         // Keep one material region through expansion, including the settled frame.
         // Samsung's structural region is suspended by the companion lease below.
-        options.onShown = this::regionTint;
-        options.onSync = this::regionTint;
+        // Only Clock cards allocate an L2 icon companion. A recycled former Clock root keeps
+        // its companion long enough to restore the old icon on the next non-Clock bind.
+        CardIcon previousIcon = cardIcons.get(root);
+        Object sourcePkg = data == null ? null
+                : io.github.igorcv88.oneuiliquidglass.hooks.Reflect.read(data, "mPackageName");
+        if (previousIcon == null && CLOCK_PACKAGE.equals(sourcePkg)) {
+            previousIcon = new CardIcon();
+            cardIcons.put(root, previousIcon);
+        }
+        if (previousIcon != null) previousIcon.bind(data);
+        final CardIcon cardIcon = previousIcon;
+        final WeakReference<View> rootRef = new WeakReference<>(root);
+        options.onShown = (host, shown) -> {
+            regionTint(host, shown);
+            if (cardIcon == null) return;
+            View boundRoot = rootRef.get();
+            if (boundRoot != null) cardIcon.sync(boundRoot, shown);
+            else cardIcon.lease.restore();
+        };
+        options.onSync = options.onShown;
         List<View> targets = fills(root);
         for (View t : targets) {
             glass.offer(t, LiveSurface.CARD, data, verdict, LiveChipHooks.RECHECK, options);
             // Samsung's writer may have put its region colour back: clear it again while glass shows.
             io.github.igorcv88.oneuiliquidglass.glass.LiveGlassDrawable g = glass.glassOf(t);
-            if (g != null && g.showsGlass()) regionTint(t, true);
+            if (g != null && g.showsGlass()) {
+                regionTint(t, true);
+                if (cardIcon != null) cardIcon.sync(root, true);
+            }
         }
         // Hosts of this card that are no longer its fill (recycled layout) go back to native.
         for (View h : glass.hosts(LiveSurface.CARD))
             if (h != null && !targets.contains(h) && (h == root || LiveChipHooks.within(h, root))) glass.forget(h, "notFill");
+        if (cardIcon != null && (targets.isEmpty() || !verdict.ok())) cardIcon.lease.restore();
     }
 
     /**

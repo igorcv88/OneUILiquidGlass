@@ -55,6 +55,14 @@ public class LiveCardHooksTest {
     }
     @After public void tearDown() { OngoingActivityDataHelper.reset(); }
 
+    @Test public void cardClockLeaseCannotChangeGradusOrRegularApps() {
+        assertTrue(LiveCardHooks.shouldTreatCardIcon("com.sec.android.app.clockpackage", 1));
+        assertFalse(LiveCardHooks.shouldTreatCardIcon("com.sec.android.app.clockpackage", 0));
+        assertFalse(LiveCardHooks.shouldTreatCardIcon("com.example.gradus", 1));
+        assertFalse(LiveCardHooks.shouldTreatCardIcon("com.example.gradus", 3));
+        assertFalse(LiveCardHooks.shouldTreatCardIcon(null, 1));
+    }
+
     /** Samsung's sequence for one card: getView, wrap in ripple/blur frames, setBlurBG. */
     private CardItemView card(int position) {
         CardItemView root = (CardItemView) adapter.getView(position, null, stack);

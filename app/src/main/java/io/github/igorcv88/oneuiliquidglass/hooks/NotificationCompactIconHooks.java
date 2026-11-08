@@ -408,6 +408,45 @@ final class NotificationCompactIconHooks {
         return null;
     }
 
+    /** Bind the actual count TextView from its owner, independent of the compact icon tree. */
+    void bindShelfLabel(View shelf) {
+        TextView existing = sharedShelfLabel.get();
+        if (existing != null && existing.isAttachedToWindow() && existing.isShown()
+                && ShelfIconInk.isCountLabel(resourceName(existing), existing.getText())) return;
+        long now = android.os.SystemClock.uptimeMillis();
+        if (shelf == null || !shelf.isAttachedToWindow() || now < nextShelfLabelLookup) return;
+        nextShelfLabelLookup = now + 650;
+        TextView match = visibleShelfCountLabel(shelf, 0);
+        if (match != null) {
+            sharedShelfLabel = new WeakReference<>(match);
+            shelfLabelMisses = 0;
+            if (Probe.trace) Probe.log("ICON_TREAT_SHELF_LABEL",
+                    Foreground.describe(match) + " source=NotificationShelf ink="
+                    + Integer.toHexString(match.getCurrentTextColor()));
+        }
+    }
+
+    private static String resourceName(View v) {
+        if (v.getId() == View.NO_ID) return null;
+        try { return v.getResources().getResourceEntryName(v.getId()); }
+        catch (RuntimeException ignored) { return null; }
+    }
+
+    private TextView visibleShelfCountLabel(View view, int depth) {
+        if (depth > 13 || view.getVisibility() != View.VISIBLE) return null;
+        if (view instanceof TextView && ShelfIconInk.isCountLabel(
+                resourceName(view), ((TextView) view).getText()) && view.isShown()) return (TextView) view;
+        if (!(view instanceof android.view.ViewGroup)) return null;
+        android.view.ViewGroup group = (android.view.ViewGroup) view;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            View child = group.getChildAt(i);
+            if (child.getClass().getSimpleName().endsWith("ExpandableNotificationRow")) continue;
+            TextView found = visibleShelfCountLabel(child, depth + 1);
+            if (found != null) return found;
+        }
+        return null;
+    }
+
     private final class State implements View.OnAttachStateChangeListener, ViewTreeObserver.OnPreDrawListener {
         final WeakReference<ImageView> ref;
         ViewTreeObserver observer;
@@ -636,6 +675,7 @@ final class NotificationCompactIconHooks {
             shelfSuspendUntil = 0;
         }
 
+
         /** Follow only the actual "N more notifications" text, never shelf footer actions. */
         private Integer shelfLabelInk(ImageView icon) {
             TextView existing = sharedShelfLabel.get();
@@ -677,26 +717,6 @@ final class NotificationCompactIconHooks {
             return null;
         }
 
-        private static String resourceName(View v) {
-            if (v.getId() == View.NO_ID) return null;
-            try { return v.getResources().getResourceEntryName(v.getId()); }
-            catch (RuntimeException ignored) { return null; }
-        }
-
-        private TextView visibleShelfCountLabel(View view, int depth) {
-            if (depth > 13 || view.getVisibility() != View.VISIBLE) return null;
-            if (view instanceof TextView && ShelfIconInk.isCountLabel(
-                    resourceName(view), ((TextView) view).getText()) && view.isShown()) return (TextView) view;
-            if (!(view instanceof android.view.ViewGroup)) return null;
-            android.view.ViewGroup group = (android.view.ViewGroup) view;
-            for (int i = 0; i < group.getChildCount(); i++) {
-                View child = group.getChildAt(i);
-                if (child.getClass().getSimpleName().endsWith("ExpandableNotificationRow")) continue;
-                TextView found = visibleShelfCountLabel(child, depth + 1);
-                if (found != null) return found;
-            }
-            return null;
-        }
 
         private String shelfTextCandidates(View view, int depth, int[] count) {
             if (depth > 7 || count[0] >= 6 || view.getVisibility() != View.VISIBLE) return "";
