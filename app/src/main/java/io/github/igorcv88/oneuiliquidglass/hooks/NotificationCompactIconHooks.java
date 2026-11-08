@@ -444,7 +444,7 @@ final class NotificationCompactIconHooks {
         boolean refreshing;
         long shelfOverwriteWindow, shelfSuspendUntil;
         int shelfOverwrites;
- 
+
         State(ImageView view) { ref = new WeakReference<>(view); }
 
         @Override public void onViewAttachedToWindow(View v) { attach(); refresh(); }
