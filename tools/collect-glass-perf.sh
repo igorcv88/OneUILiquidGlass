@@ -71,6 +71,14 @@ sleep 8
 setprop debug.oulg.trace 0
 
 stage 'GFXINFO: estado agregado de frames da SystemUI'
-dumpsys gfxinfo com.android.systemui 2>&1 | head -n 75 >> "$OUT"
+if command -v timeout >/dev/null 2>&1; then
+    timeout 6 dumpsys gfxinfo com.android.systemui 2>&1 | head -n 75 >> "$OUT"
+else
+    printf 'GFXINFO omitido: comando timeout indisponivel; evitando bloqueio no final.\n' >> "$OUT"
+fi
 stage 'CPUINFO: consumo momentaneo por processo'
-dumpsys cpuinfo 2>&1 | head -n 45 >> "$OUT"
+if command -v timeout >/dev/null 2>&1; then
+    timeout 6 dumpsys cpuinfo 2>&1 | head -n 45 >> "$OUT"
+else
+    printf 'CPUINFO omitido: comando timeout indisponivel; evitando bloqueio no final.\n' >> "$OUT"
+fi
