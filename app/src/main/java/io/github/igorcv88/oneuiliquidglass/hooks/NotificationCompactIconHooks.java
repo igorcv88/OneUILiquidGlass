@@ -659,9 +659,13 @@ final class NotificationCompactIconHooks {
         }
 
         private String filterDescription(ColorFilter filter) {
-            return filter == null ? "none" : filter instanceof PorterDuffColorFilter
-                    ? Integer.toHexString(((PorterDuffColorFilter) filter).getColor())
-                    : filter.getClass().getSimpleName();
+            if (filter == null) return "none";
+            // getColor is hidden in the public Android SDK; use the cached optional lookup.
+            try {
+                Object color = Reflect.call(filter, "getColor");
+                if (color instanceof Integer) return Integer.toHexString((Integer) color);
+            } catch (ReflectiveOperationException | RuntimeException | LinkageError ignored) { }
+            return filter.getClass().getSimpleName();
         }
 
         private void restoreShelfFilter(ImageView v) {
