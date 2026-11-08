@@ -13,6 +13,20 @@ import java.lang.ref.WeakReference;
 
 /** The eligible Now Bar's native AdaptiveIconDrawable already contains a monochrome glyph. */
 final class NowBarIconLease {
+    interface InstalledIconSource {
+        Drawable resolve(ImageView target, String packageName) throws PackageManager.NameNotFoundException;
+    }
+
+    private final InstalledIconSource installedIconSource;
+
+    NowBarIconLease() {
+        this((target, packageName) -> target.getContext().getPackageManager().getApplicationIcon(packageName));
+    }
+
+    NowBarIconLease(InstalledIconSource installedIconSource) {
+        this.installedIconSource = installedIconSource;
+    }
+
     private WeakReference<ImageView> image = new WeakReference<>(null);
     // The ImageView stops owning the native drawable as soon as the monochrome glyph replaces it.
     // Keep it strongly for the active lease; only views/card references remain weak.
@@ -87,7 +101,7 @@ final class NowBarIconLease {
         boolean fromApp = false;
         if ((glyph == null || glyph.getConstantState() == null) && packageName != null) {
             try {
-                Drawable launcher = target.getContext().getPackageManager().getApplicationIcon(packageName);
+                Drawable launcher = installedIconSource.resolve(target, packageName);
                 if (launcher instanceof AdaptiveIconDrawable) {
                     glyph = ((AdaptiveIconDrawable) launcher).getMonochrome();
                     fromApp = true;

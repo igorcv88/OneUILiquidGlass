@@ -105,7 +105,13 @@ public class NowBarIconLeaseTest {
         ImageView icon = new ImageView(activity);
         Drawable original = new VectorDrawable();
         icon.setImageDrawable(original);
-        NowBarIconLease lease = new NowBarIconLease();
+        Drawable installedLauncher = activity.getDrawable(R.drawable.oulg_launcher);
+        assertTrue(installedLauncher instanceof AdaptiveIconDrawable);
+        assertNotNull(((AdaptiveIconDrawable) installedLauncher).getMonochrome());
+        NowBarIconLease lease = new NowBarIconLease((target, packageName) -> {
+            assertEquals(activity.getPackageName(), packageName);
+            return installedLauncher;
+        });
 
         lease.sync(icon, true, activity.getPackageName());
         assertNotSame("a flattened launcher may use the app's official monochrome layer",
