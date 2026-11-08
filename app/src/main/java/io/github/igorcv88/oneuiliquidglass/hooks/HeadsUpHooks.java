@@ -124,7 +124,10 @@ public final class HeadsUpHooks {
             this.swap = material.swap;
             // The material already classified the shared scene; no second icon classifier.
             this.lightBackdrop = material.light;
-            this.ink = ShelfIconInk.sceneInk(nativeLightText, swap);
+            Tuning t = Tuning.get();
+            this.ink = ShelfIconInk.resolve(nativeLightText, swap, lightBackdrop,
+                    t.notificationIconInkMode, t.notificationIconFixedInk,
+                    t.notificationIconLightInk, t.notificationIconDarkInk);
         }
 
         ShadePalette heldFor(int generation) {
@@ -471,6 +474,18 @@ public final class HeadsUpHooks {
         // the previous shadelightglass value and leave a stable, visible card unchanged until
         // its next unrelated pre-draw (DZIF PR84 trace, 28/10). Redraw after publication too.
         Tuning.onChanged(() -> {
+            // ConfigClient arrives before the worker publishes Tuning. Rebuild only after that
+            // publication too, including a provisional palette while secure capture is unavailable.
+            if (Boolean.TRUE.equals(shadeExpanded) && barState != null
+                    && barState == Eligibility.BAR_SHADE && shadeConfigEnabled() && Tuning.get().shadeAdaptive) {
+                if (shadeGrid != null) adoptGrid(shadeGrid, "tuning");
+                else if (shadePalette != null) {
+                    ShadePalette old = shadePalette;
+                    shadePalette = new ShadePalette(shadeOpens, old.sampledAt, old.luma, old.scene,
+                            ShadeTone.materialFor(old.luma, old.scene, true));
+                }
+            } else shadePalette = null;
+            if (compactIcons != null) compactIcons.shadeToneChanged();
             // A saved panel knob also needs the last shade-window SemBlurInfo reasserted. Card
             // invalidation alone cannot update Samsung's own radius/colour adjustment.
             main.post(this::refreshPanelBlur);
@@ -1673,11 +1688,13 @@ public final class HeadsUpHooks {
                         + " hasNormal=" + (normal instanceof View));
             }
             if (owner) {
-                boolean inkOnLight = Boolean.TRUE.equals(shadeExpanded) && barState == Eligibility.BAR_SHADE
+                boolean shared = Boolean.TRUE.equals(shadeExpanded) && barState == Eligibility.BAR_SHADE
+                        && shadeConfigEnabled() && Tuning.get().shadeAdaptive
                         && shadePalette != null && shadePalette.generation == shadeOpens
-                        && !Tuning.get().shadeLocal
-                        ? shadePalette.lightBackdrop : lightBackdrop;
-                notificationIcons.sync(enabled ? r : null, Tuning.get().iconMode, inkOnLight);
+                        && !Tuning.get().shadeLocal;
+                boolean inkOnLight = shared ? shadePalette.lightBackdrop : lightBackdrop;
+                notificationIcons.sync(enabled ? r : null, Tuning.get().iconMode, inkOnLight,
+                        shared ? shadePalette.ink : null);
             } else if (iconOwnerPreviously) {
                 notificationIcons.restore();
             }

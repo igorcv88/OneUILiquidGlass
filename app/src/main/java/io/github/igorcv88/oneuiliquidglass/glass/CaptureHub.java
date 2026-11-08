@@ -105,6 +105,14 @@ public final class CaptureHub {
         return !disabled && SystemClock.uptimeMillis() >= secureUntil && CaptureApi.get() != null;
     }
 
+    /** Diagnostic only: explain a rejected one-shot request, without changing capture policy. */
+    static String unavailableReason() {
+        if (disabled) return "disabledAfterFailures";
+        long remaining = secureUntil - SystemClock.uptimeMillis();
+        if (remaining > 0) return "secureBackoff remainingMs=" + remaining;
+        return CaptureApi.get() == null ? "captureApiMissing" : "available";
+    }
+
     private static final Runnable TICK = CaptureHub::tick;
     /**
      * A new client is served at once: with no client shown the loop sleeps 500 ms between ticks, and

@@ -550,13 +550,7 @@ final class NotificationCompactIconHooks {
                     Probe.log("ICON_TREAT_SHELF_DECISION", state);
                 }
             }
-            int shelfInk = 0;
-            if (tintShelf) {
-                Tuning palette = Tuning.get();
-                shelfInk = ShelfIconInk.fromLabel(sharedInk, palette.notificationIconInkMode,
-                        palette.notificationIconFixedInk, palette.notificationIconLightInk,
-                        palette.notificationIconDarkInk);
-            }
+            int shelfInk = sharedInk == null ? 0 : sharedInk;
             if (ready == null || ready.bitmap == null) {
                 if (tintShelf) applyShelfFilter(v, shelfInk);
                 else restoreShelfFilter(v);

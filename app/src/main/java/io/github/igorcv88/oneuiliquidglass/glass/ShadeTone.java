@@ -151,7 +151,12 @@ public final class ShadeTone implements CaptureHub.Client {
      * for on the first frame of the opening.
      */
     public static Runnable prefetch(View panel, int generation, java.util.function.Consumer<ToneGrid> result) {
-        if (!CaptureHub.available()) { result.accept(null); return () -> {}; }
+        if (!CaptureHub.available()) {
+            if (Probe.trace) Probe.log("SHADE_CAPTURE_UNAVAILABLE", "generation=" + generation
+                    + " reason=" + CaptureHub.unavailableReason());
+            result.accept(null);
+            return () -> {};
+        }
         Prefetch client = new Prefetch(panel, generation, result);
         CaptureHub.register(client);
         return client::cancel;

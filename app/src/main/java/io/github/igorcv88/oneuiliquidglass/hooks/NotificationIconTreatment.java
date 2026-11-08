@@ -236,6 +236,10 @@ final class NotificationIconTreatment {
 
     /** Called as part of the existing row's pre-draw, without installing an extra watcher. */
     void sync(View row, int mode, boolean lightBackdrop) {
+        sync(row, mode, lightBackdrop, null);
+    }
+
+    void sync(View row, int mode, boolean lightBackdrop, Integer sharedInk) {
         if (row == null || mode == NotificationIconPolicy.OFF) {
             rebindGuard.reset();
             protectedRow.clear();
@@ -308,7 +312,8 @@ final class NotificationIconTreatment {
         if (resolved == null) { if (!pending) skip("noSource"); return; }
         if (resolved.bitmap == null) { skip("existingMono"); return; }
         io.github.igorcv88.oneuiliquidglass.glass.Tuning tuning = io.github.igorcv88.oneuiliquidglass.glass.Tuning.get();
-        int ink = tuning.notificationIconInkMode == 1 ? tuning.notificationIconFixedInk
+        int ink = sharedInk != null ? sharedInk
+                : tuning.notificationIconInkMode == 1 ? tuning.notificationIconFixedInk
                 : tuning.notificationIconInkMode == 2
                     ? (lightBackdrop ? tuning.notificationIconLightInk : tuning.notificationIconDarkInk)
                     : (lightBackdrop ? Color.BLACK : Color.WHITE);
