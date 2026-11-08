@@ -5,6 +5,7 @@ import static org.junit.Assert.assertSame;
 
 import android.app.Activity;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.TextView;
 import android.graphics.Color;
 import java.lang.ref.WeakReference;
@@ -19,6 +20,24 @@ import org.robolectric.annotation.Config;
 /** The overflow dot needs its own slot after the user-configured real icon limit. */
 @RunWith(RobolectricTestRunner.class) @Config(sdk = 34)
 public class NotificationCompactIconHooksTest {
+    @Test public void shelfCountCanLiveInWindowSiblingOutsideCompactIconContainer() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        FrameLayout windowContent = new FrameLayout(activity);
+        FrameLayout iconContainer = new FrameLayout(activity);
+        ImageView icon = new ImageView(activity);
+        iconContainer.addView(icon);
+        windowContent.addView(iconContainer);
+        TextView count = new TextView(activity);
+        count.setText("3 more notifications");
+        count.setTextColor(Color.BLACK);
+        windowContent.addView(count);
+        activity.setContentView(windowContent);
+        NotificationCompactIconHooks hook = new NotificationCompactIconHooks(
+                getClass().getClassLoader(), () -> true, () -> false);
+        // The shelf counter does not belong to the icon container subtree.
+        assertSame(count, hook.findShelfCountNear(icon));
+    }
+
     @Test public void shelfCanAdoptItsCounterOutsideTheIconContainer() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         FrameLayout shelf = new FrameLayout(activity);

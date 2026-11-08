@@ -78,9 +78,12 @@ final class LiveCardHooks {
     /** One reversible Clock icon lease per L2 card; never retained across recycled roots. */
     private final WeakHashMap<View, CardIcon> cardIcons = new WeakHashMap<>();
     private static final String CLOCK_PACKAGE = "com.sec.android.app.clockpackage";
+    /** On DZIF the dummy capsule lives under pip_dummy_chip_layout (alpha=0).
+     * The visible L2 Clock glyph and its opaque bitmap disc are in this header. */
+    static final String CLOCK_EXPANDED_ICON_ID = "ongoing_activity_expand_left_image";
 
     static boolean shouldTreatCardIcon(String pkg, int mode) {
-        // Only the DZIF Clock's measured dummy capsule vector is verified here.
+        // Only the DZIF Clock's visible expanded notification header is verified here.
         // User app packs and Gradus's separate notification-header icon stay native.
         return CLOCK_PACKAGE.equals(pkg) && mode != io.github.igorcv88.oneuiliquidglass.config.NotificationIconPolicy.OFF;
     }
@@ -100,7 +103,7 @@ final class LiveCardHooks {
             if (!eligible || root == null) { lease.restore(); return; }
             ImageView icon = image.get();
             if (icon == null || !LiveChipHooks.within(icon, root)) {
-                View found = NativeIds.find(root, "dummy_capsule_item_app_icon");
+                View found = NativeIds.find(root, CLOCK_EXPANDED_ICON_ID);
                 icon = found instanceof ImageView ? (ImageView) found : null;
                 image = new WeakReference<>(icon);
             }

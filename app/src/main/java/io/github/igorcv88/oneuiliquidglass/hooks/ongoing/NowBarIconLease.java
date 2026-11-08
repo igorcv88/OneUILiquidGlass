@@ -186,8 +186,7 @@ final class NowBarIconLease {
     /** The same Clock glyph occurs in three independent Samsung surfaces on DZIF. */
     static boolean clockVectorId(String id) {
         return "nowbar_icon".equals(id) || "capsule_item_app_icon".equals(id)
-                || "ongoing_activity_expand_left_image".equals(id)
-                || "dummy_capsule_item_app_icon".equals(id);
+                || "ongoing_activity_expand_left_image".equals(id);
     }
 
     static boolean nativeNotificationVector(ImageView target, Drawable drawable) {

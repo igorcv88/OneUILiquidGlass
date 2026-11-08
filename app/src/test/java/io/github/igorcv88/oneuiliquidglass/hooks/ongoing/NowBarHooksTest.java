@@ -81,6 +81,16 @@ public class NowBarHooksTest {
         return p;
     }
 
+    @Test public void expandedGradusHeaderWaitsForLayoutButClockDoesNot() {
+        ImageView gradus = new com.android.internal.widget.NotificationRowIconView(activity);
+        assertTrue(NowBarHooks.deferUnmeasuredExpanded(gradus, true, null));
+        assertFalse(NowBarHooks.deferUnmeasuredExpanded(gradus, false, null));
+        assertFalse(NowBarHooks.deferUnmeasuredExpanded(gradus, true, "com.sec.android.app.clockpackage"));
+        gradus.layout(0, 0, 132, 132);
+        assertFalse(NowBarHooks.deferUnmeasuredExpanded(gradus, true, null));
+        assertFalse(NowBarHooks.deferUnmeasuredExpanded(new ImageView(activity), true, null));
+    }
+
     @Test public void pluginBootstrapIsFilteredAndRunsOncePerClassloader() throws Exception {
         assertFalse(hooks.pluginLoaded(instance("com.other.plugin", NowBarHooks.AOD_COMPONENT, plugin(false))));
         assertFalse(hooks.pluginLoaded(instance(NowBarHooks.AOD_PACKAGE, "com.samsung.Other", plugin(false))));

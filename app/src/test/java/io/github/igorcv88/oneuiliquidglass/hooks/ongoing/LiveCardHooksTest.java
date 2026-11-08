@@ -55,6 +55,10 @@ public class LiveCardHooksTest {
     }
     @After public void tearDown() { OngoingActivityDataHelper.reset(); }
 
+    @Test public void clockCardUsesVisibleHeaderNotTheHiddenDummyChip() {
+        assertEquals("ongoing_activity_expand_left_image", LiveCardHooks.CLOCK_EXPANDED_ICON_ID);
+    }
+
     @Test public void cardClockLeaseCannotChangeGradusOrRegularApps() {
         assertTrue(LiveCardHooks.shouldTreatCardIcon("com.sec.android.app.clockpackage", 1));
         assertFalse(LiveCardHooks.shouldTreatCardIcon("com.sec.android.app.clockpackage", 0));

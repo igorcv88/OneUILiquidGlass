@@ -415,6 +415,9 @@ final class NotificationCompactIconHooks {
                 && ShelfIconInk.isCountLabel(resourceName(existing), existing.getText())) return;
         long now = android.os.SystemClock.uptimeMillis();
         if (shelf == null || !shelf.isAttachedToWindow() || now < nextShelfLabelLookup) return;
+        // HeadsUpHooks calls from every notification row; those are not shelf label owners.
+        // Do not let their scans consume the shared 650 ms lookup budget.
+        if (shelf.getClass().getSimpleName().endsWith("ExpandableNotificationRow")) return;
         nextShelfLabelLookup = now + 650;
         TextView match = visibleShelfCountLabel(shelf, 0);
         if (match != null) {
@@ -433,7 +436,7 @@ final class NotificationCompactIconHooks {
     }
 
     private TextView visibleShelfCountLabel(View view, int depth) {
-        if (depth > 13 || view.getVisibility() != View.VISIBLE) return null;
+        if (depth > 16 || view.getVisibility() != View.VISIBLE) return null;
         if (view instanceof TextView && ShelfIconInk.isCountLabel(
                 resourceName(view), ((TextView) view).getText()) && view.isShown()) return (TextView) view;
         if (!(view instanceof android.view.ViewGroup)) return null;
@@ -445,6 +448,26 @@ final class NotificationCompactIconHooks {
             if (found != null) return found;
         }
         return null;
+    }
+
+    /** The real count text may be a window-level sibling, not a shelf child. */
+    TextView findShelfCountNear(ImageView icon) {
+        ViewParent ancestor = icon.getParent();
+        for (int depth = 0; depth < 14 && ancestor instanceof View; depth++) {
+            View node = (View) ancestor;
+            String owner = node.getClass().getSimpleName();
+            if ("SecShelfNotificationIconContainer".equals(owner)
+                    || "NotificationShelf".equals(owner)) {
+                TextView label = visibleShelfCountLabel(node, 0);
+                if (label != null) return label;
+            }
+            if ("NotificationShadeWindowView".equals(owner)
+                    || "KeyguardRootView".equals(owner)) break;
+            ancestor = node.getParent();
+        }
+        // Exactly one wider walk if the shelf host does not own the count label.
+        View window = icon.getRootView();
+        return window == null ? null : visibleShelfCountLabel(window, 0);
     }
 
     private final class State implements View.OnAttachStateChangeListener, ViewTreeObserver.OnPreDrawListener {
@@ -685,35 +708,25 @@ final class NotificationCompactIconHooks {
             long now = android.os.SystemClock.uptimeMillis();
             if (now < nextShelfLabelLookup) return null;
             nextShelfLabelLookup = now + 650;
-            // On DZIF the SecShelfNotificationIconContainer can sit outside
-            // NotificationShelf. Follow its ancestors to the visible counter once per
-            // 650 ms; never walk a notification row or log notification content.
-            View origin = null;
-            ViewParent ancestor = icon.getParent();
-            for (int depth = 0; depth < 14 && ancestor instanceof View; depth++) {
-                View node = (View) ancestor;
-                String type = node.getClass().getSimpleName();
-                if (origin == null && ("SecShelfNotificationIconContainer".equals(type)
-                        || "NotificationShelf".equals(type))) origin = node;
-                if (origin != null) {
-                    TextView label = visibleShelfCountLabel(node, 0);
-                    if (label != null) {
-                        sharedShelfLabel = new WeakReference<>(label);
-                        shelfLabelMisses = 0;
-                        if (Probe.trace) Probe.log("ICON_TREAT_SHELF_LABEL", Foreground.describe(label)
-                                + " source=" + type + " ink=" + Integer.toHexString(label.getCurrentTextColor()));
-                        // Never write the label's colour here. Foreground/Samsung owns it.
-                        return label.getCurrentTextColor();
-                    }
-                }
-                if ("NotificationShadeWindowView".equals(type)
-                        || "KeyguardRootView".equals(type)) break;
-                ancestor = node.getParent();
+            // Samsung can render the count as a sibling of the icon container, or outside
+            // NotificationShelf altogether. Search the icon's ancestors and then the window
+            // root *once per 650 ms*; skip notification rows and inspect only count labels.
+            TextView label = findShelfCountNear(icon);
+            if (label != null) {
+                sharedShelfLabel = new WeakReference<>(label);
+                shelfLabelMisses = 0;
+                if (Probe.trace) Probe.log("ICON_TREAT_SHELF_LABEL", Foreground.describe(label)
+                        + " source=sharedWindow ink=" + Integer.toHexString(label.getCurrentTextColor()));
+                return label.getCurrentTextColor();
             }
-            if (Probe.trace && origin != null && ++shelfLabelMisses <= 3)
+            if (Probe.trace && ++shelfLabelMisses <= 3) {
+                View window = icon.getRootView();
                 Probe.log("ICON_TREAT_SHELF_LABEL", "missingCount=true anchor="
-                        + Foreground.describe(origin) + " candidates="
-                        + shelfTextCandidates(origin, 0, new int[]{0}));
+                        + Foreground.describe(icon.getParent() instanceof View
+                                ? (View) icon.getParent() : icon)
+                        + " window=" + (window == null ? "null" : window.getClass().getSimpleName())
+                        + " candidates=" + (window == null ? "" : shelfTextCandidates(window, 0, new int[]{0})));
+            }
             return null;
         }
 

@@ -111,6 +111,9 @@ final class NowBarHooks {
         final NowBarIconLease icon = new NowBarIconLease();
         /** The expanded notification header inflates a separate AdaptiveIconDrawable. */
         final NowBarIconLease expandedIcon = new NowBarIconLease();
+        /** One-shot lease: Samsung sometimes binds the expanded header before its first layout. */
+        WeakReference<ImageView> pendingExpanded = new WeakReference<>(null);
+        View.OnLayoutChangeListener pendingExpandedLayout;
         // DZIF can inflate a second ongoing icon (Clock's right image or the app's
         // separate left_icon). Each lease owns only its exact ImageView.
         final NowBarIconLease expandedOtherIcon = new NowBarIconLease();
@@ -256,6 +259,52 @@ final class NowBarHooks {
         return requested;
     }
 
+    /** A zero-sized OEM NotificationRowIconView is an inflation placeholder, not a drawn icon.
+     * Avoid replacing its drawable until Samsung assigns the final layout dimensions.
+     * Clock's named header is fully resolved and retains its existing eager path. */
+    static boolean deferUnmeasuredExpanded(ImageView icon, boolean shown, String packageName) {
+        return shown && packageName == null && icon != null
+                && "com.android.internal.widget.NotificationRowIconView".equals(icon.getClass().getName())
+                && (icon.getWidth() <= 0 || icon.getHeight() <= 0);
+    }
+
+    private static void cancelPendingExpanded(Card c) {
+        ImageView previous = c.pendingExpanded.get();
+        if (previous != null && c.pendingExpandedLayout != null)
+            previous.removeOnLayoutChangeListener(c.pendingExpandedLayout);
+        c.pendingExpanded.clear();
+        c.pendingExpandedLayout = null;
+    }
+
+    /** Install at most one callback per unmeasured expanded icon. No polling or timed retries. */
+    private void syncExpandedIcon(View card, Card c, ImageView icon, boolean shown, String packageName) {
+        if (!deferUnmeasuredExpanded(icon, shown, packageName)) {
+            cancelPendingExpanded(c);
+            c.expandedIcon.sync(icon, shown, packageName);
+            return;
+        }
+        if (c.pendingExpanded.get() == icon && c.pendingExpandedLayout != null) return;
+        cancelPendingExpanded(c);
+        if (c.expandedIcon.target() != null) c.expandedIcon.restore();
+        c.pendingExpanded = new WeakReference<>(icon);
+        final WeakReference<View> ownerRef = new WeakReference<>(card);
+        View.OnLayoutChangeListener listener = (v, left, top, right, bottom,
+                                               oldLeft, oldTop, oldRight, oldBottom) -> {
+            if (v.getWidth() <= 0 || v.getHeight() <= 0 || c.pendingExpanded.get() != v) return;
+            cancelPendingExpanded(c); // Remove before setImageDrawable(), which may request layout.
+            View owner = ownerRef.get();
+            if (owner == null || cards.get(owner) != c || c.host.get() == null
+                    || !v.isAttachedToWindow() || !LiveChipHooks.within(v, owner)) return;
+            c.expandedIcon.sync((ImageView) v, true, c.iconPackage);
+            if (Probe.trace) Probe.log("NOWBAR_EXPANDED_READY", "size="
+                    + v.getWidth() + "x" + v.getHeight() + " once=true");
+        };
+        c.pendingExpandedLayout = listener;
+        icon.addOnLayoutChangeListener(listener);
+        if (Probe.trace) Probe.log("NOWBAR_EXPANDED_DEFER", "size="
+                + icon.getWidth() + "x" + icon.getHeight() + " once=true");
+    }
+
     private void companions(View card, Card c, boolean shown) {
         View container = c.container.get();
         c.nativeRegion.sync(container, shown && c.host.get() != container);
@@ -274,7 +323,7 @@ final class NowBarHooks {
         // The expanded header and its secondary/info glyphs share one luma decision.
         ImageView expandedIcon = expandedRoot == null ? null : expandedHeaderIcon(expandedRoot);
         Drawable expandedBefore = expandedIcon == null ? null : expandedIcon.getDrawable();
-        c.expandedIcon.sync(expandedIcon, shown, packageName);
+        syncExpandedIcon(card, c, expandedIcon, shown, packageName);
         ImageView other = expandedRoot == null ? null : expandedOtherIcon(expandedRoot, expandedIcon);
         c.expandedOtherIcon.syncWithoutSampling(other, shown, packageName);
         ImageView info = expandedRoot == null ? null : expandedInfoIcon(expandedRoot, expandedIcon, other);

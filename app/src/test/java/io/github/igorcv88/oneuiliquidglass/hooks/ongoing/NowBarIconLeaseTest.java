@@ -20,7 +20,7 @@ public class NowBarIconLeaseTest {
     private final Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
 
     @Test public void liveCardClockVectorIsAnExplicitDzifIdOnly() {
-        assertTrue(NowBarIconLease.clockVectorId("dummy_capsule_item_app_icon"));
+        assertFalse(NowBarIconLease.clockVectorId("dummy_capsule_item_app_icon"));
         assertTrue(NowBarIconLease.clockVectorId("capsule_item_app_icon"));
         assertTrue(NowBarIconLease.clockVectorId("nowbar_icon"));
         assertFalse(NowBarIconLease.clockVectorId("icon"));
