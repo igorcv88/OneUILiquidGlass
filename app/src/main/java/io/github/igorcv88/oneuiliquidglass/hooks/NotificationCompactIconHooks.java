@@ -33,6 +33,7 @@ import de.robv.android.xposed.XposedBridge;
 import io.github.igorcv88.oneuiliquidglass.config.ConfigClient;
 import io.github.igorcv88.oneuiliquidglass.config.NotificationIconPolicy;
 import io.github.igorcv88.oneuiliquidglass.diagnostics.Probe;
+import io.github.igorcv88.oneuiliquidglass.diagnostics.Perf;
 import io.github.igorcv88.oneuiliquidglass.glass.Tuning;
 import io.github.igorcv88.oneuiliquidglass.glass.ShadeTone;
 import io.github.igorcv88.oneuiliquidglass.glass.ToneGrid;
@@ -72,6 +73,7 @@ final class NotificationCompactIconHooks {
     private Boolean sampledShelfBackdrop;
     private Integer sampledShelfInk;
     private long nextShelfInkAt;
+    private long lastShelfTraceAt;
 
     NotificationCompactIconHooks(ClassLoader loader, BooleanSupplier enabled,
                                  BooleanSupplier shelfToneSwapped) {
@@ -494,8 +496,24 @@ final class NotificationCompactIconHooks {
     Integer shelfSceneInk(ImageView icon) {
         ToneGrid grid = shadeGrid.get();
         Boolean scene = shadeScene.get();
-        if (grid == null || scene == null || !icon.isAttachedToWindow()) return null;
+        String source = "shadeGrid";
+        // The notification shelf can draw while Samsung is still bringing the shade to its
+        // expanded state. The row tone has an already published full-display preview then;
+        // use that exact palette rather than falling back to native white for this frame.
+        if (grid == null || scene == null) {
+            grid = ShadeTone.live();
+            scene = ShadeTone.liveBodyLight(grid);
+            source = "sharedPreview";
+        }
         long now = android.os.SystemClock.uptimeMillis();
+        if (grid == null || scene == null || !icon.isAttachedToWindow()) {
+            if (Probe.trace && now - lastShelfTraceAt >= 2000) {
+                lastShelfTraceAt = now;
+                Probe.log("ICON_TREAT_SHELF_SCENE", "source=unavailable grid=" + (grid != null)
+                        + " scene=" + scene + " attached=" + icon.isAttachedToWindow());
+            }
+            return null;
+        }
         if (sampledShelfInk != null && sampledShelfGrid == grid
                 && scene.equals(sampledShelfBackdrop) && now < nextShelfInkAt)
             return sampledShelfInk;
@@ -503,6 +521,9 @@ final class NotificationCompactIconHooks {
         icon.getLocationOnScreen(position);
         int top = position[1];
         float luma = grid.luma(top, top + Math.max(1, icon.getHeight()));
+        // The shelf may sit below the cropped panel bands during its entrance animation.
+        // The opening's whole-scene tone is still preferable to a fixed white fallback.
+        if (luma < 0f) luma = grid.whole();
         if (luma < 0f) return null;
         Material material = ShadeTone.materialFor(luma, scene, true);
         int ink = ShelfIconInk.sceneInk(ShadeTone.lightText(), material.swap);
@@ -511,10 +532,12 @@ final class NotificationCompactIconHooks {
         sampledShelfBackdrop = scene;
         sampledShelfInk = ink;
         nextShelfInkAt = now + 650;
-        if (Probe.trace && changed)
-            Probe.log("ICON_TREAT_SHELF_SCENE", "source=shadeGrid luma="
+        if (Probe.trace && (changed || now - lastShelfTraceAt >= 2000)) {
+            lastShelfTraceAt = now;
+            Probe.log("ICON_TREAT_SHELF_SCENE", "source=" + source + " luma="
                     + Math.round(luma * 100f) + " swap=" + material.swap
                     + " ink=" + Integer.toHexString(ink));
+        }
         return ink;
     }
 
@@ -555,7 +578,11 @@ final class NotificationCompactIconHooks {
             observer.addOnPreDrawListener(this);
         }
 
-        @Override public boolean onPreDraw() { refresh(); return true; }
+        @Override public boolean onPreDraw() {
+            long token = Perf.start(Perf.COMPACT_ICON);
+            try { refresh(); } finally { Perf.end(Perf.COMPACT_ICON, token); }
+            return true;
+        }
 
         private StatusBarNotification notification(ImageView v) {
             Object candidate = null;

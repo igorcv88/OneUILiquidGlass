@@ -18,6 +18,7 @@ import java.lang.ref.WeakReference;
 import io.github.igorcv88.oneuiliquidglass.diagnostics.LiveMaterialTrace;
 import io.github.igorcv88.oneuiliquidglass.diagnostics.LiveRenderProbe;
 import io.github.igorcv88.oneuiliquidglass.diagnostics.Probe;
+import io.github.igorcv88.oneuiliquidglass.diagnostics.Perf;
 
 /**
  * Background of a live update chip/card, a Now Bar card or a toast (hooks/ongoing). It wraps the
@@ -232,6 +233,8 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
     // ---- drawing ---------------------------------------------------------------------------
 
     @Override public void draw(Canvas canvas) {
+        long token = Perf.start(Perf.LIVE_DRAW);
+        try {
         Rect b = getBounds();
         // BackgroundBlurDrawable needs drawRenderNode. A software layer/capture cannot submit a
         // region; drawing only its transparent colour and the rim would look like missing glass.
@@ -283,6 +286,7 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
         if (optics == null) optics = new GlassDrawable(blur, density, new GlassSpec());
         if (!optics.drawOptics(canvas, b, clamped, alpha)) drawRim(canvas, b);
         drawReport("OWN_REGION", canvas, b, "blurDrawReturned");
+        } finally { Perf.end(Perf.LIVE_DRAW, token); }
     }
     private void drawReport(String mode, Canvas canvas, Rect b, String reason) {
         // Unlike LIVE_RENDER_DRAW's change-only mode, this samples successive draw submissions

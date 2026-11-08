@@ -13,6 +13,7 @@ import android.view.SurfaceControl;
 import android.view.View;
 import android.view.WindowManager;
 import io.github.igorcv88.oneuiliquidglass.diagnostics.Probe;
+import io.github.igorcv88.oneuiliquidglass.diagnostics.Perf;
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Constructor;
 import java.util.ArrayList;
@@ -26,8 +27,9 @@ import java.util.concurrent.TimeUnit;
 /**
  * One capture loop shared by every glass view that samples the backdrop. Each tick captures the
  * union of the clients' on-screen rectangles (plus a margin for motion) below their windows, at
- * half resolution, and hands the same frame to all clients. The loop runs only while a client is
- * shown and the screen is interactive.
+ * half resolution, and hands the same frame to all clients. Normal clients must be shown;
+ * the explicitly registered shade/QS preview clients may sample while hidden so the first
+ * panel frame has a recent backdrop tone. Captures are skipped while the screen is off.
  *
  * <p>Measured on S938BXXUCZZIC with the earlier probe (15 Hz, heads-up rect + 80 px, scale 0.5):
  * ready P50 7.9 ms, P95 10.3 ms, P99 13.7 ms, no failures, no secure layers.</p>
@@ -184,6 +186,7 @@ public final class CaptureHub {
     }
 
     private static void capture(int displayId, Rect crop, SurfaceControl[] exclude, float scale, long requestedAt) {
+        long perfToken = Perf.start(Perf.CAPTURE_IO);
         CaptureApi api = CaptureApi.get();
         long t0 = SystemClock.elapsedRealtimeNanos();
         Object lock = new Object();
@@ -230,6 +233,7 @@ public final class CaptureHub {
             MAIN.post(() -> deliver(null, false, name, -1));
         } finally {
             release(java.util.Arrays.asList(exclude));
+            Perf.end(Perf.CAPTURE_IO, perfToken);
         }
     }
 
@@ -290,10 +294,14 @@ public final class CaptureHub {
         final List<Double> ready = new ArrayList<>();
         int failed, secure;
         String firstError;
+        long firstAt, lastAt;
 
         void note(String error) { if (firstError == null) firstError = error; }
 
         void add(double ms, String error, boolean sec) {
+            long now = SystemClock.uptimeMillis();
+            if (firstAt == 0) firstAt = now;
+            lastAt = now;
             if (sec) secure++;
             if (error != null) { failed++; note(error); }
             else if (ms >= 0) ready.add(ms);
@@ -302,9 +310,12 @@ public final class CaptureHub {
 
         void flush(String why) {
             if (ready.isEmpty() && failed == 0 && secure == 0) return;
+            int total = ready.size() + failed + secure;
+            long elapsed = Math.max(1L, lastAt - firstAt);
             Probe.log("CAPTURE_STATS", "reason=" + why + " ok=" + ready.size() + " failed=" + failed + " secure=" + secure
+                    + " observedHz=" + String.format(java.util.Locale.ROOT, "%.1f", (total - 1) * 1000.0 / elapsed)
                     + " readyP50=" + pct(50) + " readyP95=" + pct(95) + " readyMax=" + pct(100) + " firstError=" + firstError);
-            ready.clear(); failed = 0; secure = 0; firstError = null;
+            ready.clear(); failed = 0; secure = 0; firstError = null; firstAt = 0; lastAt = 0;
         }
 
         String pct(int p) {
