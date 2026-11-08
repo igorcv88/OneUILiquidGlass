@@ -103,7 +103,8 @@ public final class HeadsUpHooks {
         final boolean nativeLightText;
         final float luma;
         final boolean scene, swap, lightBackdrop;
-        final int ink;
+        // Box once at publication: Supplier/row consumers must not box the same ink per frame.
+        final Integer ink;
         final Material material;
 
         ShadePalette(int generation, ToneGrid grid, boolean scene) {
@@ -893,7 +894,7 @@ public final class HeadsUpHooks {
                 + " material=" + shadePalette.material.style()
                 + " luma=" + Math.round(shadePalette.luma * 100f));
         if (compactIcons != null && (previousPalette == null || previousPalette.generation != shadeOpens
-                || previousPalette.ink != shadePalette.ink))
+                || !previousPalette.ink.equals(shadePalette.ink)))
             compactIcons.shadeToneChanged();
         // The adjacent QS page shares this underlying app. It can use this freshly sampled scene
         // during the lateral gesture instead of briefly drawing Samsung's native discs/ink.
