@@ -96,6 +96,18 @@ O interruptor `sfrefract` **não comprova** que o binário nativo foi carregado:
 | `textswap` | 1 | booleano | Troca cor do texto em material claro/escuro oposto ao tema |
 | `headertone` | 0 | booleano | Ajusta relógio/data/operadora da central ao fundo |
 | `icontone` | 1 | booleano | Ajusta ícone monocromático da notificação ao texto |
+| `iconmode` | 1 | inteiro 0–3 | 0 desliga, 1 trata sistema e serviços, 2 também aplicativos com ícone original verificado, 3 força todos os ícones de aplicativo elegíveis |
+| `iconcardsize` | 0.76 | 0.40–1 | Tamanho do desenho dentro do slot das notificações (pop-up, bloqueio e central) |
+| `statusiconsize` | 0.88 | 0.55–1 | Tamanho do desenho somente dos ícones tratados na barra de status; não altera ícones preservados nem a largura do slot |
+| `statusmaxicons` | 0 | inteiro 0–10 | Limite dos ícones na barra de status; 0 segue a Samsung; One UI 9 usa `NotificationIconContainer.shouldForceOverflow` e `NotificationIconContainerStatusBarViewModel.maxIcons`; reinício de SystemUI pode ser necessário após alterar |
+| `iconinkmode` | 0 | inteiro 0–2 | 0 adaptativo atual, 1 cor fixa, 2 paleta personalizada conforme fundo das notificações |
+| `iconfixedink` | `ffffff` | RGB hexadecimal de seis dígitos | Cor fixa dos glifos das notificações |
+| `iconlightink` | `000000` | RGB hexadecimal de seis dígitos | Glifo no fundo claro das notificações |
+| `icondarkink` | `ffffff` | RGB hexadecimal de seis dígitos | Glifo no fundo escuro/colorido das notificações |
+| `statusinkmode` | 0 | inteiro 0–2 | 0 adaptação nativa da Samsung, 1 cor fixa, 2 paleta personalizada para status bar |
+| `statusfixedink` | `ffffff` | RGB hexadecimal de seis dígitos | Cor fixa dos indicadores da barra superior |
+| `statuslightink` | `000000` | RGB hexadecimal de seis dígitos | Cor dos indicadores sobre fundo claro |
+| `statusdarkink` | `ffffff` | RGB hexadecimal de seis dígitos | Cor dos indicadores sobre fundo escuro/colorido |
 | `popuplock` | 1 | booleano | Estabiliza o contraste do pop-up: só muda com mudança real do fundo, confirmada por uma segunda leitura |
 | `orphandraw` | 1 | booleano | Aplica o tom das linhas minimizadas já no primeiro desenho da central |
 | `popuptone` | 1 | booleano | Véu medido do backdrop do pop-up APK-only |

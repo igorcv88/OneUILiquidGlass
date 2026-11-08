@@ -6,6 +6,8 @@
     <string name="control_title_1a9d1f6ff979">Alcance da luz dinâmica</string>
     <string name="control_title_9cbee42ce9d4">Amostras do bloqueio</string>
     <string name="control_title_e8d1e327dbeb">Amostras do pop-up</string>
+    <string name="control_title_2c9365fef254">Barra de status sobre fundo claro</string>
+    <string name="control_title_de327df14533">Barra de status sobre fundo colorido</string>
     <string name="control_title_fe0c016c9945">Borda aditiva (compatibilidade P3)</string>
     <string name="control_title_bf8389203ea5">Brilho do vidro escuro</string>
     <string name="control_title_f40464148fea">Brilho especular</string>
@@ -18,11 +20,15 @@
     <string name="control_title_b11c820a9f04">Contorno sobre fundo colorido</string>
     <string name="control_title_0b06eeda0ca8">Contraste estável</string>
     <string name="control_title_499d0bae04fb">Contraste medido no pop-up</string>
+    <string name="control_title_fb5a30ad181f">Cor da barra de status</string>
     <string name="control_title_182b2b4eb1bf">Cor do fundo da central</string>
     <string name="control_title_f506051bb466">Cor do tom sobre fundo claro</string>
     <string name="control_title_5e7c8fc5bf6b">Cor do vidro claro</string>
     <string name="control_title_8446f961d406">Cor do vidro · fundo claro</string>
     <string name="control_title_2e9f89865f0a">Cor do véu escuro (descontinuado)</string>
+    <string name="control_title_2d57baa7425d">Cor dos ícones nas notificações</string>
+    <string name="control_title_2bf54afbab32">Cor fixa da barra de status</string>
+    <string name="control_title_2430177f4c6a">Cor fixa nas notificações</string>
     <string name="control_title_4e96aab8ce76">Corte do desfoque ao sumir</string>
     <string name="control_title_4ad715209c69">Curva de cor do sistema</string>
     <string name="control_title_ee584b937380">Curva de destaque</string>
@@ -89,6 +95,7 @@
     <string name="control_title_006548b15c01">Modelo de refração</string>
     <string name="control_title_ceaef40ab9b4">Modo de reescrita</string>
     <string name="control_title_6a5669f01728">Multiplicador físico</string>
+    <string name="control_title_a2faa45a9b05">Máximo de ícones visíveis</string>
     <string name="control_title_203fe4f25f20">Nível da uniformidade</string>
     <string name="control_title_b89e7df74a83">Ocultar a faixa em</string>
     <string name="control_title_6e897db6ffb5">Opacidade da capa de mídia</string>
@@ -98,6 +105,7 @@
     <string name="control_title_bd7dd59e7500">Opacidade do vidro escuro</string>
     <string name="control_title_1494f8d77260">Opacidade do vidro · fundo claro</string>
     <string name="control_title_08864d52ba04">Origem do fundo</string>
+    <string name="control_title_ba772fd6f59e">Origem dos ícones de notificações</string>
     <string name="control_title_abd91248a5f8">Passar ao vidro claro acima de</string>
     <string name="control_title_78ce3c71cf94">Personalizar discos no fundo colorido</string>
     <string name="control_title_826f38ede54d">Preenchimento · brilho e volume · claro</string>
@@ -116,6 +124,8 @@
     <string name="control_title_23907232c21c">Saturação</string>
     <string name="control_title_76f1a4366eb4">Saturação da captura</string>
     <string name="control_title_5df7b3c6b57c">Sombra da borda no vidro claro</string>
+    <string name="control_title_d6218cd33215">Tamanho dos ícones da barra de status</string>
+    <string name="control_title_6fb27e5b7855">Tamanho dos ícones das notificações</string>
     <string name="control_title_936eb873bedb">Teto do desfoque interno</string>
     <string name="control_title_68e6ea868975">Texto adaptativo</string>
     <string name="control_title_06a0b9a00436">Tinta de diagnóstico</string>
@@ -138,6 +148,8 @@
     <string name="control_title_2755ba3ed45e">Ícone desligado · fundo colorido</string>
     <string name="control_title_99508c52e4b4">Ícone ligado · fundo claro</string>
     <string name="control_title_8f72472bf1f8">Ícone ligado · fundo colorido</string>
+    <string name="control_title_df08262ee913">Ícones sobre fundo claro</string>
+    <string name="control_title_be57a26ad171">Ícones sobre fundo colorido</string>
     <string name="control_title_f2f3c60c5911">Índice de refração</string>
     <string name="control_title_1cb1cc084b68">Óptica da Now Bar (comparação)</string>
 </resources>

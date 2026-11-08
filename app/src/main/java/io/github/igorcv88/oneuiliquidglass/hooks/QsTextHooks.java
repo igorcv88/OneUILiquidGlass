@@ -36,10 +36,10 @@ final class QsTextHooks {
     private final java.util.Map<Object,String> headerPainterLogged=new java.util.WeakHashMap<>();
     private final java.util.Set<String> headerCaptureSummaries=java.util.Collections.synchronizedSet(new java.util.HashSet<>());
     /** Identity and owner model for painter nodes composed inside a QuickTile. */
-    private final java.util.Map<Object,String> tilePainterElements=new java.util.WeakHashMap<>();
-    private final java.util.Map<Object,String> tilePainterNodes=new java.util.WeakHashMap<>();
-    private final java.util.Map<Object,Object> tilePainterElementModels=new java.util.WeakHashMap<>();
-    private final java.util.Map<Object,Object> tilePainterNodeModels=new java.util.WeakHashMap<>();
+    private final WeakIdentityMap<Object,String> tilePainterElements=new WeakIdentityMap<>();
+    private final WeakIdentityMap<Object,String> tilePainterNodes=new WeakIdentityMap<>();
+    private final WeakIdentityMap<Object,Object> tilePainterElementModels=new WeakIdentityMap<>();
+    private final WeakIdentityMap<Object,Object> tilePainterNodeModels=new WeakIdentityMap<>();
     private final java.util.Map<Object,String> sliderPainterElements=new java.util.WeakHashMap<>();
     private final java.util.Map<Object,String> sliderPainterNodes=new java.util.WeakHashMap<>();
     private final java.util.Set<Object> sliderPaintersDrawn=java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>());
@@ -924,7 +924,7 @@ final class QsTextHooks {
         nodes.each(this::invalidateNode);headerNodes.each(this::invalidateNode);
         // Repaint tile glyphs on a palette edit even if their PainterElement and QuickTile model
         // are unchanged: Compose may skip re-creating the painter in a caller recomposition.
-        for(Object node:new java.util.ArrayList<>(tilePainterNodes.keySet()))invalidateNode(node);
+        for(Object node:tilePainterNodes.keys())invalidateNode(node);
     }
     private void invalidateNode(Object node){
             try{invalidate.invoke(null,node);}

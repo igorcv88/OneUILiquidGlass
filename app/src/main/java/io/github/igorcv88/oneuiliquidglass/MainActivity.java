@@ -28,7 +28,7 @@ public final class MainActivity extends Activity implements Host {
     protected void attachBaseContext(Context base) {
         super.attachBaseContext(AppLanguage.wrap(base));
     }
-    private static final int REQ_NOTIFY = 71, REQ_EXPORT = 91, REQ_IMPORT = 92;
+    private static final int REQ_NOTIFY = 71, REQ_EXPORT = 91, REQ_IMPORT = 92, REQ_ICON_IMPORT = 93;
     private final java.util.concurrent.ExecutorService io = java.util.concurrent.Executors.newSingleThreadExecutor();
     private final Handler handler = new Handler(Looper.getMainLooper());
     private AppModel model;
@@ -38,11 +38,13 @@ public final class MainActivity extends Activity implements Host {
     private TextView toast;
     private HomePage home;
     private SurfacesPage surfaces;
+    private IconsPage icons;
     private SettingsPage settings;
     private Page[] all;
     private int tab;
     private int pendingCount = 1, pendingDelay;
     private boolean permissionPending, imeVisible;
+    private String pendingIconPackage;
     private final Runnable poll = new Runnable() {
         @Override
         public void run() {
@@ -67,6 +69,7 @@ public final class MainActivity extends Activity implements Host {
             permissionPending = state.getBoolean("permissionPending");
             pendingCount = state.getInt("pendingCount", 1);
             pendingDelay = state.getInt("pendingDelay");
+            pendingIconPackage = state.getString("pendingIconPackage");
         }
         build(ui == null ? new Bundle() : ui);
         handleIntent(getIntent());
@@ -80,14 +83,17 @@ public final class MainActivity extends Activity implements Host {
     private void build(Bundle ui) {
         theme = new Theme(this, dark(), model.ui.getBoolean("reduceMotion", false));
         tab = ui.getInt("tab", tab);
+        if (ui.getInt("navVersion", 0) == 0 && tab == 2) tab = 3;
+        tab = Math.max(0, Math.min(3, tab));
         root = new FrameLayout(this);
         root.setBackgroundColor(theme.bg);
         pages = new FrameLayout(this);
         root.addView(pages, new FrameLayout.LayoutParams(-1, -1));
         home = new HomePage(this);
         surfaces = new SurfacesPage(this);
+        icons = new IconsPage(this);
         settings = new SettingsPage(this);
-        all = new Page[] {home, surfaces, settings};
+        all = new Page[] {home, surfaces, icons, settings};
         for (int i = 0; i < all.length; i++) {
             View v = all[i].view();
             v.setVisibility(i == tab ? View.VISIBLE : View.GONE);
@@ -103,8 +109,9 @@ public final class MainActivity extends Activity implements Host {
         };
         Bundle surfaceState = ui.getBundle("surfaces");
         if (surfaceState != null) surfaces.restore(surfaceState);
-        nav = new GlassNav(this, theme, new String[] {getString(R.string.nav_home), getString(R.string.nav_surfaces), getString(R.string.settings)},
-                new Icon[] {Icon.HOME, Icon.LAYERS, Icon.SETTINGS}, tab, this::go);
+        nav = new GlassNav(this, theme, new String[] {getString(R.string.nav_home), getString(R.string.nav_surfaces),
+                getString(R.string.nav_icons), getString(R.string.settings)},
+                new Icon[] {Icon.HOME, Icon.LAYERS, Icon.BELL, Icon.SETTINGS}, tab, this::go);
         FrameLayout.LayoutParams np = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
         root.addView(nav, np);
         nav.source(all[tab].view());
@@ -145,7 +152,7 @@ public final class MainActivity extends Activity implements Host {
         bindAll();
         if (scrolls != null)
             for (int i = 0; i < all.length && i < scrolls.length; i++) {
-                final int y = scrolls[i], index = i;
+                final int y = scrolls[i], index = ui.getInt("navVersion", 0) == 0 && i == 2 ? 3 : i;
                 if (index != 1) all[index].scroller().post(() -> all[index].scroller().scrollTo(0, y));
             }
     }
@@ -179,6 +186,7 @@ public final class MainActivity extends Activity implements Host {
     private Bundle saveUi() {
         Bundle b = new Bundle();
         b.putInt("tab", tab);
+        b.putInt("navVersion", 1);
         int[] scrolls = new int[all.length];
         for (int i = 0; i < all.length; i++) scrolls[i] = all[i].scroller().getScrollY();
         b.putIntArray("scrolls", scrolls);
@@ -236,6 +244,7 @@ public final class MainActivity extends Activity implements Host {
         b.putBoolean("permissionPending", permissionPending);
         b.putInt("pendingCount", pendingCount);
         b.putInt("pendingDelay", pendingDelay);
+        b.putString("pendingIconPackage", pendingIconPackage);
     }
 
     @Override
@@ -296,6 +305,7 @@ public final class MainActivity extends Activity implements Host {
     @Override
     public void preview(String key, String value, Controls.Channel channel) {
         model.draft(key, value);
+        if (IconsPage.isIconKey(key)) model.notifyChanged();
         surfaces.previewChanged(channel);
     }
 
@@ -420,11 +430,36 @@ public final class MainActivity extends Activity implements Host {
                 .addCategory(Intent.CATEGORY_OPENABLE), REQ_IMPORT);
     }
 
+    @Override public void importNotificationIcon(String packageName) {
+        if (!NotificationIconStore.validPackage(packageName)) {
+            feedback(getString(R.string.notification_icon_error));
+            return;
+        }
+        pendingIconPackage = packageName;
+        startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("image/png")
+                .addCategory(Intent.CATEGORY_OPENABLE), REQ_ICON_IMPORT);
+    }
+
     @Override
     protected void onActivityResult(int request, int result, Intent intent) {
         super.onActivityResult(request, result, intent);
         if (result != RESULT_OK || intent == null || intent.getData() == null) return;
         Uri uri = intent.getData();
+        if (request == REQ_ICON_IMPORT) {
+            String iconPackage = pendingIconPackage;
+            pendingIconPackage = null;
+            if (!NotificationIconStore.validPackage(iconPackage)) return;
+            io.execute(() -> {
+                try (java.io.InputStream in = getContentResolver().openInputStream(uri)) {
+                    NotificationIconStore.importPng(this, iconPackage, in);
+                    model.repo.iconAssetsChanged();
+                    deliver(() -> feedback(getString(R.string.notification_icon_saved)));
+                } catch (Exception e) {
+                    deliver(() -> feedback(getString(R.string.operation_failed, e.getMessage())));
+                }
+            });
+            return;
+        }
         if (request != REQ_EXPORT && request != REQ_IMPORT) return;
         boolean enabled = model.state().enabled;
         java.util.Map<String, String> values = model.repo.overrides();

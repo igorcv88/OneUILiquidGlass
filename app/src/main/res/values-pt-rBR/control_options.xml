@@ -2,6 +2,8 @@
 <resources>
     <string name="control_option_3c5d28cf50f3">Acompanha o cartão durante gestos</string>
     <string name="control_option_8d954776f1cd">Adaptativa</string>
+    <string name="control_option_0a0e3b18cbfb">Adaptativa original</string>
+    <string name="control_option_a33344113b2b">Adaptação Samsung</string>
     <string name="control_option_20ec175d596a">Automática</string>
     <string name="control_option_c9c992be184b">Automático</string>
     <string name="control_option_ea8c83e1957a">Caminho antigo; pode atrasar</string>
@@ -10,12 +12,18 @@
     <string name="control_option_78c9135a6847">Captura completa</string>
     <string name="control_option_5f086ed5c78c">Captura só a faixa da borda</string>
     <string name="control_option_4e1de10ed349">Contorno</string>
+    <string name="control_option_308ef5ac8d40">Cor fixa personalizada</string>
+    <string name="control_option_e03b6581feae">Cores independentes para fundo claro e escuro</string>
+    <string name="control_option_8809a6227cfb">Desativado</string>
     <string name="control_option_9c6166ed846c">Desfoque mais largo e cores mais vivas</string>
     <string name="control_option_164bf4ddd36b">Desligada</string>
+    <string name="control_option_ed7c90e94c1f">Duas cores personalizadas</string>
+    <string name="control_option_408f8a407d99">Escolhe uma cor para fundo claro e outra para colorido</string>
     <string name="control_option_bc7b88d5097a">Escurecida</string>
     <string name="control_option_df4175832ef6">Espacial</string>
     <string name="control_option_5c59ae60921b">Exige a lente dinâmica</string>
     <string name="control_option_cbfb56969ab1">Falhou em alguns firmwares</string>
+    <string name="control_option_286cbcfd1496">Força o tratamento de ícones elegíveis, inclusive os personalizados</string>
     <string name="control_option_783067a8aca7">Física</string>
     <string name="control_option_2212a1a4fd6a">Gestos laterais</string>
     <string name="control_option_9a216516ec5f">Grade de teste</string>
@@ -27,6 +35,8 @@
     <string name="control_option_c908bfdb54ef">Lente suave</string>
     <string name="control_option_18f5e7ca18f6">Luminância da borda</string>
     <string name="control_option_580a7b605fb0">Mais seguro, some com mais frequência</string>
+    <string name="control_option_d0d686e5e4d9">Mantém a cor automática atual do sistema</string>
+    <string name="control_option_b6339a07c37d">Mantém os ícones como o sistema os desenhou</string>
     <string name="control_option_26f136eba6ff">Mapa de tons da lente</string>
     <string name="control_option_d08dd5f2deae">Mapa verde da luz local na borda do bloqueio</string>
     <string name="control_option_439524094087">Marcação magenta/ciano</string>
@@ -42,8 +52,10 @@
     <string name="control_option_9935aac96730">No cartão</string>
     <string name="control_option_31310ebb3669">O mesmo material dos pop-ups</string>
     <string name="control_option_d8e00743b1a4">Padrão</string>
+    <string name="control_option_bc563cb30bb5">Padrão: preserva os aplicativos do usuário e seus packs</string>
     <string name="control_option_efd3e6962023">Para comparar no aparelho</string>
     <string name="control_option_cb302177b476">Pode atrasar atrás do movimento</string>
+    <string name="control_option_797f1acc98bc">Preto ou branco conforme o fundo, como atualmente</string>
     <string name="control_option_5e752f3cd7ac">Qualquer toque</string>
     <string name="control_option_5a83874989ff">Quatro cantos</string>
     <string name="control_option_808eb0b380d3">Raio único</string>
@@ -52,10 +64,16 @@
     <string name="control_option_b21f94257814">Sem amostragem</string>
     <string name="control_option_787bedf67271">Sem forma</string>
     <string name="control_option_9af72f16deab">Sem proteção</string>
+    <string name="control_option_c004160342cd">Sistema</string>
+    <string name="control_option_340a3940c102">Sistema e originais confirmados</string>
+    <string name="control_option_04ffe2381fff">Sistema e serviços</string>
     <string name="control_option_655a7c7b8a0f">Somente o desfoque do sistema</string>
     <string name="control_option_4ec6fa29d300">Só movimentos horizontais e dois dedos</string>
     <string name="control_option_0706bd786e3a">Textura sintética numerada</string>
+    <string name="control_option_a4114a83f4c6">Todos</string>
+    <string name="control_option_84a1c49268ae">Trata aplicativos comuns só quando o ícone exibido corresponde ao original</string>
     <string name="control_option_50050d5b621c">Ultra</string>
+    <string name="control_option_fa23538ab231">Uma cor para todos os fundos</string>
     <string name="control_option_d20532b2986d">Vidro padrão sem captura</string>
     <string name="control_option_d7f8ab68ea2b">Véu fixo</string>
 </resources>

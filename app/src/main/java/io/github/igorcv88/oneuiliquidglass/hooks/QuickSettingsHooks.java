@@ -116,6 +116,7 @@ public final class QuickSettingsHooks {
         boolean rimDone, fillDone;
         /** Verified QuickTile circle, whose retained background node gets a draw-time palette. */
         Kind discKind;
+        Object discModel;
         int nativeDiscFill;
         long discPacked;
         boolean discRegistered;
@@ -150,7 +151,7 @@ public final class QuickSettingsHooks {
         // definite-assignment check accepts the callbacks, even in an SDK-free CI build.
         this.discBackground = new QsDiscBackgroundHooks(loader, this::enabled, () -> style,
                 () -> QuickSettingsHooks.this.backdrop.tone(),
-                () -> QuickSettingsHooks.this.backdrop.ink(false));
+                () -> QuickSettingsHooks.this.backdrop.ink(false), tileProbe::disc);
         this.backdrop = new QsBackdrop(this::enabled, edge::expansion,
                 () -> {
                     // A full refresh also covers the crossfade's first frame: without this the
@@ -258,7 +259,7 @@ public final class QuickSettingsHooks {
                     if(tracked instanceof Pending) {
                         Pending q=(Pending)tracked;
                         q.discRegistered=true;
-                        discBackground.element(p.thisObject,q.discKind,q.nativeDiscFill);
+                        discBackground.element(p.thisObject,q.discKind,q.nativeDiscFill,q.discModel);
                     }
                     Object q = p.getObjectExtra("oulgEdge");
                     if (q instanceof Pending) edge.element(p.thisObject, ((Pending) q).edgeShape, ((Pending) q).edgeBorder, ((Pending) q).outer, ((Pending) q).token);
@@ -538,6 +539,7 @@ public final class QuickSettingsHooks {
                         Pending q=pending.get();
                         if(q!=null) {
                             q.discKind=discKind;
+                            q.discModel=model;
                             q.nativeDiscFill=nativeColor;
                             q.discPacked=QuickSettingsGlass.color(mapped);
                         }

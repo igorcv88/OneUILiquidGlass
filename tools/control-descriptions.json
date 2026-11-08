@@ -1,4 +1,15 @@
 {
+  "iconcardsize": ["Scales only treated notification glyphs inside their existing slots in the shade, heads-up and lock screen. Unmodified icons keep their native size.", "Ajusta só o desenho dos ícones tratados dentro do espaço existente na central, nos pop-ups e no bloqueio. Ícones preservados continuam no tamanho nativo."],
+  "statusiconsize": ["Scales only eligible treated notification glyphs in the status bar; preserves the other icons and the native slot width.", "Ajusta só os ícones de notificação tratados na barra superior; mantém os demais e a largura nativa dos espaços."],
+  "statusmaxicons": ["Zero preserves Samsung's maximum. Other values use One UI 9's overflow limit and status bar ViewModel if present. Restart System UI after changing the cap to recreate the ViewModel. Available width still limits what fits.", "Zero preserva o limite Samsung. Outros valores usam o overflow e o ViewModel da barra superior na One UI 9, se disponíveis. Reinicie a System UI depois de mudar o limite para recriar o ViewModel. A largura disponível ainda limita os ícones."],
+  "iconinkmode": ["Original adaptive black/white, one fixed color, or a separate color for light and colored notification backgrounds.", "Preto/branco adaptativo original, uma cor fixa ou cores diferentes para fundo claro e colorido das notificações."],
+  "iconfixedink": ["Used when notification icon color is set to Fixed.", "Usada quando a cor dos ícones das notificações está em Fixa."],
+  "iconlightink": ["Used over light notification backgrounds in two-color mode.", "Usada sobre fundo claro das notificações no modo de duas cores."],
+  "icondarkink": ["Used over dark or colored notification backgrounds in two-color mode.", "Usada sobre fundo escuro ou colorido das notificações no modo de duas cores."],
+  "statusinkmode": ["Keep Samsung's adaptive status-bar colors by default, use one fixed color, or choose two colors by background. Coverage depends on the One UI dark receiver classes.", "Mantém as cores adaptativas Samsung por padrão, usa uma cor fixa ou escolhe duas cores por fundo. A cobertura depende das classes de adaptação da One UI."],
+  "statusfixedink": ["Used when status bar color is set to Fixed.", "Usada quando a cor da barra de status está em Fixa."],
+  "statuslightink": ["Used over light backgrounds when the status bar uses two custom colors.", "Usada sobre fundos claros quando a barra de status usa duas cores personalizadas."],
+  "statusdarkink": ["Used over dark or colored backgrounds when the status bar uses two custom colors.", "Usada sobre fundos escuros ou coloridos quando a barra de status usa duas cores personalizadas."],
   "liveradius": [
     "Controls the standard glass blur in pop-ups. Lock screen cards follow this value when their blur is automatic.",
     "Controla o desfoque do vidro padrão nos pop-ups. Os cartões da tela de bloqueio seguem esse valor quando o desfoque está em automático."
@@ -186,6 +197,10 @@
   "icontone": [
     "Matches monochrome notification icons to the text color.",
     "Ajusta os ícones monocromáticos das notificações à cor do texto."
+  ],
+  "iconmode": [
+    "Controls which notification app icons are converted to a background-free monochrome glyph. System and service icons are treated by default; user-selected icon packs are preserved.",
+    "Define quais ícones de aplicativos nas notificações serão convertidos em símbolos monocromáticos sem fundo. Ícones do sistema e de serviços são tratados por padrão; os packs escolhidos pelo usuário são preservados."
   ],
   "shadescaleveil": [
     "Adjusts the fallback contrast veil while a shade card is resized.",

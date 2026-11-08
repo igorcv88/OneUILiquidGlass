@@ -133,7 +133,7 @@ final class Foreground {
      * corner of the sender's avatar and stayed white on light glass (WhatsApp, device screenshot
      * 26/10): it is an icon view of its own, which the id test alone may miss.
      */
-    private static boolean smallIcon(View v) {
+    static boolean smallIcon(View v) {
         int id = v.getId();
         if (id == View.NO_ID || (id >>> 24) == 0 || !io.github.igorcv88.oneuiliquidglass.glass.Tuning.get().iconTone) return false;
         try {
@@ -143,6 +143,27 @@ final class Foreground {
             String cls = v.getClass().getSimpleName();
             return iconView(cls) && ("android".equals(pkg) || (pkg != null && pkg.equals(host))) && !largeIconId(entry);
         } catch (RuntimeException e) { return false; }
+    }
+    /** The icon *source* selector has its own setting and must not depend on iconTone or host,
+     * which are only populated during a separate foreground-colour traversal. */
+    static boolean notificationIconCandidate(View v, String rowPackage) {
+        if (!(v instanceof ImageView)) return false;
+        int id = v.getId();
+        if (id == View.NO_ID || (id >>> 24) == 0) return false;
+        try {
+            android.content.res.Resources r = v.getResources();
+            return notificationIconCandidateId(r.getResourcePackageName(id), r.getResourceEntryName(id),
+                    v.getClass().getSimpleName(), rowPackage);
+        } catch (RuntimeException ignored) { return false; }
+    }
+    static boolean notificationIconCandidateId(String resourcePkg, String name, String className,
+                                               String rowPackage) {
+        boolean owned = "android".equals(resourcePkg) || "com.android.systemui".equals(resourcePkg)
+                || resourcePkg != null && resourcePkg.equals(rowPackage);
+        if (!owned || largeIconId(name)) return false;
+        return smallIconId(resourcePkg, name) || iconView(className)
+                || "icon".equals(name) || "small_icon".equals(name)
+                || "app_icon".equals(name) || "notification_icon".equals(name);
     }
     static boolean smallIconId(String pkg, String entry) { return "android".equals(pkg) && "icon".equals(entry); }
     /** The template classes that show an app or small icon. */
@@ -653,6 +674,14 @@ final class Foreground {
         Rec r = swapped.get(ink.key());
         return r == null || ink.color() != r.applied;
     }
+    /** Transfer icon colour ownership before the compact shelf lease saves native properties. */
+    static void releaseIconTone(ImageView view) {
+        InkAnimator.cancel(view);
+        glyph(view, false, false);
+        Rec record = swapped.remove(view);
+        if (record != null) new Icon(view).restore(record.saved);
+    }
+
     private static int walk(View v, boolean swap, boolean lightText, java.util.List<View> tracked) {
         int changed = 0;
         if (v instanceof TextView) {
@@ -672,9 +701,12 @@ final class Foreground {
                 if (record != null) record.custom = !standard(v, false);
                 shadowFor((TextView) v, swap && eligible);
             }
+        } else if (v instanceof ImageView && ShelfIconTint.owns((ImageView) v)) {
+            // The shade palette owns this glyph, including native-only monochrome icons.
         } else if (v instanceof ImageView && (chevrons.containsKey(v) || chevronId(v))) {
             changed += chevron((ImageView)v,swap,lightText)?1:0;
-        } else if (v instanceof ImageView && (glyphs.containsKey(v) || smallIcon(v))) {
+        } else if (v instanceof ImageView && !NotificationIconTreatment.managed((ImageView) v)
+                && (glyphs.containsKey(v) || smallIcon(v))) {
             // icontone turned off live restores the glyphs already swapped.
             changed += glyph((ImageView) v, swap && io.github.igorcv88.oneuiliquidglass.glass.Tuning.get().iconTone, lightText) ? 1 : 0;
         } else if (v instanceof ImageView && (((ImageView) v).getImageTintList() != null || swapped.containsKey(v))) {

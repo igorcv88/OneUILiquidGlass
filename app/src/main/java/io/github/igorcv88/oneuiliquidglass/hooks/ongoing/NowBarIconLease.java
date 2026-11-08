@@ -1,30 +1,56 @@
 package io.github.igorcv88.oneuiliquidglass.hooks.ongoing;
 
 import android.content.res.ColorStateList;
+import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffColorFilter;
 import android.graphics.drawable.AdaptiveIconDrawable;
 import android.graphics.drawable.Drawable;
+import android.graphics.drawable.VectorDrawable;
 import android.view.View;
 import android.widget.ImageView;
 import java.lang.ref.WeakReference;
 
 /** The eligible Now Bar's native AdaptiveIconDrawable already contains a monochrome glyph. */
 final class NowBarIconLease {
+    interface InstalledIconSource {
+        Drawable resolve(ImageView target, String packageName) throws PackageManager.NameNotFoundException;
+    }
+
+    private final InstalledIconSource installedIconSource;
+
+    NowBarIconLease() {
+        this((target, packageName) -> target.getContext().getPackageManager().getApplicationIcon(packageName));
+    }
+
+    NowBarIconLease(InstalledIconSource installedIconSource) {
+        this.installedIconSource = installedIconSource;
+    }
+
     private WeakReference<ImageView> image = new WeakReference<>(null);
     // The ImageView stops owning the native drawable as soon as the monochrome glyph replaces it.
     // Keep it strongly for the active lease; only views/card references remain weak.
     private Drawable original;
+    private String activePackage;
     private WeakReference<Drawable> applied = new WeakReference<>(null);
     private WeakReference<View> disc = new WeakReference<>(null);
     private ColorStateList nativeDisc, nativeTint;
+    private Drawable nativeIconBackground;
+    private int nativeIconBackgroundAlpha;
     /** DZIF has a SEPARATE MaterialCardView for the icon in the expanded Now Bar. */
     private WeakReference<View> expandedDisc = new WeakReference<>(null);
     private ColorStateList nativeExpandedDisc;
     private long generation, nextSample;
     private Boolean lightBackdrop;
     private int ink = Color.WHITE;
+    private WeakReference<ImageView> rejectedView = new WeakReference<>(null);
+    private WeakReference<Drawable> rejectedDrawable = new WeakReference<>(null);
+    private String rejectedPackage;
+    // Samsung recreates the same native vector on binds. Resolve the installed adaptive
+    // monochrome layer once per package, not through PackageManager on every rebind.
+    private String resolvedPackage;
+    private Drawable.ConstantState resolvedOfficialMono;
 
     private void contrast(ImageView target) {
         long now = android.os.SystemClock.uptimeMillis();
@@ -55,32 +81,145 @@ final class NowBarIconLease {
 
     ImageView target() { return image.get(); }
 
-    void sync(ImageView target, boolean glass) {
+    void sync(ImageView target, boolean glass) { sync(target, glass, null); }
+
+    /** Secondary icons share the expanded header's sampled tone; they do not sample twice. */
+    void syncWithoutSampling(ImageView target, boolean glass, String packageName) {
+        sync(target, glass, packageName, false);
+    }
+
+    Boolean sampledBackdrop() { return lightBackdrop; }
+
+    /** The plugin can flatten an app's launcher into BitmapDrawable/VectorDrawable. When it
+     * does, try the installed package's official monochrome adaptive layer. Never tint the
+     * flattened bitmap itself: that would turn a colourful square into a solid square. */
+    void sync(ImageView target, boolean glass, String packageName) {
+        sync(target, glass, packageName, true);
+    }
+
+    private void sync(ImageView target, boolean glass, String packageName, boolean sample) {
         if (!glass || target == null) { restore(); return; }
-        if (image.get() == target && target.getDrawable() == applied.get() && applied.get() != null) {
+        if (image.get() == target && target.getDrawable() == applied.get() && applied.get() != null
+                && java.util.Objects.equals(activePackage, packageName)) {
             if (target.getImageTintList() != null) {
                 nativeTint = target.getImageTintList();
                 target.setImageTintList(null);
             }
             transparentDisc(target);
-            contrast(target);
+            transparentIconBackground(target);
+            if (sample) contrast(target);
             return;
         }
         restore();
         Drawable nativeIcon = target.getDrawable();
-        if (!(nativeIcon instanceof AdaptiveIconDrawable)) return;
-        Drawable glyph = ((AdaptiveIconDrawable) nativeIcon).getMonochrome();
-        if (glyph == null || glyph.getConstantState() == null) return;
-        Drawable mono = glyph.getConstantState().newDrawable(target.getResources()).mutate();
+        if (nativeIcon == null) return; // A blank Samsung placeholder must remain blank.
+        if (rejectedView.get() == target && rejectedDrawable.get() == nativeIcon
+                && java.util.Objects.equals(rejectedPackage, packageName)) return;
+        Drawable glyph = nativeIcon instanceof AdaptiveIconDrawable
+                ? ((AdaptiveIconDrawable) nativeIcon).getMonochrome() : null;
+        boolean fromApp = false;
+        if ((glyph == null || glyph.getConstantState() == null) && packageName != null) {
+            if (!packageName.equals(resolvedPackage)) {
+                resolvedPackage = packageName;
+                resolvedOfficialMono = null;
+                try {
+                    Drawable launcher = installedIconSource.resolve(target, packageName);
+                    if (launcher instanceof AdaptiveIconDrawable) {
+                        Drawable official = ((AdaptiveIconDrawable) launcher).getMonochrome();
+                        if (official != null) resolvedOfficialMono = official.getConstantState();
+                    }
+                } catch (PackageManager.NameNotFoundException | RuntimeException ignored) { }
+            }
+            if (resolvedOfficialMono != null) {
+                glyph = resolvedOfficialMono.newDrawable();
+                fromApp = true;
+            }
+        }
+        // DZIF's Clock ongoing header supplies a genuine vector small-icon glyph and
+        // a separate opaque background on NotificationRowIconView. Only this verified
+        // native notification view may use the vector itself as a monochrome mask.
+        if ((glyph == null || glyph.getConstantState() == null)
+                && (nativeNotificationVector(target, nativeIcon)
+                || clockVector(target, nativeIcon, packageName))) glyph = nativeIcon;
+        if (glyph == null || glyph.getConstantState() == null) {
+            rejectedView = new WeakReference<>(target);
+            rejectedDrawable = new WeakReference<>(nativeIcon);
+            rejectedPackage = packageName;
+            return;
+        }
+        rejectedView.clear();
+        rejectedDrawable.clear();
+        rejectedPackage = null;
+        Drawable mono;
+        try {
+            mono = (fromApp ? glyph.getConstantState().newDrawable()
+                    : glyph.getConstantState().newDrawable(target.getResources())).mutate();
+        } catch (RuntimeException | LinkageError ignored) { return; }
+        if (io.github.igorcv88.oneuiliquidglass.diagnostics.Probe.trace && fromApp)
+            io.github.igorcv88.oneuiliquidglass.diagnostics.Probe.log("NOWBAR_ICON_FALLBACK",
+                    "pkg=" + packageName + " native="
+                            + (nativeIcon == null ? "null" : nativeIcon.getClass().getSimpleName())
+                            + " source=installedMonochrome");
         mono.setColorFilter(new PorterDuffColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN));
         image = new WeakReference<>(target);
         original = nativeIcon;
+        activePackage = packageName;
         applied = new WeakReference<>(mono);
         nativeTint = target.getImageTintList();
         target.setImageTintList(null);
         target.setImageDrawable(mono);
         transparentDisc(target);
-        contrast(target);
+        transparentIconBackground(target);
+        if (sample) contrast(target);
+    }
+
+    /** One UI 9 Clock owns these two plain ImageViews outside notification rows. */
+    static boolean clockVector(ImageView target, Drawable drawable, String packageName) {
+        if (!"com.sec.android.app.clockpackage".equals(packageName)
+                || !(drawable instanceof VectorDrawable) || target == null) return false;
+        try {
+            String id = target.getResources().getResourceEntryName(target.getId());
+            return clockVectorId(id);
+        } catch (RuntimeException ignored) { return false; }
+    }
+
+    /** The same Clock glyph occurs in three independent Samsung surfaces on DZIF. */
+    static boolean clockVectorId(String id) {
+        return "nowbar_icon".equals(id) || "capsule_item_app_icon".equals(id)
+                || "ongoing_activity_expand_left_image".equals(id);
+    }
+
+    static boolean nativeNotificationVector(ImageView target, Drawable drawable) {
+        if (!(drawable instanceof VectorDrawable) || target == null) return false;
+        try {
+            String id = target.getResources().getResourceEntryName(target.getId());
+            // These two exact Samsung IDs carry small, single-ink symbols even on plain
+            // ImageView; never tint media art, progress bars or arbitrary app vectors.
+            if ("ongoing_activity_secondary_info_icon".equals(id)
+                    || "ongoing_activity_expand_right_image".equals(id)) return true;
+            if (!"com.android.internal.widget.NotificationRowIconView".equals(
+                    target.getClass().getName())) return false;
+            return "ongoing_activity_expand_left_image".equals(id)
+                    || "ongoing_activity_collapsed_icon".equals(id)
+                    || "icon".equals(id);
+        } catch (RuntimeException ignored) { return false; }
+    }
+
+    /** Remove only the icon ImageView's own native disc; preserve the drawable for restore. */
+    private void transparentIconBackground(ImageView target) {
+        Drawable current = target.getBackground();
+        if (current != nativeIconBackground) {
+            restoreIconBackground();
+            nativeIconBackground = current;
+            nativeIconBackgroundAlpha = current == null ? 255 : current.getAlpha();
+        }
+        if (current != null && current.getAlpha() != 0) current.mutate().setAlpha(0);
+    }
+
+    private void restoreIconBackground() {
+        if (nativeIconBackground != null && nativeIconBackground.getAlpha() == 0)
+            nativeIconBackground.setAlpha(nativeIconBackgroundAlpha);
+        nativeIconBackground = null;
     }
 
     private void transparentDisc(ImageView target) {
@@ -128,6 +267,10 @@ final class NowBarIconLease {
     }
 
     void restore() {
+        // Invisible/empty placeholders run through onSync too; avoid a no-op release each frame.
+        if (original == null && image.get() == null && nativeDisc == null
+                && nativeExpandedDisc == null && nativeIconBackground == null
+                && nativeTint == null) return;
         generation++;
         nextSample = 0;
         lightBackdrop = null;
@@ -141,8 +284,10 @@ final class NowBarIconLease {
         nativeTint = null;
         restoreDisc();
         restoreExpandedDisc();
+        restoreIconBackground();
         image.clear();
         original = null;
+        activePackage = null;
         applied.clear();
     }
 

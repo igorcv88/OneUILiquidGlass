@@ -60,6 +60,19 @@ public class NativeIdsTest {
         assertSame(replacement, NativeIds.find(card, "icon"));
     }
 
+    @Test public void descendantInflationInvalidatesAThrottledMissImmediately() {
+        FrameLayout expanded = new FrameLayout(activity);
+        FrameLayout holder = new FrameLayout(activity);
+        LinearLayout nested = new LinearLayout(activity);
+        expanded.addView(holder);
+        holder.addView(nested);
+        int empty = NativeIds.childrenSignature(expanded);
+        assertNull(NativeIds.find(expanded, "resource_not_present"));
+        nested.addView(new ImageView(activity));
+        assertNotEquals("new children must bypass the 750 ms negative cache",
+                empty, NativeIds.childrenSignature(expanded));
+    }
+
     @Test public void missingViewsAreNull() {
         FrameLayout card = card();
         assertNull(NativeIds.find(card, "title"));

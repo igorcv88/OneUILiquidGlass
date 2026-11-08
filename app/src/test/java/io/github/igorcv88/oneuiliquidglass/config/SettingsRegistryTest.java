@@ -28,7 +28,7 @@ public class SettingsRegistryTest {
                         root().resolve(
                                         "app/src/main/java/io/github/igorcv88/oneuiliquidglass/glass/Tuning.java"));
         java += read(root().resolve("app/src/main/java/io/github/igorcv88/oneuiliquidglass/glass/QsStyle.java"));
-        Matcher j = Pattern.compile("(?:number|prop|color)\\(\"([a-z0-9.]+)\"").matcher(java);
+        Matcher j = Pattern.compile("(?:number|prop|color|iconColor)\\(\"([a-z0-9.]+)\"").matcher(java);
         while (j.find()) readers.add(j.group(1));
         Matcher c =
                 Pattern.compile("debug\\.oulg\\.([a-z0-9.]+)")

@@ -88,6 +88,15 @@ public final class ShadeTone implements CaptureHub.Client {
         return fresh?grid:null;
     }
 
+    /** Read the palette paired with a live preview without advancing the scene's tone gate.
+     * The shelf can use this when its own shade-opening callback has not committed a grid yet. */
+    public static Boolean liveBodyLight(ToneGrid grid) {
+        PanelScene.Snapshot snapshot = lastPublished;
+        if (grid == null || snapshot == null || snapshot.grid == null
+                || snapshot.grid.takenAt != grid.takenAt) return null;
+        return snapshot.body == QsScene.Tone.LIGHT_SCENE;
+    }
+
     private static final class Preview implements CaptureHub.Client,View.OnAttachStateChangeListener {
         private final WeakReference<View> anchor;
         private final BooleanSupplier enabled;
@@ -142,7 +151,12 @@ public final class ShadeTone implements CaptureHub.Client {
      * for on the first frame of the opening.
      */
     public static Runnable prefetch(View panel, int generation, java.util.function.Consumer<ToneGrid> result) {
-        if (!CaptureHub.available()) { result.accept(null); return () -> {}; }
+        if (!CaptureHub.available()) {
+            if (Probe.trace) Probe.log("SHADE_CAPTURE_UNAVAILABLE", "generation=" + generation
+                    + " reason=" + CaptureHub.unavailableReason());
+            result.accept(null);
+            return () -> {};
+        }
         Prefetch client = new Prefetch(panel, generation, result);
         CaptureHub.register(client);
         return client::cancel;

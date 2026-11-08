@@ -494,6 +494,47 @@ public final class Controls {
         put(c("icontone", "Ajustar ícone pequeno").fmt(Format.TOGGLE).in(COLOR, ADV).all()
                 .help("O ícone monocromático da notificação acompanha a cor do texto.")
                 .show(BEHAV, Channel.NONE));
+        put(c("iconmode", "Origem dos ícones de notificações").fmt(Format.CHOICE).in(COLOR, ADV).all()
+                .choice("0", "Desativado", "Mantém os ícones como o sistema os desenhou")
+                .choice("1", "Sistema e serviços", "Padrão: preserva os aplicativos do usuário e seus packs")
+                .choice("2", "Sistema e originais confirmados", "Trata aplicativos comuns só quando o ícone exibido corresponde ao original")
+                .choice("3", "Todos", "Força o tratamento de ícones elegíveis, inclusive os personalizados")
+                .help("Preserva avatares, capas e imagens de mídia. Opções completas nas configurações.")
+                .show(BEHAV, Channel.NONE));
+        put(c("iconcardsize", "Tamanho dos ícones das notificações").fmt(Format.PERCENT_1).in(COLOR, STD).all()
+                .help("Tamanho do desenho dos ícones tratados nos cartões da central, pop-ups e bloqueio. Não modifica ícones preservados.")
+                .show(BEHAV, Channel.NONE));
+        put(c("statusiconsize", "Tamanho dos ícones da barra de status").fmt(Format.PERCENT_1).in(COLOR, STD).all()
+                .help("Altera só o desenho dos ícones tratados na barra superior, sem reduzir os demais nem mudar a largura da posição reservada.")
+                .show(BEHAV, Channel.NONE));
+        put(c("statusmaxicons", "Máximo de ícones visíveis").fmt(Format.COUNT).off("Sistema").in(COLOR, ADV).all()
+                .help("Usa o limite de overflow e o ViewModel da barra de status na One UI 9. Para aumentar o limite após mudar o valor, reinicie a System UI para recriar o ViewModel. O espaço disponível ainda limita quantos cabem.")
+                .show(BEHAV, Channel.NONE));
+        put(c("iconinkmode", "Cor dos ícones nas notificações").fmt(Format.CHOICE).in(COLOR, STD).all()
+                .choice("0", "Adaptativa original", "Preto ou branco conforme o fundo, como atualmente")
+                .choice("1", "Cor fixa personalizada", "Uma cor para todos os fundos")
+                .choice("2", "Duas cores personalizadas", "Escolhe uma cor para fundo claro e outra para colorido")
+                .help("Padrão preto/branco, cor única ou duas cores selecionadas para o fundo de cada notificação.")
+                .show(BEHAV, Channel.NONE));
+        put(c("iconfixedink", "Cor fixa nas notificações").fmt(Format.COLOR).in(COLOR, ADV).all()
+                .help("Usada somente quando o modo de cor das notificações está fixo.").show(BEHAV, Channel.NONE));
+        put(c("iconlightink", "Ícones sobre fundo claro").fmt(Format.COLOR).in(COLOR, ADV).all()
+                .help("Usada para o material claro no modo de duas cores.").show(BEHAV, Channel.NONE));
+        put(c("icondarkink", "Ícones sobre fundo colorido").fmt(Format.COLOR).in(COLOR, ADV).all()
+                .help("Usada para o material escuro ou colorido no modo de duas cores.").show(BEHAV, Channel.NONE));
+        put(c("statusinkmode", "Cor da barra de status").fmt(Format.CHOICE).in(COLOR, STD).all()
+                .choice("0", "Adaptação Samsung", "Mantém a cor automática atual do sistema")
+                .choice("1", "Cor fixa personalizada", "Uma cor para todos os fundos")
+                .choice("2", "Duas cores personalizadas", "Cores independentes para fundo claro e escuro")
+                .help("Conserva o controle nativo Samsung por padrão. As cores personalizadas dependem dos receptores de cor do firmware.")
+                .show(BEHAV, Channel.NONE));
+        put(c("statusfixedink", "Cor fixa da barra de status").fmt(Format.COLOR).in(COLOR, ADV).all()
+                .help("Cor personalizada para relógio, bateria, sinal e notificações, quando os receptores Samsung permitem.")
+                .show(BEHAV, Channel.NONE));
+        put(c("statuslightink", "Barra de status sobre fundo claro").fmt(Format.COLOR).in(COLOR, ADV).all()
+                .help("Cor dos indicadores no modo claro da barra superior.").show(BEHAV, Channel.NONE));
+        put(c("statusdarkink", "Barra de status sobre fundo colorido").fmt(Format.COLOR).in(COLOR, ADV).all()
+                .help("Cor dos indicadores no modo escuro da barra superior.").show(BEHAV, Channel.NONE));
         put(c("shadescaleveil", "Véu durante animações").fmt(Format.PERCENT_255)
                 .in(COLOR, ADV).on(SH)
                 .help("Véu de reserva enquanto um cartão da central é redimensionado.")

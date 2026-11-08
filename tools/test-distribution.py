@@ -27,7 +27,7 @@ class DistributionTests(unittest.TestCase):
         java=(ROOT/'app/src/main/java/io/github/igorcv88/oneuiliquidglass/glass/Tuning.java').read_text()
         java+=(ROOT/'app/src/main/java/io/github/igorcv88/oneuiliquidglass/glass/QsStyle.java').read_text()
         c=(ROOT/'sfhook/oulg_sf.c').read_text();registry=(ROOT/'app/src/main/java/io/github/igorcv88/oneuiliquidglass/config/SettingsRegistry.java').read_text()
-        readers=set(re.findall(r'(?:number|prop|color)\("([a-z0-9.]+)"',java))|set(re.findall(r'debug\.oulg\.([a-z0-9.]+)',c))
+        readers=set(re.findall(r'(?:number|prop|color|iconColor)\("([a-z0-9.]+)"',java))|set(re.findall(r'debug\.oulg\.([a-z0-9.]+)',c))
         specs=set(re.findall(r'add\(new SettingSpec\("([a-z0-9.]+)"',registry))
         self.assertEqual(len(specs),len(readers));self.assertEqual(readers,specs)
     def test_compositor_defaults_are_valid_helper_decimals(self):

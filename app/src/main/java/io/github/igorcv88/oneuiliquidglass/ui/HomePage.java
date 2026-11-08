@@ -12,8 +12,7 @@ import java.util.*;
 
 /**
  * Início: state in one line, the master switch, the three surfaces with their own switch,
- * the test as the main action and styles. At most one notice, only when something needs the
- * person.
+ * the test as the main action and styles. Pending icon edits can coexist with a lens notice.
  */
 public final class HomePage implements Page {
     private final Host host;
@@ -277,7 +276,7 @@ public final class HomePage implements Page {
         notice(st, sync);
     }
 
-    /** The single most useful notice, or none. */
+    /** Pending icon edits and, independently, the most useful general notice. */
     private void notice(ControlState st, AppModel.Sync sync) {
         AppModel m = host.model();
         android.app.Activity a = host.activity();
@@ -285,6 +284,7 @@ public final class HomePage implements Page {
         LinearLayout n = null;
         Map<String, String> pending = m.mode() == Mode.DYNAMIC_LENS ? m.pendingCompositor() : Collections.emptyMap();
         List<String> conflicts = m.conflicts();
+        int pendingIcons = m.pendingIcons().size();
         CompositorValues.Outcome last = m.lastApply();
         if (last == CompositorValues.Outcome.NOT_LOADED) {
             key = "lens-failed";
@@ -307,9 +307,13 @@ public final class HomePage implements Page {
             key = "conflict" + conflicts.size();
             n = Ui.notice(a, t, Ui.Tone.INFO, conflicts.size() == 1 ? a.getString(R.string.home_conflict_one) : a.getString(R.string.home_conflict_many, conflicts.size()), a.getString(R.string.home_review), host::openConflicts);
         } else key = "";
-        if (key.equals(noticeKey)) return;
-        noticeKey = key;
+        String combinedKey = key + ":icons:" + pendingIcons;
+        if (combinedKey.equals(noticeKey)) return;
+        noticeKey = combinedKey;
         noticeSlot.removeAllViews();
+        if (pendingIcons != 0) noticeSlot.addView(Ui.notice(a, t, Ui.Tone.INFO,
+                a.getResources().getQuantityString(R.plurals.icons_pending, pendingIcons, pendingIcons),
+                a.getString(R.string.home_apply), () -> InfoSheets.applyIcons(host)), Ui.match());
         if (n != null) noticeSlot.addView(n, Ui.match());
     }
 }

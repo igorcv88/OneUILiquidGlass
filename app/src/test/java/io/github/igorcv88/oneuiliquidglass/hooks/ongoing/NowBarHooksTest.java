@@ -6,6 +6,7 @@ import android.app.Activity;
 import android.os.Looper;
 import android.view.View;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 import com.android.systemui.plugins.keyguardstatusview.NowBarItem;
 import com.android.systemui.shared.plugins.PluginInstance;
 import com.samsung.android.app.facewidget.presentation.NowBarMediaCardView;
@@ -80,6 +81,16 @@ public class NowBarHooksTest {
         return p;
     }
 
+    @Test public void expandedGradusHeaderWaitsForLayoutButClockDoesNot() {
+        ImageView gradus = new com.android.internal.widget.NotificationRowIconView(activity);
+        assertTrue(NowBarHooks.deferUnmeasuredExpanded(gradus, true, null));
+        assertFalse(NowBarHooks.deferUnmeasuredExpanded(gradus, false, null));
+        assertFalse(NowBarHooks.deferUnmeasuredExpanded(gradus, true, "com.sec.android.app.clockpackage"));
+        gradus.layout(0, 0, 132, 132);
+        assertFalse(NowBarHooks.deferUnmeasuredExpanded(gradus, true, null));
+        assertFalse(NowBarHooks.deferUnmeasuredExpanded(new ImageView(activity), true, null));
+    }
+
     @Test public void pluginBootstrapIsFilteredAndRunsOncePerClassloader() throws Exception {
         assertFalse(hooks.pluginLoaded(instance("com.other.plugin", NowBarHooks.AOD_COMPONENT, plugin(false))));
         assertFalse(hooks.pluginLoaded(instance(NowBarHooks.AOD_PACKAGE, "com.samsung.Other", plugin(false))));
@@ -107,6 +118,33 @@ public class NowBarHooksTest {
         assertNotNull(abi.viewMode); assertNotNull(abi.expandedColor); assertNotNull(abi.stackRefresh);
         assertNotNull(abi.expandedState); assertNotNull(abi.gradientVisible);
         assertEquals(a.class, abi.n.getDeclaringClass());
+    }
+
+    @Test public void expandedHeaderIconLookupStaysWithinTheExpandedContent() {
+        FrameLayout expanded = new FrameLayout(activity);
+        ImageView icon = new ImageView(activity);
+        icon.setId(android.R.id.icon);
+        expanded.addView(icon);
+        assertSame(icon, NowBarHooks.expandedHeaderIcon(expanded));
+        assertNull(NowBarHooks.expandedHeaderIcon(new FrameLayout(activity)));
+    }
+
+    @Test public void packageResolutionRejectsDisplayLabelsBeforeLookingUpInstalledIcons() {
+        assertNull(NowBarHooks.iconPackage(new NowBarItem("Timer", null)));
+        assertNull(NowBarHooks.iconPackage(new NowBarItem("GRADUS Treino", null)));
+        assertEquals("com.sec.android.app.clockpackage",
+                NowBarHooks.iconPackage(new NowBarItem("com.sec.android.app.clockpackage", null)));
+    }
+
+    @Test public void iconDiagnosisDistinguishesNativeVectorFromAdaptiveMonochrome() {
+        assertEquals("missing", NowBarHooks.iconState(null));
+        ImageView icon = new ImageView(activity);
+        icon.setImageDrawable(new android.graphics.drawable.VectorDrawable());
+        String vector = NowBarHooks.iconState(icon);
+        assertTrue(vector, vector.startsWith("VectorDrawable{mono=false"));
+        icon.setImageResource(io.github.igorcv88.oneuiliquidglass.R.drawable.oulg_launcher);
+        String adaptive = NowBarHooks.iconState(icon);
+        assertTrue(adaptive, adaptive.startsWith("AdaptiveIconDrawable{mono=true"));
     }
 
     @Test public void ongoingCardTakesGlassAndKeepsItAcrossBaseWriters() {

@@ -6,6 +6,8 @@ import android.database.Cursor;
 import android.database.MatrixCursor;
 import android.net.Uri;
 import android.os.Binder;
+import android.os.Bundle;
+import android.os.ParcelFileDescriptor;
 
 import io.github.igorcv88.oneuiliquidglass.config.*;
 
@@ -31,6 +33,29 @@ public final class ConfigProvider extends ContentProvider {
         } catch (android.content.pm.PackageManager.NameNotFoundException ignored) {
         }
         throw new SecurityException("Config is restricted to SystemUI and the app UID");
+    }
+
+    /** SystemUI may only report a package identifier, never message or sender details. */
+    @Override public Bundle call(String method, String arg, Bundle extras) {
+        authorize();
+        if (!"reportMissingNotificationIcon".equals(method) || extras != null
+                || !NotificationIconStore.validPackage(arg))
+            throw new IllegalArgumentException("Unsupported call");
+        NotificationIconStore.recordMissing(getContext(), arg);
+        return Bundle.EMPTY;
+    }
+
+    /** Bounded PNGs imported explicitly by the user; never exposes the app's other files. */
+    @Override public ParcelFileDescriptor openFile(Uri uri, String mode) throws java.io.FileNotFoundException {
+        authorize();
+        if (!"r".equals(mode) || !Config.AUTHORITY.equals(uri.getAuthority())
+                || uri.getQuery() != null || uri.getFragment() != null
+                || uri.getPathSegments().size() != 2
+                || !NotificationIconStore.SEGMENT.equals(uri.getPathSegments().get(0)))
+            throw new java.io.FileNotFoundException("Unsupported icon URI");
+        String pkg = uri.getPathSegments().get(1);
+        if (!NotificationIconStore.validPackage(pkg)) throw new java.io.FileNotFoundException("Invalid package");
+        return ParcelFileDescriptor.open(NotificationIconStore.file(getContext(), pkg), ParcelFileDescriptor.MODE_READ_ONLY);
     }
 
     @Override

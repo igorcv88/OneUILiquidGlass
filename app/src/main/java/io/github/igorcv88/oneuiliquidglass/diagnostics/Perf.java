@@ -21,9 +21,11 @@ package io.github.igorcv88.oneuiliquidglass.diagnostics;
 public final class Perf {
     private Perf() {}
     public static final int PREDRAW = 0, DRAW_BEFORE = 1, DRAW_AFTER = 2, GLASS_DRAW = 3, BLUR_GUARD = 4, BLUR_MUTATOR = 5, SHADE = 6,
-            EVENT = 7, ATTACH = 8, DETACH = 9, EXIT = 10, TOUCH = 11, TEXT_GUARD = 12, TUNING = 13;
+            EVENT = 7, ATTACH = 8, DETACH = 9, EXIT = 10, TOUCH = 11, TEXT_GUARD = 12, TUNING = 13,
+            COMPACT_ICON = 14, CAPTURE_IO = 15, LIVE_DRAW = 16, QS_PREDRAW = 17;
     private static final String[] NAMES = {"predraw", "drawBefore", "drawAfter", "glassDraw", "blurGuard", "blurMutator", "shade",
-            "event", "attach", "detach", "exit", "touch", "textGuard", "tuning"};
+            "event", "attach", "detach", "exit", "touch", "textGuard", "tuning", "compactIcon", "captureIo",
+            "liveDraw", "qsPredraw"};
     private static final String[] SECTIONS = new String[NAMES.length];
     static { for (int i = 0; i < NAMES.length; i++) SECTIONS[i] = "OULG:" + NAMES[i]; }
     private static final long WINDOW_NS = 2_000_000_000L;
@@ -68,7 +70,10 @@ public final class Perf {
         String line = null, spike = null, frameSpike = null;
         synchronized (Perf.class) {
             stats[slot].add(ns);
-            if (ns >= SPIKE_NS && spikes < SPIKES_PER_WINDOW) {
+            // Capture IO waits for an asynchronous hardware callback off the UI thread.
+            // Its expected wall time is in the 5-20 ms range; report that in the histogram,
+            // not as dozens of misleading main-thread jank spikes.
+            if (slot != CAPTURE_IO && ns >= SPIKE_NS && spikes < SPIKES_PER_WINDOW) {
                 spikes++;
                 spike = "slot=" + NAMES[slot] + " us=" + ns / 1_000L + " main=" + main + " frameNs=" + (!outer ? "nested" : key == Long.MIN_VALUE ? "none" : key);
             }

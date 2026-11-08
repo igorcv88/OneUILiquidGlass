@@ -116,6 +116,31 @@ final class InfoSheets {
         s.show();
     }
 
+    /** Apply all staged icon edits together, with a single explicit SystemUI restart. */
+    static void applyIcons(Host host) {
+        AppModel m = host.model();
+        int changes = m.pendingIcons().size();
+        if (changes == 0) return;
+        android.app.Activity a = host.activity();
+        Sheet sheet = new Sheet(a, host.theme(), a.getString(R.string.icons_apply_title));
+        sheet.text(a.getResources().getQuantityString(R.plurals.icons_apply_warning, changes, changes));
+        sheet.action(a.getString(R.string.action_cancel), Ui.ButtonStyle.OUTLINED, sheet::dismiss);
+        sheet.action(a.getString(R.string.icons_apply_restart), Ui.ButtonStyle.FILLED, () -> {
+            sheet.dismiss();
+            Runnable apply = () -> {
+                m.applyIcons();
+                m.root.restartSystemUi(ok -> host.feedback(ok ? a.getString(R.string.restart_ui_done)
+                        : a.getString(R.string.restart_error, m.root.message())));
+            };
+            if (m.root.granted()) apply.run();
+            else m.root.check(ok -> {
+                if (ok) apply.run();
+                else host.feedback(a.getString(R.string.root_not_granted));
+            });
+        });
+        sheet.show();
+    }
+
     /** "Soft reboot": fixed root command, informed confirmation, no automation. */
     static void softReboot(Host host) {
         Theme t = host.theme();

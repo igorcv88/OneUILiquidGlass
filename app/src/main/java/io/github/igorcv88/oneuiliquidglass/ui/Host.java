@@ -50,4 +50,7 @@ public interface Host {
     void exportSettings();
 
     void importSettings();
+
+    /** Launches the Android document picker for one unresolved notification's PNG. */
+    void importNotificationIcon(String packageName);
 }

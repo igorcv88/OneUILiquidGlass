@@ -25,7 +25,7 @@ public class ControlMatrixTest {
     static Map<String, Set<String>> fields() throws IOException {
         String tuning = new String(Files.readAllBytes(SRC.resolve("glass/Tuning.java")), StandardCharsets.UTF_8);
         Map<String, Set<String>> out = new TreeMap<>();
-        Matcher m = Pattern.compile("(?m)^\\s*(?:int |String |float )?(\\w+) = [^;]*?(?:number|prop)\\(\"([a-z0-9.]+)\"").matcher(tuning);
+        Matcher m = Pattern.compile("(?m)^\\s*(?:int |String |float )?(\\w+) = [^;]*?(?:number|prop|iconColor)\\(\"([a-z0-9.]+)\"").matcher(tuning);
         while (m.find()) out.computeIfAbsent(m.group(2), k -> new TreeSet<>()).add(m.group(1));
         // Derived fields read through locals or helpers.
         // QS reads the same debug property independently of the app override.

@@ -9,6 +9,12 @@
     <string name="control_description_huoptics">Seleciona o material da lente dinâmica nos pop-ups.</string>
     <string name="control_description_hz">Define a frequência de captura do pop-up no modo de captura.</string>
     <string name="control_description_hzkg">Define a frequência de captura da tela de bloqueio quando necessária.</string>
+    <string name="control_description_iconcardsize">Ajusta só o desenho dos ícones tratados dentro do espaço existente na central, nos pop-ups e no bloqueio. Ícones preservados continuam no tamanho nativo.</string>
+    <string name="control_description_icondarkink">Usada sobre fundo escuro ou colorido das notificações no modo de duas cores.</string>
+    <string name="control_description_iconfixedink">Usada quando a cor dos ícones das notificações está em Fixa.</string>
+    <string name="control_description_iconinkmode">Preto/branco adaptativo original, uma cor fixa ou cores diferentes para fundo claro e colorido das notificações.</string>
+    <string name="control_description_iconlightink">Usada sobre fundo claro das notificações no modo de duas cores.</string>
+    <string name="control_description_iconmode">Define quais ícones de aplicativos nas notificações serão convertidos em símbolos monocromáticos sem fundo. Ícones do sistema e de serviços são tratados por padrão; os packs escolhidos pelo usuário são preservados.</string>
     <string name="control_description_icontone">Ajusta os ícones monocromáticos das notificações à cor do texto.</string>
     <string name="control_description_ior">Define o índice de refração usado pelo modelo físico.</string>
     <string name="control_description_kgblurpath">Seleciona onde o desfoque da tela de bloqueio é desenhado quando a lente dinâmica está ativa.</string>
@@ -154,6 +160,12 @@
     <string name="control_description_shadelocal">Mede o fundo atrás de cada cartão em vez da tela inteira.</string>
     <string name="control_description_shadescaleveil">Ajusta o véu de contraste usado enquanto um cartão da central muda de tamanho.</string>
     <string name="control_description_shadetone">Seleciona como os cartões da central protegem o contraste do texto.</string>
+    <string name="control_description_statusdarkink">Usada sobre fundos escuros ou coloridos quando a barra de status usa duas cores personalizadas.</string>
+    <string name="control_description_statusfixedink">Usada quando a cor da barra de status está em Fixa.</string>
+    <string name="control_description_statusiconsize">Ajusta só os ícones de notificação tratados na barra superior; mantém os demais e a largura nativa dos espaços.</string>
+    <string name="control_description_statusinkmode">Mantém as cores adaptativas Samsung por padrão, usa uma cor fixa ou escolhe duas cores por fundo. A cobertura depende das classes de adaptação da One UI.</string>
+    <string name="control_description_statuslightink">Usada sobre fundos claros quando a barra de status usa duas cores personalizadas.</string>
+    <string name="control_description_statusmaxicons">Zero preserva o limite Samsung. Outros valores usam o overflow e o ViewModel da barra superior na One UI 9, se disponíveis. Reinicie a System UI depois de mudar o limite para recriar o ViewModel. A largura disponível ainda limita os ícones.</string>
     <string name="control_description_stylehi">Define a luminância do fundo acima da qual o cartão passa ao vidro claro.</string>
     <string name="control_description_stylelo">Define a luminância do fundo abaixo da qual o cartão volta ao vidro escuro.</string>
     <string name="control_description_textswap">Adapta as cores do vidro e do texto ao fundo.</string>

@@ -50,6 +50,9 @@ public final class ConfigRepository {
         Map<String, String> values = new LinkedHashMap<>();
         for (SettingSpec spec : SettingsRegistry.all()) {
             Object raw = all.get(PREFIX + spec.key);
+            // Icon edits are held back from the running SystemUI until explicit Apply.
+            Object applied = all.get(IconSettings.APPLIED_PREFIX + spec.key);
+            if (applied instanceof String) raw = IconSettings.ABSENT.equals(applied) ? null : applied;
             if (raw instanceof String
                     && spec.type != SettingSpec.Type.READONLY
                     && !spec.helperOwned()) {
@@ -71,7 +74,56 @@ public final class ConfigRepository {
     }
 
     public Map<String, String> overrides() {
-        return snapshotValues().overrides;
+        Map<String, String> desired = new LinkedHashMap<>();
+        Map<String, ?> all = prefs.getAll();
+        for (SettingSpec spec : SettingsRegistry.all()) {
+            Object raw = all.get(PREFIX + spec.key);
+            if (raw instanceof String && spec.type != SettingSpec.Type.READONLY && !spec.helperOwned()) {
+                try { desired.put(spec.key, spec.validate((String) raw)); }
+                catch (IllegalArgumentException ignored) { }
+            }
+        }
+        for (Map.Entry<String, ?> e : all.entrySet())
+            if (ProductFlags.known(e.getKey()) && e.getValue() instanceof Boolean)
+                desired.put(e.getKey(), (Boolean) e.getValue() ? "1" : "0");
+        return desired;
+    }
+
+    /** Pending icon values, including values that reset to the OS/default. */
+    public Map<String, String> pendingIcons() {
+        Map<String, ?> all = prefs.getAll();
+        Map<String, String> pending = new LinkedHashMap<>();
+        for (String key : IconSettings.keys()) {
+            Object before = all.get(IconSettings.APPLIED_PREFIX + key);
+            if (!(before instanceof String)) continue;
+            String old = IconSettings.ABSENT.equals(before) ? null : (String) before;
+            String desired = (String) all.get(PREFIX + key);
+            if (!Objects.equals(old, desired)) pending.put(key, desired);
+        }
+        return pending;
+    }
+
+    /** Returns the effective value currently delivered to SystemUI, for the preview. */
+    public String appliedIcon(SettingSpec spec) {
+        String staged = prefs.getString(IconSettings.APPLIED_PREFIX + spec.key, null);
+        if (staged != null) {
+            if (!IconSettings.ABSENT.equals(staged)) return staged;
+            String external = SystemPropertyReader.read(spec.key);
+            return external.isEmpty() ? spec.defaultValue : external;
+        }
+        String saved = prefs.getString(PREFIX + spec.key, null);
+        return saved == null ? desired(spec) : saved;
+    }
+
+    /** Commit staged icon settings atomically; the caller then requests one SystemUI restart. */
+    @android.annotation.SuppressLint("ApplySharedPref")
+    public synchronized void applyIcons() {
+        if (pendingIcons().isEmpty()) return;
+        SharedPreferences.Editor edit = prefs.edit();
+        for (String key : IconSettings.keys()) edit.remove(IconSettings.APPLIED_PREFIX + key);
+        edit.putLong("generation", generation() + 1)
+                .putLong("lastChange", System.currentTimeMillis()).commit();
+        notifyChanged();
     }
 
     public boolean conflict(SettingSpec s) {
@@ -121,6 +173,13 @@ public final class ConfigRepository {
         return prefs.getLong("generation", 0);
     }
 
+    /** A locally imported icon changed; notify SystemUI without changing the selected settings. */
+    public synchronized void iconAssetsChanged() {
+        prefs.edit().putLong("generation", generation() + 1)
+                .putLong("lastChange", System.currentTimeMillis()).apply();
+        notifyChanged();
+    }
+
     public synchronized void replace(Map<String, String> values, boolean clear) {
         replace(values, clear, null);
     }
@@ -137,8 +196,19 @@ public final class ConfigRepository {
                 checked.put(e.getKey(), e.getValue());
             else throw new IllegalArgumentException("Chave desconhecida: " + e.getKey());
         }
+        boolean affectsRunningEngine = clear || enabled != null;
+        for (String key : checked.keySet())
+            if (!IconSettings.contains(key)) affectsRunningEngine = true;
         snapshot();
         SharedPreferences.Editor edit = prefs.edit();
+        for (String key : IconSettings.keys()) {
+            if (!checked.containsKey(key) && !clear) continue;
+            String marker = IconSettings.APPLIED_PREFIX + key;
+            if (!prefs.contains(marker)) {
+                String before = prefs.getString(PREFIX + key, null);
+                edit.putString(marker, before == null ? IconSettings.ABSENT : before);
+            }
+        }
         if (clear)
             for (String key : prefs.getAll().keySet())
                 if (key.startsWith(PREFIX) || key.startsWith(BASELINE) || ProductFlags.known(key))
@@ -151,10 +221,10 @@ public final class ConfigRepository {
                         .putString(BASELINE + e.getKey(), SystemPropertyReader.read(e.getKey()));
         }
         if (enabled != null) edit.putBoolean(Config.KEY_ENABLED, enabled);
-        edit.putLong("generation", generation() + 1)
-                .putLong("lastChange", System.currentTimeMillis())
-                .apply();
-        notifyChanged();
+        if (affectsRunningEngine) edit.putLong("generation", generation() + 1)
+                .putLong("lastChange", System.currentTimeMillis());
+        edit.apply();
+        if (affectsRunningEngine) notifyChanged();
     }
 
     /**
@@ -170,6 +240,7 @@ public final class ConfigRepository {
     }
 
     private void snapshot() {
+        // Undo refers to the visible desired edits, including un-applied icon values.
         org.json.JSONObject json = new org.json.JSONObject(overrides());
         prefs.edit()
                 .putString("undo", json.toString())
@@ -200,12 +271,16 @@ public final class ConfigRepository {
 
     public synchronized void releaseToExternal(SettingSpec s) {
         snapshot();
-        prefs.edit()
-                .remove(PREFIX + s.key)
-                .remove(BASELINE + s.key)
-                .putLong("generation", generation() + 1)
-                .apply();
-        notifyChanged();
+        SharedPreferences.Editor edit = prefs.edit();
+        if (IconSettings.contains(s.key) && !prefs.contains(IconSettings.APPLIED_PREFIX + s.key)) {
+            String before = prefs.getString(PREFIX + s.key, null);
+            edit.putString(IconSettings.APPLIED_PREFIX + s.key,
+                    before == null ? IconSettings.ABSENT : before);
+        }
+        edit.remove(PREFIX + s.key).remove(BASELINE + s.key);
+        if (!IconSettings.contains(s.key)) edit.putLong("generation", generation() + 1);
+        edit.apply();
+        if (!IconSettings.contains(s.key)) notifyChanged();
     }
 
     private void notifyChanged() {

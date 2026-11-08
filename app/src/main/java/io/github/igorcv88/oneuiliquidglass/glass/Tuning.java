@@ -264,6 +264,16 @@ public final class Tuning {
     public final boolean headerTone;
     /** A notification's monochrome small icon follows the text's swapped tone (debug.oulg.icontone). */
     public final boolean iconTone;
+    /** Notification app icon source: off, system, verified originals, all. */
+    public final int iconMode;
+    /** Glyph scaling is independent of the status-bar slot geometry. */
+    public final float notificationIconScale, statusIconScale;
+    /** Zero preserves Samsung's static-icon overflow limit. */
+    public final int statusMaxIcons;
+    /** 0 = native/adaptive, 1 = fixed custom color, 2 = colors by backdrop. */
+    public final int notificationIconInkMode, statusIconInkMode;
+    public final int notificationIconFixedInk, notificationIconLightInk, notificationIconDarkInk;
+    public final int statusIconFixedInk, statusIconLightInk, statusIconDarkInk;
     /**
      * LSPosed-only pop-ups take a veil measured from the backdrop under them, as shade cards do
      * (debug.oulg.popuptone, default 1; 0: the plain tint, white text over a white app).
@@ -435,6 +445,18 @@ public final class Tuning {
         textSwap = number("textswap", 1f) >= 1f;
         headerTone = number("headertone", 0f) >= 1f;
         iconTone = number("icontone", 1f) >= 1f;
+        iconMode = io.github.igorcv88.oneuiliquidglass.config.NotificationIconPolicy.mode(number("iconmode", 1f));
+        notificationIconScale = clamp(number("iconcardsize", .76f), .40f, 1f);
+        statusIconScale = clamp(number("statusiconsize", .88f), .55f, 1f);
+        statusMaxIcons = Math.round(clamp(number("statusmaxicons", 0f), 0f, 10f));
+        notificationIconInkMode = Math.round(clamp(number("iconinkmode", 0f), 0f, 2f));
+        statusIconInkMode = Math.round(clamp(number("statusinkmode", 0f), 0f, 2f));
+        notificationIconFixedInk = iconColor("iconfixedink", "ffffff");
+        notificationIconLightInk = iconColor("iconlightink", "000000");
+        notificationIconDarkInk = iconColor("icondarkink", "ffffff");
+        statusIconFixedInk = iconColor("statusfixedink", "ffffff");
+        statusIconLightInk = iconColor("statuslightink", "000000");
+        statusIconDarkInk = iconColor("statusdarkink", "ffffff");
         popupTone = number("popuptone", 1f) >= 1f;
         popupLock = number("popuplock", 1f) >= 1f;
         orphanDraw = number("orphandraw", 1f) >= 1f;
@@ -455,7 +477,10 @@ public final class Tuning {
         headerGap = clamp(number("headergap", 7f), 0f, 8f);
         perf = number("perf", 0f) >= 1f;
         Perf.enabled = perf;
-        trace = number("trace", 0f) >= 1f;
+        // A persisted UI preference of trace=0 must not mask an explicit temporary root
+        // diagnostic (`setprop debug.oulg.trace 1`). The snapshot provider takes precedence
+        // for normal controls, but tracing is opt-in through either independent switch.
+        trace = traceEnabled(number("trace", 0f) >= 1f, systemProp("trace", "0"));
         Probe.trace = trace;
         edgePremulMode = Math.max(0, Math.min(4, Math.round(number("edgepremul", 0f))));
         edgePremulSafe = edgePremulMode > 0;
@@ -544,7 +569,7 @@ public final class Tuning {
                 + " refract=" + refract + " ior=" + ior + " blur=" + blur + " sat=" + saturation
                 + " disp=" + dispersion + " hz=" + hz + " hzkg=" + keyguardHz + " tint=" + tintAlpha
                 + " semradius=" + semRadius + " semradiuslens=" + semRadiusLens + " sflens=" + sfLens + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " live=" + live + " liveradius=" + liveRadius + " liveshaderadius=" + liveShadeRadius + " liveoptics=" + liveOptics + " livesheen=" + liveSheen + " liveglint=" + liveGlint + " shadeglint=" + shadeGlint + " livelens=" + liveLens + " lensmaxage=" + lensMaxAge + " lenssettle=" + lensSettle + " lensgate=" + lensGate + " lenstransition=" + lensTransition + " kgblurpath=" + kgBlurPath + " shadeblurpath=" + shadeBlurPath + " shadefadecut=" + shadeFadeCut + " kgblurradius=" + kgBlurRadius + " pillglass=" + pillGlass + " pillblur=" + pillBlur + " kgoptics=" + kgOptics + " huoptics=" + huOptics + " kglens=" + kgLens + " shadetone=" + shadeTone + " shadeveil=" + shadeVeil + " shadeadaptive=" + shadeAdaptive + " shadecap=" + shadeCap + " shadelift=" + shadeLift + " veilmax=" + veilMax + " stylelo=" + styleLo + " stylehi=" + styleHi + " lightglass=" + lightGlass + " lighttone=" + Integer.toHexString(lightTone) + " lightedge=" + lightEdge + " lightoutline=" + lightOutline + " shadelightglass=" + shadeLightGlass + " shadedarkglass=" + shadeDarkGlass + " livedarkalpha=" + liveDarkAlpha + " livedarkfill=" + liveDarkFill + " liverim=" + liveRim + " kgdarkalpha=" + kgDarkAlpha + " kgdarkfill=" + kgDarkFill + " kgrim=" + kgRim + " kgglint=" + kgGlint + " textswap=" + textSwap + " headertone=" + headerTone + " icontone=" + iconTone + " popuptone=" + popupTone + " popuplock=" + popupLock + " orphandraw=" + orphanDraw + " shadescaleveil=" + shadeScaleVeil + " shadelocal=" + shadeLocal + " paneldim=" + panelDim + " panelblurcap=" + panelBlurCap + " panelnativegray=" + panelNativeGray + " panelcolor=" + Integer.toHexString(panelColor) + " sfoptics=" + sfOptics + " kgwinblur=" + kgWinBlur + " headergap=" + headerGap + " perf=" + perf + " trace=" + trace + " mediaart=" + mediaArt + " qsmediaart=" + qsMediaArt + " edgepremul=" + edgePremulMode
-                + " kgsharedoptics=" + kgSharedOptics + " popuplinegain=" + popupLineGain
+                + " iconmode=" + iconMode + " kgsharedoptics=" + kgSharedOptics + " popuplinegain=" + popupLineGain
                 + " kglinegain=" + lockscreenLineGain + " shadelinegain=" + shadeLineGain;
     }
 
@@ -585,6 +610,18 @@ public final class Tuning {
         String v = prop(key, "");
         if (v.isEmpty()) return fallback;
         try { return Float.parseFloat(v); } catch (NumberFormatException e) { return fallback; }
+    }
+
+    static boolean traceEnabled(boolean configEnabled, String debugProperty) {
+        return configEnabled || "1".equals(debugProperty);
+    }
+
+    private static int iconColor(String key, String fallback) {
+        try {
+            return io.github.igorcv88.oneuiliquidglass.config.Rgba.argb(prop(key, fallback)) | 0xff000000;
+        } catch (IllegalArgumentException e) {
+            return io.github.igorcv88.oneuiliquidglass.config.Rgba.argb(fallback);
+        }
     }
 
     private static String prop(String key, String fallback) {

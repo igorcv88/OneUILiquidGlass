@@ -9,6 +9,12 @@
     <string name="control_description_huoptics">Selects the dynamic lens material used on pop-ups.</string>
     <string name="control_description_hz">Sets the pop-up capture rate in capture mode.</string>
     <string name="control_description_hzkg">Sets the lock screen capture rate when capture is needed.</string>
+    <string name="control_description_iconcardsize">Scales only treated notification glyphs inside their existing slots in the shade, heads-up and lock screen. Unmodified icons keep their native size.</string>
+    <string name="control_description_icondarkink">Used over dark or colored notification backgrounds in two-color mode.</string>
+    <string name="control_description_iconfixedink">Used when notification icon color is set to Fixed.</string>
+    <string name="control_description_iconinkmode">Original adaptive black/white, one fixed color, or a separate color for light and colored notification backgrounds.</string>
+    <string name="control_description_iconlightink">Used over light notification backgrounds in two-color mode.</string>
+    <string name="control_description_iconmode">Controls which notification app icons are converted to a background-free monochrome glyph. System and service icons are treated by default; user-selected icon packs are preserved.</string>
     <string name="control_description_icontone">Matches monochrome notification icons to the text color.</string>
     <string name="control_description_ior">Sets the refractive index used by the physical model.</string>
     <string name="control_description_kgblurpath">Selects where lock screen blur is drawn when the dynamic lens is active.</string>
@@ -154,6 +160,12 @@
     <string name="control_description_shadelocal">Measures the background behind each card instead of the whole screen.</string>
     <string name="control_description_shadescaleveil">Adjusts the fallback contrast veil while a shade card is resized.</string>
     <string name="control_description_shadetone">Selects how notification shade cards protect text contrast.</string>
+    <string name="control_description_statusdarkink">Used over dark or colored backgrounds when the status bar uses two custom colors.</string>
+    <string name="control_description_statusfixedink">Used when status bar color is set to Fixed.</string>
+    <string name="control_description_statusiconsize">Scales only eligible treated notification glyphs in the status bar; preserves the other icons and the native slot width.</string>
+    <string name="control_description_statusinkmode">Keep Samsung\'s adaptive status-bar colors by default, use one fixed color, or choose two colors by background. Coverage depends on the One UI dark receiver classes.</string>
+    <string name="control_description_statuslightink">Used over light backgrounds when the status bar uses two custom colors.</string>
+    <string name="control_description_statusmaxicons">Zero preserves Samsung\'s maximum. Other values use One UI 9\'s overflow limit and status bar ViewModel if present. Restart System UI after changing the cap to recreate the ViewModel. Available width still limits what fits.</string>
     <string name="control_description_stylehi">Sets the background luminance above which a card switches to light glass.</string>
     <string name="control_description_stylelo">Sets the background luminance below which a card switches to dark glass.</string>
     <string name="control_description_textswap">Adapts the glass and text colors to the background.</string>

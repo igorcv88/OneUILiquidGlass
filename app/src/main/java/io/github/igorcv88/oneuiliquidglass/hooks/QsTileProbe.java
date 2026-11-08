@@ -19,12 +19,11 @@ final class QsTileProbe {
     private final Set<String> models = Collections.synchronizedSet(new HashSet<>());
     private final ThreadLocal<Object> currentModel = new ThreadLocal<>();
     /** IconTextTile receives deferred Compose lambdas. Their invocation can outlive QuickTile(). */
-    private final Map<Object,Object> tileLambdas = Collections.synchronizedMap(new WeakHashMap<>());
+    private final WeakIdentityMap<Object,Object> tileLambdas = new WeakIdentityMap<>();
     private final Set<Object> ambiguousLambdas = Collections.newSetFromMap(new WeakHashMap<>());
     private final ThreadLocal<Boolean> inTileLambda = new ThreadLocal<>();
     private final Set<Object> routedLambdas = Collections.newSetFromMap(new WeakHashMap<>());
-    private final Map<Object,QuickSettingsGlass.Kind> discStates =
-            java.util.Collections.synchronizedMap(new WeakHashMap<>());
+    private final WeakIdentityMap<Object,QuickSettingsGlass.Kind> discStates = new WeakIdentityMap<>();
 
     Object currentModel() { return currentModel.get(); }
     boolean inTileLambda() { return Boolean.TRUE.equals(inTileLambda.get()); }
@@ -33,8 +32,12 @@ final class QsTileProbe {
     }
     void disc(Object model,QuickSettingsGlass.Kind state) {
         if (model != null && (state == QuickSettingsGlass.Kind.ACTIVE
-                || state == QuickSettingsGlass.Kind.IDLE || state == QuickSettingsGlass.Kind.NONE))
-            discStates.put(model,state);
+                || state == QuickSettingsGlass.Kind.IDLE || state == QuickSettingsGlass.Kind.NONE)) {
+            QuickSettingsGlass.Kind previous=discStates.put(model,state);
+            if(Probe.trace && previous!=state) Probe.log("QS_TILE_STATE_CHANGE",
+                    "model="+Integer.toHexString(System.identityHashCode(model))
+                            +" previous="+previous+" current="+state);
+        }
     }
     QuickSettingsGlass.Kind disc(Object model) { return model == null ? null : discStates.get(model); }
 

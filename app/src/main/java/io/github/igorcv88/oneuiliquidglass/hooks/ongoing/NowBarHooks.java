@@ -2,6 +2,8 @@ package io.github.igorcv88.oneuiliquidglass.hooks.ongoing;
 
 import android.content.ComponentName;
 import android.content.res.ColorStateList;
+import android.graphics.drawable.AdaptiveIconDrawable;
+import android.graphics.drawable.Drawable;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
@@ -101,10 +103,22 @@ final class NowBarHooks {
     /** Per card: the item it shows, the layers found, the native CardView values put aside. */
     private static final class Card {
         WeakReference<Object> item = new WeakReference<>(null);
+        WeakReference<Object> packageItem = new WeakReference<>(null);
+        String iconPackage;
         WeakReference<View> host = new WeakReference<>(null), container = new WeakReference<>(null), gradient = new WeakReference<>(null);
         ColorStateList nativeCardColor;
         final NativeRegionLease nativeRegion = new NativeRegionLease();
         final NowBarIconLease icon = new NowBarIconLease();
+        /** The expanded notification header inflates a separate AdaptiveIconDrawable. */
+        final NowBarIconLease expandedIcon = new NowBarIconLease();
+        final NowBarIconVisibilityBridge expandedBridge = new NowBarIconVisibilityBridge();
+        /** One-shot lease: Samsung sometimes binds the expanded header before its first layout. */
+        WeakReference<ImageView> pendingExpanded = new WeakReference<>(null);
+        View.OnLayoutChangeListener pendingExpandedLayout;
+        // DZIF can inflate a second ongoing icon (Clock's right image or the app's
+        // separate left_icon). Each lease owns only its exact ImageView.
+        final NowBarIconLease expandedOtherIcon = new NowBarIconLease();
+        final NowBarIconLease expandedInfoIcon = new NowBarIconLease();
         Float nativeElevation;
         boolean gradientHidden;
         WeakReference<View> hiddenGradient = new WeakReference<>(null);
@@ -114,6 +128,9 @@ final class NowBarHooks {
         WeakReference<GlassLayer> layer = new WeakReference<>(null);
         /** Last native reason logged for this card: the same state is never logged twice. */
         String lastNative;
+        /** Trace-only, bounded diagnostic of the actual compact/expanded icon views. */
+        long nextIconProbe;
+        String lastIconProbe;
     }
 
     private final LiveGlass glass;
@@ -163,6 +180,22 @@ final class NowBarHooks {
     }
     int loaderCount() { return loaders.size(); }
 
+    /** Trace-only inventory after an ongoing notification is removed; never mutates a card. */
+    String diagnosticSummary() {
+        int layers = 0, visible = 0, withItem = 0;
+        for (Map.Entry<View, Card> entry : new java.util.ArrayList<>(cards.entrySet())) {
+            View view = entry.getKey();
+            Card card = entry.getValue();
+            if (view == null) continue;
+            if (view.isAttachedToWindow() && view.isShown()) visible++;
+            if (card.item.get() != null) withItem++;
+            GlassLayer layer = card.layer.get();
+            if (layer != null && layer.getParent() != null) layers++;
+        }
+        return "cards=" + cards.size() + " visible=" + visible + " withItem=" + withItem
+                + " layers=" + layers;
+    }
+
     /** After d0(item) / e0(item, z) on the ongoing card, and N/U of the base with this card. */
     void cardBound(Abi abi, View card, Object item) {
         if (card == null || glass.writing() || card.getClass() != abi.ongoing) return;
@@ -170,6 +203,10 @@ final class NowBarHooks {
         if (c == null) { c = new Card(); c.abi = abi; cards.put(card, c); }
         if (item != null) c.item = new WeakReference<>(item);
         Object it = c.item.get();
+        if (c.packageItem.get() != it) {
+            c.iconPackage = iconPackage(it);
+            c.packageItem = new WeakReference<>(it);
+        }
         LiveEligibility.Verdict verdict = LiveEligibility.nowBar(card, it);
         View container = view(abi.container, card);
         if (container == null) { release(card, c, "noContainer"); return; }
@@ -223,16 +260,99 @@ final class NowBarHooks {
         return requested;
     }
 
+    /** A zero-sized OEM NotificationRowIconView is an inflation placeholder, not a drawn icon.
+     * Avoid replacing its drawable until Samsung assigns the final layout dimensions.
+     * Clock's named header is fully resolved and retains its existing eager path. */
+    static boolean deferUnmeasuredExpanded(ImageView icon, boolean shown, String packageName) {
+        return shown && packageName == null && icon != null
+                && "com.android.internal.widget.NotificationRowIconView".equals(icon.getClass().getName())
+                && (icon.getWidth() <= 0 || icon.getHeight() <= 0);
+    }
+
+    private static void cancelPendingExpanded(Card c) {
+        ImageView previous = c.pendingExpanded.get();
+        if (previous != null && c.pendingExpandedLayout != null)
+            previous.removeOnLayoutChangeListener(c.pendingExpandedLayout);
+        c.pendingExpanded.clear();
+        c.pendingExpandedLayout = null;
+    }
+
+    /** Install at most one callback per unmeasured expanded icon. No polling or timed retries. */
+    private void syncExpandedIcon(View card, Card c, ImageView icon, boolean shown, String packageName) {
+        if (!deferUnmeasuredExpanded(icon, shown, packageName)) {
+            cancelPendingExpanded(c);
+            c.expandedIcon.sync(icon, shown, packageName);
+            c.expandedBridge.sync(icon, NativeIds.find(card, "expand_content_rootview"),
+                    shown, packageName);
+            return;
+        }
+        c.expandedBridge.restore();
+        if (c.pendingExpanded.get() == icon && c.pendingExpandedLayout != null) return;
+        cancelPendingExpanded(c);
+        if (c.expandedIcon.target() != null) c.expandedIcon.restore();
+        c.pendingExpanded = new WeakReference<>(icon);
+        final WeakReference<View> ownerRef = new WeakReference<>(card);
+        View.OnLayoutChangeListener listener = (v, left, top, right, bottom,
+                                               oldLeft, oldTop, oldRight, oldBottom) -> {
+            if (v.getWidth() <= 0 || v.getHeight() <= 0 || c.pendingExpanded.get() != v) return;
+            cancelPendingExpanded(c); // Remove before setImageDrawable(), which may request layout.
+            View owner = ownerRef.get();
+            if (owner == null || cards.get(owner) != c || c.host.get() == null
+                    || !v.isAttachedToWindow() || !LiveChipHooks.within(v, owner)) return;
+            c.expandedIcon.sync((ImageView) v, true, c.iconPackage);
+            c.expandedBridge.sync((ImageView) v,
+                    NativeIds.find(owner, "expand_content_rootview"), true, c.iconPackage);
+            if (Probe.trace) Probe.log("NOWBAR_EXPANDED_READY", "size="
+                    + v.getWidth() + "x" + v.getHeight() + " once=true");
+        };
+        c.pendingExpandedLayout = listener;
+        icon.addOnLayoutChangeListener(listener);
+        if (Probe.trace) Probe.log("NOWBAR_EXPANDED_DEFER", "size="
+                + icon.getWidth() + "x" + icon.getHeight() + " once=true");
+    }
+
     private void companions(View card, Card c, boolean shown) {
         View container = c.container.get();
         c.nativeRegion.sync(container, shown && c.host.get() != container);
         if (container != null && NativeShape.cardLike(container) && c.host.get() != container) cardTransparent(container, c, shown);
+        View expandedRoot = NativeIds.find(card, "expand_content_rootview");
+        String packageName = c.iconPackage;
+        if (packageName == null && verifiedClockHeader(c.item.get(), expandedRoot)) {
+            // The AOD plugin's "Timer" is a display label, not an installable package.
+            // Accept it only alongside Clock's measured DZIF header resource.
+            packageName = "com.sec.android.app.clockpackage";
+            c.iconPackage = packageName;
+        }
         ImageView icon = c.icon.target();
         if (icon == null || !LiveChipHooks.within(icon, card)) icon = findIcon(card);
-        c.icon.sync(icon, shown);
+        c.icon.sync(icon, shown, packageName);
+        // The expanded header and its secondary/info glyphs share one luma decision.
+        ImageView expandedIcon = expandedRoot == null ? null : expandedHeaderIcon(expandedRoot);
+        Drawable expandedBefore = expandedIcon == null ? null : expandedIcon.getDrawable();
+        syncExpandedIcon(card, c, expandedIcon, shown, packageName);
+        ImageView other = expandedRoot == null ? null : expandedOtherIcon(expandedRoot, expandedIcon);
+        c.expandedOtherIcon.syncWithoutSampling(other, shown, packageName);
+        ImageView info = expandedRoot == null ? null : expandedInfoIcon(expandedRoot, expandedIcon, other);
+        c.expandedInfoIcon.syncWithoutSampling(info, shown, packageName);
+        Boolean backdrop = c.expandedIcon.sampledBackdrop();
+        if (backdrop != null) {
+            c.expandedOtherIcon.applyTone(backdrop);
+            c.expandedInfoIcon.applyTone(backdrop);
+        }
+        if (expandedIcon != null && expandedBefore != expandedIcon.getDrawable()) {
+            Drawable after = expandedIcon.getDrawable();
+            Probe.log("NOWBAR_EXPANDED_ICON", "glass=" + shown
+                    + " pkg=" + (packageName == null ? "unresolved" : packageName)
+                    + " target=" + expandedIcon.getClass().getSimpleName()
+                    + " alpha=" + expandedIcon.getAlpha()
+                    + " size=" + expandedIcon.getWidth() + "x" + expandedIcon.getHeight()
+                    + " before=" + (expandedBefore == null ? "null" : expandedBefore.getClass().getSimpleName())
+                    + " after=" + (after == null ? "null" : after.getClass().getSimpleName()));
+        }
         // DZIF uses a different CardView for the EXPANDED ongoing app icon; the normal
         // nowbar_icon lease only clears its compact disc. Never touch MediaCardView.
-        c.icon.syncExpandedDisc(findExpandedIconContainer(card), shown);
+        c.icon.syncExpandedDisc(findExpandedIconContainer(card, expandedIcon), shown);
+        traceIcons(card, c, icon, expandedIcon, shown);
         View gradient = c.gradient.get();
         View hidden = c.hiddenGradient.get();
         if (c.nativeGradientVisibility != null && (!shown || hidden != gradient)) {
@@ -287,9 +407,157 @@ final class NowBarHooks {
      * runs only on that one view (DZIF simpleperf 04/11: the previous walk ran reflection on every
      * node and dominated SystemUI's main thread).
      */
-    private static View findExpandedIconContainer(View card) {
+    private static View findExpandedIconContainer(View card, ImageView icon) {
         View v = NativeIds.find(card, "ongoing_app_expanded_icon_container");
-        return v != null && NativeShape.cardLike(v) ? v : null;
+        if (v != null && NativeShape.cardLike(v)) return v;
+        // Alternate Samsung layouts put a separate, icon-sized CardView directly
+        // around the notification header's icon. Never clear the whole ongoing card.
+        if (icon == null) return null;
+        View root = NativeIds.find(card, "expand_content_rootview");
+        for (android.view.ViewParent p = icon.getParent(); p instanceof View && p != root;
+             p = p.getParent()) {
+            View candidate = (View) p;
+            if (!NativeShape.cardLike(candidate)) continue;
+            int w = candidate.getWidth(), h = candidate.getHeight();
+            if (w > 0 && h > 0 && icon.getWidth() > 0 && icon.getHeight() > 0
+                    && w <= icon.getWidth() * 3 && h <= icon.getHeight() * 3) return candidate;
+        }
+        return null;
+    }
+
+    /** Constrain every lookup to the ongoing card's expanded notification content. */
+    private static ImageView findExpandedIcon(View card) {
+        View expanded = NativeIds.find(card, "expand_content_rootview");
+        return expanded == null ? null : expandedHeaderIcon(expanded);
+    }
+
+    static ImageView expandedHeaderIcon(View expanded) {
+        // Clock's ID is different from Gradus/standard Android notification headers.
+        for (String id : new String[]{"ongoing_activity_expand_left_image", "icon", "left_icon"}) {
+            View v = NativeIds.find(expanded, id);
+            if (v instanceof ImageView) return (ImageView) v;
+        }
+        return null;
+    }
+
+    static ImageView expandedOtherIcon(View expanded, ImageView primary) {
+        for (String id : new String[]{"ongoing_activity_expand_right_image", "right_icon",
+                "left_icon", "icon"}) {
+            View v = NativeIds.find(expanded, id);
+            if (v instanceof ImageView && v != primary) return (ImageView) v;
+        }
+        return null;
+    }
+
+    static ImageView expandedInfoIcon(View expanded, ImageView primary, ImageView secondary) {
+        View v = NativeIds.find(expanded, "ongoing_activity_secondary_info_icon");
+        return v instanceof ImageView && v != primary && v != secondary ? (ImageView) v : null;
+    }
+
+    /** Samsung sometimes exposes a display label in getNowBarPackage (e.g. "Timer").
+     * Never query PackageManager with a UI label; use a separately verified package field. */
+    static String iconPackage(Object item) {
+        if (item == null) return null;
+        for (String method : new String[]{"getPackageName", "getAppPackageName",
+                "getNotificationPackage", "getSourcePackage", "getNowBarPackage"}) {
+            Object value = NativeShape.call(item, method);
+            if (value instanceof String && packageName((String) value)) return (String) value;
+        }
+        for (String field : new String[]{"mPackageName", "packageName",
+                "mAppPackageName", "mNotificationPackage"}) {
+            Object value = io.github.igorcv88.oneuiliquidglass.hooks.Reflect.read(item, field);
+            if (value instanceof String && packageName((String) value)) return (String) value;
+        }
+        return null;
+    }
+
+    /** Display labels cannot establish identity alone; also require Clock's DZIF header. */
+    private static boolean verifiedClockHeader(Object item, View expandedRoot) {
+        if (item == null || expandedRoot == null) return false;
+        Object label = NativeShape.call(item, "getNowBarPackage");
+        if (!(label instanceof String)) return false;
+        String text = (String) label;
+        if (!("Timer".equalsIgnoreCase(text) || "Clock".equalsIgnoreCase(text)
+                || "Relógio".equalsIgnoreCase(text))) return false;
+        return NativeIds.find(expandedRoot, "ongoing_activity_expand_left_image") instanceof ImageView;
+    }
+
+    private static boolean packageName(String value) {
+        return value.matches("[a-zA-Z_][a-zA-Z_0-9]*(\\.[a-zA-Z_][a-zA-Z_0-9]*)+");
+    }
+
+    /**
+     * The AOD plugin inflates distinct compact/expanded icons. Every eligible app can supply a
+     * different drawable (e.g. Clock's VectorDrawable or Maps' launcher bitmap), so an app-only
+     * probe missed the failing expanded views. This diagnostic reads no notification text and is
+     * capped per card to once per two seconds, with output only when the route changes.
+     */
+    private static void traceIcons(View card, Card c, ImageView compact, ImageView expanded,
+                                   boolean shown) {
+        if (!Probe.trace) return;
+        long now = android.os.SystemClock.uptimeMillis();
+        if (now < c.nextIconProbe) return;
+        c.nextIconProbe = now + 2000;
+        Object item = c.item.get();
+        Object pkgValue = item == null ? null : NativeShape.call(item, "getNowBarPackage");
+        String pkg = pkgValue instanceof String ? (String) pkgValue : "unavailable";
+        View expandedRoot = NativeIds.find(card, "expand_content_rootview");
+        View iconContainer = findExpandedIconContainer(card, expanded);
+        String state = "pkg=" + pkg + " shown=" + shown
+                + " compact=" + iconState(compact)
+                + " expandedRoot=" + (expandedRoot == null ? "missing" : expandedRoot.getClass().getSimpleName())
+                + " expanded=" + iconState(expanded)
+                + " right=" + iconState(expandedRoot == null ? null : expandedOtherIcon(expandedRoot, expanded))
+                + " info=" + iconState(expandedRoot == null ? null : expandedInfoIcon(
+                        expandedRoot, expanded, expandedOtherIcon(expandedRoot, expanded)))
+                + " expandedDisc=" + (iconContainer == null ? "missing" : iconContainer.getClass().getSimpleName())
+                + " expandedParent=" + (expanded == null || expanded.getParent() == null
+                        ? "missing" : expanded.getParent().getClass().getSimpleName())
+                + " expandedBg=" + (expanded == null || expanded.getBackground() == null
+                        ? "none" : expanded.getBackground().getClass().getSimpleName());
+        if (!state.equals(c.lastIconProbe)) {
+            c.lastIconProbe = state;
+            Probe.log("NOWBAR_ICON_DIAG", state);
+            if (expanded == null && expandedRoot != null)
+                Probe.log("NOWBAR_ICON_CANDIDATES", "pkg=" + pkg + " views=" + candidateIds(expandedRoot));
+        }
+    }
+
+    static String iconState(ImageView image) {
+        if (image == null) return "missing";
+        Drawable drawable = image.getDrawable();
+        String type = drawable == null ? "null" : drawable.getClass().getSimpleName();
+        boolean adaptiveMono = drawable instanceof AdaptiveIconDrawable
+                && ((AdaptiveIconDrawable) drawable).getMonochrome() != null;
+        return type + "{mono=" + adaptiveMono + ",state="
+                + (drawable != null && drawable.getConstantState() != null)
+                + ",attached=" + image.isAttachedToWindow()
+                + ",visible=" + image.isShown()
+                + ",imageTint=" + (image.getImageTintList() != null)
+                + ",filter=" + (image.getColorFilter() != null) + "}";
+    }
+
+    /** Only resource identifiers and view classes; at most eight entries and ten levels deep. */
+    private static String candidateIds(View root) {
+        StringBuilder out = new StringBuilder();
+        scanCandidates(root, out, new int[]{0}, 0);
+        return out.length() == 0 ? "none" : out.toString();
+    }
+
+    private static void scanCandidates(View v, StringBuilder out, int[] count, int depth) {
+        if (v == null || depth > 10 || count[0] >= 8) return;
+        if (v instanceof ImageView) {
+            if (out.length() > 0) out.append(',');
+            out.append(v.getClass().getSimpleName()).append(':');
+            try { out.append(v.getResources().getResourceEntryName(v.getId())); }
+            catch (RuntimeException e) { out.append("no-id"); }
+            count[0]++;
+        }
+        if (v instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) v;
+            for (int i = 0; i < group.getChildCount() && count[0] < 8; i++)
+                scanCandidates(group.getChildAt(i), out, count, depth + 1);
+        }
     }
 
     /** No changes to vector-only icons or sibling UI outside NowBarOngoingCardView. */

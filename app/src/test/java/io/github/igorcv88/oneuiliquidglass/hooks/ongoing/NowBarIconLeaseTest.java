@@ -19,6 +19,15 @@ import org.robolectric.annotation.Config;
 public class NowBarIconLeaseTest {
     private final Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
 
+    @Test public void liveCardClockVectorIsAnExplicitDzifIdOnly() {
+        assertFalse(NowBarIconLease.clockVectorId("dummy_capsule_item_app_icon"));
+        assertTrue(NowBarIconLease.clockVectorId("capsule_item_app_icon"));
+        assertTrue(NowBarIconLease.clockVectorId("nowbar_icon"));
+        assertFalse(NowBarIconLease.clockVectorId("icon"));
+        assertFalse(NowBarIconLease.clockVectorId("large_icon"));
+        assertFalse(NowBarIconLease.clockVectorId(null));
+    }
+
     @Test public void expandedDiscIsClearedWithoutTouchingTheNativeIcon() {
         FakeCardView expanded = new FakeCardView(activity);
         ImageView icon = new ImageView(activity);
@@ -44,6 +53,23 @@ public class NowBarIconLeaseTest {
                 expanded.getCardBackgroundColor().getDefaultColor());
         assertSame(originalIcon, icon.getDrawable());
         assertNotEquals(0, originalColor);
+    }
+
+    @Test public void nativeIconDiscRebindingIsHiddenAndRestored() {
+        ImageView header = new ImageView(activity);
+        header.setImageResource(R.drawable.oulg_launcher);
+        android.graphics.drawable.ColorDrawable background =
+                new android.graphics.drawable.ColorDrawable(0xff3142a7);
+        header.setBackground(background);
+        NowBarIconLease lease = new NowBarIconLease();
+        lease.sync(header, true);
+        assertEquals(0, background.getAlpha());
+        background.setAlpha(255); // Samsung rebinds its opaque disc
+        lease.sync(header, true);
+        assertEquals(0, background.getAlpha());
+        lease.restore();
+        assertSame(background, header.getBackground());
+        assertEquals(255, background.getAlpha());
     }
 
     @Test public void expandedDiscRestoresImmediatelyOnGlassGateOff() {
@@ -88,6 +114,43 @@ public class NowBarIconLeaseTest {
         assertNotEquals(0, nativeColor);
     }
 
+    @Test public void verifiedSamsungRowVectorIsMonochromeAndItsDiscCleared() {
+        com.android.internal.widget.NotificationRowIconView icon =
+                new com.android.internal.widget.NotificationRowIconView(activity);
+        icon.setId(android.R.id.icon);
+        android.graphics.drawable.VectorDrawable vector =
+                new android.graphics.drawable.VectorDrawable();
+        icon.setImageDrawable(vector);
+        icon.setBackground(new android.graphics.drawable.ColorDrawable(0xff2244aa));
+        NowBarIconLease lease = new NowBarIconLease();
+
+        lease.sync(icon, true);
+        assertNotSame("only verified notification vectors are leased", vector, icon.getDrawable());
+        assertEquals(0, icon.getBackground().getAlpha());
+        lease.restore();
+        assertSame(vector, icon.getDrawable());
+        assertEquals(255, icon.getBackground().getAlpha());
+    }
+
+    @Test public void clockVectorNeverConvertsUnverifiedAppsIntoMonochrome() {
+        ImageView icon = new ImageView(activity);
+        icon.setImageDrawable(new VectorDrawable());
+        assertFalse(NowBarIconLease.clockVector(icon, icon.getDrawable(),
+                "com.igcv.gradus"));
+        assertFalse(NowBarIconLease.clockVector(icon, icon.getDrawable(), null));
+    }
+
+    @Test public void secondaryIconReusesTheHeaderToneWithoutSampling() {
+        ImageView secondary = new ImageView(activity);
+        secondary.setImageResource(R.drawable.oulg_launcher);
+        NowBarIconLease lease = new NowBarIconLease();
+        lease.syncWithoutSampling(secondary, true, null);
+        lease.applyTone(true);
+        assertTrue(lease.sampledBackdrop());
+        lease.restore();
+        assertNull(lease.sampledBackdrop());
+    }
+
     @Test public void vectorOnlyIconIsNeverReplaced() {
         FakeCardView disc = new FakeCardView(activity);
         ImageView icon = new ImageView(activity);
@@ -99,6 +162,77 @@ public class NowBarIconLeaseTest {
         lease.sync(icon, true);
         assertSame(vector, icon.getDrawable());
         assertEquals(nativeColor, disc.getCardBackgroundColor().getDefaultColor());
+    }
+
+    @Test public void vectorWithKnownInstalledPackageCanUseItsOfficialMonochromeGlyph() {
+        ImageView icon = new ImageView(activity);
+        Drawable original = new VectorDrawable();
+        icon.setImageDrawable(original);
+        Drawable installedLauncher = activity.getDrawable(R.drawable.oulg_launcher);
+        assertTrue(installedLauncher instanceof AdaptiveIconDrawable);
+        assertNotNull(((AdaptiveIconDrawable) installedLauncher).getMonochrome());
+        int[] resolves = {0};
+        NowBarIconLease lease = new NowBarIconLease((target, packageName) -> {
+            assertEquals(activity.getPackageName(), packageName);
+            resolves[0]++;
+            return installedLauncher;
+        });
+
+        lease.sync(icon, true, activity.getPackageName());
+        assertNotSame("a flattened launcher may use the app's official monochrome layer",
+                original, icon.getDrawable());
+        assertFalse(icon.getDrawable() instanceof AdaptiveIconDrawable);
+        Drawable mono = icon.getDrawable();
+        lease.sync(icon, true, activity.getPackageName());
+        assertSame("steady frame does not replace an already applied glyph", mono, icon.getDrawable());
+        Drawable rebound = new VectorDrawable(); // the Samsung writer rebound this view
+        icon.setImageDrawable(rebound);
+        lease.sync(icon, true, activity.getPackageName());
+        assertEquals("rebind cannot call PackageManager again", 1, resolves[0]);
+        lease.restore();
+        assertSame("reversion returns the last Samsung drawable, not the stale first one",
+                rebound, icon.getDrawable());
+    }
+
+    @Test public void unknownPackageDoesNotTurnVectorIntoSolidForeground() {
+        ImageView icon = new ImageView(activity);
+        Drawable original = new VectorDrawable();
+        icon.setImageDrawable(original);
+        NowBarIconLease lease = new NowBarIconLease();
+        lease.sync(icon, true, "invalid.missing.package.for.oulg.test");
+        assertSame(original, icon.getDrawable());
+        lease.sync(icon, false);
+        assertSame(original, icon.getDrawable());
+    }
+
+    @Test public void emptySamsungPlaceholderRemainsEmptyEvenWithAnInstalledPackage() {
+        ImageView placeholder = new ImageView(activity);
+        NowBarIconLease lease = new NowBarIconLease();
+        lease.sync(placeholder, true, activity.getPackageName());
+        assertNull(placeholder.getDrawable());
+    }
+
+    @Test public void expandedNotificationHeaderLosesItsAdaptiveBackgroundAndRestoresIt() {
+        // The DZIF expanded view is a NotificationRowIconView inside a notification header,
+        // not the compact nowbar_icon's MaterialCardView.
+        ImageView headerIcon = new ImageView(activity);
+        headerIcon.setId(android.R.id.icon);
+        headerIcon.setImageResource(R.drawable.oulg_launcher);
+        Drawable original = headerIcon.getDrawable();
+        assertTrue(original instanceof AdaptiveIconDrawable);
+        NowBarIconLease lease = new NowBarIconLease();
+
+        lease.sync(headerIcon, true);
+        assertNotSame("the app's coloured adaptive background must be removed",
+                original, headerIcon.getDrawable());
+        assertFalse(headerIcon.getDrawable() instanceof AdaptiveIconDrawable);
+        Drawable monochrome = headerIcon.getDrawable();
+        lease.sync(headerIcon, true);
+        assertSame(monochrome, headerIcon.getDrawable());
+
+        lease.sync(headerIcon, false);
+        assertSame("the native icon returns when the glass gate closes",
+                original, headerIcon.getDrawable());
     }
 
     @Test public void tintedAdaptiveGlyphFollowsContrastAndRestoresNativeTint() {

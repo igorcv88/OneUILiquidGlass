@@ -10,6 +10,7 @@ import java.lang.ref.WeakReference;
 import java.util.function.BooleanSupplier;
 import java.util.function.DoubleSupplier;
 import io.github.igorcv88.oneuiliquidglass.diagnostics.Probe;
+import io.github.igorcv88.oneuiliquidglass.diagnostics.Perf;
 import io.github.igorcv88.oneuiliquidglass.glass.BackdropMotion;
 import io.github.igorcv88.oneuiliquidglass.glass.QsScene;
 import io.github.igorcv88.oneuiliquidglass.glass.PanelScene;
@@ -77,7 +78,11 @@ final class QsBackdrop {
     private ValueAnimator inkAnimator;
     private WeakReference<View> host = new WeakReference<>(null);
     private ViewTreeObserver observer;
-    private final ViewTreeObserver.OnPreDrawListener draw = () -> { poll(); return true; };
+    private final ViewTreeObserver.OnPreDrawListener draw = () -> {
+        long token = Perf.start(Perf.QS_PREDRAW);
+        try { poll(); } finally { Perf.end(Perf.QS_PREDRAW, token); }
+        return true;
+    };
     private final View.OnAttachStateChangeListener attach = new View.OnAttachStateChangeListener() {
         @Override public void onViewAttachedToWindow(View v) { watch(v); }
         @Override public void onViewDetachedFromWindow(View v) { stop(); }

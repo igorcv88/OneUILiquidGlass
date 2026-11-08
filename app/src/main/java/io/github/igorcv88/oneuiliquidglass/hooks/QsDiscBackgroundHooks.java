@@ -8,6 +8,8 @@ import java.util.Set;
 import java.util.WeakHashMap;
 import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
+import java.util.function.Function;
+import java.lang.ref.WeakReference;
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
 import io.github.igorcv88.oneuiliquidglass.diagnostics.Probe;
@@ -22,16 +24,24 @@ import io.github.igorcv88.oneuiliquidglass.glass.QuickSettingsGlass;
  * call BoxWithOutline again. No unbound background, notification or media node is modified.
  */
 final class QsDiscBackgroundHooks {
-    private static final class Spec {
+    static final class Spec {
         final QuickSettingsGlass.Kind kind;
         final int original;
-        Spec(QuickSettingsGlass.Kind kind,int original) {this.kind=kind;this.original=original;}
+        final WeakReference<Object> model;
+        Spec(QuickSettingsGlass.Kind kind,int original,Object model) {
+            this.kind=kind;this.original=original;this.model=new WeakReference<>(model);
+        }
+        QuickSettingsGlass.Kind liveKind(Function<Object,QuickSettingsGlass.Kind> state) {
+            QuickSettingsGlass.Kind latest=state.apply(model.get());
+            return latest==null?kind:latest;
+        }
     }
     private final ClassLoader loader;
     private final BooleanSupplier enabled;
     private final Supplier<QsStyle> style;
     private final Supplier<QsScene.Tone> scene;
     private final Supplier<Float> phase;
+    private final Function<Object,QuickSettingsGlass.Kind> state;
     private final WeakIdentityMap<Object,Spec> elements=new WeakIdentityMap<>();
     private final WeakIdentityMap<Object,Spec> nodes=new WeakIdentityMap<>();
     private final Set<Object> liveNodes=Collections.newSetFromMap(new WeakHashMap<>());
@@ -43,8 +53,10 @@ final class QsDiscBackgroundHooks {
     private int tracked, bound;
 
     QsDiscBackgroundHooks(ClassLoader loader,BooleanSupplier enabled,Supplier<QsStyle> style,
-            Supplier<QsScene.Tone> scene,Supplier<Float> phase) {
+            Supplier<QsScene.Tone> scene,Supplier<Float> phase,
+            Function<Object,QuickSettingsGlass.Kind> state) {
         this.loader=loader;this.enabled=enabled;this.style=style;this.scene=scene;this.phase=phase;
+        this.state=state;
     }
 
     void install(Class<?> backgroundElement) {
@@ -73,8 +85,12 @@ final class QsDiscBackgroundHooks {
                     try {
                         if(nodeBrush!=null&&nodeBrush.get(p.thisObject)!=null)return;
                         long original=nodeColor.getLong(p.thisObject);
+                        // A remembered BackgroundNode can survive ON/OFF. Read the same verified
+                        // model state as the painter instead of pinning the constructor's kind.
+                        QuickSettingsGlass.Kind kind=spec.liveKind(state);
+                        if(kind==QuickSettingsGlass.Kind.NONE)return;
                         int mapped=enabled.getAsBoolean()
-                                ?style.get().tileBackground(spec.kind,scene.get(),spec.original,phase.get())
+                                ?style.get().tileBackground(kind,scene.get(),spec.original,phase.get())
                                 :spec.original;
                         long current=QuickSettingsGlass.color(mapped);
                         if(current==original)return;
@@ -84,7 +100,8 @@ final class QsDiscBackgroundHooks {
                         String signature=Probe.trace?scene.get()+":"+Integer.toHexString(mapped):null;
                         if(signature!=null&&!signature.equals(lastDrawn.put(p.thisObject,signature)))
                             Probe.log("QS_DISC_DRAW", "node="+Integer.toHexString(System.identityHashCode(p.thisObject))
-                                    +" scene="+scene.get()+" original="+Integer.toHexString(spec.original)
+                                    +" scene="+scene.get()+" kind="+kind+" capturedKind="+spec.kind
+                                    +" original="+Integer.toHexString(spec.original)
                                     +" applied="+Integer.toHexString(mapped)+" phase="+phase.get());
                     } catch(ReflectiveOperationException|RuntimeException e){failure(e);}
                 }
@@ -102,9 +119,9 @@ final class QsDiscBackgroundHooks {
     }
 
     /** Called only for a verified QuickTile's circle by BoxWithOutline's background constructor. */
-    void element(Object element,QuickSettingsGlass.Kind kind,int original) {
+    void element(Object element,QuickSettingsGlass.Kind kind,int original,Object model) {
         if(ready&&element!=null&&(kind==QuickSettingsGlass.Kind.ACTIVE||kind==QuickSettingsGlass.Kind.IDLE)) {
-            elements.put(element,new Spec(kind,original));
+            elements.put(element,new Spec(kind,original,model));
             if(Probe.trace&&tracked++<12)
                 Probe.log("QS_DISC_ELEMENT","element="+Integer.toHexString(System.identityHashCode(element))
                         +" kind="+kind+" native="+Integer.toHexString(original));
