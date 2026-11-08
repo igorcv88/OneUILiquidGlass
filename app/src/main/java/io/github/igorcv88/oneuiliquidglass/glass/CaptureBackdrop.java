@@ -37,13 +37,14 @@ public final class CaptureBackdrop implements SampledBackdrop, CaptureHub.Client
     @Override public void onFrame(CaptureHub.Frame next) {
         View v = view.get();
         // The hub broadcasts each shared frame, including to clients that did not request it.
-        // A hidden/released lane must not be invalidated by another visible surface's capture.
-        if (released || v == null || !v.isAttachedToWindow() || !v.isShown() || hz() <= 0) return;
+        // Keep the latest borrowed frame for a hidden lane's next opening, but never invalidate
+        // that hidden view because another visible surface requested a capture.
+        if (released || v == null || !v.isAttachedToWindow() || hz() <= 0) return;
         // A frame taken for the shade's tone prefetch alone (an eighth of the resolution) is not
         // refracted: the lens keeps its last frame, or the live blur, until the next capture.
         if (next.scale < CaptureHub.SCALE) return;
         frame = next;
-        v.invalidate();
+        if (v.isShown()) v.invalidate();
     }
     @Override public void onUnavailable() {
         unavailable = true;

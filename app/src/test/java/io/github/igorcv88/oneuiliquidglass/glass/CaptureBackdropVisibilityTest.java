@@ -16,9 +16,15 @@ import org.robolectric.annotation.LooperMode;
 @RunWith(RobolectricTestRunner.class) @Config(sdk = 34)
 @LooperMode(LooperMode.Mode.PAUSED)
 public class CaptureBackdropVisibilityTest {
-    @Test public void broadcastDoesNotDeliverVisualFramesToHiddenOrDisabledLane() {
+    private static final class TrackedView extends View {
+        int invalidations;
+        TrackedView(Activity activity) { super(activity); }
+        @Override public void invalidate() { invalidations++; super.invalidate(); }
+    }
+
+    @Test public void hiddenLaneKeepsReadyFrameWithoutInvalidatingAndDisabledLaneDoesNotReceive() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
-        View view = new View(activity);
+        TrackedView view = new TrackedView(activity);
         activity.setContentView(view);
         AtomicInteger hz = new AtomicInteger(60);
         CaptureBackdrop backdrop = new CaptureBackdrop(view, false, hz::get);
@@ -27,15 +33,21 @@ public class CaptureBackdropVisibilityTest {
         try {
             assertTrue(view.isAttachedToWindow());
             view.setVisibility(View.INVISIBLE);
+            view.invalidations = 0;
             backdrop.onFrame(frame);
-            assertNull(backdrop.frame());
+            assertSame("hidden lane is prepared for the next opening", frame, backdrop.frame());
+            assertEquals(0, view.invalidations);
             view.setVisibility(View.VISIBLE);
+            view.invalidations = 0;
             hz.set(0);
-            backdrop.onFrame(frame);
-            assertNull(backdrop.frame());
-            hz.set(60);
-            backdrop.onFrame(frame);
+            CaptureHub.Frame ignored = new CaptureHub.Frame(frame.bitmap, frame.crop, .5f, false);
+            backdrop.onFrame(ignored);
             assertSame(frame, backdrop.frame());
+            assertEquals(0, view.invalidations);
+            hz.set(60);
+            backdrop.onFrame(ignored);
+            assertSame(ignored, backdrop.frame());
+            assertEquals(1, view.invalidations);
             backdrop.release();
             backdrop.onFrame(frame);
             assertNull(backdrop.frame());
