@@ -7,9 +7,11 @@ import android.widget.*;
 import io.github.igorcv88.oneuiliquidglass.TestNotifications;
 import io.github.igorcv88.oneuiliquidglass.R;
 import io.github.igorcv88.oneuiliquidglass.config.*;
+import io.github.igorcv88.oneuiliquidglass.live.UserspaceRestartPolicy;
 import io.github.igorcv88.oneuiliquidglass.ui.kit.*;
 
 import java.util.List;
+import java.util.Collections;
 
 /** Secondary sheets: test variants, delivery to the system, values changed outside the app. */
 final class InfoSheets {
@@ -141,7 +143,7 @@ final class InfoSheets {
         sheet.show();
     }
 
-    /** "Soft reboot": fixed root command, informed confirmation, no automation. */
+    /** Preserve a loaded dynamic lens by using its verified injector for the userspace restart. */
     static void softReboot(Host host) {
         Theme t = host.theme();
         android.app.Activity a = host.activity();
@@ -155,7 +157,29 @@ final class InfoSheets {
         TextView go = s.action(host.activity().getString(R.string.restart_userspace), Ui.ButtonStyle.FILLED, () -> {
             s.dismiss();
             AppModel m = host.model();
-            Runnable restart = () -> m.root.softReboot(ok -> { if (!ok) host.feedback(host.activity().getString(R.string.restart_error, m.root.message())); });
+            Runnable restart = () -> m.refreshObserved(() -> {
+                UserspaceRestartPolicy.Route route = UserspaceRestartPolicy.choose(
+                        m.observedAvailable(), m.mode(), m.lens.model().bundled);
+                if (route == UserspaceRestartPolicy.Route.BLOCKED) {
+                    host.feedback(a.getString(m.observedAvailable()
+                            ? R.string.restart_lens_unavailable : R.string.sf_props_unavailable));
+                    return;
+                }
+                if (route == UserspaceRestartPolicy.Route.REINJECT_LENS) {
+                    if (m.lens.model().busy) {
+                        host.feedback(a.getString(R.string.restart_lens_busy));
+                    } else {
+                        // No new values: preserve the current compositor properties.
+                        // The helper checks its install/selftest and reinjects before restarting zygote.
+                        m.lens.restartConfirmed(Collections.emptyMap());
+                        host.feedback(a.getString(R.string.restart_lens_started));
+                    }
+                    return;
+                }
+                m.root.softReboot(ok -> {
+                    if (!ok) host.feedback(a.getString(R.string.restart_error, m.root.message()));
+                });
+            });
             if (m.root.granted()) restart.run();
             else m.root.check(ok -> {
                 if (ok) restart.run();
@@ -191,8 +215,18 @@ final class InfoSheets {
             block.setPadding(t.dp(18), t.dp(12), t.dp(12), t.dp(8));
             block.addView(Ui.text(a, t, ControlTitles.title(host.activity(), c) + " · " + SearchSheet.surfaces(host.activity(), c), Theme.BODY, t.ink, false));
             String observed = st.observed.get(key);
-            block.addView(Ui.text(a, t, a.getString(R.string.conflict_values, ControlValues.display(host.activity(), c, st.saved.get(key)),
-                    ControlValues.display(host.activity(), c, observed == null || observed.isEmpty() ? c.spec().defaultValue : observed)), Theme.CAPTION, t.inkMuted, false));
+            String saved = st.saved.get(key);
+            String appValue = ControlValues.display(a, c, saved);
+            String terminalValue = ControlValues.display(a, c,
+                    observed == null || observed.isEmpty() ? c.spec().defaultValue : observed);
+            if (appValue.equals(terminalValue)) {
+                // The control's rounded display may hide a real difference. Show exact inputs.
+                appValue += " (" + (saved == null ? a.getString(R.string.conflict_default_property) : saved) + ")";
+                terminalValue += " (" + (observed == null || observed.isEmpty()
+                        ? a.getString(R.string.conflict_default_property) : observed) + ")";
+            }
+            block.addView(Ui.text(a, t, a.getString(R.string.conflict_values, appValue,
+                    terminalValue), Theme.CAPTION, t.inkMuted, false));
             LinearLayout actions = Ui.row(a);
             TextView external = Ui.button(a, t, host.activity().getString(R.string.conflict_use_terminal), null, Ui.ButtonStyle.TEXT, true);
             external.setOnClickListener(v -> {

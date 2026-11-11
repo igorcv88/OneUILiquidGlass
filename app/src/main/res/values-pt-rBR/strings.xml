@@ -314,7 +314,11 @@
     <string name="restart_error">Não foi possível reiniciar: %1$s</string>
     <string name="root_not_granted">Acesso root não concedido</string>
     <string name="restart_userspace_title">Reiniciar userspace?</string>
-    <string name="restart_userspace_warning">Reinicia o compositor de tela (SurfaceFlinger) e o zygote, sem desligar o aparelho. A tela fica preta por alguns segundos e todos os apps abertos são fechados, inclusive este. Os caches de sombreamento são apagados e refeitos.\n\nUma lente dinâmica ativada pelo app é descarregada; ative-a de novo depois, se quiser. Será pedido acesso root.</string>
+    <string name="restart_userspace_warning">Reinicia o compositor de tela (SurfaceFlinger) e o zygote, sem desligar o aparelho. A tela fica preta por alguns segundos e todos os apps abertos são fechados, inclusive este. Os caches de sombreamento são apagados e refeitos.\n\nSe a lente dinâmica estiver ativa, o app usará o injetor verificado para recarregá-la durante o reinício. Se não conseguir validar a reinjeção, recusará o reinício para evitar a perda da lente. Será pedido acesso root.</string>
+    <string name="restart_lens_unavailable">Não é possível preservar a lente ativa: esta versão não inclui o injetor. O userspace não foi reiniciado.</string>
+    <string name="restart_lens_busy">Já há uma operação da lente em andamento. O userspace não foi reiniciado.</string>
+    <string name="restart_lens_started">Verificando e reiniciando a lente dinâmica…</string>
+    <string name="conflict_default_property">padrão do sistema</string>
     <string name="restart_saved_ack">Salvei o que estava fazendo</string>
     <string name="conflict_none">Nenhum ajuste foi alterado fora do app desde o último salvamento.</string>
     <string name="conflict_explanation">Um terminal mudou estes valores depois que o app os salvou. O app não sobrescreve sem perguntar.</string>
