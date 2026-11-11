@@ -3,6 +3,7 @@ package io.github.igorcv88.oneuiliquidglass.config;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.net.Uri;
+import android.provider.Settings;
 
 import io.github.igorcv88.oneuiliquidglass.Config;
 
@@ -13,12 +14,21 @@ public final class ConfigRepository {
     public static final int SCHEMA_VERSION = 1;
     public static final Uri SNAPSHOT = Uri.parse("content://" + Config.AUTHORITY + "/v1/snapshot");
     public static final String PREFIX = "desired.", BASELINE = "baseline.";
+    private static final String BASELINE_BOOT = "baselineBoot.";
     private final Context context;
     private final SharedPreferences prefs;
+    private final int bootCount;
 
     public ConfigRepository(Context context) {
         this.context = context.getApplicationContext();
         prefs = Config.open(context);
+        int count;
+        try {
+            count = Settings.Global.getInt(context.getContentResolver(), Settings.Global.BOOT_COUNT);
+        } catch (Settings.SettingNotFoundException | SecurityException e) {
+            count = ExternalChanges.UNKNOWN_BOOT;
+        }
+        bootCount = count;
     }
 
     public SharedPreferences preferences() {
@@ -127,8 +137,10 @@ public final class ConfigRepository {
     }
 
     public boolean conflict(SettingSpec s) {
-        String saved = prefs.getString(BASELINE + s.key, null);
-        return saved != null && !saved.equals(SystemPropertyReader.read(s.key));
+        String baseline = prefs.getString(BASELINE + s.key, null);
+        return ExternalChanges.conflict(s, baseline, prefs.getString(PREFIX + s.key, null),
+                SystemPropertyReader.read(s.key),
+                prefs.getInt(BASELINE_BOOT + s.key, ExternalChanges.UNKNOWN_BOOT), bootCount);
     }
 
     public synchronized void save(SettingSpec s, String value) {
@@ -211,14 +223,16 @@ public final class ConfigRepository {
         }
         if (clear)
             for (String key : prefs.getAll().keySet())
-                if (key.startsWith(PREFIX) || key.startsWith(BASELINE) || ProductFlags.known(key))
+                if (key.startsWith(PREFIX) || key.startsWith(BASELINE)
+                        || key.startsWith(BASELINE_BOOT) || ProductFlags.known(key))
                     edit.remove(key);
         for (Map.Entry<String, String> e : checked.entrySet()) {
             if (ProductFlags.known(e.getKey()))
                 edit.putBoolean(e.getKey(), e.getValue().equals("1"));
             else
                 edit.putString(PREFIX + e.getKey(), e.getValue())
-                        .putString(BASELINE + e.getKey(), SystemPropertyReader.read(e.getKey()));
+                        .putString(BASELINE + e.getKey(), SystemPropertyReader.read(e.getKey()))
+                        .putInt(BASELINE_BOOT + e.getKey(), bootCount);
         }
         if (enabled != null) edit.putBoolean(Config.KEY_ENABLED, enabled);
         if (affectsRunningEngine) edit.putLong("generation", generation() + 1)
@@ -235,7 +249,8 @@ public final class ConfigRepository {
     public synchronized void adoptWritten(Map<String, String> written) {
         SharedPreferences.Editor edit = prefs.edit();
         for (Map.Entry<String, String> e : written.entrySet())
-            if (prefs.contains(PREFIX + e.getKey())) edit.putString(BASELINE + e.getKey(), e.getValue());
+            if (prefs.contains(PREFIX + e.getKey())) edit.putString(BASELINE + e.getKey(), e.getValue())
+                    .putInt(BASELINE_BOOT + e.getKey(), bootCount);
         edit.commit();
     }
 
@@ -277,7 +292,7 @@ public final class ConfigRepository {
             edit.putString(IconSettings.APPLIED_PREFIX + s.key,
                     before == null ? IconSettings.ABSENT : before);
         }
-        edit.remove(PREFIX + s.key).remove(BASELINE + s.key);
+        edit.remove(PREFIX + s.key).remove(BASELINE + s.key).remove(BASELINE_BOOT + s.key);
         if (!IconSettings.contains(s.key)) edit.putLong("generation", generation() + 1);
         edit.apply();
         if (!IconSettings.contains(s.key)) notifyChanged();

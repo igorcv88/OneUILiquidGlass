@@ -13,19 +13,15 @@ public final class RootAccess {
     private enum Action { CHECK, SYSTEM_UI, SOFT_REBOOT }
 
     /**
-     * "Soft reboot": compositor and zygote restart with the shader caches cleared. Detached with
-     * nohup because the app itself dies with zygote. A compositor restart drops a lens injected at
-     * runtime, so the refraction flag is cleared unless the running compositor has the boot
-     * module's overlay mounted (checked before the stop, as oulg-live.sh does): that overlay is
-     * what loads the lens again. Module markers describe the next boot, not the current one.
+     * Plain userspace restart, used only when a fresh read says the dynamic lens is disabled.
+     * A running lens must instead use SfLiveController's verified reinjection path. This fallback
+     * clears the refraction flag rather than leaving SystemUI tagging cards without a shader.
      */
     static final String SOFT_REBOOT =
-            "nohup sh -c 'p=$(pidof surfaceflinger | cut -d \" \" -f 1); keep=0;"
-                    + " [ -n \"$p\" ] && grep -Fq /oulg_sf/ /proc/$p/mountinfo && keep=1;"
-                    + " stop surfaceflinger;"
+            "nohup sh -c 'stop surfaceflinger;"
                     + " rm -f /data/misc/surfaceflinger/skia_shaders /data/misc/surfaceflinger/egl_shaders"
                     + " /data/misc/surfaceflinger/oulg_shaders.txt;"
-                    + " [ \"$keep\" = 1 ] || setprop debug.oulg.sfrefract \"\";"
+                    + " setprop debug.oulg.sfrefract \"\";"
                     + " start surfaceflinger; sleep 3; setprop ctl.restart zygote' >/dev/null 2>&1 &";
 
     private final Activity activity;

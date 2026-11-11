@@ -314,7 +314,11 @@
     <string name="restart_error">Could not restart: %1$s</string>
     <string name="root_not_granted">Root access not granted</string>
     <string name="restart_userspace_title">Restart userspace?</string>
-    <string name="restart_userspace_warning">Restarts SurfaceFlinger and zygote without powering off the device. The screen turns black briefly and all open apps, including this one, close. Shader caches are cleared and rebuilt.\n\nAn app-enabled dynamic lens is unloaded; enable it again afterward if desired. Root access will be requested.</string>
+    <string name="restart_userspace_warning">Restarts SurfaceFlinger and zygote without powering off the device. The screen turns black briefly and all open apps, including this one, close. Shader caches are cleared and rebuilt.\n\nIf the dynamic lens is active, the app will use its verified injector to reload it during the restart. If that cannot be verified, the restart will be refused to avoid losing the lens. Root access will be requested.</string>
+    <string name="restart_lens_unavailable">Cannot preserve the active lens: this build has no injector. Userspace was not restarted.</string>
+    <string name="restart_lens_busy">Lens operation already in progress. Userspace was not restarted.</string>
+    <string name="restart_lens_started">Checking and restarting the dynamic lens…</string>
+    <string name="conflict_default_property">system default</string>
     <string name="restart_saved_ack">I saved my work</string>
     <string name="conflict_none">No settings have changed outside the app since the last save.</string>
     <string name="conflict_explanation">A terminal changed these values after the app saved them. The app will not overwrite them without asking.</string>
