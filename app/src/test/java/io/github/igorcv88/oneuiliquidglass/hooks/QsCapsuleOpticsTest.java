@@ -29,6 +29,34 @@ public class QsCapsuleOpticsTest {
         assertTrue(QuickSettingsEdgeLight.usesCompositor("tile"));
     }
 
+    /** The QS-only angular wrap carries the fixed top light into the curved rim. */
+    @Test public void directionalCornerWrapPreservesDirectionAndDynamicLightSeparation() {
+        assertTrue(LiquidGlassShader.SOURCE.contains("uniform float qsDirectionalWrap;"));
+        assertTrue(LiquidGlassShader.SOURCE.contains("smoothstep(-0.65, 1.0, facing)"));
+        assertTrue(LiquidGlassShader.SOURCE.contains("qsDirectionalWrap > 0.5 ? 0.97 : 1.0"));
+        // With the current top-left direction, top-right curvature must not lose
+        // all of its static light, but still receive less than the straight top.
+        float x = 0.45f, y = 0.89f;
+        float length = (float) Math.hypot(x, y);
+        float top = y / length;
+        float topRight = (y - x) / (length * (float) Math.sqrt(2.0));
+        float rightSide = -x / length;
+        float bottom = -y / length;
+        assertTrue(wrapped(topRight) > original(topRight));
+        assertTrue(wrapped(topRight) < wrapped(top));
+        assertTrue(wrapped(rightSide) < wrapped(topRight));
+        assertEquals(0f, wrapped(bottom), 0.0001f);
+    }
+
+    private static float original(float facing) { return smooth(-0.35f, 1f, facing); }
+    private static float wrapped(float facing) {
+        return original(facing) * 0.2f + smooth(-0.65f, 1f, facing) * 0.8f;
+    }
+    private static float smooth(float lo, float hi, float value) {
+        float t = Math.max(0f, Math.min(1f, (value - lo) / (hi - lo)));
+        return t * t * (3f - 2f * t);
+    }
+
     @After public void reset() throws Exception {
         Field f = QsCapsuleOptics.class.getDeclaredField("broken"); f.setAccessible(true); f.set(null, false);
     }

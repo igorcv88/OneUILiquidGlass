@@ -57,6 +57,7 @@ public final class LiquidGlassShader {
         uniform float innerGain;
         uniform float rimGain;
         uniform float outline;
+        uniform float qsDirectionalWrap;
 
         float roundedBox(float2 p, float2 hs, float r) {
             float2 q = abs(p) - hs + r;
@@ -84,6 +85,13 @@ public final class LiquidGlassShader {
             float2 ld = normalize(light + float2(0.0001, 0.0));
             float facing = dot(n, -ld);
             float lit = smoothstep(-0.35, 1.0, facing);
+            // QS only: broaden the angular response so the overhead light follows the
+            // rounded corners instead of ending where the straight top edge turns.
+            // Keep the direction and let the light decay naturally down the side.
+            if (qsDirectionalWrap > 0.5) {
+                float wrapped = smoothstep(-0.65, 1.0, facing);
+                lit = mix(lit, wrapped, 0.8);
+            }
             float far = smoothstep(0.0, 1.0, -facing);
             float b = max(bevel, 4.0);
 
@@ -119,7 +127,9 @@ public final class LiquidGlassShader {
 
             float3 cool = float3(0.95, 0.975, 1.0);
             float3 added = cool * (contour * contourGain + bent + fresnel + inner + sh) + float3(1.0, 0.995, 0.985) * glint;
-            added *= specular / 0.60 * decor;
+            // A slight QS-only reduction reserves visible contrast for the independent,
+            // backdrop-sampled SurfaceFlinger edge light; all other surfaces are unchanged.
+            added *= specular / 0.60 * decor * (qsDirectionalWrap > 0.5 ? 0.97 : 1.0);
             return half4(half3(clamp(added, 0.0, 1.0)), half(clamp(absorb * shadow / 0.26 * decor, 0.0, 1.0)));
         }
         half4 edge(float2 p, float2 hs, float d, float2 n) {
