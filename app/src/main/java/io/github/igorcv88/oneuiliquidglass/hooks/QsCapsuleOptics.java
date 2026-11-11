@@ -158,6 +158,8 @@ final class QsCapsuleOptics {
         // Lower-right opposed highlight is the visible second arc on QS capsules; notification
         // cards keep innerGain=1 in GlassDrawable. Fresnel and the actual lit rim remain.
         s.setFloatUniform("innerGain", 0f);
+        // Fixed directional light wraps around QS corners; does not alter SF backdrop light.
+        s.setFloatUniform("qsDirectionalWrap", 1f);
         s.setFloatUniform("rimGain", (media ? .55f : 1f) * illumination);
         s.setFloatUniform("outline", light ? t.lightOutline * (media ? .5f : 1f) * illumination : 0f);
     }
