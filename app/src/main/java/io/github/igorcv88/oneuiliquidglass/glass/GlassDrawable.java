@@ -353,6 +353,8 @@ public final class GlassDrawable extends Drawable {
         s.setFloatUniform("sheen", edgeEnabled && live ? t.liveSheen : 0f);
         s.setFloatUniform("glintGain", live ? glint : 1f);
         s.setFloatUniform("innerGain", 1f);
+        // The corner-wrap correction is QS-only; preserve notification/Now Bar optics.
+        s.setFloatUniform("qsDirectionalWrap", 0f);
         s.setFloatUniform("rimGain", live ? rimGain : 1f);
         s.setFloatUniform("outline", edgeEnabled && live ? outline : 0f);
     }
