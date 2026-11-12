@@ -2,6 +2,7 @@ package io.github.igorcv88.oneuiliquidglass.hooks;
 
 import android.content.res.ColorStateList;
 import android.graphics.Color;
+import android.graphics.drawable.GradientDrawable;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
@@ -794,9 +795,11 @@ final class Foreground {
 
     /**
      * A custom label may follow the glass only inside a notification row, with no private
-     * background between the label and that row. The row itself owns the module's material.
-     * Unknown drawables, including images, gradients and selectors, fail closed. This deliberately
-     * does not infer transparency from Drawable.getOpacity() (TRANSLUCENT can still paint a card).
+     * painted fill between the label and that row. The row itself owns the module's material.
+     * RemoteViews can wrap labels in a transparent GradientDrawable whose global alpha is 255;
+     * a solid fill with alpha 0 is not a private text backdrop. Unknown drawables, actual
+     * gradients and opaque fills still fail closed. Do not infer transparency from
+     * Drawable.getOpacity() (TRANSLUCENT may still paint a card).
      * No resource-id or publisher allowlist: RemoteViews can also contain labels without ids.
      */
     static boolean customSurface(View v) {
@@ -812,8 +815,18 @@ final class Foreground {
         return false;
     }
     private static boolean clear(android.graphics.drawable.Drawable d) {
-        return d == null || d.getAlpha() == 0 || (d instanceof android.graphics.drawable.ColorDrawable
-                && (((android.graphics.drawable.ColorDrawable) d).getColor() >>> 24) == 0);
+        if (d == null || d.getAlpha() == 0) return true;
+        if (d instanceof android.graphics.drawable.ColorDrawable)
+            return (((android.graphics.drawable.ColorDrawable) d).getColor() >>> 24) == 0;
+        if (d instanceof GradientDrawable) {
+            GradientDrawable shape = (GradientDrawable) d;
+            ColorStateList fill = shape.getColor();
+            // A transparent solid fill is clear even when the drawable's own alpha is 255.
+            // Unknown/stateful fills and multi-stop gradients remain private surfaces.
+            return fill != null && !fill.isStateful() && shape.getColors() == null
+                    && (fill.getDefaultColor() >>> 24) == 0;
+        }
+        return false;
     }
 
     /** Whether a view is part of a standard template; icon: only the expand icon. */
