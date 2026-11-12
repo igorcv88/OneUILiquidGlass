@@ -61,6 +61,61 @@ public final class CustomForegroundTest {
         assertEquals(0xff000000, text.getCurrentTextColor());
         Foreground.apply(row, false, true, tracked);
     }
+    @Test public void transparentGradientLayoutRootFollowsGlassAndRestores() {
+        // 99Food/DZIF logs: layout background GradientDrawable{alpha=255 color=#00000000}.
+        GradientDrawable transparent = new GradientDrawable();
+        transparent.setColor(0x00000000);
+        content.setBackground(transparent);
+        TextView title = label(0xfff6f8f5);
+        TextView subtitle = label(0xffc6cbc7);
+        assertEquals(255, transparent.getAlpha());
+        assertTrue(Foreground.customSurface(title));
+        assertTrue(Foreground.customSurface(subtitle));
+        Foreground.apply(row, true, true, tracked);
+        assertEquals(0xff09070a, title.getCurrentTextColor());
+        assertEquals(0xff393438, subtitle.getCurrentTextColor());
+        Foreground.apply(row, false, true, tracked);
+        assertEquals(0xfff6f8f5, title.getCurrentTextColor());
+        assertEquals(0xffc6cbc7, subtitle.getCurrentTextColor());
+    }
+    @Test public void colouredBadgeAndRealGradientStayPrivateUnderTransparentRoot() {
+        GradientDrawable transparent = new GradientDrawable();
+        transparent.setColor(0x00000000);
+        content.setBackground(transparent);
+        TextView title = label(0xfff6f8f5);
+        TextView badge = label(0xfff6f8f5);
+        GradientDrawable yellow = new GradientDrawable();
+        yellow.setColor(0xffffd500);
+        badge.setBackground(yellow);
+        TextView gradient = label(0xfff6f8f5);
+        gradient.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{0x00ffffff, 0xffffffff}));
+        assertTrue(Foreground.customSurface(title));
+        assertFalse(Foreground.customSurface(badge));
+        assertFalse(Foreground.customSurface(gradient));
+        Foreground.apply(row, true, true, tracked);
+        assertEquals(0xff09070a, title.getCurrentTextColor());
+        assertEquals(0xfff6f8f5, badge.getCurrentTextColor());
+        assertEquals(0xfff6f8f5, gradient.getCurrentTextColor());
+    }
+    @Test public void transparentGradientTurningOpaqueReleasesAndCanReapply() {
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(0x00000000);
+        content.setBackground(background);
+        TextView title = label(0xfff6f8f5);
+        Foreground.apply(row, true, true, tracked);
+        assertEquals(0xff09070a, title.getCurrentTextColor());
+        background.setColor(0xff203040); // A RemoteViews update installs a private fill.
+        assertFalse(Foreground.customSurface(title));
+        Foreground.apply(row, true, true, tracked);
+        assertEquals(0xfff6f8f5, title.getCurrentTextColor());
+        assertTrue(tracked.isEmpty());
+        background.setColor(0x00000000);
+        Foreground.apply(row, true, true, tracked);
+        assertEquals(0xff09070a, title.getCurrentTextColor());
+        Foreground.apply(row, false, true, tracked);
+        assertEquals(0xfff6f8f5, title.getCurrentTextColor());
+    }
     @Test public void unknownBackgroundAndForegroundFailClosed() {
         TextView text = label(0xffffffff);
         content.setBackground(new GradientDrawable());
