@@ -74,6 +74,8 @@
     <string name="control_title_ca965e93745e">Escurecer o painel</string>
     <string name="control_title_d16920526011">Escurecimento</string>
     <string name="control_title_1add28f0cac7">Escurecimento do Clear Glass</string>
+    <string name="control_title_683a178d491a">Escurecimento máximo do Clear Glass (pop-up)</string>
+    <string name="control_title_194ab8c798ea">Escurecimento mínimo do Clear Glass (pop-up)</string>
     <string name="control_title_b1d0a9cb07ad">Espaço acima do título</string>
     <string name="control_title_11330fb4e644">Espera após gesto</string>
     <string name="control_title_bef898e88315">Espera após transição</string>
@@ -105,6 +107,7 @@
     <string name="control_title_04f26b1088fe">Matiz fria do Clear Glass</string>
     <string name="control_title_8172137d462a">Medir cada cartão</string>
     <string name="control_title_27e402875dc0">Medir tempo dos ganchos</string>
+    <string name="control_title_3d2d3f93bf63">Menisco do Clear Glass (pop-up)</string>
     <string name="control_title_006548b15c01">Modelo de refração</string>
     <string name="control_title_ceaef40ab9b4">Modo de reescrita</string>
     <string name="control_title_b634baeb7442">Modos Clear Glass compilados</string>
@@ -143,6 +146,7 @@
     <string name="control_title_23907232c21c">Saturação</string>
     <string name="control_title_76f1a4366eb4">Saturação da captura</string>
     <string name="control_title_248d0863d7e0">Saturação do Clear Glass</string>
+    <string name="control_title_c0d565be5b41">Saturação do Clear Glass (pop-up)</string>
     <string name="control_title_5df7b3c6b57c">Sombra da borda no vidro claro</string>
     <string name="control_title_34d4857e12a5">Subida do blur do Clear Glass (bloqueio)</string>
     <string name="control_title_67f768b0004c">Subida do blur do Clear Glass (pop-up)</string>

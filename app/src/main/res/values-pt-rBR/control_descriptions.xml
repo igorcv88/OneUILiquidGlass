@@ -112,6 +112,10 @@
     <string name="control_description_sf_hcbody2">Parâmetro experimental do Clear Glass; registrado para o contrato do compositor, ainda sem controle no app. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_hccore">Parâmetro experimental do Clear Glass; registrado para o contrato do compositor, ainda sem controle no app. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_hcedge">Parâmetro experimental do Clear Glass; registrado para o contrato do compositor, ainda sem controle no app. As mudanças são aplicadas após reiniciar o userspace.</string>
+    <string name="control_description_sf_hcfold">Parâmetro experimental do Clear Glass; registrado para o contrato do compositor, ainda sem controle no app. As mudanças são aplicadas após reiniciar o userspace.</string>
+    <string name="control_description_sf_hcsat">Parâmetro experimental do Clear Glass; registrado para o contrato do compositor, ainda sem controle no app. As mudanças são aplicadas após reiniciar o userspace.</string>
+    <string name="control_description_sf_hcscrim">Parâmetro experimental do Clear Glass; registrado para o contrato do compositor, ainda sem controle no app. As mudanças são aplicadas após reiniciar o userspace.</string>
+    <string name="control_description_sf_hcscrimmax">Parâmetro experimental do Clear Glass; registrado para o contrato do compositor, ainda sem controle no app. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_hubloom">Reduz amostras muito claras no centro do pop-up. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_hublur">Multiplica o desfoque do compositor no pop-up sem alterar o desfoque básico. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_hubodylens">Ajusta a refração difusa em todo o pop-up, independentemente da borda. As mudanças são aplicadas após reiniciar o userspace.</string>

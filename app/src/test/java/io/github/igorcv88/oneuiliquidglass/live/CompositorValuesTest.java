@@ -196,6 +196,7 @@ public final class CompositorValuesTest {
     private static final Set<String> CLEAR_GLASS_PENDING_INTEGRATION = new TreeSet<>(Arrays.asList(
             "huclear", "kgclear",
             "hcband", "hcamp", "hcbody", "hcbody2", "hcedge", "hccore", "hcblurexp",
+            "hcfold", "hcsat", "hcscrim", "hcscrimmax",
             "kcband", "kcamp", "kcbody", "kcbody2", "kcedge", "kccore", "kcblurexp",
             "kcveil", "kclevel", "kcdim", "kcknee", "kcsat", "kccool"));
 
@@ -207,7 +208,7 @@ public final class CompositorValuesTest {
         read.remove("optics");
         read.remove("norewrite");
         read.remove("clear"); // compiled-mode marker written by the library
-        assertEquals(22, CLEAR_GLASS_PENDING_INTEGRATION.size());
+        assertEquals(26, CLEAR_GLASS_PENDING_INTEGRATION.size());
         assertTrue(read.containsAll(CLEAR_GLASS_PENDING_INTEGRATION));
         assertTrue(Collections.disjoint(CLEAR_GLASS_PENDING_INTEGRATION, SfLive.WRITABLE));
         read.removeAll(CLEAR_GLASS_PENDING_INTEGRATION);

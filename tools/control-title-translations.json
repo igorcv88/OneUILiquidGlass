@@ -173,5 +173,9 @@
   "Domo cúbico do Clear Glass (bloqueio)": "Clear Glass cubic dome (lock screen)",
   "Blur do contorno do Clear Glass (bloqueio)": "Clear Glass outline blur (lock screen)",
   "Blur do miolo do Clear Glass (bloqueio)": "Clear Glass center blur (lock screen)",
-  "Subida do blur do Clear Glass (bloqueio)": "Clear Glass blur ramp (lock screen)"
+  "Subida do blur do Clear Glass (bloqueio)": "Clear Glass blur ramp (lock screen)",
+  "Menisco do Clear Glass (pop-up)": "Clear Glass meniscus (pop-up)",
+  "Saturação do Clear Glass (pop-up)": "Clear Glass saturation (pop-up)",
+  "Escurecimento mínimo do Clear Glass (pop-up)": "Clear Glass minimum scrim (pop-up)",
+  "Escurecimento máximo do Clear Glass (pop-up)": "Clear Glass maximum scrim (pop-up)"
 }

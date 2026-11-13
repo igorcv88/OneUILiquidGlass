@@ -74,6 +74,8 @@
     <string name="control_title_ca965e93745e">Panel darkening</string>
     <string name="control_title_d16920526011">Darkening</string>
     <string name="control_title_1add28f0cac7">Clear Glass dimming</string>
+    <string name="control_title_683a178d491a">Clear Glass maximum scrim (pop-up)</string>
+    <string name="control_title_194ab8c798ea">Clear Glass minimum scrim (pop-up)</string>
     <string name="control_title_b1d0a9cb07ad">Space above title</string>
     <string name="control_title_11330fb4e644">Delay after gesture</string>
     <string name="control_title_bef898e88315">Delay after transition</string>
@@ -105,6 +107,7 @@
     <string name="control_title_04f26b1088fe">Clear Glass cool tint</string>
     <string name="control_title_8172137d462a">Measure each card</string>
     <string name="control_title_27e402875dc0">Measure hook timing</string>
+    <string name="control_title_3d2d3f93bf63">Clear Glass meniscus (pop-up)</string>
     <string name="control_title_006548b15c01">Refraction model</string>
     <string name="control_title_ceaef40ab9b4">Rewrite mode</string>
     <string name="control_title_b634baeb7442">Compiled Clear Glass modes</string>
@@ -143,6 +146,7 @@
     <string name="control_title_23907232c21c">Saturation</string>
     <string name="control_title_76f1a4366eb4">Capture saturation</string>
     <string name="control_title_248d0863d7e0">Clear Glass saturation</string>
+    <string name="control_title_c0d565be5b41">Clear Glass saturation (pop-up)</string>
     <string name="control_title_5df7b3c6b57c">Light glass edge shadow</string>
     <string name="control_title_34d4857e12a5">Clear Glass blur ramp (lock screen)</string>
     <string name="control_title_67f768b0004c">Clear Glass blur ramp (pop-up)</string>

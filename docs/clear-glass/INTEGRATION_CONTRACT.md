@@ -110,7 +110,7 @@ Rules for the module:
 - Treat a written `huclear`/`kgclear` as **pending** until `debug.oulg.sf.clear` (or the `CLEAR_OPTICS` line) reports it. Before that, the device renders the previous modes.
 - A reported mode is what a program was compiled with, not proof that a card was drawn clear. Per-card confirmation needs the debug maps (section 7) or a screenshot.
 
-The live helper (`sfhook/live/oulg-live.sh`) accepts `huclear kgclear hcband hcamp hcbody hcbody2 hcedge hccore hcblurexp kcband kcamp kcbody kcbody2 kcedge kccore kcblurexp kcveil kclevel kcdim kcknee kcsat kccool` in `setprops`. It refuses the bare key `clear` (the reported state is not writable).
+The live helper (`sfhook/live/oulg-live.sh`) accepts `huclear kgclear hcband hcamp hcbody hcbody2 hcedge hccore hcblurexp kcband kcamp kcbody kcbody2 kcedge kccore kcblurexp kcveil kclevel kcdim kcknee kcsat kccool hcfold hcsat hcscrim hcscrimmax` in `setprops`. It refuses the bare key `clear` (the reported state is not writable).
 
 ## 6. Changes expected on the Android side (not done here)
 
@@ -168,3 +168,35 @@ None of these can be decided on the host:
 - R4 SwiftShader ≠ Adreno: precision and cost may differ.
 - R5 HU blur: core 12 shows much more backdrop structure than optics 11 (structure 9.2 vs 2.0 on the test backdrop); core 24 is about half of that.
 - Existing optics-11 issues kept as they were (not fixed here): `sflens 0.55` folds the HU edge (5.6 px at r 92, 6.6 px at r 108); `kglevel` range; the stale `field_check`.
+
+## 12. Heads-up meniscus and clear material (`feat/clear-glass-meniscus`)
+
+Added after the first device captures of optics 12 (S25 Ultra, DZIF, lossless PNG crops, `hcedge 8`, `hccore 24`, `hcblurexp 1`). Measured on those crops: colour boundaries behind the card stay straight within 1.5 px over the whole height (the slab moves a vertical edge only through the 1.8 % dome); the 10–90 % width of a black/white step is 32–33 px in the body and 20–21 px next to the top and bottom outline; per-pixel grain inside the card is 0.3–0.6 of 255 RMS; the body over a white backdrop reads 245 of 255, so white text has about 1.1:1 contrast. The slab's rim is a displaced copy at 1:1, sharper than the body. The reference surface (the SimpMusic mini player, `io.github.kyant0:backdrop`) uses a convex lens whose slope is largest at the outline with amplitude twice the band, a uniform blur, saturation 1.5 and a black scrim of 0.12–0.50 driven by the backdrop's luminance.
+
+Four heads-up properties, all neutral by default. With them unset, neutral or out of range the clear GLSL is byte for byte that of optics 12 at `25acdc7` (`testdata/optics12_golden`):
+
+| Property | Default | Range | Meaning |
+|---|---|---|---|
+| `debug.oulg.sf.hcfold` | 0 | 0–3 | 0 keeps the slab. Above 0 the heads-up field is the meniscus below; the value is the amplitude over the band |
+| `debug.oulg.sf.hcsat` | 1 | 0.9–2 | saturation of the heads-up clear body |
+| `debug.oulg.sf.hcscrim` | 0 | 0–0.6 | scrim where the backdrop is black |
+| `debug.oulg.sf.hcscrimmax` | 0 | 0–0.8 | scrim where the backdrop is white; raised to `hcscrim` when below it and limited to `hcscrim + (1 − hcscrim) / 2` |
+
+```
+x = 1 - depth / band                       band as in section 1 (hcband)
+a = min(hcfold * band, cap * min(hs))      cap = max(1 / max(rho, 1) - l0 - l2, 0), rounded down to 4 decimals
+s = -R u (l0 + l2 u^2) - n a (1 - sqrt(1 - x^2))      (second term only for 0 < depth < band)
+F = rho * s
+gain = 1 - (hcscrim + (hcscrimmax - hcscrim) * y)      y = Rec.709 luma of the (blurred) backdrop at the pixel, encoded values
+```
+
+- The map folds by design. On a straight edge the source depth `depth + a (1 − sqrt(1 − x²))` falls from `a` at the outline to one minimum at `depth = band (1 − 1 / sqrt(1 + (a / band)²))` and rises after it: outside that depth the rim shows the interior mirrored and compressed, inside it the image is stretched (without bound at the fold line). The σ ≥ 0.25 bound of section 1 does not apply to the meniscus.
+- What does hold (`clear_check.c`, M1–M4): every sample stays inside the card and never moves outward (30.8 M points, 108 parameter sets × 10 shapes); the shift and its slope vanish at `depth = band`; the fold depth matches the formula within 0.005 px; the outline samples `a` px inside.
+- The tag strength `k` is not used by the meniscus (mode 1 no longer caps the amplitude by `k` when `hcfold > 0`).
+- The material is applied to the refracted, blurred backdrop before the edge light, so the light is not dimmed. The limit on `hcscrimmax` keeps the output luma from falling as the backdrop gets brighter (checked over the whole range).
+- The blur stays the section-1 curve. A uniform blur is `hcedge = hccore`.
+- Starting values for the device, sized on the 1340×374 card (r 108): `hcband 0.42` (45.4 px), `hcfold 2` (a 90.7 px, mirrored rim 25.1 px, stretched zone 20.3 px), `hcedge 24`, `hccore 24`, `hcbody 0`, `hcsat 1.5`, `hcscrim 0.12`, `hcscrimmax 0.5` (white backdrop at 0.50, mid grey 0.50 at 0.345). These are arithmetic from the reference's parameters and the measurements above, not device results.
+- Registry: the four keys are in the catalogue and `SettingsRegistry` (199 specs), `Tier.INTERNAL` read-only rows, in `CLEAR_GLASS_PENDING_INTEGRATION`, not in `SfLive.WRITABLE`.
+- Sizes: largest library with meniscus and material 16374 of 32768 bytes; `main()` unchanged.
+- Not covered: the lockscreen (profile 1) keeps the slab; `clear_render_check.mjs` (WebGL) has no meniscus case yet, so the GLSL/twin agreement of the meniscus rests on the shared text structure and glslang, not on a rendered comparison.
+- Pending on the device: everything visual. In particular the module flips notification text to dark over light backdrops; with a scrim that brings white down to 0.50 the text colour rule may need a different threshold.

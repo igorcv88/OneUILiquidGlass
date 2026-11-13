@@ -13,7 +13,7 @@ for line in text.splitlines():
  if key=='sf.clear': default=''; domain='readonly'; desc='Modos Clear Glass do último programa compilado (hu:<modo>,kg:<modo>); ausente = desconhecido, não confirma ativação.'
  rows[key]=(default,domain,desc or domain)
 READONLY=('sf.optics','sf.clear')
-assert len(rows)==195,len(rows)
+assert len(rows)==199,len(rows)
 # Literal bounds follow Tuning; native limits are deliberately conservative UI limits, not C clamps.
 bools=set('livelens shadeblur sfrefract liveblur kgwinblur kgsharedoptics pillglass textswap headertone icontone popuptone popuplock orphandraw shadelocal panelnativegray perf trace sf.norewrite sf.kgfixedrim qs.tilelight qs.tiledark qs.hideoffdiscs'.split())
 ints=set('qs.edgeblur rimhz hz hzkg tint lensmaxage lenssettle lenstransition liveradius liveshaderadius semradius semradiuslens semalpha kgblurpath shadeblurpath kgblurradius pillblur kgoptics huoptics livedarkalpha livedarkfill kgdarkalpha kgdarkfill shadescaleveil panelblurcap sf.taps sf.kgtaps edgepremul'.split())
@@ -34,6 +34,9 @@ titles.update({'sf.huclear':'Clear Glass no pop-up','sf.kgclear':'Clear Glass no
                'sf.kcveil':'Véu do Clear Glass','sf.kclevel':'Nível do véu do Clear Glass',
                'sf.kcdim':'Escurecimento do Clear Glass','sf.kcknee':'Compressão de realces do Clear Glass',
                'sf.kcsat':'Saturação do Clear Glass','sf.kccool':'Matiz fria do Clear Glass'})
+# Heads-up meniscus and clear material (oulg_fix_clear).
+native.update({'hcfold':(0,3),'hcsat':(.9,2),'hcscrim':(0,.6),'hcscrimmax':(0,.8)})
+titles.update({'sf.hcfold':'Menisco do Clear Glass (pop-up)','sf.hcsat':'Saturação do Clear Glass (pop-up)','sf.hcscrim':'Escurecimento mínimo do Clear Glass (pop-up)','sf.hcscrimmax':'Escurecimento máximo do Clear Glass (pop-up)'})
 for p,s in (('sf.hc','pop-up'),('sf.kc','bloqueio')):
  titles.update({p+'band':f'Banda de refração do Clear Glass ({s})',p+'amp':f'Refração da borda do Clear Glass ({s})',
                 p+'body':f'Refração do corpo do Clear Glass ({s})',p+'body2':f'Domo cúbico do Clear Glass ({s})',
