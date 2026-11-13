@@ -105,13 +105,61 @@ for hu, kg, debug in itertools.product((0, 1, 2), (0, 1, 2), (0, 3)):
     if not path.exists():
         continue
     want = dict(reversed(l.split()) for l in path.read_text().split("\n") if l.strip())
-    for name, args in (("unset", ""), ("neutral", ",hcfold=0,hcsat=1,hcscrim=0,hcscrimmax=0,hcadapt=0"), ("invalid", ",hcfold=9,hcsat=NaN,hcscrim=-1,hcadapt=2")):
+    for name, args in (("unset", ""), ("neutral", ",hcfold=0,hcsat=1,hcscrim=0,hcscrimmax=0,hcadapt=0,kcfold=0,hclift=0,kclift=0,hcneutral=0.75"),
+                       ("invalid", ",hcfold=9,hcsat=NaN,hcscrim=-1,hcadapt=2,kcfold=9,hclift=-1,kclift=NaN,hcneutral=2")):
         out = gen(f"i2_{name}_{hu}{kg}_{debug}", debug, f"huclear={hu},kgclear={kg}{args}")
         got = {q.name: sha(q) for q in out.glob("mod_*")}
         if got != want:
             fails.append(f"I2 hu {hu} kg {kg} debug {debug} ({name}): " + ", ".join(sorted(k for k in set(got) | set(want) if got.get(k) != want.get(k))))
 print("I2: with the meniscus and heads-up material unset, neutral or invalid, clear output is byte-identical to optics 12 (25acdc7)"
       if not any(f.startswith("I2") for f in fails) else "I2: FAILED")
+
+# I3: the heads-up approved on the device (acff51b: meniscus, material, adaptive body) is unchanged
+# while the lockscreen meniscus, the lifts and the neutral strength are unset, neutral or invalid.
+APPROVED = {"a": "hcband=0.42,hcfold=2,hcedge=24,hccore=24,hcbody=0,hcsat=1.05,hcscrim=0,hcscrimmax=0,hcadapt=1",
+            "b": "hcband=0.42,hcfold=2,hcedge=24,hccore=24,hcsat=1.5,hcscrim=0.12,hcscrimmax=0.5,hcadapt=1"}
+golden_hu = golden.parent / "hu_approved_golden"
+i3 = 0
+for cfg, params in APPROVED.items():
+    for (hu, kg), debug in itertools.product(((1, 0), (2, 0), (1, 1), (1, 2), (2, 2)), (0, 3)):
+        want = dict(reversed(l.split()) for l in (golden_hu / f"{cfg}_m{hu}{kg}_d{debug}.sha256").read_text().split("\n") if l.strip())
+        for name, args in (("unset", ""), ("neutral", ",kcfold=0,hclift=0,kclift=0,hcneutral=0.75"), ("invalid", ",kcfold=-1,hclift=3,kclift=NaN,hcneutral=-0.1")):
+            out = gen(f"i3_{cfg}_{name}_{hu}{kg}_{debug}", debug, f"huclear={hu},kgclear={kg},{params}{args}")
+            got = {q.name: sha(q) for q in out.glob("mod_*")}
+            i3 += 1
+            if got != want:
+                fails.append(f"I3 {cfg} hu {hu} kg {kg} debug {debug} ({name}): " + ", ".join(sorted(k for k in set(got) | set(want) if got.get(k) != want.get(k))))
+print(f"I3: the approved heads-up (acff51b, two parameter sets, {i3} runs) is byte-identical with kcfold, hclift, kclift and hcneutral unset, neutral or invalid"
+      if not any(f.startswith("I3") for f in fails) else "I3: FAILED")
+
+# Lockscreen meniscus, both lifts and a non-default neutral strength, with the approved heads-up.
+kgmen = 0
+for hu, kg in itertools.product((0, 1, 2), repeat=2):
+    for debug in range(5):
+        out = gen(f"kgmen{hu}{kg}_d{debug}", debug, f"huclear={hu},kgclear={kg},{APPROVED['a']},hclift=0.5,hcneutral=0.4,kcband=0.42,kcfold=2,kcedge=12,kccore=24,kclift=0.5")
+        base = ref[1 if debug == 1 else 0]
+        for frag in sorted(out.glob("mod_*.frag")):
+            text = frag.read_text()
+            external = "samplerExternalOES" in text
+            if suffix(text) != suffix((base / frag.name).read_text()):
+                fails.append(f"kg meniscus changed main(): hu {hu} kg {kg} debug {debug} {frag.name}")
+            if text.count("sqrt(max(1.0 - x * x, 0.0))") != (1 if hu else 0) + (1 if kg else 0):
+                fails.append(f"kg meniscus field count wrong: hu {hu} kg {kg} {frag.name}")
+            if text.count("1.0 - pow(1.0 - clamp(rgb, 0.0, 1.0)") != (0 if external else (1 if hu else 0) + (1 if kg else 0)):
+                fails.append(f"lift count wrong: hu {hu} kg {kg} {frag.name}")
+            if not hu and not kg and debug in (0, 1) and text != (ref[debug] / frag.name).read_text():
+                fails.append(f"kg meniscus parameters changed an off program: debug {debug} {frag.name}")
+            r = subprocess.run(["glslangValidator", "-S", "frag", str(frag)], capture_output=True, text=True)
+            if r.returncode:
+                fails.append(f"compile {frag}: {r.stdout[-400:]}")
+            if "voulg_tag" in text:
+                for vert in ("mod_001.vert", "min_001.vert"):
+                    r = subprocess.run(["glslangValidator", "-l", str(out / vert), str(frag)], capture_output=True, text=True)
+                    if r.returncode:
+                        fails.append(f"link {vert} + {frag}: {r.stdout[-400:]}")
+            kgmen += 1
+print(f"kg meniscus: {kgmen} fragment rewrites (9 mode pairs x debug 0-4, kcfold 2, hclift 0.5, kclift 0.5, hcneutral 0.4) compile and link; "
+      "main() unchanged; one meniscus field and one lift per clear profile")
 
 # Meniscus and heads-up material.
 meniscus = 0

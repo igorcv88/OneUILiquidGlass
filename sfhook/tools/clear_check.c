@@ -415,8 +415,9 @@ static void field_meniscus(double qx, double qy, double hx, double hy, double r,
 }
 static double mcap_of(double l0, double l2, double rho) {
     struct oulg_clear c = OULG_CLEAR_DEFAULT;
-    c.body[0] = (float) l0; c.body2[0] = (float) l2;
-    return (double) (long) (oulg_meniscus_cap(&c, rho) * 1e4) / 1e4;
+    c.body[0] = (float) l0; c.body2[0] = (float) l2; c.body[1] = (float) l0; c.body2[1] = (float) l2;
+    CHECK(oulg_meniscus_cap(&c, 0, rho) == oulg_meniscus_cap(&c, 1, rho), "meniscus cap differs between profiles");
+    return (double) (long) (oulg_meniscus_cap(&c, 0, rho) * 1e4) / 1e4;
 }
 
 // M1: no sample leaves the card or moves outward, over shapes x band x fold x dome x rho.
@@ -497,13 +498,15 @@ static void m2_m3_m4(void) {
 // The heads-up clear material: ranges, the monotone bound and the luma it outputs.
 static void hu_material(void) {
     struct oulg_clear c = OULG_CLEAR_DEFAULT, d = OULG_CLEAR_DEFAULT;
-    CHECK(d.fold == 0 && d.hsat == 1 && d.scrim == 0 && d.scrimmax == 0, "hu material: defaults are not neutral");
+    CHECK(d.fold[0] == 0 && d.fold[1] == 0 && d.lift[0] == 0 && d.lift[1] == 0 && d.neutral == 0.75f && d.hsat == 1 && d.scrim == 0 && d.scrimmax == 0, "hu material: defaults are not neutral");
     c.mode[0] = 1;
     CHECK(!oulg_hu_material_on(&c), "hu material: emitted with neutral values");
-    c.fold = 3.1f; c.hsat = 2.1f; c.scrim = 0.61f; c.scrimmax = 0.81f; oulg_fix_clear(&c);
-    CHECK(c.fold == 0 && c.hsat == 1 && c.scrim == 0 && c.scrimmax == 0, "hu material: out-of-range values kept");
-    c.fold = NAN; c.hsat = NAN; c.scrim = NAN; c.scrimmax = NAN; oulg_fix_clear(&c);
-    CHECK(c.fold == 0 && c.hsat == 1 && c.scrim == 0 && c.scrimmax == 0, "hu material: NaN kept");
+    c.fold[0] = 3.1f; c.fold[1] = 3.1f; c.lift[0] = 2.1f; c.lift[1] = -0.1f; c.neutral = 1.1f; c.hsat = 2.1f; c.scrim = 0.61f; c.scrimmax = 0.81f; oulg_fix_clear(&c);
+    CHECK(c.fold[1] == 0 && c.lift[0] == 0 && c.lift[1] == 0 && c.neutral == 0.75f, "kg fold, lift, neutral: out-of-range values kept");
+    CHECK(c.fold[0] == 0 && c.hsat == 1 && c.scrim == 0 && c.scrimmax == 0, "hu material: out-of-range values kept");
+    c.fold[0] = NAN; c.fold[1] = NAN; c.lift[0] = NAN; c.lift[1] = NAN; c.neutral = NAN; c.hsat = NAN; c.scrim = NAN; c.scrimmax = NAN; oulg_fix_clear(&c);
+    CHECK(c.fold[1] == 0 && c.lift[0] == 0 && c.lift[1] == 0 && c.neutral == 0.75f, "kg fold, lift, neutral: NaN kept");
+    CHECK(c.fold[0] == 0 && c.hsat == 1 && c.scrim == 0 && c.scrimmax == 0, "hu material: NaN kept");
     c.scrim = 0.3f; c.scrimmax = 0.1f; oulg_fix_clear(&c);
     CHECK(c.scrimmax == c.scrim, "hu material: scrimmax below scrim not raised");
     double worst = 1e9;
@@ -628,13 +631,80 @@ static void hu_adapt(void) {
            OULG_ADAPT_WIDE, oldx, keep40, keep80, fine, bare);
 }
 
+// The text of one function of the library, from its signature to the closing brace at column 0.
+static int fn_text(const char *lib, const char *sig, char *out, size_t cap) {
+    const char *a = strstr(lib, sig), *b = a ? strstr(a, "\n}\n") : NULL;
+    if (!a || !b || (size_t) (b - a) + 3 >= cap) return 0;
+    memcpy(out, a, (size_t) (b - a) + 3); out[b - a + 3] = 0;
+    return 1;
+}
+// Lockscreen meniscus and the lift: one field text for both profiles, the lockscreen's edge block and
+// material untouched by kcfold, the lift's tone curve, and where each is emitted.
+static void kg_meniscus_and_lift(void) {
+    char *a = malloc(1 << 17), *b = malloc(1 << 17), fa[4096], fb[4096], ga[8192], gb[8192];
+    struct oulg_profile p[OULG_PROFILES] = {OULG_PROFILES_DEFAULT[0], OULG_PROFILES_DEFAULT[1], OULG_PROFILES_DEFAULT[2], OULG_PROFILES_DEFAULT[3]};
+    p[1].refract = p[0].refract; p[1].blur = p[0].blur;
+    // Same parameters on both profiles: the two field functions differ in their index only.
+    struct oulg_clear c = OULG_CLEAR_DEFAULT; c.mode[0] = 1; c.mode[1] = 1;
+    for (int i = 0; i < 2; i++) { c.band[i] = 0.42f; c.body[i] = 0.03f; c.body2[i] = 0.01f; c.edge[i] = 12; c.core[i] = 24; c.blurexp[i] = 1.5f; c.fold[i] = 2; }
+    oulg_fix_clear(&c);
+    CHECK(oulg_lib(a, 1 << 17, 0, 0, p, &c), "kg meniscus: library failed");
+    CHECK(fn_text(a, "highp vec2 oulg_clear0(", fa, sizeof fa) && fn_text(a, "highp vec2 oulg_clear1(", fb, sizeof fb), "kg meniscus: field functions missing");
+    char *idx = strstr(fb, "oulg_clear1("); if (idx) idx[10] = '0';
+    CHECK(strcmp(fa, fb) == 0 && strstr(fa, "sqrt(max(1.0 - x * x, 0.0))"), "kg meniscus: the two profiles do not share one field text");
+    // Independent parameters reach their own function; kcfold alone leaves the heads-up function a slab.
+    struct oulg_clear k = OULG_CLEAR_DEFAULT; k.mode[0] = 1; k.mode[1] = 1; k.fold[1] = 1.5f; k.band[1] = 0.6f; oulg_fix_clear(&k);
+    CHECK(oulg_lib(a, 1 << 17, 0, 0, p, &k), "kg meniscus: library failed (kg only)");
+    CHECK(fn_text(a, "highp vec2 oulg_clear0(", fa, sizeof fa) && fn_text(a, "highp vec2 oulg_clear1(", fb, sizeof fb), "kg meniscus: field functions missing (kg only)");
+    CHECK(!strstr(fa, "sqrt(max(1.0 - x * x") && strstr(fa, "t * t * (3.0 - 2.0 * t)"), "kg meniscus: kcfold changed the heads-up field");
+    CHECK(strstr(fb, "min(1.5000 * band,") && strstr(fb, "clamp(0.6000 * r, bevel, r)"), "kg meniscus: the lockscreen parameters are not in its field");
+    // kcfold changes the field function and nothing else: material, edge block, light, body are the slab's.
+    struct oulg_clear s = k; s.fold[1] = 0;
+    CHECK(oulg_lib(b, 1 << 17, 0, 0, p, &s), "kg meniscus: library failed (slab)");
+    CHECK(fn_text(a, "mediump vec4 oulg_material_clear(", ga, sizeof ga) && fn_text(b, "mediump vec4 oulg_material_clear(", gb, sizeof gb)
+          && strcmp(ga, gb) == 0 && strstr(ga, OULG_EDGE_BLOCK_START), "kg meniscus: kcfold changed the lockscreen material or its edge block");
+    const char *ta = strstr(a, "highp vec2 oulg_field("), *tb = strstr(b, "highp vec2 oulg_field(");
+    CHECK(ta && tb && strcmp(ta, tb) == 0, "kg meniscus: kcfold changed text after the field functions");
+    // With kgclear off, kcfold and kclift emit nothing.
+    struct oulg_clear off = OULG_CLEAR_DEFAULT, off2 = OULG_CLEAR_DEFAULT; off.mode[0] = 1; off2.mode[0] = 1; off2.fold[1] = 2; off2.lift[1] = 1;
+    oulg_lib(a, 1 << 17, 0, 0, p, &off); oulg_lib(b, 1 << 17, 0, 0, p, &off2);
+    CHECK(strcmp(a, b) == 0, "kg meniscus: kcfold or kclift emitted with kgclear 0");
+    // Lift: emitted once per profile that asks for it, before the lockscreen's edge block.
+    struct oulg_clear l = OULG_CLEAR_DEFAULT; l.mode[0] = 1; l.mode[1] = 1; l.lift[0] = 0.5f; l.lift[1] = 1.0f; oulg_fix_clear(&l);
+    CHECK(oulg_hu_material_on(&l), "lift: heads-up material off with hclift set");
+    CHECK(oulg_lib(a, 1 << 17, 0, 0, p, &l), "lift: library failed");
+    CHECK(fn_text(a, "mediump vec4 oulg_material_hu(", ga, sizeof ga) && strstr(ga, "vec3(1.500));\n  return vec4("), "lift: heads-up line missing or misplaced");
+    CHECK(fn_text(a, "mediump vec4 oulg_material_clear(", gb, sizeof gb), "lift: lockscreen material missing");
+    const char *kl = strstr(gb, "vec3(2.000));\n"), *eb = strstr(gb, OULG_EDGE_BLOCK_START);
+    CHECK(kl && eb && kl < eb, "lift: lockscreen line missing or after the edge block");
+    CHECK(oulg_count(a, "1.0 - pow(1.0 - clamp(rgb, 0.0, 1.0)") == 2, "lift: emitted %d times", (int) oulg_count(a, "1.0 - pow(1.0 - clamp(rgb, 0.0, 1.0)"));
+    // The curve: fixed ends, never below the input, increasing, no value above 1, larger with the lift.
+    double mid1 = 0, mid2 = 0;
+    for (double L = 0; L <= 2.0001; L += 0.25) {
+        double prev = -1;
+        for (double v = 0; v <= 1.00001; v += 0.001) {
+            double o = 1 - pow(1 - fmin(v, 1), 1 + L);
+            CHECK(o >= v - 1e-12 && o <= 1 + 1e-12 && o >= prev, "lift %.2f: curve broken at %.3f (%.4f)", L, v, o);
+            prev = o;
+        }
+        CHECK(1 - pow(1 - 0.0, 1 + L) == 0 && 1 - pow(1 - 1.0, 1 + L) == 1, "lift %.2f: ends move", L);
+        if (L == 1) mid1 = 1 - pow(0.5, 2);
+        if (L == 2) mid2 = 1 - pow(0.5, 3);
+    }
+    printf("kg meniscus: one field text for both profiles (index aside); kcfold changes the lockscreen field function only "
+           "(material, edge block and everything after the fields identical to the slab's); nothing emitted with kgclear 0\n");
+    printf("lift: 0 emits nothing; fixed black and white, increasing, never below the input, never above 1; mid grey 0.50 -> %.3f at lift 1, %.3f at lift 2; "
+           "heads-up after the scrim, lockscreen before its edge block\n", mid1, mid2);
+    free(a); free(b);
+}
+
 // Sizes and text with the meniscus and the heads-up material compiled.
 static void meniscus_text(void) {
     char *buf = malloc(1 << 17), *ref = malloc(1 << 17); size_t most = 0;
     struct oulg_profile p[OULG_PROFILES] = {OULG_PROFILES_DEFAULT[0], OULG_PROFILES_DEFAULT[1], OULG_PROFILES_DEFAULT[2], OULG_PROFILES_DEFAULT[3]};
     p[0].bloom = 1.5f;
     for (int hu = 0; hu < 3; hu++) for (int kg = 0; kg < 3; kg++) for (int dbg = 0; dbg <= 4; dbg++) for (int ext = 0; ext < 2; ext++) {
-        struct oulg_clear c = OULG_CLEAR_DEFAULT; c.mode[0] = hu; c.mode[1] = kg; c.fold = 2; c.hsat = 1.5f; c.scrim = 0.12f; c.scrimmax = 0.5f; c.adapt = 1;
+        struct oulg_clear c = OULG_CLEAR_DEFAULT; c.mode[0] = hu; c.mode[1] = kg; c.fold[0] = 2; c.hsat = 1.5f; c.scrim = 0.12f; c.scrimmax = 0.5f; c.adapt = 1;
         CHECK(oulg_lib(buf, 1 << 17, ext, dbg, p, &c), "meniscus: library failed hu %d kg %d debug %d ext %d", hu, kg, dbg, ext);
         size_t n = strlen(buf), cap = oulg_lib_cap(dbg, &c);
         CHECK(n * 4 <= cap * 3, "meniscus size: hu %d kg %d debug %d ext %d uses %zu of %zu", hu, kg, dbg, ext, n, cap);
@@ -658,7 +728,7 @@ static void meniscus_text(void) {
 
 int main(void) {
     u1_u2(); u3_u4(); u5(); u6(); u7(); u8(); fix_ranges(); sizes(); text_invariance();
-    m1(); m2_m3_m4(); hu_material(); hu_adapt(); meniscus_text();
+    m1(); m2_m3_m4(); hu_material(); hu_adapt(); kg_meniscus_and_lift(); meniscus_text();
     if (fails) { printf("clear_check: %d FAILURES\n", fails); return 1; }
     printf("clear_check: all checks passed\n");
     return 0;
