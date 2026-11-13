@@ -368,24 +368,29 @@ static void layered_blur(struct oulg_profile p[OULG_PROFILES]) {
 
 // Clear Glass (refract.h), read when a fragment shader is compiled like the profiles above:
 // debug.oulg.sf.huclear and .kgclear select it per profile (0 off: the optics-11 GLSL byte for byte;
-// 1 every card of the profile; 2 per card, by the tag's strength slice), and debug.oulg.sf.hc<name>
-// / .kc<name> its parameters, <name> one of band amp body body2 edge core blurexp, plus for the
+// 1 every card of the profile; 2 per card, by the tag's strength slice), and the sf.hc* (heads-up) /
+// sf.kc* (lockscreen) properties its parameters: band amp body body2 edge core blurexp, plus for the
 // lockscreen veil level dim knee sat cool. Every one of them needs a shader recompilation (in
 // practice a SurfaceFlinger restart); only the mode-2 tag slice changes live.
+// Names are spelled out (no prefix concatenation) so the registry contract test sees each reader.
 static void clear_params(struct oulg_clear *c) {
-    static const char *const pre[2] = {"debug.oulg.sf.hc", "debug.oulg.sf.kc"};
-    static const char *const names[7] = {"band", "amp", "body", "body2", "edge", "core", "blurexp"};
     *c = OULG_CLEAR_DEFAULT;
     c->mode[0] = (int) prop_float("debug.oulg.sf.huclear", 0.0f);
     c->mode[1] = (int) prop_float("debug.oulg.sf.kgclear", 0.0f);
-    for (int i = 0; i < 2; i++) {
-        float *dst[7] = {&c->band[i], &c->amp[i], &c->body[i], &c->body2[i], &c->edge[i], &c->core[i], &c->blurexp[i]};
-        for (int j = 0; j < 7; j++) {
-            char name[48];
-            snprintf(name, sizeof name, "%s%s", pre[i], names[j]);
-            *dst[j] = prop_float(name, *dst[j]);
-        }
-    }
+    c->band[0] = prop_float("debug.oulg.sf.hcband", c->band[0]);
+    c->amp[0] = prop_float("debug.oulg.sf.hcamp", c->amp[0]);
+    c->body[0] = prop_float("debug.oulg.sf.hcbody", c->body[0]);
+    c->body2[0] = prop_float("debug.oulg.sf.hcbody2", c->body2[0]);
+    c->edge[0] = prop_float("debug.oulg.sf.hcedge", c->edge[0]);
+    c->core[0] = prop_float("debug.oulg.sf.hccore", c->core[0]);
+    c->blurexp[0] = prop_float("debug.oulg.sf.hcblurexp", c->blurexp[0]);
+    c->band[1] = prop_float("debug.oulg.sf.kcband", c->band[1]);
+    c->amp[1] = prop_float("debug.oulg.sf.kcamp", c->amp[1]);
+    c->body[1] = prop_float("debug.oulg.sf.kcbody", c->body[1]);
+    c->body2[1] = prop_float("debug.oulg.sf.kcbody2", c->body2[1]);
+    c->edge[1] = prop_float("debug.oulg.sf.kcedge", c->edge[1]);
+    c->core[1] = prop_float("debug.oulg.sf.kccore", c->core[1]);
+    c->blurexp[1] = prop_float("debug.oulg.sf.kcblurexp", c->blurexp[1]);
     c->veil = prop_float("debug.oulg.sf.kcveil", c->veil);
     c->level = prop_float("debug.oulg.sf.kclevel", c->level);
     c->dim = prop_float("debug.oulg.sf.kcdim", c->dim);
