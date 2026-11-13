@@ -511,7 +511,7 @@ static void hu_material(void) {
         struct oulg_clear e = OULG_CLEAR_DEFAULT; e.scrim = (float) lo; e.scrimmax = (float) hi; oulg_fix_clear(&e);
         double prev = -1;
         for (double y = 0; y <= 1.0001; y += 0.001) {
-            double out = y * (1 - (e.scrim + (e.scrimmax - e.scrim) * y));
+            double out = y * (1 - (e.scrim + (e.scrimmax - e.scrim) * (y * y * (3 - 2 * y))));
             CHECK(out >= prev - 1e-9, "hu material: luma falls at y %.3f (scrim %.2f, scrimmax %.2f)", y, e.scrim, e.scrimmax);
             if (prev >= 0) worst = fmin(worst, (out - prev) / 0.001);
             prev = out;
@@ -520,7 +520,10 @@ static void hu_material(void) {
     struct oulg_clear s = OULG_CLEAR_DEFAULT; s.mode[0] = 1; s.hsat = 1.5f; s.scrim = 0.12f; s.scrimmax = 0.5f; oulg_fix_clear(&s);
     CHECK(s.scrim == 0.12f && s.scrimmax == 0.5f && oulg_hu_material_on(&s), "hu material: the reference values were changed");
     printf("hu material: neutral by default, ranges and NaN checked, output luma never falls as y rises (smallest slope %.3f); "
-           "scrim 0.12-0.50 leaves white at %.2f and mid grey 0.50 at %.3f\n", worst, 1 - 0.5, 0.5 * (1 - (0.12 + 0.38 * 0.5)));
+           "scrim 0.12-0.50 leaves y 0.25 at %.3f, 0.50 at %.3f, 0.75 at %.3f and white at %.2f\n", worst,
+           0.25 * (1 - (0.12 + 0.38 * 0.15625)), 0.5 * (1 - (0.12 + 0.38 * 0.5)), 0.75 * (1 - (0.12 + 0.38 * 0.84375)), 1 - 0.5);
+    CHECK(strstr(OULG_FS_HU_MATERIAL_FMT, "w = y * y * (3.0 - 2.0 * y)") && strstr(OULG_FS_HU_MATERIAL_FMT, "* w);"),
+          "hu material: the shader weight is not the one checked here");
 }
 
 // Sizes and text with the meniscus and the heads-up material compiled.

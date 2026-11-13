@@ -187,7 +187,8 @@ x = 1 - depth / band                       band as in section 1 (hcband)
 a = min(hcfold * band, cap * min(hs))      cap = max(1 / max(rho, 1) - l0 - l2, 0), rounded down to 4 decimals
 s = -R u (l0 + l2 u^2) - n a (1 - sqrt(1 - x^2))      (second term only for 0 < depth < band)
 F = rho * s
-gain = 1 - (hcscrim + (hcscrimmax - hcscrim) * y)      y = Rec.709 luma of the (blurred) backdrop at the pixel, encoded values
+gain = 1 - (hcscrim + (hcscrimmax - hcscrim) * w)      w = y^2 (3 - 2y), y = Rec.709 luma of the (blurred) backdrop at the pixel, encoded values
+sat  = hcsat + (1 - hcsat) * w                         the saturation fades to 1 over highlights
 ```
 
 - The map folds by design. On a straight edge the source depth `depth + a (1 − sqrt(1 − x²))` falls from `a` at the outline to one minimum at `depth = band (1 − 1 / sqrt(1 + (a / band)²))` and rises after it: outside that depth the rim shows the interior mirrored and compressed, inside it the image is stretched (without bound at the fold line). The σ ≥ 0.25 bound of section 1 does not apply to the meniscus.
@@ -195,8 +196,8 @@ gain = 1 - (hcscrim + (hcscrimmax - hcscrim) * y)      y = Rec.709 luma of the (
 - The tag strength `k` is not used by the meniscus (mode 1 no longer caps the amplitude by `k` when `hcfold > 0`).
 - The material is applied to the refracted, blurred backdrop before the edge light, so the light is not dimmed. The limit on `hcscrimmax` keeps the output luma from falling as the backdrop gets brighter (checked over the whole range).
 - The blur stays the section-1 curve. A uniform blur is `hcedge = hccore`.
-- Starting values for the device, sized on the 1340×374 card (r 108): `hcband 0.42` (45.4 px), `hcfold 2` (a 90.7 px, mirrored rim 25.1 px, stretched zone 20.3 px), `hcedge 24`, `hccore 24`, `hcbody 0`, `hcsat 1.5`, `hcscrim 0.12`, `hcscrimmax 0.5` (white backdrop at 0.50, mid grey 0.50 at 0.345). These are arithmetic from the reference's parameters and the measurements above, not device results.
+- Starting values for the device, sized on the 1340×374 card (r 108): `hcband 0.42` (45.4 px), `hcfold 2` (a 90.7 px, mirrored rim 25.1 px, stretched zone 20.3 px), `hcedge 24`, `hccore 24`, `hcbody 0`, `hcsat 1.5`, `hcscrim 0.12`, `hcscrimmax 0.5` (backdrop luma 0.25 → 0.205, 0.50 → 0.345, 0.75 → 0.420, white → 0.50). These are arithmetic from the reference's parameters and the measurements above, not device results.
 - Registry: the four keys are in the catalogue and `SettingsRegistry` (199 specs), `Tier.INTERNAL` read-only rows, in `CLEAR_GLASS_PENDING_INTEGRATION`, not in `SfLive.WRITABLE`.
-- Sizes: largest library with meniscus and material 16374 of 32768 bytes; `main()` unchanged.
+- Sizes: largest library with meniscus and material 16432 of 32768 bytes; `main()` unchanged.
 - Not covered: the lockscreen (profile 1) keeps the slab; `clear_render_check.mjs` (WebGL) has no meniscus case yet, so the GLSL/twin agreement of the meniscus rests on the shared text structure and glslang, not on a rendered comparison.
 - Pending on the device: everything visual. In particular the module flips notification text to dark over light backdrops; with a scrim that brings white down to 0.50 the text colour rule may need a different threshold.

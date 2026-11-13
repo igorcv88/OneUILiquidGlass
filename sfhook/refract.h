@@ -713,9 +713,12 @@ static void oulg_fix_params(struct oulg_profile p[OULG_PROFILES]) {
 // d and its slope vanish at depth = band (C1); every sample stays inside the card and never moves
 // outward (sfhook/tools/clear_check.c, M1-M4). The lens strength k of the tag is not used.
 // Heads-up clear material (hsat, scrim, scrimmax; all neutral by default, nothing emitted): the body
-// is saturated by hsat and multiplied by 1 - (scrim + (scrimmax - scrim) y), y the backdrop's luma at
-// the pixel, so a bright backdrop is darkened more than a dark one. scrimmax <= scrim + (1 - scrim) / 2
-// keeps the output luma increasing in y. The edge light is added after it, as before.
+// is multiplied by 1 - (scrim + (scrimmax - scrim) w), w = y^2 (3 - 2y), y the backdrop's luma at the
+// pixel. The weight is flat at both ends: darks and mids keep nearly the scrim floor, highlights take
+// most of scrimmax (w is 0.16 at y 0.25, 0.5 at 0.5, 0.84 at 0.75). The gain is one scalar for the
+// three channels, so it adds no tint. hsat fades to 1 with the same weight, so a near-white backdrop
+// is not pushed toward the colour around it. w + y w' peaks at 1.6875, so scrimmax <= scrim +
+// (1 - scrim) / 2 keeps the output luma increasing in y. The edge light is added after it, as before.
 #define OULG_CLEAR_M 0.25
 struct oulg_clear {
     int mode[2];                                   // per profile: 0 off, 1 whole profile, 2 per card
@@ -883,8 +886,9 @@ static int oulg_replace_once(char *buf, size_t cap, const char *from, const char
     "  mediump float a = max(c.a, 1e-3);\n" \
     "  mediump vec3 rgb = c.rgb / a;\n" \
     "  mediump float y = clamp(dot(rgb, vec3(0.2126, 0.7152, 0.0722)), 0.0, 1.0);\n" \
-    "  rgb = mix(vec3(y), rgb, %.3f);\n" \
-    "  rgb *= 1.0 - (%.3f + %.3f * y);\n" \
+    "  mediump float w = y * y * (3.0 - 2.0 * y);\n" \
+    "  rgb = mix(vec3(y), rgb, mix(%.3f, 1.0, w));\n" \
+    "  rgb *= 1.0 - (%.3f + %.3f * w);\n" \
     "  return vec4(clamp(rgb, 0.0, 1.0) * c.a, c.a);\n" \
     "}\n"
 #define OULG_HU_MATERIAL_AT "  if (oulg_pf < 0.5) return c;\n"
