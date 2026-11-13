@@ -134,14 +134,26 @@ final class LensSheet extends Sheet {
                 boolean on = "1".equals(model.status.get("sfrefract")) && "1".equals(model.status.get("sf_rewrite"))
                         && "1".equals(model.status.get("sf_got")) && "1".equals(model.status.get("sf_rewrite_ok"))
                         && "1".equals(model.status.get("sf_stable"));
-                title = on ? activity.getString(R.string.lens_active) : activity.getString(R.string.lens_loaded_unverified);
+                // GOT plus rewritten shaders prove active interception, but without the
+                // monitor's stable-generation attestation we cannot confirm the restart.
+                // Repeated status reads cannot manufacture missing evidence.
+                boolean monitorUnverified = !on
+                        && "1".equals(model.status.get("sf_got"))
+                        && "1".equals(model.status.get("sf_rewrite_ok"))
+                        && "1".equals(model.status.get("sf_loaded"))
+                        && !"1".equals(model.status.get("sf_stable"));
+                title = on ? activity.getString(R.string.lens_active)
+                        : monitorUnverified ? activity.getString(R.string.lens_monitor_unverified)
+                        : activity.getString(R.string.lens_loaded_unverified);
                 text = on ? (pending.isEmpty()
                         ? unverified ? activity.getString(R.string.lens_loaded_params_unverified)
                                      : activity.getString(R.string.lens_loaded_desc)
                         : activity.getString(R.string.lens_pending_desc))
-                        : activity.getString(R.string.lens_wait_verify);
+                        : activity.getString(monitorUnverified ? R.string.lens_monitor_unverified_desc
+                                : R.string.lens_wait_verify);
                 action = !pending.isEmpty() ? (pending.size() == 1 ? activity.getString(R.string.lens_apply_one) : activity.getString(R.string.lens_apply_many, pending.size()))
-                        : !on ? activity.getString(R.string.lens_check_state) : unverified ? activity.getString(R.string.lens_restart_confirm) : null;
+                        : !on ? (monitorUnverified ? null : activity.getString(R.string.lens_check_state))
+                              : unverified ? activity.getString(R.string.lens_restart_confirm) : null;
                 break;
             default:
                 title = activity.getString(R.string.lens_no_response);
