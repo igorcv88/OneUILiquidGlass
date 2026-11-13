@@ -526,30 +526,75 @@ static void hu_material(void) {
           "hu material: the shader weight is not the one checked here");
 }
 
-// The disc of the shader over a pattern that varies along x only (1 px grid, weights exp(-2 rho^2)).
-static double disc_over(double (*f)(double), double x0, double R) {
-    double acc = 0, sum = 0;
-    for (int i = -(int) R; i <= (int) R; i++) for (int j = -(int) R; j <= (int) R; j++) {
-        double rr = (i * i + j * j) / (R * R);
-        if (rr > 1) continue;
-        double w = exp(-2 * rr);
-        acc += w * f(x0 + i); sum += w;
+// ---- Heads-up adaptive blur: a model over patterns that vary along x only ----
+#define AN 801   // x = -400 .. 400
+static void aconv(const double *a, const double *k, int h, double *out) {
+    for (int x = 0; x < AN; x++) {
+        double acc = 0;
+        for (int m = -h; m <= h; m++) { int i = x + m < 0 ? 0 : x + m >= AN ? AN - 1 : x + m; acc += k[m + h] * a[i]; }
+        out[x] = acc;
     }
-    return acc / sum;
 }
-static double pat_stripes8(double x) { return fmod(floor(x / 4.0) + 1000.0, 2.0) < 0.5 ? 1.0 : 0.0; }
-static double pat_stroke6(double x) { return fabs(x) < 3 ? 1.0 : 0.0; }
-static double pat_stroke40(double x) { return fabs(x) < 20 ? 1.0 : 0.0; }
-static double pat_stroke80(double x) { return fabs(x) < 40 ? 1.0 : 0.0; }
-static double adapt_weight(double (*f)(double), double x, double R, double contrast) {
-    double d = contrast * fabs(disc_over(f, x, R) - disc_over(f, x, R * OULG_ADAPT_WIDE));
-    double t = fmin(fmax((d - OULG_ADAPT_LO) / (OULG_ADAPT_HI - OULG_ADAPT_LO), 0), 1);
-    return t * t * (3 - 2 * t);
+// The marginal along x of the shader's disc (weights exp(-2 rho^2)); returns the half width.
+static int disc_kernel(double R, double *k) {
+    int h = (int) R; double sum = 0;
+    for (int i = -h; i <= h; i++) {
+        double acc = 0;
+        for (int j = -h; j <= h; j++) { double rr = (i * i + j * j) / (R * R); if (rr <= 1) acc += exp(-2 * rr); }
+        k[i + h] = acc; sum += acc;
+    }
+    for (int i = 0; i <= 2 * h; i++) k[i] /= sum;
+    return h;
 }
-// The heads-up adaptive blur: neutral default, range, and what the two-scale detector answers on a
-// 24 px disc: periodic fine detail is unchanged, an isolated full-contrast hairline moves a little,
-// a stroke about as wide as the disc moves fully. A stroke wider than the wide disc is detected at
-// its flanks more than at its centre: no disc of this size can average it out.
+static int gauss_kernel(double sig, double *k) {
+    int h = (int) (4 * sig); double sum = 0;
+    for (int i = -h; i <= h; i++) { k[i + h] = exp(-i * i / (2 * sig * sig)); sum += k[i + h]; }
+    for (int i = 0; i <= 2 * h; i++) k[i] /= sum;
+    return h;
+}
+static double sstep(double lo, double hi, double d) { double t = fmin(fmax((d - lo) / (hi - lo), 0), 1); return t * t * (3 - 2 * t); }
+// Direction changes of y over the central 500 px, ignoring steps below 1e-4.
+static int extrema(const double *y) {
+    int n = 0; double last = 0;
+    for (int x = 151; x < 651; x++) {
+        double d = y[x] - y[x - 1];
+        if (fabs(d) <= 1e-4) continue;
+        if (last != 0 && (d > 0) != (last > 0)) n++;
+        last = d;
+    }
+    return n;
+}
+static double span(const double *y) { double lo = 1e9, hi = -1e9; for (int x = 150; x < 651; x++) { lo = fmin(lo, y[x]); hi = fmax(hi, y[x]); } return hi - lo; }
+struct amodel { double a[AN], now[AN], old[AN]; };
+// src through an optional Gaussian pre-blur (the region blur), then the body: A, B, the shader's mix
+// (now) and the first version's |yA - yB| mix (old).
+static void amodel_run(const double *src, double pre, double R, struct amodel *m) {
+    static double s[AN], s2[AN], b[AN], q[AN], k[1024];
+    if (pre > 0) aconv(src, k, gauss_kernel(pre, k), s); else memcpy(s, src, sizeof s);
+    aconv(s, k, disc_kernel(R, k), m->a);
+    int h = disc_kernel(R * OULG_ADAPT_WIDE, k);
+    for (int x = 0; x < AN; x++) s2[x] = s[x] * s[x];
+    aconv(s, k, h, b); aconv(s2, k, h, q);
+    for (int x = 0; x < AN; x++) {
+        double sd = sqrt(fmax(q[x] - b[x] * b[x], 0));
+        m->now[x] = m->a[x] + sstep(OULG_ADAPT_LO, OULG_ADAPT_HI, sd) * (b[x] - m->a[x]);
+        m->old[x] = m->a[x] + sstep(0.06, 0.30, fabs(m->a[x] - b[x])) * (b[x] - m->a[x]);
+    }
+}
+static double pat_at(int kind, int x) {
+    switch (kind) {
+    case 0: return abs(x) < 20 ? 1.0 : 0.25;                                  // one 40 px stroke
+    case 1: return abs(x) < 40 ? 1.0 : 0.25;                                  // one 80 px stroke
+    case 2: return abs(x - 50) < 20 || abs(x + 50) < 20 ? 1.0 : 0.25;         // two 40 px strokes, 60 px apart
+    case 3: return x > 0 ? 1.0 : 0.25;                                        // a step
+    case 4: return ((x + 400) / 4) % 2 == 0 ? 1.0 : 0.0;                      // 8 px stripes
+    default: return abs(x) < 3 ? 1.0 : 0.0;                                   // a 6 px line
+    }
+}
+// The heads-up adaptive blur: neutral default and range; then, on a 24 px disc with and without a
+// 7.5 px region blur in front of it: the mix adds no extremum to what the plain disc shows (no
+// doubled contour), lowers the residual of a stroke the disc cannot average out, and leaves fine
+// detail as the plain disc renders it. The first version's |yA - yB| weight is the positive control.
 static void hu_adapt(void) {
     struct oulg_clear c = OULG_CLEAR_DEFAULT; c.mode[0] = 1; oulg_fix_clear(&c);
     CHECK(OULG_CLEAR_DEFAULT.adapt == 0 && !oulg_hu_adapt_on(&c), "hu adapt: on by default");
@@ -557,21 +602,30 @@ static void hu_adapt(void) {
     c.adapt = NAN; oulg_fix_clear(&c); CHECK(c.adapt == 0, "hu adapt: NaN kept");
     c.adapt = 1; oulg_fix_clear(&c); CHECK(c.adapt == 1 && oulg_hu_adapt_on(&c), "hu adapt: 1 rejected");
     c.mode[0] = 0; CHECK(!oulg_hu_adapt_on(&c), "hu adapt: on with the heads-up clear off");
-    const double R = 24;
-    double fine = 0, thin = 0;
-    for (double x = 0; x < 8; x += 0.5) fine = fmax(fine, adapt_weight(pat_stripes8, x, R, 1.0));
-    for (double x = -40; x <= 40; x += 1) thin = fmax(thin, adapt_weight(pat_stroke6, x, R, 1.0));
-    double w40 = adapt_weight(pat_stroke40, 0, R, 0.75), w80 = adapt_weight(pat_stroke80, 0, R, 0.75);
-    CHECK(fine == 0, "hu adapt: 8 px stripes move to the wide blur (weight %.3f)", fine);
-    CHECK(thin < 0.2, "hu adapt: a 6 px line moves to the wide blur (weight %.3f)", thin);
-    double f80 = 0;
-    for (double x = 0; x <= 80; x += 1) f80 = fmax(f80, adapt_weight(pat_stroke80, x, R, 0.75));
-    CHECK(w40 > 0.8 && w80 > 0.25 && f80 > 0.6, "hu adapt: wide strokes are not detected (40 px %.3f, 80 px %.3f, flank %.3f)", w40, w80, f80);
-    double a40 = disc_over(pat_stroke40, 0, R), b40 = disc_over(pat_stroke40, 0, R * OULG_ADAPT_WIDE);
-    printf("hu adapt: off by default, range and NaN checked; disc 24 px, wide x%.0f: weight 0 on 8 px stripes, at most %.2f on a 6 px line at full contrast, "
-           "%.2f at the centre of a 40 px stroke, %.2f at the centre and up to %.2f on the flanks of an 80 px one (contrast 0.75); "
-           "the 40 px stroke's residual falls from %.2f to %.2f of its contrast\n",
-           OULG_ADAPT_WIDE, thin, w40, w80, f80, a40, a40 + w40 * (b40 - a40));
+    static struct amodel m; static double src[AN];
+    double keep40 = 0, keep80 = 0, fine = 0, bare = 0; int oldx = 0;
+    for (int pre = 0; pre < 2; pre++) for (int kind = 0; kind < 6; kind++) {
+        for (int x = 0; x < AN; x++) src[x] = pat_at(kind, x - 400);
+        amodel_run(src, pre ? 7.5 : 0.0, 24.0, &m);
+        if (kind < 4) CHECK(extrema(m.now) == extrema(m.a), "hu adapt: pattern %d pre %d has %d extrema, the plain disc %d",
+                            kind, pre, extrema(m.now), extrema(m.a));
+        // Fine detail: stripes always, the hairline behind the region blur (what the device samples).
+        // The hairline on an unblurred source is reported: its 0.15 residual is spread, with no new extremum.
+        for (int x = 150; x < 651 && kind >= 4; x++) {
+            double d = fabs(m.now[x] - m.a[x]);
+            if (kind == 5 && !pre) bare = fmax(bare, d); else fine = fmax(fine, d);
+        }
+        if (kind == 5) CHECK(extrema(m.now) == extrema(m.a), "hu adapt: the 6 px line gains extrema (pre %d)", pre);
+        if (pre && kind == 0) { keep40 = span(m.now) / span(m.a); oldx = extrema(m.old); }
+        if (pre && kind == 1) keep80 = span(m.now) / span(m.a);
+    }
+    CHECK(oldx > 1, "hu adapt: the |yA - yB| weight no longer shows the doubled contours (positive control, %d extrema)", oldx);
+    CHECK(keep40 < 0.7, "hu adapt: a 40 px stroke keeps %.2f of the plain disc's residual", keep40);
+    CHECK(fine < 0.02, "hu adapt: fine detail differs from the plain disc by %.3f", fine);
+    printf("hu adapt: off by default, range and NaN checked; disc 24 px, wide x%.1f, with and without a 7.5 px region blur: strokes of 40 and 80 px, "
+           "a pair of strokes and a step keep the plain disc's count of extrema (the |yA - yB| weight gave %d across one 40 px stroke instead of 1); "
+           "residual of a 40 px stroke %.2f and of an 80 px one %.2f of the plain disc's; 8 px stripes, and a 6 px line behind the region blur, within %.3f of the plain disc (the line on an unblurred source: %.3f)\n",
+           OULG_ADAPT_WIDE, oldx, keep40, keep80, fine, bare);
 }
 
 // Sizes and text with the meniscus and the heads-up material compiled.

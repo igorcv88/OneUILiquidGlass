@@ -198,7 +198,7 @@ sat  = hcsat + (1 - hcsat) * w                         the saturation fades to 1
 - The blur stays the section-1 curve. A uniform blur is `hcedge = hccore`.
 - Starting values for the device, sized on the 1340×374 card (r 108): `hcband 0.42` (45.4 px), `hcfold 2` (a 90.7 px, mirrored rim 25.1 px, stretched zone 20.3 px), `hcedge 24`, `hccore 24`, `hcbody 0`, `hcsat 1.5`, `hcscrim 0.12`, `hcscrimmax 0.5` (backdrop luma 0.25 → 0.205, 0.50 → 0.345, 0.75 → 0.420, white → 0.50). These are arithmetic from the reference's parameters and the measurements above, not device results.
 - Registry: the four keys are in the catalogue and `SettingsRegistry` (200 specs, with `sf.hcadapt` of section 13), `Tier.INTERNAL` read-only rows, in `CLEAR_GLASS_PENDING_INTEGRATION`, not in `SfLive.WRITABLE`.
-- Sizes: largest library with meniscus, material and adaptive body 16988 of 32768 bytes; `main()` unchanged.
+- Sizes: largest library with meniscus, material and adaptive body 17664 of 32768 bytes; `main()` unchanged.
 - Not covered: the lockscreen (profile 1) keeps the slab; `clear_render_check.mjs` (WebGL) has no meniscus case yet, so the GLSL/twin agreement of the meniscus rests on the shared text structure and glslang, not on a rendered comparison.
 - Pending on the device: everything visual. In particular the module flips notification text to dark over light backdrops; with a scrim that brings white down to 0.50 the text colour rule may need a different threshold.
 
@@ -211,15 +211,17 @@ After the device round with the meniscus: lens, rim and blur level were accepted
 | `debug.oulg.sf.hcadapt` | 0 | 0–1 | 0: nothing emitted, the body is the single disc as before. Above 0: the largest share of the wide disc a pixel can take |
 
 ```
-A = disc(radius br)            the body as before
-B = disc(radius 3 br)          same centre (the refracted position), same taps
-d = |luma(A) - luma(B)|
-body = mix(A, B, hcadapt * smoothstep(0.06, 0.30, d))
+A  = disc(radius br)             the body as before
+B  = disc(radius 2.5 br)         same centre (the refracted position), same tap count
+sd = weighted standard deviation of the luma of B's taps
+body = mix(A, B, hcadapt * smoothstep(0.06, 0.22, sd))
 ```
 
-- Where the disc already averaged the backdrop out, A and B agree and the pixel is A. Where a structure wider than the disc survives it, they differ and the pixel moves toward B. The lens is not involved.
-- Model on the host (`clear_check.c`, a 24 px disc over patterns varying along one axis): weight 0 on 8 px stripes; at most 0.16 on an isolated 6 px line at full contrast; 1.00 at the centre of a 40 px stroke at contrast 0.75, whose residual falls from 0.96 to 0.45 of its contrast; for an 80 px stroke 0.34 at the centre and up to 0.64 on the flanks. A structure wider than the wide disc cannot be averaged out by it.
-- Cost: the heads-up clear body takes twice the taps while `hcadapt > 0`. The wide disc spreads the same taps over nine times the area; its grain on the device is not measured.
+- First version, rejected on the device: the weight was `smoothstep(0.06, 0.30, |luma(A) − luma(B)|)` with B at 3 br. A and B cross on both flanks of every stroke; the weight fell to 0 there and the output alternated between the two blurs, which drew doubled contours on the launcher's clock. The host model reproduces it: 5 extrema across one 40 px stroke instead of 1 (3 at the factor 2.5).
+- `sd` is a wide-scale statistic: high all around a structure the disc cannot average out, falling off smoothly away from it. The weight has no fine structure of its own. Where the backdrop is flat or its detail is finer than the disc, A and B agree and the result is A whatever the weight.
+- Model on the host (`clear_check.c`, a 24 px disc over patterns varying along one axis, with and without a 7.5 px region blur in front of it; 7.5 px is inferred from the 19.3 px edge width of the E0 capture): strokes of 40 and 80 px, a pair of strokes and a step keep the plain disc's count of extrema; the residual of a 40 px stroke is 0.59 of the plain disc's and of an 80 px stroke 0.87; 8 px stripes, and a 6 px line behind the region blur, stay within 0.008 of the plain disc.
+- Limits: a structure wider than the wide disc (60 px radius at br 24) is softened at its flanks only. The model is one-dimensional and uses the continuous disc; it does not model the 48 taps. B spreads them over 6.25 times the area (about 15 px between taps at br 24), which can show as grain on the device.
+- Cost: the heads-up clear body takes twice the taps while `hcadapt > 0`.
 - Neutral highlights (part of the heads-up material, active whenever it is emitted): pixels with luma above 0.55 and `max − min` below 0.45 are pulled toward their own grey, by up to 75 % at luma ≥ 0.90 and chroma ≤ 0.15. Luma is kept, so the scrim's monotone bound is unchanged. Example: (0.80, 0.85, 1.00) keeps luma 0.85 and its chroma falls from 0.20 to about 0.07. Vivid highlights (chroma above 0.45) are not touched.
 - The scrim is unchanged. With the clock handled by the blur, a lower `hcscrimmax` darkens near-white areas less.
 - Not validated on the device. The WebGL render check has no case for either.

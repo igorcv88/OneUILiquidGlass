@@ -723,14 +723,18 @@ static void oulg_fix_params(struct oulg_profile p[OULG_PROFILES]) {
 // own grey, up to 75 %: white content blurred over a coloured wallpaper stops reading as a tinted
 // white. Luma is kept, so the bound above is unchanged; vivid highlights are not touched.
 // Heads-up adaptive blur (adapt, 0 = off, nothing emitted): the body is the usual disc A plus a
-// second disc B of OULG_ADAPT_WIDE times the radius, mixed by adapt * smoothstep(LO, HI, |yA - yB|).
-// Where the disc already averaged the backdrop out (fine detail, flat areas) A and B agree and the
-// result is A, as before; where a structure wider than the disc survives it (a large clock, a broad
-// bright shape) they differ and the pixel moves to the wider blur. The lens is not involved: both
-// discs are centred on the same refracted position.
-#define OULG_ADAPT_WIDE 3.0
+// second disc B of OULG_ADAPT_WIDE times the radius, mixed by adapt * smoothstep(LO, HI, sd), sd the
+// weighted standard deviation of the luma of B's own taps. sd is a wide-scale statistic: it is high
+// all around a structure the disc cannot average out and falls off smoothly away from it, so the
+// weight has no fine structure of its own. The first version weighted by |yA - yB| per pixel; A and B
+// cross on both flanks of every stroke, the weight fell to 0 there and the output drew extra contours
+// (3 extrema across one 40 px stroke instead of 1 at this width factor, 5 at the factor 3 it shipped
+// with: sfhook/tools/clear_check.c keeps that as the positive control). Where the backdrop is flat, or its detail is finer than the disc, A and B agree
+// and the result is A whatever the weight. The lens is not involved: both discs are centred on the
+// same refracted position. B spreads the profile's taps over WIDE^2 the area.
+#define OULG_ADAPT_WIDE 2.5
 #define OULG_ADAPT_LO 0.06
-#define OULG_ADAPT_HI 0.30
+#define OULG_ADAPT_HI 0.22
 #define OULG_CLEAR_M 0.25
 struct oulg_clear {
     int mode[2];                                   // per profile: 0 off, 1 whole profile, 2 per card
@@ -909,16 +913,32 @@ static int oulg_replace_once(char *buf, size_t cap, const char *from, const char
     "  rgb *= 1.0 - (%.3f + %.3f * w);\n" \
     "  return vec4(clamp(rgb, 0.0, 1.0) * c.a, c.a);\n" \
     "}\n"
-// The heads-up adaptive body (wide factor, lo, hi, adapt): two discs and the scale-space mix.
+// The heads-up adaptive body (taps, taps, wide factor, adapt, lo, hi): disc A, then disc B with the
+// luma variance of its taps, and the mix.
 #define OULG_FS_HU_BODY_FMT \
     "mediump vec4 oulg_body_hu(sampler2D s, highp vec2 uv) {\n" \
+    "  const mediump vec3 w709 = vec3(0.2126, 0.7152, 0.0722);\n" \
     "  mediump vec4 a = oulg_disc0(s, uv);\n" \
-    "  highp float br = oulg_br;\n" \
-    "  oulg_br = br * %.2f;\n" \
-    "  mediump vec4 b = oulg_disc0(s, uv);\n" \
-    "  oulg_br = br;\n" \
-    "  mediump float d = abs(dot(a.rgb - b.rgb, vec3(0.2126, 0.7152, 0.0722)));\n" \
-    "  return mix(a, b, %.3f * smoothstep(%.2f, %.2f, d));\n" \
+    "  highp float a0 = 6.2831853 * fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));\n" \
+    "  highp vec2 dir = vec2(cos(a0), sin(a0));\n" \
+    "  const highp mat2 rot = mat2(-0.7373688, 0.6754903, -0.6754903, -0.7373688);\n" \
+    "  mediump vec4 acc = vec4(0.0);\n" \
+    "  highp float wsum = 0.0, m2 = 0.0;\n" \
+    "  for (int i = 0; i < %d; i++) {\n" \
+    "    highp float rr = sqrt((float(i) + 0.5) / %d.0);\n" \
+    "    highp vec2 o = dir * (rr * oulg_br * %.2f);\n" \
+    "    mediump vec4 tap = textureLod(s, uv + oulg_jx * o.x + oulg_jy * o.y, 0.0);\n" \
+    "    highp float w = exp(-2.0 * rr * rr);\n" \
+    "    highp float y = dot(tap.rgb, w709);\n" \
+    "    acc += w * tap;\n" \
+    "    m2 += w * y * y;\n" \
+    "    wsum += w;\n" \
+    "    dir = rot * dir;\n" \
+    "  }\n" \
+    "  mediump vec4 b = acc / wsum;\n" \
+    "  highp float yb = dot(b.rgb, w709);\n" \
+    "  highp float sd = sqrt(max(m2 / wsum - yb * yb, 0.0));\n" \
+    "  return mix(a, b, %.3f * smoothstep(%.2f, %.2f, sd));\n" \
     "}\n"
 #define OULG_HU_BODY_AT "oulg_pf > 0.5 ? oulg_disc1(s, uv) : oulg_disc0(s, uv); }\n"
 #define OULG_HU_BODY_TO "oulg_pf > 0.5 ? oulg_disc1(s, uv) : oulg_cl > 0.5 ? oulg_body_hu(s, uv) : oulg_disc0(s, uv); }\n"
@@ -1077,8 +1097,8 @@ static int oulg_lib_into(char *out, size_t cap, int external, int debug, const s
             if (!oulg_replace_once(tmp, OULG_TEXT_CAP, OULG_HU_MATERIAL_AT, OULG_HU_MATERIAL_TO)) return 0;
         }
         if (oulg_hu_adapt_on(cl)) {
-            if (!oulg_append(out, cap, &at, OULG_FS_HU_BODY_FMT, OULG_ADAPT_WIDE, (double) cl->adapt, OULG_ADAPT_LO,
-                             OULG_ADAPT_HI)) return 0;
+            if (!oulg_append(out, cap, &at, OULG_FS_HU_BODY_FMT, p[0].taps, p[0].taps, OULG_ADAPT_WIDE, (double) cl->adapt,
+                             OULG_ADAPT_LO, OULG_ADAPT_HI)) return 0;
             if (!oulg_replace_once(tmp, OULG_TEXT_CAP, OULG_HU_BODY_AT, OULG_HU_BODY_TO)) return 0;
         }
         if (oulg_clear_on(cl, 1)) { if (!oulg_clear_lens(out, cap, &at, tmp, OULG_TEXT_CAP, cl)) return 0; }
