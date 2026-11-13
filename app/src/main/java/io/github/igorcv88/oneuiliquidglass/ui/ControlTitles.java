@@ -27,6 +27,8 @@ final class ControlTitles {
             case "Brilho do vidro escuro": return R.string.control_title_bf8389203ea5;
             case "Brilho especular": return R.string.control_title_f40464148fea;
             case "Brilho no topo": return R.string.control_title_6953361f458b;
+            case "Clareamento do Clear Glass (bloqueio)": return R.string.control_title_41284a3acf75;
+            case "Clareamento do Clear Glass (pop-up)": return R.string.control_title_db92724cd09a;
             case "Clear Glass no bloqueio": return R.string.control_title_64228432dde7;
             case "Clear Glass no pop-up": return R.string.control_title_414d7a830981;
             case "Compressão de realces do Clear Glass": return R.string.control_title_e92668db46cf;
@@ -116,12 +118,14 @@ final class ControlTitles {
             case "Matiz fria do Clear Glass": return R.string.control_title_04f26b1088fe;
             case "Medir cada cartão": return R.string.control_title_8172137d462a;
             case "Medir tempo dos ganchos": return R.string.control_title_27e402875dc0;
+            case "Menisco do Clear Glass (bloqueio)": return R.string.control_title_f3b1dc710f06;
             case "Menisco do Clear Glass (pop-up)": return R.string.control_title_3d2d3f93bf63;
             case "Modelo de refração": return R.string.control_title_006548b15c01;
             case "Modo de reescrita": return R.string.control_title_ceaef40ab9b4;
             case "Modos Clear Glass compilados": return R.string.control_title_b634baeb7442;
             case "Multiplicador físico": return R.string.control_title_6a5669f01728;
             case "Máximo de ícones visíveis": return R.string.control_title_a2faa45a9b05;
+            case "Neutralidade dos brancos do Clear Glass (pop-up)": return R.string.control_title_a33a5e23b95e;
             case "Nível da uniformidade": return R.string.control_title_203fe4f25f20;
             case "Nível do véu do Clear Glass": return R.string.control_title_90bf052cade3;
             case "Ocultar a faixa em": return R.string.control_title_b89e7df74a83;

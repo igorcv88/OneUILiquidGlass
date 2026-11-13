@@ -735,22 +735,33 @@ static void oulg_fix_params(struct oulg_profile p[OULG_PROFILES]) {
 #define OULG_ADAPT_WIDE 2.5
 #define OULG_ADAPT_LO 0.06
 #define OULG_ADAPT_HI 0.22
+// Lockscreen meniscus (fold[1], 0 = slab): the same field text as the heads-up, with the lockscreen's
+// own band, dome, blur curve and global scale. Only the shift changes: the lighting coordinates of the
+// Fresnel, contour and specular block still come from oulg_shift_base, as with the slab.
+// Lift (lift[i], 0 = none, nothing emitted): c -> 1 - (1 - c)^(1 + lift) per channel, after the scrim
+// (heads-up) or the dim and tint (lockscreen) and before the edge block. Black and white stay fixed,
+// every value between rises, no channel can clip and the map is increasing, so it adds no tone
+// reversal; the gain is largest where a channel is low, which moves colours toward white, never
+// toward a hue. It brightens what the blur left; it restores no detail.
+// neutral (default 0.75): the strength of the near-white pull of the heads-up material.
 #define OULG_CLEAR_M 0.25
 struct oulg_clear {
     int mode[2];                                   // per profile: 0 off, 1 whole profile, 2 per card
     float band[2], amp[2], body[2], body2[2];       // beta, A cap, l0, l2
     float edge[2], core[2], blurexp[2];             // blur radius at the outline / past the band, exponent
     float veil, level, dim, knee, sat, cool;        // profile 1's material
-    float fold;                                     // profile 0: meniscus amplitude / band (0 = slab)
+    float fold[2];                                  // meniscus amplitude / band (0 = slab)
     float hsat, scrim, scrimmax;                    // profile 0's clear material
     float adapt;                                    // profile 0: share of the wide disc where structure survives
+    float lift[2];                                  // positive tone map of the body (0 = none)
+    float neutral;                                  // profile 0: near-white neutralisation strength
 };
 static const struct oulg_clear OULG_CLEAR_DEFAULT = {
     {0, 0}, {0.85f, 0.85f}, {0.40f, 0.40f}, {0.06f, 0.05f}, {0.0f, 0.0f},
     {4.0f, 4.0f}, {24.0f, 24.0f}, {2.0f, 2.0f},
     0.04f, 0.85f, 0.0f, 0.0f, 1.0f, 0.5f,
-    0.0f, 1.0f, 0.0f, 0.0f,
-    0.0f};
+    {0.0f, 0.0f}, 1.0f, 0.0f, 0.0f,
+    0.0f, {0.0f, 0.0f}, 0.75f};
 
 static float oulg_in(float v, float lo, float hi, float fallback) { return v >= lo && v <= hi ? v : fallback; }
 
@@ -769,6 +780,8 @@ static void oulg_fix_clear(struct oulg_clear *c) {
         c->core[i] = oulg_in(c->core[i], 0.0f, 48.0f, d->core[i]);
         if (c->edge[i] > c->core[i]) c->edge[i] = c->core[i];
         c->blurexp[i] = oulg_in(c->blurexp[i], 1.0f, 4.0f, d->blurexp[i]);
+        c->fold[i] = oulg_in(c->fold[i], 0.0f, 3.0f, d->fold[i]);
+        c->lift[i] = oulg_in(c->lift[i], 0.0f, 2.0f, d->lift[i]);
     }
     c->veil = oulg_in(c->veil, 0.0f, 0.2f, d->veil);
     c->level = oulg_in(c->level, 0.1f, 0.85f, d->level);
@@ -776,7 +789,6 @@ static void oulg_fix_clear(struct oulg_clear *c) {
     c->knee = oulg_in(c->knee, 0.0f, 0.6f, d->knee);
     c->sat = oulg_in(c->sat, 0.9f, 1.3f, d->sat);
     c->cool = oulg_in(c->cool, 0.0f, 2.0f, d->cool);
-    c->fold = oulg_in(c->fold, 0.0f, 3.0f, d->fold);
     c->hsat = oulg_in(c->hsat, 0.9f, 2.0f, d->hsat);
     c->scrim = oulg_in(c->scrim, 0.0f, 0.6f, d->scrim);
     c->scrimmax = oulg_in(c->scrimmax, 0.0f, 0.8f, d->scrimmax);
@@ -784,16 +796,17 @@ static void oulg_fix_clear(struct oulg_clear *c) {
     float top = c->scrim + (1.0f - c->scrim) / 2.0f;  // above it the output luma would fall as y rises
     if (c->scrimmax > top) c->scrimmax = top;
     c->adapt = oulg_in(c->adapt, 0.0f, 1.0f, d->adapt);
+    c->neutral = oulg_in(c->neutral, 0.0f, 1.0f, d->neutral);
 }
 
 // The meniscus amplitude cap as a share of min(hs): with it the deepest sample (the outline's, at
 // rho (a + dome)) stays within min(hs) of the outline. Never negative.
-static double oulg_meniscus_cap(const struct oulg_clear *c, double rho) {
-    double cap = 1.0 / (rho > 1.0 ? rho : 1.0) - c->body[0] - c->body2[0];
+static double oulg_meniscus_cap(const struct oulg_clear *c, int i, double rho) {
+    double cap = 1.0 / (rho > 1.0 ? rho : 1.0) - c->body[i] - c->body2[i];
     return cap > 0.0 ? cap : 0.0;
 }
 static int oulg_hu_material_on(const struct oulg_clear *c) {
-    return c && c->mode[0] != 0 && (c->hsat != 1.0f || c->scrimmax > 0.0f);
+    return c && c->mode[0] != 0 && (c->hsat != 1.0f || c->scrimmax > 0.0f || c->lift[0] > 0.0f);
 }
 static int oulg_hu_adapt_on(const struct oulg_clear *c) { return c && c->mode[0] != 0 && c->adapt > 0.0f; }
 
@@ -881,9 +894,9 @@ static int oulg_replace_once(char *buf, size_t cap, const char *from, const char
     "  highp float t = 1.0 - depth / band;\n" \
     "  return s - (v / l) * sign(q) * (%s * band * t * t * (3.0 - 2.0 * t));\n" \
     "}\n"
-// The heads-up meniscus field (band, blurexp, edge, core, l0, l2, fold, cap).
+// The meniscus field of one profile (index, band, blurexp, edge, core, l0, l2, fold, cap).
 #define OULG_FS_MENISCUS_FIELD_FMT \
-    "highp vec2 oulg_clear0(highp vec2 q, highp vec2 hs, highp float r, highp float k) {\n" \
+    "highp vec2 oulg_clear%d(highp vec2 q, highp vec2 hs, highp float r, highp float k) {\n" \
     "  highp vec2 w = abs(q) - (hs - vec2(r));\n" \
     "  highp vec2 v = max(w, vec2(0.0));\n" \
     "  highp float l = length(v);\n" \
@@ -900,7 +913,8 @@ static int oulg_replace_once(char *buf, size_t cap, const char *from, const char
     "  highp float a = min(%.4f * band, %.4f * min(hs.x, hs.y));\n" \
     "  return s - (v / l) * sign(q) * (a * (1.0 - sqrt(max(1.0 - x * x, 0.0))));\n" \
     "}\n"
-// The heads-up clear material (hsat, scrim, scrimmax - scrim).
+// The heads-up clear material (neutral, hsat, scrim, scrimmax - scrim), the optional lift (1 + lift)
+// and the tail.
 #define OULG_FS_HU_MATERIAL_FMT \
     "mediump vec4 oulg_material_hu(mediump vec4 c) {\n" \
     "  mediump float a = max(c.a, 1e-3);\n" \
@@ -908,9 +922,11 @@ static int oulg_replace_once(char *buf, size_t cap, const char *from, const char
     "  mediump float y = clamp(dot(rgb, vec3(0.2126, 0.7152, 0.0722)), 0.0, 1.0);\n" \
     "  mediump float w = y * y * (3.0 - 2.0 * y);\n" \
     "  mediump float ch = max(max(rgb.r, rgb.g), rgb.b) - min(min(rgb.r, rgb.g), rgb.b);\n" \
-    "  mediump float n = 0.75 * smoothstep(0.55, 0.90, y) * (1.0 - smoothstep(0.15, 0.45, ch));\n" \
+    "  mediump float n = %.2f * smoothstep(0.55, 0.90, y) * (1.0 - smoothstep(0.15, 0.45, ch));\n" \
     "  rgb = mix(vec3(y), rgb, mix(%.3f, 1.0, w) * (1.0 - n));\n" \
-    "  rgb *= 1.0 - (%.3f + %.3f * w);\n" \
+    "  rgb *= 1.0 - (%.3f + %.3f * w);\n"
+#define OULG_FS_LIFT_FMT "  rgb = 1.0 - pow(1.0 - clamp(rgb, 0.0, 1.0), vec3(%.3f));\n"
+#define OULG_FS_HU_MATERIAL_TAIL \
     "  return vec4(clamp(rgb, 0.0, 1.0) * c.a, c.a);\n" \
     "}\n"
 // The heads-up adaptive body (taps, taps, wide factor, adapt, lo, hi): disc A, then disc B with the
@@ -983,11 +999,11 @@ static int oulg_clear_field(char *out, size_t cap, size_t *at, int debug, const 
         char amp[48];
         if (cl->mode[i] == 1) snprintf(amp, sizeof amp, "min(k, %.4f)", acap);
         else snprintf(amp, sizeof amp, "%.4f", acap);
-        if (i == 0 && cl->fold > 0.0f) {
-            double mcap = (double) (long) (oulg_meniscus_cap(cl, p[0].refract) * 1e4) / 1e4;  // rounded down
-            if (!oulg_append(out, cap, at, OULG_FS_MENISCUS_FIELD_FMT, (double) cl->band[0], (double) cl->blurexp[0],
-                             (double) cl->edge[0], (double) cl->core[0], (double) cl->body[0], (double) cl->body2[0],
-                             (double) cl->fold, mcap)) return 0;
+        if (cl->fold[i] > 0.0f) {
+            double mcap = (double) (long) (oulg_meniscus_cap(cl, i, p[i].refract) * 1e4) / 1e4;  // rounded down
+            if (!oulg_append(out, cap, at, OULG_FS_MENISCUS_FIELD_FMT, i, (double) cl->band[i], (double) cl->blurexp[i],
+                             (double) cl->edge[i], (double) cl->core[i], (double) cl->body[i], (double) cl->body2[i],
+                             (double) cl->fold[i], mcap)) return 0;
             continue;
         }
         if (!oulg_append(out, cap, at, OULG_FS_CLEAR_FIELD_FMT, i, (double) cl->band[i], (double) cl->blurexp[i],
@@ -1047,6 +1063,7 @@ static int oulg_clear_lens(char *out, size_t cap, size_t *at, char *lens, size_t
     return oulg_append(out, cap, at, "%.*s", (int) (body - lens), lens)
         && oulg_append(out, cap, at, OULG_FS_CLEAR_MATERIAL_FMT, (double) cl->sat, (double) cl->knee, (double) cl->veil,
                        (double) cl->level, 1.0 - (double) cl->dim, cr / cw, cg / cw, cb / cw)
+        && (cl->lift[1] <= 0.0f || oulg_append(out, cap, at, OULG_FS_LIFT_FMT, 1.0 + (double) cl->lift[1]))
         && oulg_append(out, cap, at, "%.*s", (int) (ret - edge), edge)
         && oulg_append(out, cap, at, "%s", OULG_FS_CLEAR_MATERIAL_TAIL)
         && oulg_append(out, cap, at, "%s", body);
@@ -1092,8 +1109,10 @@ static int oulg_lib_into(char *out, size_t cap, int external, int debug, const s
                          : debug >= 3 ? "if (oulg_on > 0.0) return oulg_map;\n" : "";
         if (!oulg_lens_text(tmp, OULG_TEXT_CAP, p, slot)) return 0;
         if (oulg_hu_material_on(cl)) {
-            if (!oulg_append(out, cap, &at, OULG_FS_HU_MATERIAL_FMT, (double) cl->hsat, (double) cl->scrim,
+            if (!oulg_append(out, cap, &at, OULG_FS_HU_MATERIAL_FMT, (double) cl->neutral, (double) cl->hsat, (double) cl->scrim,
                              (double) (cl->scrimmax - cl->scrim))) return 0;
+            if (cl->lift[0] > 0.0f && !oulg_append(out, cap, &at, OULG_FS_LIFT_FMT, 1.0 + (double) cl->lift[0])) return 0;
+            if (!oulg_append(out, cap, &at, "%s", OULG_FS_HU_MATERIAL_TAIL)) return 0;
             if (!oulg_replace_once(tmp, OULG_TEXT_CAP, OULG_HU_MATERIAL_AT, OULG_HU_MATERIAL_TO)) return 0;
         }
         if (oulg_hu_adapt_on(cl)) {

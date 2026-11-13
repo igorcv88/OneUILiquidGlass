@@ -114,6 +114,8 @@
     <string name="control_description_sf_hccore">Experimental Clear Glass parameter; registered for the compositor contract, not yet a control in the app. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_hcedge">Experimental Clear Glass parameter; registered for the compositor contract, not yet a control in the app. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_hcfold">Experimental Clear Glass parameter; registered for the compositor contract, not yet a control in the app. Changes apply after userspace restarts.</string>
+    <string name="control_description_sf_hclift">Experimental Clear Glass parameter; registered for the compositor contract, not yet a control in the app. Changes apply after userspace restarts.</string>
+    <string name="control_description_sf_hcneutral">Experimental Clear Glass parameter; registered for the compositor contract, not yet a control in the app. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_hcsat">Experimental Clear Glass parameter; registered for the compositor contract, not yet a control in the app. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_hcscrim">Experimental Clear Glass parameter; registered for the compositor contract, not yet a control in the app. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_hcscrimmax">Experimental Clear Glass parameter; registered for the compositor contract, not yet a control in the app. Changes apply after userspace restarts.</string>
@@ -132,8 +134,10 @@
     <string name="control_description_sf_kccore">Experimental Clear Glass parameter; registered for the compositor contract, not yet a control in the app. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_kcdim">Experimental Clear Glass parameter; registered for the compositor contract, not yet a control in the app. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_kcedge">Experimental Clear Glass parameter; registered for the compositor contract, not yet a control in the app. Changes apply after userspace restarts.</string>
+    <string name="control_description_sf_kcfold">Experimental Clear Glass parameter; registered for the compositor contract, not yet a control in the app. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_kcknee">Experimental Clear Glass parameter; registered for the compositor contract, not yet a control in the app. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_kclevel">Experimental Clear Glass parameter; registered for the compositor contract, not yet a control in the app. Changes apply after userspace restarts.</string>
+    <string name="control_description_sf_kclift">Experimental Clear Glass parameter; registered for the compositor contract, not yet a control in the app. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_kcsat">Experimental Clear Glass parameter; registered for the compositor contract, not yet a control in the app. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_kcveil">Experimental Clear Glass parameter; registered for the compositor contract, not yet a control in the app. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_kgband">Adjusts the width over which lock screen edge blur and refraction grow. Changes apply after userspace restarts.</string>

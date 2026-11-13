@@ -110,7 +110,7 @@ Rules for the module:
 - Treat a written `huclear`/`kgclear` as **pending** until `debug.oulg.sf.clear` (or the `CLEAR_OPTICS` line) reports it. Before that, the device renders the previous modes.
 - A reported mode is what a program was compiled with, not proof that a card was drawn clear. Per-card confirmation needs the debug maps (section 7) or a screenshot.
 
-The live helper (`sfhook/live/oulg-live.sh`) accepts `huclear kgclear hcband hcamp hcbody hcbody2 hcedge hccore hcblurexp kcband kcamp kcbody kcbody2 kcedge kccore kcblurexp kcveil kclevel kcdim kcknee kcsat kccool hcfold hcsat hcscrim hcscrimmax hcadapt` in `setprops`. It refuses the bare key `clear` (the reported state is not writable).
+The live helper (`sfhook/live/oulg-live.sh`) accepts `huclear kgclear hcband hcamp hcbody hcbody2 hcedge hccore hcblurexp kcband kcamp kcbody kcbody2 kcedge kccore kcblurexp kcveil kclevel kcdim kcknee kcsat kccool hcfold hcsat hcscrim hcscrimmax hcadapt kcfold hclift kclift hcneutral` in `setprops`. It refuses the bare key `clear` (the reported state is not writable).
 
 ## 6. Changes expected on the Android side (not done here)
 
@@ -197,7 +197,7 @@ sat  = hcsat + (1 - hcsat) * w                         the saturation fades to 1
 - The material is applied to the refracted, blurred backdrop before the edge light, so the light is not dimmed. The limit on `hcscrimmax` keeps the output luma from falling as the backdrop gets brighter (checked over the whole range).
 - The blur stays the section-1 curve. A uniform blur is `hcedge = hccore`.
 - Starting values for the device, sized on the 1340×374 card (r 108): `hcband 0.42` (45.4 px), `hcfold 2` (a 90.7 px, mirrored rim 25.1 px, stretched zone 20.3 px), `hcedge 24`, `hccore 24`, `hcbody 0`, `hcsat 1.5`, `hcscrim 0.12`, `hcscrimmax 0.5` (backdrop luma 0.25 → 0.205, 0.50 → 0.345, 0.75 → 0.420, white → 0.50). These are arithmetic from the reference's parameters and the measurements above, not device results.
-- Registry: the four keys are in the catalogue and `SettingsRegistry` (200 specs, with `sf.hcadapt` of section 13), `Tier.INTERNAL` read-only rows, in `CLEAR_GLASS_PENDING_INTEGRATION`, not in `SfLive.WRITABLE`.
+- Registry: the four keys are in the catalogue and `SettingsRegistry` (204 specs, with the keys of sections 13 and 14), `Tier.INTERNAL` read-only rows, in `CLEAR_GLASS_PENDING_INTEGRATION`, not in `SfLive.WRITABLE`.
 - Sizes: largest library with meniscus, material and adaptive body 17664 of 32768 bytes; `main()` unchanged.
 - Not covered: the lockscreen (profile 1) keeps the slab; `clear_render_check.mjs` (WebGL) has no meniscus case yet, so the GLSL/twin agreement of the meniscus rests on the shared text structure and glslang, not on a rendered comparison.
 - Pending on the device: everything visual. In particular the module flips notification text to dark over light backdrops; with a scrim that brings white down to 0.50 the text colour rule may need a different threshold.
@@ -225,3 +225,25 @@ body = mix(A, B, hcadapt * smoothstep(0.06, 0.22, sd))
 - Neutral highlights (part of the heads-up material, active whenever it is emitted): pixels with luma above 0.55 and `max − min` below 0.45 are pulled toward their own grey, by up to 75 % at luma ≥ 0.90 and chroma ≤ 0.15. Luma is kept, so the scrim's monotone bound is unchanged. Example: (0.80, 0.85, 1.00) keeps luma 0.85 and its chroma falls from 0.20 to about 0.07. Vivid highlights (chroma above 0.45) are not touched.
 - The scrim is unchanged. With the clock handled by the blur, a lower `hcscrimmax` darkens near-white areas less.
 - Not validated on the device. The WebGL render check has no case for either.
+
+## 14. Lockscreen meniscus, lift and neutral strength (`feat/clear-glass-kg-meniscus`)
+
+The heads-up of `acff51b` was approved on the device (`hcfold 2`, `hcband 0.42`, `hcsat 1.05`, `hcscrim 0`, `hcscrimmax 0`, `hcadapt 1`). Its generated GLSL is frozen in `sfhook/tools/testdata/hu_approved_golden` and checked byte for byte (I3) while the four keys below are unset, neutral or invalid.
+
+| Property | Profile | Default | Range | Meaning |
+|---|---|---|---|---|
+| `debug.oulg.sf.kcfold` | KG | 0 | 0–3 | 0 keeps the slab. Above 0: the meniscus of section 12 with the lockscreen's own `kcband`, `kcbody`, `kcbody2`, `kcedge`, `kccore`, `kcblurexp` and `kgrefract` |
+| `debug.oulg.sf.hclift` | HU | 0 | 0–2 | `c → 1 − (1 − c)^(1 + lift)` per channel, after the scrim. Nothing emitted at 0 |
+| `debug.oulg.sf.kclift` | KG | 0 | 0–2 | same curve, after dim and tint, before the edge block. Nothing emitted at 0 |
+| `debug.oulg.sf.hcneutral` | HU | 0.75 | 0–1 | strength of the near-white pull of section 13, which was fixed at 0.75. Acts only while the heads-up material is emitted |
+
+- One field text: `OULG_FS_MENISCUS_FIELD_FMT` takes the profile index; with equal parameters the two functions differ in that index only (`clear_check.c`). The cap is `1 / max(refract, 1) − body − body2` per profile. M1–M4 of section 12 run on the twin over refraction scales 0.8–1.2, three domes and three bands, which covers the lockscreen's ranges.
+- What `kcfold` changes on the lockscreen: the shift, and through it `oulg_e` (the edge light's sample offset), as on the heads-up. What it does not change: the material, the Fresnel, contour and specular block (their coordinates come from `oulg_shift_base`), the blur curve, the light cases. The test compares the library with `kcfold` 1.5 and 0: only the field function differs.
+- In mode 1 the tag strength no longer caps the lockscreen amplitude when `kcfold > 0`, as on the heads-up.
+- Lift: black and white stay fixed, every value between rises, no channel can exceed 1, the curve is increasing (checked for lift 0–2). Mid grey 0.50 becomes 0.75 at lift 1 and 0.875 at 2. It moves colours toward white. The lockscreen's existing `kcveil` (≤ 0.2) toward `kclevel` (≤ 0.85) raises mid grey to 0.57 at most and darkens backdrops above the level, which is why `kclift` exists.
+- Not changed: `hcadapt` stays heads-up only; profiles 2 and 3; `main()`; the modes; the optics-11 and optics-12 identities.
+- `kgsharedoptics`: unchanged and still undecided for clear cards (section 6). The Java edge is drawn over the card whatever the field is.
+- Text colour: the module picks it from the backdrop. Scrim, dim and lift change the body's luma without the module knowing; see `UI_HANDOFF.md` section 7.
+- Bundle: `sfhook/live/version.prop` goes to v0.29.0 / 30. It had stayed at v0.28.0 / 29 through the Clear Glass commits, which change the library.
+- Controls for the UI agent: `docs/clear-glass/UI_HANDOFF.md`.
+- Not validated on the device: the lockscreen meniscus, both lifts and any `hcneutral` other than 0.75.

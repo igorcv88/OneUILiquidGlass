@@ -122,6 +122,8 @@ final class ControlDescriptions {
             case "sf.hccore": return R.string.control_description_sf_hccore;
             case "sf.hcedge": return R.string.control_description_sf_hcedge;
             case "sf.hcfold": return R.string.control_description_sf_hcfold;
+            case "sf.hclift": return R.string.control_description_sf_hclift;
+            case "sf.hcneutral": return R.string.control_description_sf_hcneutral;
             case "sf.hcsat": return R.string.control_description_sf_hcsat;
             case "sf.hcscrim": return R.string.control_description_sf_hcscrim;
             case "sf.hcscrimmax": return R.string.control_description_sf_hcscrimmax;
@@ -140,8 +142,10 @@ final class ControlDescriptions {
             case "sf.kccore": return R.string.control_description_sf_kccore;
             case "sf.kcdim": return R.string.control_description_sf_kcdim;
             case "sf.kcedge": return R.string.control_description_sf_kcedge;
+            case "sf.kcfold": return R.string.control_description_sf_kcfold;
             case "sf.kcknee": return R.string.control_description_sf_kcknee;
             case "sf.kclevel": return R.string.control_description_sf_kclevel;
+            case "sf.kclift": return R.string.control_description_sf_kclift;
             case "sf.kcsat": return R.string.control_description_sf_kcsat;
             case "sf.kcveil": return R.string.control_description_sf_kcveil;
             case "sf.kgband": return R.string.control_description_sf_kgband;

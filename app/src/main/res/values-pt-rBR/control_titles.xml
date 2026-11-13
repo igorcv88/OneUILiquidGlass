@@ -19,6 +19,8 @@
     <string name="control_title_bf8389203ea5">Brilho do vidro escuro</string>
     <string name="control_title_f40464148fea">Brilho especular</string>
     <string name="control_title_6953361f458b">Brilho no topo</string>
+    <string name="control_title_41284a3acf75">Clareamento do Clear Glass (bloqueio)</string>
+    <string name="control_title_db92724cd09a">Clareamento do Clear Glass (pop-up)</string>
     <string name="control_title_64228432dde7">Clear Glass no bloqueio</string>
     <string name="control_title_414d7a830981">Clear Glass no pop-up</string>
     <string name="control_title_e92668db46cf">Compressão de realces do Clear Glass</string>
@@ -108,12 +110,14 @@
     <string name="control_title_04f26b1088fe">Matiz fria do Clear Glass</string>
     <string name="control_title_8172137d462a">Medir cada cartão</string>
     <string name="control_title_27e402875dc0">Medir tempo dos ganchos</string>
+    <string name="control_title_f3b1dc710f06">Menisco do Clear Glass (bloqueio)</string>
     <string name="control_title_3d2d3f93bf63">Menisco do Clear Glass (pop-up)</string>
     <string name="control_title_006548b15c01">Modelo de refração</string>
     <string name="control_title_ceaef40ab9b4">Modo de reescrita</string>
     <string name="control_title_b634baeb7442">Modos Clear Glass compilados</string>
     <string name="control_title_6a5669f01728">Multiplicador físico</string>
     <string name="control_title_a2faa45a9b05">Máximo de ícones visíveis</string>
+    <string name="control_title_a33a5e23b95e">Neutralidade dos brancos do Clear Glass (pop-up)</string>
     <string name="control_title_203fe4f25f20">Nível da uniformidade</string>
     <string name="control_title_90bf052cade3">Nível do véu do Clear Glass</string>
     <string name="control_title_b89e7df74a83">Ocultar a faixa em</string>

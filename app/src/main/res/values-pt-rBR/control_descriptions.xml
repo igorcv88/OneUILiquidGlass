@@ -114,6 +114,8 @@
     <string name="control_description_sf_hccore">Parâmetro experimental do Clear Glass; registrado para o contrato do compositor, ainda sem controle no app. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_hcedge">Parâmetro experimental do Clear Glass; registrado para o contrato do compositor, ainda sem controle no app. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_hcfold">Parâmetro experimental do Clear Glass; registrado para o contrato do compositor, ainda sem controle no app. As mudanças são aplicadas após reiniciar o userspace.</string>
+    <string name="control_description_sf_hclift">Parâmetro experimental do Clear Glass; registrado para o contrato do compositor, ainda sem controle no app. As mudanças são aplicadas após reiniciar o userspace.</string>
+    <string name="control_description_sf_hcneutral">Parâmetro experimental do Clear Glass; registrado para o contrato do compositor, ainda sem controle no app. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_hcsat">Parâmetro experimental do Clear Glass; registrado para o contrato do compositor, ainda sem controle no app. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_hcscrim">Parâmetro experimental do Clear Glass; registrado para o contrato do compositor, ainda sem controle no app. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_hcscrimmax">Parâmetro experimental do Clear Glass; registrado para o contrato do compositor, ainda sem controle no app. As mudanças são aplicadas após reiniciar o userspace.</string>
@@ -132,8 +134,10 @@
     <string name="control_description_sf_kccore">Parâmetro experimental do Clear Glass; registrado para o contrato do compositor, ainda sem controle no app. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_kcdim">Parâmetro experimental do Clear Glass; registrado para o contrato do compositor, ainda sem controle no app. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_kcedge">Parâmetro experimental do Clear Glass; registrado para o contrato do compositor, ainda sem controle no app. As mudanças são aplicadas após reiniciar o userspace.</string>
+    <string name="control_description_sf_kcfold">Parâmetro experimental do Clear Glass; registrado para o contrato do compositor, ainda sem controle no app. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_kcknee">Parâmetro experimental do Clear Glass; registrado para o contrato do compositor, ainda sem controle no app. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_kclevel">Parâmetro experimental do Clear Glass; registrado para o contrato do compositor, ainda sem controle no app. As mudanças são aplicadas após reiniciar o userspace.</string>
+    <string name="control_description_sf_kclift">Parâmetro experimental do Clear Glass; registrado para o contrato do compositor, ainda sem controle no app. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_kcsat">Parâmetro experimental do Clear Glass; registrado para o contrato do compositor, ainda sem controle no app. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_kcveil">Parâmetro experimental do Clear Glass; registrado para o contrato do compositor, ainda sem controle no app. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_kgband">Ajusta a largura da transição de desfoque e refração na borda da tela de bloqueio. As mudanças são aplicadas após reiniciar o userspace.</string>
