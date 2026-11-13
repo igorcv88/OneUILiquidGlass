@@ -272,12 +272,13 @@ static int vertex_broken;
 
 // Shader diagnostics, read at compile time (requires a SurfaceFlinger restart/cache refresh):
 // 1 is the established magenta/cyan tag proof; 2 paints the raw backdrop luminance sampled at the
-// KG outline in green, before material, opacity and glow composition. 0 is the production path.
+// KG outline in green, before material, opacity and glow composition; 3 and 4 replace every tagged
+// card by its field map (shift, blur radius; refract.h), for host tests. 0 is the production path.
 // The lens strength travels in the tag, set live by the module.
 static int debug_tint(void) {
     char v[PROP_VALUE_MAX] = {0};
     if (__system_property_get("debug.oulg.sf.debug", v) <= 0) return 0;
-    return v[0] == '2' && !v[1] ? 2 : v[0] == '1' && !v[1] ? 1 : 0;
+    return v[1] || v[0] < '1' || v[0] > '4' ? 0 : v[0] - '0';
 }
 
 static float prop_float(const char *name, float fallback) {
@@ -365,6 +366,64 @@ static void layered_blur(struct oulg_profile p[OULG_PROFILES]) {
     p[3].light = prop_float("debug.oulg.sf.qslight", OULG_QS_LIGHT_DEFAULT);
 }
 
+// Clear Glass (refract.h), read when a fragment shader is compiled like the profiles above:
+// debug.oulg.sf.huclear and .kgclear select it per profile (0 off: the optics-11 GLSL byte for byte;
+// 1 every card of the profile; 2 per card, by the tag's strength slice), and debug.oulg.sf.hc<name>
+// / .kc<name> its parameters, <name> one of band amp body body2 edge core blurexp, plus for the
+// lockscreen veil level dim knee sat cool. Every one of them needs a shader recompilation (in
+// practice a SurfaceFlinger restart); only the mode-2 tag slice changes live.
+static void clear_params(struct oulg_clear *c) {
+    static const char *const pre[2] = {"debug.oulg.sf.hc", "debug.oulg.sf.kc"};
+    static const char *const names[7] = {"band", "amp", "body", "body2", "edge", "core", "blurexp"};
+    *c = OULG_CLEAR_DEFAULT;
+    c->mode[0] = (int) prop_float("debug.oulg.sf.huclear", 0.0f);
+    c->mode[1] = (int) prop_float("debug.oulg.sf.kgclear", 0.0f);
+    for (int i = 0; i < 2; i++) {
+        float *dst[7] = {&c->band[i], &c->amp[i], &c->body[i], &c->body2[i], &c->edge[i], &c->core[i], &c->blurexp[i]};
+        for (int j = 0; j < 7; j++) {
+            char name[48];
+            snprintf(name, sizeof name, "%s%s", pre[i], names[j]);
+            *dst[j] = prop_float(name, *dst[j]);
+        }
+    }
+    c->veil = prop_float("debug.oulg.sf.kcveil", c->veil);
+    c->level = prop_float("debug.oulg.sf.kclevel", c->level);
+    c->dim = prop_float("debug.oulg.sf.kcdim", c->dim);
+    c->knee = prop_float("debug.oulg.sf.kcknee", c->knee);
+    c->sat = prop_float("debug.oulg.sf.kcsat", c->sat);
+    c->cool = prop_float("debug.oulg.sf.kccool", c->cool);
+    oulg_fix_clear(c);
+}
+
+// What was last compiled, published once per change: debug.oulg.sf.clear = "hu:<mode>,kg:<mode>"
+// and one CLEAR_OPTICS log line with the effective (range-checked) parameters. SELinux may refuse
+// surfaceflinger the property write, as for debug.oulg.sf.optics; the log line still records it.
+// A mode here is what a fragment program was compiled with, not proof that a card was drawn clear.
+static pthread_mutex_t clear_lock = PTHREAD_MUTEX_INITIALIZER;
+static struct oulg_clear clear_published;
+static int clear_published_any;
+static void announce_clear(const struct oulg_clear *c, const struct oulg_profile p[OULG_PROFILES]) {
+    pthread_mutex_lock(&clear_lock);
+    int changed = !clear_published_any || memcmp(&clear_published, c, sizeof *c) != 0;
+    if (changed) { clear_published = *c; clear_published_any = 1; }
+    pthread_mutex_unlock(&clear_lock);
+    if (!changed) return;
+    char state[32];
+    snprintf(state, sizeof state, "hu:%d,kg:%d", c->mode[0], c->mode[1]);
+    int rc = __system_property_set("debug.oulg.sf.clear", state);
+    __android_log_print(ANDROID_LOG_INFO, TAG,
+        "CLEAR_OPTICS version=%s hu=%d kg=%d published=%d"
+        " hc=band:%.3f,amp:%.4f,body:%.4f,body2:%.4f,edge:%.2f,core:%.2f,blurexp:%.3f,refract:%.3f,blur:%.3f"
+        " kc=band:%.3f,amp:%.4f,body:%.4f,body2:%.4f,edge:%.2f,core:%.2f,blurexp:%.3f,refract:%.3f,blur:%.3f"
+        " kcmat=veil:%.3f,level:%.3f,dim:%.3f,knee:%.3f,sat:%.3f,cool:%.3f",
+        OULG_OPTICS_VERSION, c->mode[0], c->mode[1], rc == 0,
+        (double) c->band[0], oulg_clear_acap(c, 0, p[0].refract), (double) c->body[0], (double) c->body2[0],
+        (double) c->edge[0], (double) c->core[0], (double) c->blurexp[0], (double) p[0].refract, (double) p[0].blur,
+        (double) c->band[1], oulg_clear_acap(c, 1, p[1].refract), (double) c->body[1], (double) c->body2[1],
+        (double) c->edge[1], (double) c->core[1], (double) c->blurexp[1], (double) p[1].refract, (double) p[1].blur,
+        (double) c->veil, (double) c->level, (double) c->dim, (double) c->knee, (double) c->sat, (double) c->cool);
+}
+
 // Tells the module that this library's optics are live (debug.oulg.sf.optics = OULG_OPTICS_VERSION)
 // once a fragment rewrite compiles; the module only then lets the compositor light profile-1 cards
 // instead of its own edge shader. SELinux may refuse surfaceflinger the write; the boot script and a
@@ -428,8 +487,10 @@ void glShaderSource(GLuint shader, GLsizei count, const GLchar *const *strings, 
         int dbg = debug_tint();
         struct oulg_profile profiles[OULG_PROFILES];
         layered_blur(profiles);
-        char *frag = vertex_broken ? NULL : oulg_rewrite_fragment(joined, dbg, profiles);
-        if (!frag) frag = oulg_rewrite_clip(joined, dbg, profiles);
+        struct oulg_clear clear;
+        clear_params(&clear);
+        char *frag = vertex_broken ? NULL : oulg_rewrite_fragment_cl(joined, dbg, profiles, &clear);
+        if (!frag) frag = oulg_rewrite_clip_cl(joined, dbg, profiles, &clear);
         if (frag) {
             int ok = compiles(shader, frag);
             __android_log_print(ANDROID_LOG_INFO, TAG, "REWRITE fragment shader=%u compiled=%d", shader, ok);
@@ -447,7 +508,13 @@ void glShaderSource(GLuint shader, GLsizei count, const GLchar *const *strings, 
             }
             free(frag);
             used = ok;
-            if (ok) { publish_health(1); announce_optics(); }
+            if (ok) {
+                publish_health(1); announce_optics();
+                // The profiles as the rewrite range-checked them, for the logged effective amplitude.
+                struct oulg_profile fixed[OULG_PROFILES] = {profiles[0], profiles[1], profiles[2], profiles[3]};
+                oulg_fix_params(fixed);
+                announce_clear(&clear, fixed);
+            }
         }
     }
     if (!used) real_shader_source(shader, count, strings, lengths);
