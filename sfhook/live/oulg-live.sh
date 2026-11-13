@@ -124,6 +124,8 @@ status)
     ' "$PROCDIR/$p/maps" 2>/dev/null; then out sf_loaded 1; else out sf_loaded 0; fi
     [ "$(getprop debug.oulg.sf.norewrite)" = 1 ] && out sf_rewrite 0 || out sf_rewrite 1
     out sf_optics "$(getprop debug.oulg.sf.optics)"
+    # Clear Glass modes of the last compiled fragment program (hu:<m>,kg:<m>), not the requested ones.
+    out sf_clear "$(getprop debug.oulg.sf.clear)"
     out sfrefract "$(getprop debug.oulg.sfrefract)"
     # Repeat identity after maps/property reads: mixed observations cannot establish health.
     end_pid="$(sf_pid)"
@@ -192,6 +194,8 @@ setprops)
         [ "$name" != "$kv" ] || die 2 "malformed_$kv"
         case "$name" in
             core|taps|ramp|hubloom|edgeblur|hublur|hubodylens|hurefract|kgcore|kgtaps|kgramp|kgsat|kgtone|kgrim|kgspec|kgflat|kglevel|kgcool|kgtilt|kgline|kgfixedrim|kgcorecap|kggradient|kgband|kgbodylens|kgblurexp|kgedgeblur|kgblur|kgrefract|kgflatcap|kgcoredim|kgglow|shadecap|shadelift|hulight|kglight|kgdepth|shadelight|qslens|qsbody|qsdepth|qslight|debug) ;;
+            # Clear Glass (refract.h): selection and parameters, read at shader compilation.
+            huclear|kgclear|hcband|hcamp|hcbody|hcbody2|hcedge|hccore|hcblurexp|kcband|kcamp|kcbody|kcbody2|kcedge|kccore|kcblurexp|kcveil|kclevel|kcdim|kcknee|kcsat|kccool) ;;
             *) die 2 "key_not_allowed_$name" ;;
         esac
         case "$value" in
