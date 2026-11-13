@@ -86,8 +86,8 @@ public class GlassMaterialApplicabilityTest {
         assertKind(Applicability.Kind.NEEDS_RESTART, of(true, concat(clear, "sf.hcsat", "1.05")), "sf.hcneutral");
         assertKind(Applicability.Kind.NEEDS_RESTART, of(true, concat(clear, "sf.hclift", "0.3")), "sf.hcneutral");
         assertKind(Applicability.Kind.NEEDS_RESTART, of(true, concat(clear, "sf.hcscrimmax", "0.2")), "sf.hcneutral");
-        // The minimum darkening alone does not emit the block.
-        assertKind(Applicability.Kind.INACTIVE, of(true, concat(clear, "sf.hcscrim", "0.2")), "sf.hcneutral");
+        // The library raises the maximum darkening to the minimum, so either one emits the block.
+        assertKind(Applicability.Kind.NEEDS_RESTART, of(true, concat(clear, "sf.hcscrim", "0.2")), "sf.hcneutral");
         // Saturation back at exactly 1 is neutral.
         assertKind(Applicability.Kind.INACTIVE, of(true, concat(clear, "sf.hcsat", "1")), "sf.hcneutral");
     }
@@ -96,6 +96,14 @@ public class GlassMaterialApplicabilityTest {
         String[] out = Arrays.copyOf(a, a.length + b.length);
         System.arraycopy(b, 0, out, a.length, b.length);
         return out;
+    }
+
+    @Test
+    public void theLevelOnlyActsWhileTheVeilIsAboveZero() {
+        String[] clear = {"sf.huclear", "1", "sf.kgclear", "1"};
+        assertKind(Applicability.Kind.NEEDS_RESTART, of(true, clear), "sf.kclevel");
+        assertKind(Applicability.Kind.INACTIVE, of(true, concat(clear, "sf.kcveil", "0")), "sf.kclevel");
+        assertEquals(Applicability.NEEDS_VEIL, of(true, concat(clear, "sf.kcveil", "0")).rule("sf.kclevel").reason);
     }
 
     @Test
@@ -124,6 +132,7 @@ public class GlassMaterialApplicabilityTest {
         for (String key : GlassMaterial.clearKeys()) {
             Applicability.Result r = clear.rule(key);
             if (key.equals("sf.hcamp") || key.equals("sf.kcamp")) continue; // depend on the meniscus, tested above
+            if (key.equals("sf.kclevel")) continue; // depends on the veil, tested above
             assertTrue(key + " -> " + r, r.usable());
         }
     }

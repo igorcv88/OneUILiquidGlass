@@ -685,5 +685,5 @@
   "sf.kcfold": ["Strength of the curved glass rim on lock-screen cards.", "Intensidade da borda curva nos cartões da tela de bloqueio."],
   "sf.hclift": ["Brightens the pop-up glass without changing its refraction. High values can reduce text contrast.", "Clareia o vidro do pop-up sem alterar a refração. Valores altos podem reduzir o contraste do texto."],
   "sf.kclift": ["Brightens the lock-screen glass; high values can reduce text contrast.", "Clareia o vidro na tela de bloqueio; valores altos podem reduzir o contraste do texto."],
-  "sf.hcneutral": ["Reduces blue or colored tint in the almost-white highlights of pop-ups. Only works while saturation, bright-area darkening or brightening is changed.", "Reduz tons azulados ou coloridos nas áreas quase brancas dos pop-ups. Só funciona com saturação, escurecimento nas áreas claras ou clareamento alterados."]
+  "sf.hcneutral": ["Reduces blue or colored tint in the almost-white highlights of pop-ups. Only works while saturation, darkening or brightening is changed.", "Reduz tons azulados ou coloridos nas áreas quase brancas dos pop-ups. Só funciona com saturação, escurecimento ou clareamento alterados."]
 }

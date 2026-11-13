@@ -68,6 +68,10 @@ public final class Segmented extends LinearLayout {
         selected = index;
         tint();
         if (anim != null) anim.cancel();
+        if (index < 0) { // No selection: the pill is not drawn, and stays where it was.
+            invalidate();
+            return;
+        }
         if (t.reduceMotion || !isAttachedToWindow()) {
             pill = index;
             invalidate();

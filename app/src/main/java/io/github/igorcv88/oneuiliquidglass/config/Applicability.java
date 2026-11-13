@@ -244,7 +244,8 @@ public final class Applicability {
     static final String NEEDS_CLEAR = "Usado com o vidro Transparente",
             NEEDS_FROSTED = "Usado com o vidro Fosco",
             NEEDS_MENISCUS_OFF = "Só funciona com o menisco desligado",
-            NEEDS_MATERIAL_BLOCK = "Exige saturação, escurecimento nas áreas claras ou clareamento";
+            NEEDS_MATERIAL_BLOCK = "Exige saturação, escurecimento ou clareamento",
+            NEEDS_VEIL = "Só funciona com o véu acima de 0";
 
     /**
      * The material rules of a compositor key (see {@link GlassMaterial}): a Clear parameter acts
@@ -267,8 +268,11 @@ public final class Applicability {
         switch (key) {
             case "sf.hcamp": return number("sf.hcfold") > 0 ? inactive(NEEDS_MENISCUS_OFF) : restart();
             case "sf.kcamp": return number("sf.kcfold") > 0 ? inactive(NEEDS_MENISCUS_OFF) : restart();
+            case "sf.kclevel": return number("sf.kcveil") > 0 ? restart() : inactive(NEEDS_VEIL);
             case "sf.hcneutral":
-                return number("sf.hcsat") != 1 || number("sf.hcscrimmax") > 0 || number("sf.hclift") > 0
+                // The library raises scrimmax to scrim before testing the block (refract.h).
+                return number("sf.hcsat") != 1 || Math.max(number("sf.hcscrimmax"), number("sf.hcscrim")) > 0
+                        || number("sf.hclift") > 0
                         ? restart() : inactive(NEEDS_MATERIAL_BLOCK);
             default: return restart();
         }

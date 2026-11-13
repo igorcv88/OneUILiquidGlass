@@ -85,7 +85,8 @@ final class MaterialPanel {
                 ? m.clearValuesOnDevice() : java.util.Collections.emptyMap();
         boolean revert = m.canRevertMaterial();
         ControlState st = m.state();
-        String key = status + ":" + material + ":" + revert + ":" + recommended.size() + ":" + onDevice.size()
+        String key = status + ":" + material + ":" + revert + ":" + new java.util.TreeMap<>(recommended) + ":"
+                + new java.util.TreeMap<>(onDevice)
                 + ":" + st.shown(GlassMaterial.HU_SELECTOR) + ":" + st.shown(GlassMaterial.KG_SELECTOR);
         if (key.equals(builtKey)) return;
         builtKey = key;

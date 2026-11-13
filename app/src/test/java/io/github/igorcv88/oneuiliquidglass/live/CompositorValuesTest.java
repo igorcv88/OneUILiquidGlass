@@ -196,14 +196,17 @@ public final class CompositorValuesTest {
         observed.put("sf.core", "48");
         observed.put("sf.hcfold", "2");
         observed.put("sf.huclear", "1");
-        assertTrue(CompositorValues.pending(Collections.emptyMap(), observed, oldBaseline).isEmpty());
+        assertEquals(Collections.singleton("sf.huclear"),
+                CompositorValues.pending(Collections.emptyMap(), observed, oldBaseline).keySet());
         // A value the app saved is still pending against that baseline.
-        assertEquals(Collections.singletonMap("sf.hcfold", "3"),
-                CompositorValues.pending(Collections.singletonMap("sf.hcfold", "3"), observed, oldBaseline));
+        assertEquals("3", CompositorValues.pending(Collections.singletonMap("sf.hcfold", "3"), observed, oldBaseline).get("sf.hcfold"));
+        // The material selectors are not skipped: a property alone must not read as applied.
+        assertEquals(Collections.singletonMap("sf.huclear", "1"),
+                CompositorValues.pending(Collections.emptyMap(), observed, oldBaseline));
         // And a baseline that recorded the key reports a real difference.
         oldBaseline.put("sf.hcfold", "0");
-        assertEquals(Collections.singletonMap("sf.hcfold", "2"),
-                CompositorValues.pending(Collections.emptyMap(), observed, oldBaseline));
+        Map<String, String> both = new TreeMap<>(CompositorValues.pending(Collections.emptyMap(), observed, oldBaseline));
+        assertEquals(new TreeSet<>(Arrays.asList("sf.hcfold", "sf.huclear")), both.keySet());
     }
 
     @Test public void setpropsCommandIsAllowlistedAndNumeric() {

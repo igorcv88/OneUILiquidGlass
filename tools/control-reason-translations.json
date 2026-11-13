@@ -32,5 +32,6 @@
   "Usado com o vidro Transparente": "Used with Clear glass",
   "Usado com o vidro Fosco": "Used with Frosted glass",
   "Só funciona com o menisco desligado": "Only used when Meniscus is off",
-  "Exige saturação, escurecimento nas áreas claras ou clareamento": "Needs saturation, bright-area darkening or brightening to be changed"
+  "Exige saturação, escurecimento ou clareamento": "Needs saturation, darkening or brightening to be changed",
+  "Só funciona com o véu acima de 0": "Only used when the veil is above 0"
 }

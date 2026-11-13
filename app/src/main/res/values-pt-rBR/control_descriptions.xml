@@ -115,7 +115,7 @@
     <string name="control_description_sf_hcedge">Desfoque no contorno externo dos pop-ups. Se for maior que o do centro, é reduzido para igualar. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_hcfold">Intensidade da borda curva e comprimida do vidro nos pop-ups. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_hclift">Clareia o vidro do pop-up sem alterar a refração. Valores altos podem reduzir o contraste do texto. As mudanças são aplicadas após reiniciar o userspace.</string>
-    <string name="control_description_sf_hcneutral">Reduz tons azulados ou coloridos nas áreas quase brancas dos pop-ups. Só funciona com saturação, escurecimento nas áreas claras ou clareamento alterados. As mudanças são aplicadas após reiniciar o userspace.</string>
+    <string name="control_description_sf_hcneutral">Reduz tons azulados ou coloridos nas áreas quase brancas dos pop-ups. Só funciona com saturação, escurecimento ou clareamento alterados. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_hcsat">Intensidade das cores do fundo visto através dos pop-ups. Valores maiores deixam as cores mais vivas; os realces ficam como estão. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_hcscrim">Escurece o vidro do pop-up sobre as partes escuras do fundo. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_hcscrimmax">Escurece o vidro do pop-up sobre as partes claras do fundo. Nunca fica abaixo do valor das áreas escuras. As mudanças são aplicadas após reiniciar o userspace.</string>

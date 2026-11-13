@@ -14,13 +14,14 @@
     <string name="control_reason_37d1bfc3168b">Disable transparent off tile discs</string>
     <string name="control_reason_e061dd5d8ae0">State read from the device</string>
     <string name="control_reason_17236c820833">Requires blur drawn on the card</string>
-    <string name="control_reason_419be72842f8">Needs saturation, bright-area darkening or brightening to be changed</string>
+    <string name="control_reason_7bc5b40329fd">Needs saturation, darkening or brightening to be changed</string>
     <string name="control_reason_79d513d51655">Retired setting with no visual effect</string>
     <string name="control_reason_61e39f9c26d3">Glass is off</string>
     <string name="control_reason_317c7653bd1b">Glass is off on the surfaces where this setting applies</string>
     <string name="control_reason_b7d2e9ae3d5f">Has no effect with adaptive contrast protection</string>
     <string name="control_reason_65e66e7ee1c0">Has no effect with standard glass</string>
     <string name="control_reason_9c1dfe250b2b">Only used when Meniscus is off</string>
+    <string name="control_reason_a68b50de9042">Only used when the veil is above 0</string>
     <string name="control_reason_d819d244b0d8">Used with the dynamic lens</string>
     <string name="control_reason_d390f2b8bbe0">Used with the physical model</string>
     <string name="control_reason_02be17ba5336">Used with the smooth lens model</string>
