@@ -61,7 +61,7 @@ Heads-up (the HU has no material in optics 11; this block is emitted only when a
 | `hclift` | 0.30 | 0–2 | 0 | brightening: `c → 1 − (1 − c)^(1 + lift)` per channel, after the scrim |
 | `hcneutral` | 0.75 | 0–1 | 0 | strength of the pull of near-white, low-chroma pixels toward their own grey |
 
-`hcneutral` acts only while the block is emitted. To use it alone, the UI must also keep one of the three conditions true (for example `hcsat 1.01`). The configuration approved on the device is `hcsat 1.05`, `hcscrim 0`, `hcscrimmax 0`, `hcadapt 1`, `hclift` unset, `hcneutral` unset.
+`hcneutral` acts only while the block is emitted. To use it alone, the UI must also keep one of the three conditions true (for example `hcsat 1.01`). The configuration approved on the device is `hcsat 1.05`, `hcscrim 0`, `hcscrimmax 0`, `hcadapt 1`, `hclift` 0.30, `hcneutral` unset. The approved Clear-only defaults are now built into the native shader: these values are fallbacks, not forced overrides.
 
 Lockscreen (replaces the optics-11 body material on a clear card):
 
