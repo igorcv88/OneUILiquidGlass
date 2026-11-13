@@ -172,7 +172,7 @@
     <string name="control_description_sf_qsbody">Adjusts the refracted background visible at Quick Settings capsule edges. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_qsdepth">Adjusts how far light from a bright background enters a Quick Settings capsule. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_qslens">Adjusts background refraction near Quick Settings capsule edges. Changes apply after userspace restarts.</string>
-    <string name="control_description_sf_qslight">Adjusts background light entering Quick Settings capsule edges. Changes apply after userspace restarts.</string>
+    <string name="control_description_sf_qslight">Developer-only edge-light gain for Quick Settings; 0.90 is on by default in Frosted and Clear. Read-only here; change with root/Termux.</string>
     <string name="control_description_sf_ramp">Sets the depth at which pop-up inner blur reaches full strength. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_shadecap">Sets the maximum brightness under light text in the shade lens tone map. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_shadelift">Sets the minimum brightness under dark text in the shade lens tone map. Changes apply after userspace restarts.</string>
