@@ -17,7 +17,7 @@ for folder, index in [('values', 0), ('values-pt-rBR', 1)]:
     for key, values in sorted(data.items()):
         name = 'control_description_' + key.replace('.', '_')
         description = values[index]
-        if key.startswith('sf.') and key not in ('sf.optics', 'sf.norewrite', 'sf.clear'):
+        if key.startswith('sf.') and key not in ('sf.optics', 'sf.norewrite', 'sf.clear', 'sf.qslight'):
             description += (' Changes apply after userspace restarts.' if index == 0
                             else ' As mudanças são aplicadas após reiniciar o userspace.')
         value = escape(description).replace("'", "\\'")
