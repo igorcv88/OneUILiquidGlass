@@ -7,12 +7,13 @@ import org.junit.Test;
 import java.util.*;
 
 public final class CompositorValuesTest {
-    @Test public void qsLightRequiresCompileAndComposeValuesDoNot() {
-        assertTrue(CompositorValues.writable("sf.qslight"));
-        assertEquals(Collections.singletonMap("sf.qslight","2"),
-                CompositorValues.pending(Collections.singletonMap("sf.qslight","2"),Collections.emptyMap()));
+    @Test public void developerOnlyQsLightIsReadOnlyAndOtherQsOpticsStillCompile() {
+        assertFalse(CompositorValues.writable("sf.qslight"));
+        assertTrue(CompositorValues.pending(Collections.singletonMap("sf.qslight","2"),Collections.emptyMap()).isEmpty());
         assertTrue(CompositorValues.pending(Collections.singletonMap("qs.darkfill","0.2"),Collections.emptyMap()).isEmpty());
-        assertTrue(CompositorValues.pending(Collections.singletonMap("sf.qslight","0.90"),Collections.emptyMap()).isEmpty());
+        assertTrue(CompositorValues.writable("sf.qslens"));
+        assertEquals(Collections.singletonMap("sf.qslens","0.4"),
+                CompositorValues.pending(Collections.singletonMap("sf.qslens","0.4"),Collections.emptyMap()));
     }
     @Test public void pendingIsSavedMinusWhatTheCompositorWouldCompile() {
         Map<String, String> saved = new HashMap<>(), observed = new HashMap<>();
@@ -96,11 +97,12 @@ public final class CompositorValuesTest {
     @Test public void freshRestartDefaultsCanAllPassTheRootHelperValidator() {
         Map<String, String> defaults = CompositorValues.restartInputs(
                 Collections.emptyMap(), Collections.emptyMap());
-        assertEquals("0.90", defaults.get("sf.qslight"));
+        assertFalse(defaults.containsKey("sf.qslight")); // developer-only: never written by the app
+        assertEquals("0.30", defaults.get("sf.qslens"));
         Map<String, String> normalized = SfLive.normalizeValues(defaults);
         assertEquals(defaults.size(), normalized.size());
-        assertEquals("0.9", normalized.get("sf.qslight"));
-        assertTrue(SfLive.setprops("/d", defaults).get(2).contains(" qslight=0.9"));
+        assertEquals("0.3", normalized.get("sf.qslens"));
+        assertTrue(SfLive.setprops("/d", defaults).get(2).contains(" qslens=0.3"));
     }
 
     @Test public void verificationNeedsALoadedLibraryAndMatchingValues() {
@@ -176,9 +178,9 @@ public final class CompositorValuesTest {
         Map<String, String> saved = new HashMap<>();
         saved.put("sf.huclear", "1");
         saved.put("sf.kgclear", "1");
-        saved.put("sf.hcfold", "2");
-        saved.put("sf.kcedge", "24");
-        saved.put("sf.hcsat", "1");        // equals the default: nothing to apply
+        saved.put("sf.hcfold", "1");
+        saved.put("sf.kcedge", "12");
+        saved.put("sf.hcsat", "1.05");    // equals the approved native default: nothing to apply
         Map<String, String> pending = CompositorValues.pending(saved, Collections.emptyMap());
         assertEquals(new TreeSet<>(Arrays.asList("sf.huclear", "sf.kgclear", "sf.hcfold", "sf.kcedge")), pending.keySet());
         // One setprops call carries all of them.
@@ -239,7 +241,7 @@ public final class CompositorValuesTest {
         assertEquals("sh '/d/oulg-live.sh' setprops qsbody=",
                 SfLive.setprops("/d", Collections.singletonMap("sf.qsbody", "")).get(2));
         assertEquals("0", SfLive.normalizeValues(
-                Collections.singletonMap("sf.qsbody", "-0.000")).get("sf.qslight"));
+                Collections.singletonMap("sf.qsbody", "-0.000")).get("sf.qsbody"));
         for (String invalid : new String[]{".", "-.", "1.", "--1", "1e-3", "NaN",
                 "0; reboot", "$(id)", " 0.9", "0.9 ", "1234567890123"})
             assertThrows(invalid, IllegalArgumentException.class,
