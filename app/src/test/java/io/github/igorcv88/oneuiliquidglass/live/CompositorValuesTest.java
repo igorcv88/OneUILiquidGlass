@@ -196,17 +196,22 @@ public final class CompositorValuesTest {
         observed.put("sf.core", "48");
         observed.put("sf.hcfold", "2");
         observed.put("sf.huclear", "1");
-        assertEquals(Collections.singleton("sf.huclear"),
-                CompositorValues.pending(Collections.emptyMap(), observed, oldBaseline).keySet());
-        // A value the app saved is still pending against that baseline.
+        observed.put("sf.kgclear", "1");
+        // A compile from the old app did not record either selector: getprop=Clear with a
+        // missing baseline is UNKNOWN, not a pending Clear -> Clear restart.
+        assertTrue(CompositorValues.pending(Collections.emptyMap(), observed, oldBaseline).isEmpty());
+        // Explicit saved changes that have not reached getprop are still pending.
         assertEquals("3", CompositorValues.pending(Collections.singletonMap("sf.hcfold", "3"), observed, oldBaseline).get("sf.hcfold"));
-        // The material selectors are not skipped: a property alone must not read as applied.
-        assertEquals(Collections.singletonMap("sf.huclear", "1"),
-                CompositorValues.pending(Collections.emptyMap(), observed, oldBaseline));
-        // And a baseline that recorded the key reports a real difference.
+        Map<String, String> selected = new HashMap<>();
+        selected.put("sf.huclear", "0");
+        selected.put("sf.kgclear", "0");
+        assertEquals(selected, CompositorValues.pending(selected, observed, oldBaseline));
+        // Once a selector was recorded by an actual verified compile, a difference is real.
         oldBaseline.put("sf.hcfold", "0");
-        Map<String, String> both = new TreeMap<>(CompositorValues.pending(Collections.emptyMap(), observed, oldBaseline));
-        assertEquals(new TreeSet<>(Arrays.asList("sf.hcfold", "sf.huclear")), both.keySet());
+        oldBaseline.put("sf.huclear", "0");
+        oldBaseline.put("sf.kgclear", "0");
+        Map<String, String> changed = CompositorValues.pending(Collections.emptyMap(), observed, oldBaseline);
+        assertEquals(new TreeSet<>(Arrays.asList("sf.hcfold", "sf.huclear", "sf.kgclear")), changed.keySet());
     }
 
     @Test public void setpropsCommandIsAllowlistedAndNumeric() {
