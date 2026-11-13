@@ -127,6 +127,22 @@ public class GlassMaterialUiTest {
     }
 
     @Test
+    public void homeDoesNotDuplicateAnUnconfirmedGlassMaterialWarning() {
+        observe(new HashMap<String, String>() {{
+            put("sfrefract", "1");
+            put("sf.huclear", "1");
+            put("sf.kgclear", "1");
+        }});
+        MainActivity a = open();
+        List<String> shown = texts(a.findViewById(android.R.id.content));
+        assertTrue(shown.toString(), shown.contains(a.getString(
+                io.github.igorcv88.oneuiliquidglass.R.string.material_status_unconfirmed)));
+        assertFalse("The Home banner duplicates the material's unconfirmed state: " + shown,
+                shown.contains(a.getString(
+                        io.github.igorcv88.oneuiliquidglass.R.string.home_lens_unverified)));
+    }
+
+    @Test
     public void homeShowsTheMaterialChoiceInBrazilianPortuguese() {
         AppLanguage.set(context, AppLanguage.PORTUGUESE);
         MainActivity a = open();

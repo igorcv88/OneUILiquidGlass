@@ -360,6 +360,8 @@
     <string name="lens_activate">Activate lens</string>
     <string name="lens_active">Active</string>
     <string name="lens_loaded_unverified">Loaded, awaiting verification</string>
+    <string name="lens_monitor_unverified">Loaded; stability not attested</string>
+    <string name="lens_monitor_unverified_desc">The compositor is loaded and its shader rewrite was observed, but the 120-second process monitor has not attested stability. If the restart was less than 2 minutes ago, let monitoring finish. Otherwise, open Show log and inspect HEALTH_FINAL and the monitor record. Repeating Check alone cannot create missing evidence.</string>
     <string name="lens_loaded_params_unverified">The lens is loaded, but a restart with these settings has not been verified.</string>
     <string name="lens_loaded_desc">The lens is loaded in the compositor.</string>
     <string name="lens_pending_desc">Some settings are waiting for a restart.</string>
