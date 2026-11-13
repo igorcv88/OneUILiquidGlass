@@ -360,6 +360,8 @@
     <string name="lens_activate">Ativar lente</string>
     <string name="lens_active">Ativa</string>
     <string name="lens_loaded_unverified">Carregada, aguardando verificação</string>
+    <string name="lens_monitor_unverified">Carregada; estabilidade não atestada</string>
+    <string name="lens_monitor_unverified_desc">O compositor está carregado e a reescrita do shader foi observada, mas o monitor de 120 segundos não atestou a estabilidade. Se o reinício ocorreu há menos de 2 minutos, aguarde a conclusão do monitoramento. Caso contrário, abra Mostrar log e confira HEALTH_FINAL e o registro do monitor. Repetir Verificar não cria um atestado ausente.</string>
     <string name="lens_loaded_params_unverified">A lente está carregada, mas ainda não foi verificado um reinício com estes parâmetros.</string>
     <string name="lens_loaded_desc">A lente está carregada no compositor.</string>
     <string name="lens_pending_desc">Há ajustes esperando um reinício para valer.</string>
