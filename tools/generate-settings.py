@@ -97,6 +97,7 @@ for key,(default,domain,desc) in rows.items():
  strategy='MATERIAL' if key in 'liveradius liveshaderadius kgblurradius sflens kglens sat lighttone lightglass shadelightglass liveglint shadeglint kgglint liverim kgrim veilmax livedarkalpha livedarkfill kgdarkalpha kgdarkfill sf.core sf.kgcore sf.kgsat'.split() else 'DIAGRAM'
  if key=='shadedarkglass': strategy='MATERIAL'
  if key=='sf.qslight': dependency='sfrefract=1'; advanced=True
+ if key=='sf.qslight': lo,hi=0,2  # Developer-only range; READONLY has no editable slider.
  lines.append('        add(new SettingSpec('+','.join([q(key),q(group),q(scope),q(title),q(desc), 'SettingSpec.Type.'+typ,q(default),str(lo),str(hi),'1' if typ=='INT' else '.05' if key=='mediaart' else '.01',q(unit),q(enums.get(key,'')),q(dependency),'true' if advanced else 'false',q(strategy)])+'));')
 (out/'SettingsRegistry.java').write_text('''package io.github.igorcv88.oneuiliquidglass.config;
 import java.util.*;
