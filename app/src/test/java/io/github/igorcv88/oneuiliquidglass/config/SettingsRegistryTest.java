@@ -44,7 +44,7 @@ public class SettingsRegistryTest {
     public void everyDefaultPassesAndReadonlyCannotBeWritten() {
         for (SettingSpec spec : SettingsRegistry.all()) {
             if (spec.type == SettingSpec.Type.READONLY) {
-                assertEquals("sf.optics", spec.key);
+                assertTrue(spec.key, spec.key.equals("sf.optics") || spec.key.equals("sf.clear"));
                 try {
                     spec.validate("9");
                     fail();

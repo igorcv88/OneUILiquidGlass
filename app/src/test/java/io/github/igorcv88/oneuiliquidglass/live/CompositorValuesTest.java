@@ -189,13 +189,28 @@ public final class CompositorValuesTest {
         assertThrows(IllegalArgumentException.class, () -> SfLive.normalizeValues(null));
     }
 
+    /**
+     * Clear Glass compositor parameters: registered (SettingsRegistry) but deliberately not
+     * live-writable until the Android integration; remove this set when they join WRITABLE.
+     */
+    private static final Set<String> CLEAR_GLASS_PENDING_INTEGRATION = new TreeSet<>(Arrays.asList(
+            "huclear", "kgclear",
+            "hcband", "hcamp", "hcbody", "hcbody2", "hcedge", "hccore", "hcblurexp",
+            "kcband", "kcamp", "kcbody", "kcbody2", "kcedge", "kccore", "kcblurexp",
+            "kcveil", "kclevel", "kcdim", "kcknee", "kcsat", "kccool"));
+
     @Test public void writableListMatchesTheLibraryReaderMinusOwnedMarkers() throws Exception {
         String c = new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get("../sfhook/oulg_sf.c")), "UTF-8");
-        java.util.regex.Matcher m = java.util.regex.Pattern.compile("debug\\.oulg\\.sf\\.([a-z]+)").matcher(c);
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("debug\\.oulg\\.sf\\.([a-z0-9]+)").matcher(c);
         Set<String> read = new TreeSet<>();
         while (m.find()) read.add(m.group(1));
         read.remove("optics");
         read.remove("norewrite");
+        read.remove("clear"); // compiled-mode marker written by the library
+        assertEquals(22, CLEAR_GLASS_PENDING_INTEGRATION.size());
+        assertTrue(read.containsAll(CLEAR_GLASS_PENDING_INTEGRATION));
+        assertTrue(Collections.disjoint(CLEAR_GLASS_PENDING_INTEGRATION, SfLive.WRITABLE));
+        read.removeAll(CLEAR_GLASS_PENDING_INTEGRATION);
         assertEquals(read, new TreeSet<>(SfLive.WRITABLE));
         String helper = new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get("../sfhook/live/oulg-live.sh")), "UTF-8");
         for (String k : SfLive.WRITABLE) assertTrue(k, helper.contains("|" + k + "|") || helper.contains(" " + k + "|") || helper.contains("|" + k + ")"));

@@ -35,7 +35,7 @@ class DistributionTests(unittest.TestCase):
         registry=(ROOT/'app/src/main/java/io/github/igorcv88/oneuiliquidglass/config/SettingsRegistry.java').read_text()
         defaults={key:default.strip('`').split(' ')[0]
             for key,default in re.findall(r'^\| `(sf\.[a-z]+)` \| ([^|]+) \|',catalogue,re.M)
-            if key!='sf.optics'}
+            if key not in ('sf.optics','sf.clear')}  # read-only markers, not helper decimals
         self.assertIn('sf.qslight',defaults)
         self.assertEqual('0.90',defaults['sf.qslight'])
         for key,default in defaults.items():

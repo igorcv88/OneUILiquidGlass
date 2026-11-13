@@ -929,6 +929,56 @@ public final class Controls {
                 .in(TECH, Tier.INTERNAL).all()
                 .help("Definida pelo reinício: ativar a lente limpa este valor; o modo de"
                         + " coleta o liga."));
+        put(c("sf.clear", "Modos Clear Glass compilados").fmt(Format.READONLY)
+                .in(TECH, Tier.INTERNAL).all()
+                .help("Marcador gravado pela biblioteca. Ausente significa desconhecido; não prova que um cartão foi desenhado com Clear Glass."));
+
+        // Clear Glass (experimental compositor variant): registered so the registry covers every
+        // library reader, but never an editable row until the Android integration exposes it.
+        put(c("sf.huclear", "Clear Glass no pop-up").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(HU)
+                .help("Experimental, ainda sem controle no app."));
+        put(c("sf.hcband", "Banda de refração do Clear Glass (pop-up)").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(HU)
+                .help("Experimental, ainda sem controle no app."));
+        put(c("sf.hcamp", "Refração da borda do Clear Glass (pop-up)").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(HU)
+                .help("Experimental, ainda sem controle no app."));
+        put(c("sf.hcbody", "Refração do corpo do Clear Glass (pop-up)").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(HU)
+                .help("Experimental, ainda sem controle no app."));
+        put(c("sf.hcbody2", "Domo cúbico do Clear Glass (pop-up)").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(HU)
+                .help("Experimental, ainda sem controle no app."));
+        put(c("sf.hcedge", "Blur do contorno do Clear Glass (pop-up)").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(HU)
+                .help("Experimental, ainda sem controle no app."));
+        put(c("sf.hccore", "Blur do miolo do Clear Glass (pop-up)").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(HU)
+                .help("Experimental, ainda sem controle no app."));
+        put(c("sf.hcblurexp", "Subida do blur do Clear Glass (pop-up)").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(HU)
+                .help("Experimental, ainda sem controle no app."));
+        put(c("sf.kgclear", "Clear Glass no bloqueio").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(KG)
+                .help("Experimental, ainda sem controle no app."));
+        put(c("sf.kcband", "Banda de refração do Clear Glass (bloqueio)").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(KG)
+                .help("Experimental, ainda sem controle no app."));
+        put(c("sf.kcamp", "Refração da borda do Clear Glass (bloqueio)").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(KG)
+                .help("Experimental, ainda sem controle no app."));
+        put(c("sf.kcbody", "Refração do corpo do Clear Glass (bloqueio)").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(KG)
+                .help("Experimental, ainda sem controle no app."));
+        put(c("sf.kcbody2", "Domo cúbico do Clear Glass (bloqueio)").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(KG)
+                .help("Experimental, ainda sem controle no app."));
+        put(c("sf.kcedge", "Blur do contorno do Clear Glass (bloqueio)").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(KG)
+                .help("Experimental, ainda sem controle no app."));
+        put(c("sf.kccore", "Blur do miolo do Clear Glass (bloqueio)").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(KG)
+                .help("Experimental, ainda sem controle no app."));
+        put(c("sf.kcblurexp", "Subida do blur do Clear Glass (bloqueio)").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(KG)
+                .help("Experimental, ainda sem controle no app."));
+        put(c("sf.kcveil", "Véu do Clear Glass").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(KG)
+                .help("Experimental, ainda sem controle no app."));
+        put(c("sf.kclevel", "Nível do véu do Clear Glass").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(KG)
+                .help("Experimental, ainda sem controle no app."));
+        put(c("sf.kcdim", "Escurecimento do Clear Glass").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(KG)
+                .help("Experimental, ainda sem controle no app."));
+        put(c("sf.kcknee", "Compressão de realces do Clear Glass").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(KG)
+                .help("Experimental, ainda sem controle no app."));
+        put(c("sf.kcsat", "Saturação do Clear Glass").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(KG)
+                .help("Experimental, ainda sem controle no app."));
+        put(c("sf.kccool", "Matiz fria do Clear Glass").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(KG)
+                .help("Experimental, ainda sem controle no app."));
     }
 
     public static Control get(String key) {
