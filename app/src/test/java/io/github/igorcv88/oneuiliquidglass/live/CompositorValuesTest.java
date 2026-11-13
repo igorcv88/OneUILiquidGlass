@@ -231,21 +231,21 @@ public final class CompositorValuesTest {
 
     @Test public void oldDecimalFormsNormalizeBeforeReachingTheHelper() {
         for (String value : new String[]{".90", "0.90", "0.9", "00.900"}) {
-            assertEquals("sh '/d/oulg-live.sh' setprops qslight=0.9",
-                    SfLive.setprops("/d", Collections.singletonMap("sf.qslight", value)).get(2));
+            assertEquals("sh '/d/oulg-live.sh' setprops qsbody=0.9",
+                    SfLive.setprops("/d", Collections.singletonMap("sf.qsbody", value)).get(2));
         }
         assertEquals("sh '/d/oulg-live.sh' setprops shadelift=-0.5",
                 SfLive.setprops("/d", Collections.singletonMap("sf.shadelift", "-.50")).get(2));
-        assertEquals("sh '/d/oulg-live.sh' setprops qslight=",
-                SfLive.setprops("/d", Collections.singletonMap("sf.qslight", "")).get(2));
+        assertEquals("sh '/d/oulg-live.sh' setprops qsbody=",
+                SfLive.setprops("/d", Collections.singletonMap("sf.qsbody", "")).get(2));
         assertEquals("0", SfLive.normalizeValues(
-                Collections.singletonMap("sf.qslight", "-0.000")).get("sf.qslight"));
+                Collections.singletonMap("sf.qsbody", "-0.000")).get("sf.qslight"));
         for (String invalid : new String[]{".", "-.", "1.", "--1", "1e-3", "NaN",
                 "0; reboot", "$(id)", " 0.9", "0.9 ", "1234567890123"})
             assertThrows(invalid, IllegalArgumentException.class,
-                    () -> SfLive.normalizeValues(Collections.singletonMap("sf.qslight", invalid)));
+                    () -> SfLive.normalizeValues(Collections.singletonMap("sf.qsbody", invalid)));
         assertThrows(IllegalArgumentException.class,
-                () -> SfLive.normalizeValues(Collections.singletonMap("sf.qslight", null)));
+                () -> SfLive.normalizeValues(Collections.singletonMap("sf.qsbody", null)));
         assertThrows(IllegalArgumentException.class, () -> SfLive.normalizeValues(null));
     }
 
@@ -266,10 +266,15 @@ public final class CompositorValuesTest {
         read.remove("optics");
         read.remove("norewrite");
         read.remove("clear"); // compiled-mode marker written by the library
+        read.remove("qslight"); // developer-only; Termux helper accepts this, the app cannot set it
         assertEquals(31, CLEAR_GLASS.size());
         assertTrue(read.containsAll(CLEAR_GLASS));
         assertTrue(SfLive.WRITABLE.containsAll(CLEAR_GLASS));
         assertEquals(read, new TreeSet<>(SfLive.WRITABLE));
+        assertFalse(SfLive.WRITABLE.contains("qslight"));
+        assertFalse(CompositorValues.writable("sf.qslight"));
+        assertThrows(IllegalArgumentException.class, () ->
+                SfLive.setprops("/d", Collections.singletonMap("sf.qslight", "0.9")));
         String helper = new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get("../sfhook/live/oulg-live.sh")), "UTF-8");
         for (String k : SfLive.WRITABLE) assertTrue(k, helper.contains("|" + k + "|") || helper.contains(" " + k + "|") || helper.contains("|" + k + ")"));
     }
