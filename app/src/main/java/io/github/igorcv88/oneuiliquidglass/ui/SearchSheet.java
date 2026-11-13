@@ -82,6 +82,9 @@ final class SearchSheet extends Sheet {
         Map<Controls.Section, List<Controls.Control>> groups = new EnumMap<>(Controls.Section.class);
         for (Controls.Control c : Controls.all()) {
             if (!technical && c.tier == Controls.Tier.INTERNAL) continue;
+            // Ordinary search follows the material that decides the surface; the technical list
+            // keeps every parameter and says which material uses it.
+            if (!technical && !GlassMaterial.visible(c.key, c.on(surface) ? surface : c.surfaces.iterator().next(), st::shown)) continue;
             if (!matchesControl(activity, c, q)) continue;
             groups.computeIfAbsent(c.section, k -> new ArrayList<>()).add(c);
         }
@@ -98,7 +101,7 @@ final class SearchSheet extends Sheet {
                 Applicability.Result a = app.on(c.key, where);
                 String value = ControlValues.display(host.activity(), c, st.shown(c.key));
                 String sub = surfaces(activity, c) + " · " + value + (a.usable() || a.kind == Applicability.Kind.READ_ONLY ? "" : " · " + ControlReasons.text(activity, a.reason));
-                if (technical) sub += "\n" + c.spec().fullKey();
+                if (technical) sub += "\n" + c.spec().fullKey() + materialNote(c.key);
                 LinearLayout r = Ui.listRow(activity, t, null, ControlTitles.title(activity, c), sub, Controls.editable(c.key) ? Ui.chevron(activity, t) : null);
                 if (Controls.editable(c.key)) r.setOnClickListener(v -> {
                     dismiss();
@@ -108,6 +111,14 @@ final class SearchSheet extends Sheet {
                 card.addView(r);
             }
             results.addView(card, Ui.match());
+        }
+    }
+
+    private String materialNote(String key) {
+        switch (GlassMaterial.scope(key)) {
+            case CLEAR_ONLY: return " · " + activity.getString(R.string.search_material_clear);
+            case FROSTED_ONLY: return " · " + activity.getString(R.string.search_material_frosted);
+            default: return "";
         }
     }
 

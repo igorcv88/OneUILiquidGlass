@@ -147,6 +147,100 @@ public final class AppModel {
         }
     }
 
+    // ---- glass material (Frosted / Clear): one choice, two compositor selectors
+
+    /** The material both selectors stand for; null when they differ or one is per-card. */
+    public GlassMaterial material() {
+        return GlassMaterial.of(state()::shown);
+    }
+
+    /**
+     * Saves the choice as the two selectors in one edit (one undo step) and nothing else: no root,
+     * no property write, no restart. The values stay pending until the compositor is recompiled.
+     * Refuses when the Terminal changed a selector the app had saved (the existing conflict rule);
+     * a selector the app never saved is replaced by an explicit choice, still pending until applied.
+     */
+    public Result selectMaterial(GlassMaterial material) {
+        Map<String, String> selection = material.selection();
+        for (String key : selection.keySet()) {
+            SettingSpec spec = SettingsRegistry.get(key);
+            if (spec == null) return new Result(false, false, activity.getString(R.string.error_not_editable));
+            if (repo.conflict(spec)) {
+                notifyChanged();
+                return new Result(false, true, activity.getString(R.string.error_conflict));
+            }
+        }
+        try {
+            repo.replace(selection, false);
+            notifyChanged();
+            return new Result(true, false, "");
+        } catch (IllegalArgumentException e) {
+            notifyChanged();
+            return new Result(false, false, activity.getString(R.string.error_invalid_setting, material.id));
+        }
+    }
+
+    /** What the running compositor was compiled with (or last sent); null when unknown. */
+    public GlassMaterial compiledMaterial() {
+        Map<String, String> baseline = CompositorValues.baseline(lensPrefs());
+        if (baseline == null) return null;
+        GlassMaterial hu = GlassMaterial.ofSelector(baseline.get(GlassMaterial.HU_SELECTOR));
+        GlassMaterial kg = GlassMaterial.ofSelector(baseline.get(GlassMaterial.KG_SELECTOR));
+        return hu != null && hu == kg ? hu : null;
+    }
+
+    public MaterialStatus materialStatus() {
+        return MaterialStatus.of(material(), mode(), pendingCompositor().keySet(),
+                compositorUnverified(), lastApply());
+    }
+
+    /** Whether the choice differs from the material the compositor was last compiled with. */
+    public boolean canRevertMaterial() {
+        GlassMaterial compiled = compiledMaterial();
+        return compiled != null && compiled != material();
+    }
+
+    public Result revertMaterial() {
+        GlassMaterial compiled = compiledMaterial();
+        return compiled == null ? new Result(false, false, "") : selectMaterial(compiled);
+    }
+
+    /** Clear parameters the person has not set anywhere: the starting point may be offered. */
+    public Map<String, String> recommendedClearOffer() {
+        ControlState st = state();
+        if (!GlassMaterial.clearValuesPresent(st.saved, st.observed).isEmpty())
+            return Collections.emptyMap();
+        return GlassMaterial.recommendedClear();
+    }
+
+    /** Clear values found on the device (Terminal) that the app has not saved. */
+    public Map<String, String> clearValuesOnDevice() {
+        ControlState st = state();
+        return GlassMaterial.clearValuesOnlyOnDevice(st.saved, st.observed);
+    }
+
+    /** Saves {@code values} (a reviewed set of Clear parameters) in one edit; nothing is sent. */
+    public Result saveClearValues(Map<String, String> values) {
+        if (values.isEmpty()) return new Result(true, false, "");
+        for (String key : values.keySet()) {
+            SettingSpec spec = SettingsRegistry.get(key);
+            if (spec == null || !Controls.editable(key))
+                return new Result(false, false, activity.getString(R.string.error_not_editable));
+            if (repo.conflict(spec)) {
+                notifyChanged();
+                return new Result(false, true, activity.getString(R.string.error_conflict));
+            }
+        }
+        try {
+            repo.replace(values, false);
+            notifyChanged();
+            return new Result(true, false, "");
+        } catch (IllegalArgumentException e) {
+            notifyChanged();
+            return new Result(false, false, activity.getString(R.string.error_invalid_setting, "Clear"));
+        }
+    }
+
     public void flag(String key, boolean on) {
         repo.flag(key, on);
         notifyChanged();

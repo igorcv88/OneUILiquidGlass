@@ -97,7 +97,11 @@ public final class Segmented extends LinearLayout {
 
     @Override
     protected void onDraw(Canvas c) {
-        if (items.length == 0) return;
+        // No selection (a value set outside this control): no pill, every label muted.
+        if (items.length == 0 || selected < 0) {
+            super.onDraw(c);
+            return;
+        }
         float w = (getWidth() - getPaddingLeft() - getPaddingRight()) / (float) items.length;
         float l = getPaddingLeft() + w * pill, top = getPaddingTop(), b = getHeight() - getPaddingBottom();
         paint.setColor(t.dark ? 0xff27324a : 0xffffffff);

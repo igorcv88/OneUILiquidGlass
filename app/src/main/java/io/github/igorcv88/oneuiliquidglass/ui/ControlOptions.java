@@ -12,6 +12,7 @@ final class ControlOptions {
             case "Adaptativa": return R.string.control_option_8d954776f1cd;
             case "Adaptativa original": return R.string.control_option_0a0e3b18cbfb;
             case "Adaptação Samsung": return R.string.control_option_a33344113b2b;
+            case "Aparência original": return R.string.control_option_0c4e291a7b4b;
             case "Automática": return R.string.control_option_20ec175d596a;
             case "Automático": return R.string.control_option_c9c992be184b;
             case "Caminho antigo; pode atrasar": return R.string.control_option_ea8c83e1957a;
@@ -22,6 +23,7 @@ final class ControlOptions {
             case "Contorno": return R.string.control_option_4e1de10ed349;
             case "Cor fixa personalizada": return R.string.control_option_308ef5ac8d40;
             case "Cores independentes para fundo claro e escuro": return R.string.control_option_e03b6581feae;
+            case "Definido fora do app": return R.string.control_option_ed469e5dc765;
             case "Desativado": return R.string.control_option_8809a6227cfb;
             case "Desfoque mais largo e cores mais vivas": return R.string.control_option_9c6166ed846c;
             case "Desligada": return R.string.control_option_164bf4ddd36b;
@@ -30,8 +32,10 @@ final class ControlOptions {
             case "Escurecida": return R.string.control_option_bc7b88d5097a;
             case "Espacial": return R.string.control_option_df4175832ef6;
             case "Exige a lente dinâmica": return R.string.control_option_5c59ae60921b;
+            case "Exige reiniciar o userspace": return R.string.control_option_98bb3300112e;
             case "Falhou em alguns firmwares": return R.string.control_option_cbfb56969ab1;
             case "Força o tratamento de ícones elegíveis, inclusive os personalizados": return R.string.control_option_286cbcfd1496;
+            case "Fosco": return R.string.control_option_7b9330ac47fd;
             case "Física": return R.string.control_option_783067a8aca7;
             case "Gestos laterais": return R.string.control_option_2212a1a4fd6a;
             case "Grade de teste": return R.string.control_option_9a216516ec5f;
@@ -63,6 +67,7 @@ final class ControlOptions {
             case "Padrão: preserva os aplicativos do usuário e seus packs": return R.string.control_option_bc563cb30bb5;
             case "Para comparar no aparelho": return R.string.control_option_efd3e6962023;
             case "Pode atrasar atrás do movimento": return R.string.control_option_cb302177b476;
+            case "Por cartão (avançado)": return R.string.control_option_e663156ae3c4;
             case "Preto ou branco conforme o fundo, como atualmente": return R.string.control_option_797f1acc98bc;
             case "Qualquer toque": return R.string.control_option_5e752f3cd7ac;
             case "Quatro cantos": return R.string.control_option_5a83874989ff;
@@ -79,6 +84,7 @@ final class ControlOptions {
             case "Só movimentos horizontais e dois dedos": return R.string.control_option_4ec6fa29d300;
             case "Textura sintética numerada": return R.string.control_option_0706bd786e3a;
             case "Todos": return R.string.control_option_a4114a83f4c6;
+            case "Transparente (estilo iOS)": return R.string.control_option_d54e4e66c5ff;
             case "Trata aplicativos comuns só quando o ícone exibido corresponde ao original": return R.string.control_option_84a1c49268ae;
             case "Ultra": return R.string.control_option_50050d5b621c;
             case "Uma cor para todos os fundos": return R.string.control_option_fa23538ab231;

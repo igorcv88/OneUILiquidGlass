@@ -142,7 +142,14 @@ public final class SfLive {
             "core", "taps", "ramp", "hubloom", "edgeblur", "hublur", "hubodylens", "hurefract", "kgcore", "kgtaps", "kgramp", "kgsat", "kgtone",
             "kgrim", "kgspec", "kgflat", "kglevel", "kgcool", "kgtilt", "kgline", "kgfixedrim", "kgcorecap",
             "kggradient", "kgband", "kgbodylens", "kgblurexp", "kgedgeblur", "kgblur", "kgrefract", "kgflatcap", "kgcoredim", "kgglow", "shadecap", "shadelift",
-            "hulight", "kglight", "kgdepth", "shadelight", "qslens", "qsbody", "qsdepth", "qslight", "debug"));
+            "hulight", "kglight", "kgdepth", "shadelight", "qslens", "qsbody", "qsdepth", "qslight", "debug",
+            // Clear Glass (docs/clear-glass/UI_HANDOFF.md): the two profile selectors and the
+            // parameters each profile reads while its selector is above 0.
+            "huclear", "kgclear",
+            "hcband", "hcamp", "hcbody", "hcbody2", "hcedge", "hccore", "hcblurexp",
+            "hcfold", "hcsat", "hcscrim", "hcscrimmax", "hcadapt", "hclift", "hcneutral",
+            "kcband", "kcamp", "kcbody", "kcbody2", "kcedge", "kccore", "kcblurexp",
+            "kcfold", "kcveil", "kclevel", "kcdim", "kcknee", "kcsat", "kccool", "kclift"));
 
     /** key=value lines (the helper's output, a live.prop); comments and other lines are skipped. */
     public static Map<String, String> parse(String text) {

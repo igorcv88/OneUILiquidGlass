@@ -4,6 +4,7 @@
     <string name="control_option_8d954776f1cd">Adaptativa</string>
     <string name="control_option_0a0e3b18cbfb">Adaptativa original</string>
     <string name="control_option_a33344113b2b">Adaptação Samsung</string>
+    <string name="control_option_0c4e291a7b4b">Aparência original</string>
     <string name="control_option_20ec175d596a">Automática</string>
     <string name="control_option_c9c992be184b">Automático</string>
     <string name="control_option_ea8c83e1957a">Caminho antigo; pode atrasar</string>
@@ -14,6 +15,7 @@
     <string name="control_option_4e1de10ed349">Contorno</string>
     <string name="control_option_308ef5ac8d40">Cor fixa personalizada</string>
     <string name="control_option_e03b6581feae">Cores independentes para fundo claro e escuro</string>
+    <string name="control_option_ed469e5dc765">Definido fora do app</string>
     <string name="control_option_8809a6227cfb">Desativado</string>
     <string name="control_option_9c6166ed846c">Desfoque mais largo e cores mais vivas</string>
     <string name="control_option_164bf4ddd36b">Desligada</string>
@@ -22,8 +24,10 @@
     <string name="control_option_bc7b88d5097a">Escurecida</string>
     <string name="control_option_df4175832ef6">Espacial</string>
     <string name="control_option_5c59ae60921b">Exige a lente dinâmica</string>
+    <string name="control_option_98bb3300112e">Exige reiniciar o userspace</string>
     <string name="control_option_cbfb56969ab1">Falhou em alguns firmwares</string>
     <string name="control_option_286cbcfd1496">Força o tratamento de ícones elegíveis, inclusive os personalizados</string>
+    <string name="control_option_7b9330ac47fd">Fosco</string>
     <string name="control_option_783067a8aca7">Física</string>
     <string name="control_option_2212a1a4fd6a">Gestos laterais</string>
     <string name="control_option_9a216516ec5f">Grade de teste</string>
@@ -55,6 +59,7 @@
     <string name="control_option_bc563cb30bb5">Padrão: preserva os aplicativos do usuário e seus packs</string>
     <string name="control_option_efd3e6962023">Para comparar no aparelho</string>
     <string name="control_option_cb302177b476">Pode atrasar atrás do movimento</string>
+    <string name="control_option_e663156ae3c4">Por cartão (avançado)</string>
     <string name="control_option_797f1acc98bc">Preto ou branco conforme o fundo, como atualmente</string>
     <string name="control_option_5e752f3cd7ac">Qualquer toque</string>
     <string name="control_option_5a83874989ff">Quatro cantos</string>
@@ -71,6 +76,7 @@
     <string name="control_option_4ec6fa29d300">Só movimentos horizontais e dois dedos</string>
     <string name="control_option_0706bd786e3a">Textura sintética numerada</string>
     <string name="control_option_a4114a83f4c6">Todos</string>
+    <string name="control_option_d54e4e66c5ff">Transparente (estilo iOS)</string>
     <string name="control_option_84a1c49268ae">Trata aplicativos comuns só quando o ícone exibido corresponde ao original</string>
     <string name="control_option_50050d5b621c">Ultra</string>
     <string name="control_option_fa23538ab231">Uma cor para todos os fundos</string>

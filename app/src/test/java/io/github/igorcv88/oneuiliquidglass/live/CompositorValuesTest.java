@@ -154,6 +154,58 @@ public final class CompositorValuesTest {
                         Collections.singletonMap("sf.edgeblur", "0")));
     }
 
+    @Test public void clearGlassValuesGoThroughTheSameAllowlistedValidatedCommand() {
+        assertTrue(CompositorValues.writable("sf.huclear"));
+        assertTrue(CompositorValues.writable("sf.hcfold"));
+        assertTrue(CompositorValues.writable("sf.kclift"));
+        assertFalse("the compiled-mode marker is the library's, not ours", CompositorValues.writable("sf.clear"));
+        Map<String, String> v = new LinkedHashMap<>();
+        v.put("sf.huclear", "1");
+        v.put("sf.kgclear", "1");
+        v.put("sf.hcfold", "2.0");
+        v.put("sf.kclift", "");
+        assertEquals("sh '/d/oulg-live.sh' setprops huclear=1 kgclear=1 hcfold=2 kclift=",
+                SfLive.setprops("/d", v).get(2));
+        for (String[] bad : new String[][] {{"sf.clear", "hu:1,kg:1"}, {"sf.hcfold", "1;reboot"}, {"sf.hcfold", "$(id)"},
+                {"sf.hcfold", "1e1"}, {"hcfold", "2"}, {"sf.hcfold", "0x2"}})
+            assertThrows(bad[0] + "=" + bad[1], IllegalArgumentException.class,
+                    () -> SfLive.setprops("/d", Collections.singletonMap(bad[0], bad[1])));
+    }
+
+    @Test public void materialSelectorsAndClearValuesAreOneBatchOfPendingValues() {
+        Map<String, String> saved = new HashMap<>();
+        saved.put("sf.huclear", "1");
+        saved.put("sf.kgclear", "1");
+        saved.put("sf.hcfold", "2");
+        saved.put("sf.kcedge", "24");
+        saved.put("sf.hcsat", "1");        // equals the default: nothing to apply
+        Map<String, String> pending = CompositorValues.pending(saved, Collections.emptyMap());
+        assertEquals(new TreeSet<>(Arrays.asList("sf.huclear", "sf.kgclear", "sf.hcfold", "sf.kcedge")), pending.keySet());
+        // One setprops call carries all of them.
+        assertTrue(SfLive.setprops("/d", pending).get(2).contains(" huclear=1 "));
+        Map<String, String> compiled = CompositorValues.restartInputs(Collections.emptyMap(), pending);
+        assertTrue(CompositorValues.pending(saved, pending, compiled).isEmpty());
+    }
+
+    @Test public void aBaselineThatNeverRecordedAKeyDoesNotInventADifference() {
+        // Recorded before the Clear Glass keys were writable: it proves nothing about them, and a
+        // Terminal value for a Clear key must not look like a change the app made or missed.
+        Map<String, String> oldBaseline = new HashMap<>();
+        oldBaseline.put("sf.core", "48");
+        Map<String, String> observed = new HashMap<>();
+        observed.put("sf.core", "48");
+        observed.put("sf.hcfold", "2");
+        observed.put("sf.huclear", "1");
+        assertTrue(CompositorValues.pending(Collections.emptyMap(), observed, oldBaseline).isEmpty());
+        // A value the app saved is still pending against that baseline.
+        assertEquals(Collections.singletonMap("sf.hcfold", "3"),
+                CompositorValues.pending(Collections.singletonMap("sf.hcfold", "3"), observed, oldBaseline));
+        // And a baseline that recorded the key reports a real difference.
+        oldBaseline.put("sf.hcfold", "0");
+        assertEquals(Collections.singletonMap("sf.hcfold", "2"),
+                CompositorValues.pending(Collections.emptyMap(), observed, oldBaseline));
+    }
+
     @Test public void setpropsCommandIsAllowlistedAndNumeric() {
         assertEquals("sh '/d/oulg-live.sh' setprops kgfixedrim=1",
                 SfLive.setprops("/d", Collections.singletonMap("sf.kgfixedrim", "1")).get(2));
@@ -189,11 +241,8 @@ public final class CompositorValuesTest {
         assertThrows(IllegalArgumentException.class, () -> SfLive.normalizeValues(null));
     }
 
-    /**
-     * Clear Glass compositor parameters: registered (SettingsRegistry) but deliberately not
-     * live-writable until the Android integration; remove this set when they join WRITABLE.
-     */
-    private static final Set<String> CLEAR_GLASS_PENDING_INTEGRATION = new TreeSet<>(Arrays.asList(
+    /** Clear Glass compositor parameters: registered, editable in the app and live-writable. */
+    private static final Set<String> CLEAR_GLASS = new TreeSet<>(Arrays.asList(
             "huclear", "kgclear",
             "hcband", "hcamp", "hcbody", "hcbody2", "hcedge", "hccore", "hcblurexp",
             "hcfold", "hcsat", "hcscrim", "hcscrimmax", "hcadapt",
@@ -209,10 +258,9 @@ public final class CompositorValuesTest {
         read.remove("optics");
         read.remove("norewrite");
         read.remove("clear"); // compiled-mode marker written by the library
-        assertEquals(31, CLEAR_GLASS_PENDING_INTEGRATION.size());
-        assertTrue(read.containsAll(CLEAR_GLASS_PENDING_INTEGRATION));
-        assertTrue(Collections.disjoint(CLEAR_GLASS_PENDING_INTEGRATION, SfLive.WRITABLE));
-        read.removeAll(CLEAR_GLASS_PENDING_INTEGRATION);
+        assertEquals(31, CLEAR_GLASS.size());
+        assertTrue(read.containsAll(CLEAR_GLASS));
+        assertTrue(SfLive.WRITABLE.containsAll(CLEAR_GLASS));
         assertEquals(read, new TreeSet<>(SfLive.WRITABLE));
         String helper = new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get("../sfhook/live/oulg-live.sh")), "UTF-8");
         for (String k : SfLive.WRITABLE) assertTrue(k, helper.contains("|" + k + "|") || helper.contains(" " + k + "|") || helper.contains("|" + k + ")"));

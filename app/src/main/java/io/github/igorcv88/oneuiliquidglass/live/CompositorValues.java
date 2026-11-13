@@ -77,6 +77,10 @@ public final class CompositorValues {
             String key = "sf." + shortKey;
             SettingSpec spec = SettingsRegistry.get(key);
             if (spec == null || out.containsKey(key)) continue;
+            // A baseline recorded before a key joined the writable list never captured it, so it
+            // proves nothing about that key: no difference to report (the key is pending only
+            // when the app saved a value for it, above).
+            if (!compiled.containsKey(key)) continue;
             String current = observed.get(key);
             if (!same(spec, current, compiled.get(key)))
                 out.put(key, current == null || current.isEmpty() ? spec.defaultValue : current);

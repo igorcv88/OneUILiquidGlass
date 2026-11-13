@@ -230,12 +230,56 @@ public final class Applicability {
                 // The blur of the profile-3 regions: only the dynamic lens draws them. Live.
                 return lens ? ACTIVE : inactive(NEEDS_LENS);
             default:
-                if (key.startsWith("sf."))
+                if (key.startsWith("sf.")) {
+                    Result material = materialRule(key);
+                    if (material != null) return material;
                     return lens
                             ? new Result(Kind.NEEDS_RESTART, restartReason())
                             : inactive(NEEDS_LENS);
+                }
                 return ACTIVE;
         }
+    }
+
+    static final String NEEDS_CLEAR = "Usado com o vidro Transparente",
+            NEEDS_FROSTED = "Usado com o vidro Fosco",
+            NEEDS_MENISCUS_OFF = "Só funciona com o menisco desligado",
+            NEEDS_MATERIAL_BLOCK = "Exige saturação, escurecimento nas áreas claras ou clareamento";
+
+    /**
+     * The material rules of a compositor key (see {@link GlassMaterial}): a Clear parameter acts
+     * only while its profile is compiled clear, an optics-11 knob only while it is not, and a few
+     * Clear parameters depend on another. Null when the key has no material rule, so the generic
+     * compositor rule applies. A per-card selector (2) keeps both groups active.
+     */
+    private Result materialRule(String key) {
+        GlassMaterial.Scope scope = GlassMaterial.scope(key);
+        if (scope == GlassMaterial.Scope.COMMON) return null;
+        Controls.Control control = Controls.get(key);
+        Controls.Surface profile = control == null || control.surfaces.isEmpty()
+                ? Controls.Surface.HEADSUP : control.surfaces.iterator().next();
+        GlassMaterial material = GlassMaterial.forSurface(this.value, profile);
+        boolean perCard = material == null;
+        if (!perCard && !(scope == GlassMaterial.Scope.CLEAR_ONLY ? material == GlassMaterial.CLEAR
+                : material == GlassMaterial.FROSTED))
+            return inactive(scope == GlassMaterial.Scope.CLEAR_ONLY ? NEEDS_CLEAR : NEEDS_FROSTED);
+        if (mode != Mode.DYNAMIC_LENS) return inactive(NEEDS_LENS);
+        switch (key) {
+            case "sf.hcamp": return number("sf.hcfold") > 0 ? inactive(NEEDS_MENISCUS_OFF) : restart();
+            case "sf.kcamp": return number("sf.kcfold") > 0 ? inactive(NEEDS_MENISCUS_OFF) : restart();
+            case "sf.hcneutral":
+                return number("sf.hcsat") != 1 || number("sf.hcscrimmax") > 0 || number("sf.hclift") > 0
+                        ? restart() : inactive(NEEDS_MATERIAL_BLOCK);
+            default: return restart();
+        }
+    }
+
+    private static Result restart() {
+        return new Result(Kind.NEEDS_RESTART, restartReason());
+    }
+
+    private double number(String key) {
+        return Mode.number(v(key));
     }
 
     private static String requiresBand(boolean standard) {

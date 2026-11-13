@@ -139,7 +139,11 @@ public final class SettingSpec {
                             || n > max
                             || type == Type.INT && n != Math.rint(n)
                             || key.equals("kglens") && n != -1 && n < .1) break;
-                    return BigDecimal.valueOf(n).stripTrailingZeros().toPlainString();
+                    BigDecimal canonical = BigDecimal.valueOf(n);
+                    // The root helper takes at most 12 characters: a compositor value never needs
+                    // more than six decimals, and a longer imported one must not block the restart.
+                    if (key.startsWith("sf.")) canonical = canonical.setScale(6, java.math.RoundingMode.HALF_UP);
+                    return canonical.stripTrailingZeros().toPlainString();
                 } catch (NumberFormatException ignored) {
                     break;
                 }

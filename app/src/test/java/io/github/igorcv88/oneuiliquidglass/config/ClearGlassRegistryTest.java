@@ -23,8 +23,8 @@ import org.robolectric.RuntimeEnvironment;
 
 /**
  * Clear Glass compositor properties (docs/clear-glass/INTEGRATION_CONTRACT.md): registered with the
- * domains the library accepts, never editable from the app yet, and the compiled-mode marker
- * sf.clear is read-only everywhere.
+ * domains the library accepts, editable in the app (the two selectors only through the glass
+ * material) and live-writable, while the compiled-mode marker sf.clear stays read-only.
  */
 @RunWith(RobolectricTestRunner.class)
 @org.robolectric.annotation.Config(sdk = 33)
@@ -146,18 +146,33 @@ public class ClearGlassRegistryTest {
     }
 
     @Test
-    public void clearPropertiesAreNotEditableControlsNorLiveWritable() {
+    public void clearPropertiesAreControlsAndLiveWritableExceptTheTwoSelectors() {
         for (String key : WRITABLE_SPECS.keySet()) {
             Controls.Control c = Controls.get(key);
             assertNotNull(key, c);
-            assertEquals(key, Controls.Tier.INTERNAL, c.tier);
-            assertFalse(key, Controls.editable(key));
-            assertFalse(key, SfLive.WRITABLE.contains(key.substring(3)));
-            assertFalse(key, CompositorValues.writable(key));
+            assertTrue(key, SfLive.WRITABLE.contains(key.substring(3)));
+            assertTrue(key, CompositorValues.writable(key));
+            boolean selector = key.equals("sf.huclear") || key.equals("sf.kgclear");
+            // The selectors are chosen through the glass material, never as an ordinary row.
+            if (selector) assertEquals(key, Controls.Tier.INTERNAL, c.tier);
+            else assertNotEquals(key, Controls.Tier.INTERNAL, c.tier);
+            assertEquals(key, !selector, Controls.editable(key));
+            assertNotEquals(key, SettingSpec.Type.READONLY, SettingsRegistry.get(key).type);
         }
         assertFalse(Controls.editable("sf.clear"));
         assertFalse(SfLive.WRITABLE.contains("clear"));
         assertFalse(CompositorValues.writable("sf.clear"));
+    }
+
+    @Test
+    public void compositorValuesAreCanonicalisedToWhatTheHelperAccepts() {
+        SettingSpec amp = SettingsRegistry.get("sf.hcamp");
+        assertEquals("0.3", amp.validate("0.30000000000000004"));
+        assertEquals("0.123457", amp.validate("0.1234567"));
+        for (SettingSpec s : SettingsRegistry.all()) {
+            if (!s.key.startsWith("sf.") || s.type != SettingSpec.Type.FLOAT) continue;
+            assertTrue(s.key, s.validate(String.valueOf(s.max)).length() <= 12);
+        }
     }
 
     @Test

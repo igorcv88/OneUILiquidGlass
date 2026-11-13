@@ -47,7 +47,7 @@ public class ControlMatrixTest {
         Set<String> out = new TreeSet<>();
         try (Stream<Path> files = Files.walk(SRC)) {
             for (Path p : files.filter(f -> f.toString().endsWith(".java")).collect(Collectors.toList())) {
-                String rel = SRC.relativize(p).toString();
+                String rel = SRC.relativize(p).toString().replace(java.io.File.separatorChar, '/');
                 if (rel.startsWith("ui/") || rel.startsWith("config/") || rel.equals("glass/Tuning.java") || rel.equals("MainActivity.java")) continue;
                 String text = new String(Files.readAllBytes(p), StandardCharsets.UTF_8);
                 // Reads go through Tuning.get() or a local Tuning named t / tn.
