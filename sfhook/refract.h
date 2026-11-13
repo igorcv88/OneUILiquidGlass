@@ -527,8 +527,9 @@ struct oulg_profile { float core; int taps; float ramp; float sat; float tone; f
 // only the light, lens and body terms; the others ignore them.
 #define OULG_PROFILES 4
 // The optics this library implements, announced to the module (debug.oulg.sf.optics). 10: profile 3.
-// 11: profile 3 refraction and the edge light on every profile.
-#define OULG_OPTICS_VERSION "11"
+// 11: profile 3 refraction and the edge light on every profile. 12: the library knows Clear Glass
+// (below); it does not mean Clear Glass is compiled: see debug.oulg.sf.clear.
+#define OULG_OPTICS_VERSION "12"
 static const struct oulg_profile OULG_PROFILES_DEFAULT[OULG_PROFILES] = {
     {OULG_CORE_DEFAULT, OULG_HU_TAPS_DEFAULT, OULG_HU_RAMP_DEFAULT, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 400.0f, 1.0f, 0.0f, 1.0f,
      OULG_HU_BLOOM_DEFAULT, 0.0f, 0.0f, OULG_HU_BODYLENS_DEFAULT, 1.0f, OULG_HU_EDGE_DEFAULT,
@@ -685,6 +686,68 @@ static void oulg_fix_params(struct oulg_profile p[OULG_PROFILES]) {
     }
 }
 
+// Clear Glass (ClearGlass_Handoff/OPTICS_SPEC.md, proposal A), an experimental variant of profiles 0
+// (heads-up) and 1 (lockscreen), selected per profile when a shader is compiled:
+//  - mode 0: not emitted; the generated GLSL is byte for byte that of optics 11;
+//  - mode 1: every card of the profile takes the clear variant;
+//  - mode 2: both variants are compiled; a card takes the clear one when its tag's strength slice
+//    reads s >= 0.85 (k >= 1.035; the module sends s = 11/12 and limits baseline strengths to 0.85).
+// The clear field is profile 1's v0.23 slab over a band, carried to both profiles:
+//   band = clamp(beta r, bevel, r), t = 1 - depth / band, G = t^2 (3 - 2 t), u = q / hs,
+//   s = -R u (l0 + l2 u^2) - n A band G(t) (0 < depth < band), F = rho s,
+//   A = min(k [mode 1 only], amp, amax), amax = ((1 - 0.25) / rho - l0 - 3 l2) / 1.5 >= 0,
+// so the sampling map's singular values satisfy 1 >= sigma >= 1 - rho (l0 + 3 l2 + 1.5 A) >= 0.25 (no
+// fold, at most 4x magnification). Blur: one curve, edge + (core - edge) S5(depth / band)^blurexp.
+// Profile 0 keeps no material in the compositor; profile 1's clear material has a uniform body weight
+// (saturation, highlight knee, an additive veil toward a level, a multiplicative dim, the cool tint)
+// and keeps the baseline's Fresnel/contour/specular block and lighting coordinates verbatim.
+// oulg_glow, the edge light and profiles 2/3 are untouched.
+#define OULG_CLEAR_M 0.25
+struct oulg_clear {
+    int mode[2];                                   // per profile: 0 off, 1 whole profile, 2 per card
+    float band[2], amp[2], body[2], body2[2];       // beta, A cap, l0, l2
+    float edge[2], core[2], blurexp[2];             // blur radius at the outline / past the band, exponent
+    float veil, level, dim, knee, sat, cool;        // profile 1's material
+};
+static const struct oulg_clear OULG_CLEAR_DEFAULT = {
+    {0, 0}, {0.85f, 0.85f}, {0.40f, 0.40f}, {0.06f, 0.05f}, {0.0f, 0.0f},
+    {4.0f, 4.0f}, {24.0f, 24.0f}, {2.0f, 2.0f},
+    0.04f, 0.85f, 0.0f, 0.0f, 1.0f, 0.5f};
+
+static float oulg_in(float v, float lo, float hi, float fallback) { return v >= lo && v <= hi ? v : fallback; }
+
+// Out-of-range values fall back to the starting values; edge > core is lowered to core, and a dome
+// with l0 + 3 l2 > 0.45 reverts to the starting dome.
+static void oulg_fix_clear(struct oulg_clear *c) {
+    const struct oulg_clear *d = &OULG_CLEAR_DEFAULT;
+    for (int i = 0; i < 2; i++) {
+        if (c->mode[i] != 1 && c->mode[i] != 2) c->mode[i] = 0;
+        c->band[i] = oulg_in(c->band[i], 0.42f, 1.0f, d->band[i]);
+        c->amp[i] = oulg_in(c->amp[i], 0.0f, 0.5f, d->amp[i]);
+        c->body[i] = oulg_in(c->body[i], 0.0f, 0.15f, d->body[i]);
+        c->body2[i] = oulg_in(c->body2[i], 0.0f, 0.05f, d->body2[i]);
+        if (c->body[i] + 3.0f * c->body2[i] > 0.45f) { c->body[i] = d->body[i]; c->body2[i] = d->body2[i]; }
+        c->edge[i] = oulg_in(c->edge[i], 0.0f, 48.0f, d->edge[i]);
+        c->core[i] = oulg_in(c->core[i], 0.0f, 48.0f, d->core[i]);
+        if (c->edge[i] > c->core[i]) c->edge[i] = c->core[i];
+        c->blurexp[i] = oulg_in(c->blurexp[i], 1.0f, 4.0f, d->blurexp[i]);
+    }
+    c->veil = oulg_in(c->veil, 0.0f, 0.2f, d->veil);
+    c->level = oulg_in(c->level, 0.1f, 0.85f, d->level);
+    c->dim = oulg_in(c->dim, 0.0f, 0.3f, d->dim);
+    c->knee = oulg_in(c->knee, 0.0f, 0.6f, d->knee);
+    c->sat = oulg_in(c->sat, 0.9f, 1.3f, d->sat);
+    c->cool = oulg_in(c->cool, 0.0f, 2.0f, d->cool);
+}
+
+// The clear amplitude cap for one profile: min(amp, amax), amax from the global scale rho so that
+// rho (l0 + 3 l2 + 1.5 A) <= 1 - OULG_CLEAR_M. Never negative.
+static double oulg_clear_acap(const struct oulg_clear *c, int i, double rho) {
+    double amax = rho > 0.0 ? ((1.0 - OULG_CLEAR_M) / rho - c->body[i] - 3.0 * c->body2[i]) / 1.5 : c->amp[i];
+    if (amax < 0.0) amax = 0.0;
+    return amax < c->amp[i] ? amax : c->amp[i];
+}
+
 // Appends with snprintf; returns 0 once the buffer is full.
 static int oulg_append(char *out, size_t cap, size_t *at, const char *fmt, ...) __attribute__((format(printf, 4, 5)));
 static int oulg_append(char *out, size_t cap, size_t *at, const char *fmt, ...) {
@@ -698,11 +761,180 @@ static int oulg_append(char *out, size_t cap, size_t *at, const char *fmt, ...) 
     return 1;
 }
 
-// The shared library for one program. External (camera/video) textures allow neither textureLod nor
-// the filtered path: they get the globals and the field only, and keep their plain sample.
-static int oulg_lib(char *out, size_t cap, int external, int debug, const struct oulg_profile p[OULG_PROFILES]) {
+// The field library text exactly as optics 11 emits it (OULG_FS_FIELD_FMT with its arguments).
+static int oulg_field_text(char *out, size_t cap, const struct oulg_profile p[OULG_PROFILES]) {
     size_t at = 0;
+    return oulg_append(out, cap, &at, OULG_FS_FIELD_FMT, (double) p[1].gradient, (double) p[3].lens, (double) p[1].ramp, (double) p[1].core, (double) p[1].ccap,
+                     (double) p[0].core, (double) p[0].ramp, (double) p[0].edge, (double) p[0].edge, (double) p[0].core, (double) p[0].ramp,
+                     (double) p[1].ramp, (double) p[1].core, (double) p[1].ccap,
+                     (double) p[1].band, (double) p[1].blurexp, (double) p[1].edge, (double) p[1].core, (double) p[1].ccap, (double) p[1].lensbody,
+                     (0.75 - (double) p[1].lensbody) / 1.5 < 0.5 ? (0.75 - (double) p[1].lensbody) / 1.5 : 0.5,
+                     (double) p[1].edge, (double) p[1].edge,
+                     (double) p[0].lensbody, (double) p[0].refract, (double) p[1].refract,
+                     (double) p[0].blur, (double) p[1].blur);
+}
+
+// Profile 1's material text exactly as optics 11 emits it; slot is the diagnostic line placed at the
+// top of both oulg_sample overloads ("" in production).
+static int oulg_lens_text(char *out, size_t cap, const struct oulg_profile p[OULG_PROFILES], const char *slot) {
+    size_t at = 0;
+    // The cool tint, normalised to unit luma so it shifts hue only.
+    double cr = 1.0 - 0.06 * p[1].cool, cg = 1.0 - 0.01 * p[1].cool, cb = 1.0 + 0.08 * p[1].cool;
+    double cl = 0.2126 * cr + 0.7152 * cg + 0.0722 * cb;
+    double coreOn = p[1].core > 0.001f ? 1.0 : 0.0;
+    // One material across the card when the blur is one radius too (kgedgeblur >= the core's
+    // effective radius): the body weight (saturation, highlight knee, flattening, core dim) is then 1
+    // from the outline to the middle. DZIF 04/11/2026: with the blur already uniform at 48 px, the
+    // depth-weighted material still drew the "miolo" band. Otherwise the v0.23 depth weight.
+    float coreR = p[1].core < p[1].ccap ? p[1].core : p[1].ccap;
+    double uniformBody = p[1].edge + 0.001f >= coreR ? 1.0 : 0.0;
+    return oulg_append(out, cap, &at, OULG_FS_LENS_FMT, uniformBody, coreOn, coreOn,
+                       (double) p[1].sat, (double) p[1].tone, (double) p[1].flat, (double) p[1].fcap, (double) p[1].level, (double) p[1].cdim,
+                       cr / cl, cg / cl, cb / cl, (double) p[1].glow, (double) p[1].rim, (double) p[1].tilt, (double) p[1].line,
+                       (double) p[1].spec, slot, slot);
+}
+
+// Replaces the single occurrence of `from` in buf (capacity cap) with `to`; 0 if absent, repeated or
+// out of room, which makes the rewrite keep the original shader.
+static int oulg_replace_once(char *buf, size_t cap, const char *from, const char *to) {
+    char *p = strstr(buf, from);
+    if (!p || strstr(p + 1, from)) return 0;
+    size_t fl = strlen(from), tl = strlen(to), total = strlen(buf);
+    if (total - fl + tl + 1 > cap) return 0;
+    memmove(p + tl, p + fl, total - (size_t) (p - buf) - fl + 1);
+    memcpy(p, to, tl);
+    return 1;
+}
+
+// Clear Glass field for one profile (index, band, blurexp, edge, core, l0, l2, amplitude expression).
+#define OULG_FS_CLEAR_FIELD_FMT \
+    "highp vec2 oulg_clear%d(highp vec2 q, highp vec2 hs, highp float r, highp float k) {\n" \
+    "  highp vec2 w = abs(q) - (hs - vec2(r));\n" \
+    "  highp vec2 v = max(w, vec2(0.0));\n" \
+    "  highp float l = length(v);\n" \
+    "  highp float bevel = clamp(r * 0.42, 16.0, 56.0);\n" \
+    "  highp float depth = r - l - min(max(w.x, w.y), 0.0);\n" \
+    "  highp float band = clamp(%.4f * r, bevel, r);\n" \
+    "  highp float sb = oulg_smootherstep(0.0, band, depth);\n" \
+    "  oulg_bw = sb > 0.0 ? pow(sb, %.3f) : 0.0;\n" \
+    "  oulg_br = mix(%.2f, %.2f, oulg_bw);\n" \
+    "  highp vec2 u = q / max(hs, vec2(1.0));\n" \
+    "  highp vec2 s = -min(hs.x, hs.y) * u * (vec2(%.4f) + %.4f * u * u);\n" \
+    "  if (l <= 0.0 || depth <= 0.0 || depth >= band) return s;\n" \
+    "  highp float t = 1.0 - depth / band;\n" \
+    "  return s - (v / l) * sign(q) * (%s * band * t * t * (3.0 - 2.0 * t));\n" \
+    "}\n"
+// Profile 1's clear material (sat, knee, veil, level, 1 - dim, cool x3), then the baseline's edge
+// block verbatim, then the tail.
+#define OULG_FS_CLEAR_MATERIAL_FMT \
+    "mediump vec4 oulg_material_clear(mediump vec4 c) {\n" \
+    "  mediump float lbody = clamp(oulg_lw, 0.0, 1.0);\n" \
+    "  mediump float a = max(c.a, 1e-3);\n" \
+    "  mediump vec3 rgb = c.rgb / a;\n" \
+    "  const mediump vec3 w709 = vec3(0.2126, 0.7152, 0.0722);\n" \
+    "  mediump float y = dot(rgb, w709);\n" \
+    "  rgb = mix(vec3(y), rgb, %.3f);\n" \
+    "  rgb *= 1.0 - %.3f * smoothstep(0.65, 1.0, y);\n" \
+    "  y = max(dot(rgb, w709), 0.0);\n" \
+    "  mediump float yt = y + %.3f * (%.3f - y);\n" \
+    "  const mediump vec3 scatter = vec3(0.86, 0.94, 1.06) / 0.92744;\n" \
+    "  rgb = yt > y ? rgb + (yt - y) * scatter : rgb * (yt / max(y, 1e-3));\n" \
+    "  rgb *= %.3f;\n" \
+    "  rgb *= vec3(%.4f, %.4f, %.4f);\n"
+#define OULG_FS_CLEAR_MATERIAL_TAIL \
+    "  return vec4(clamp(rgb, 0.0, 1.0) * c.a, c.a);\n" \
+    "}\n" \
+    "mediump vec4 oulg_material(mediump vec4 c) { return oulg_cl > 0.5 && oulg_pf > 0.5 ? oulg_material_clear(c) : oulg_material_base(c); }\n"
+#define OULG_EDGE_BLOCK_START "  if (oulg_t > 0.0) {\n"
+#define OULG_MATERIAL_RETURN "  return vec4(clamp(rgb, 0.0, 1.0) * c.a, c.a);\n}\n"
+
+static int oulg_clear_on(const struct oulg_clear *cl, int i) { return cl && cl->mode[i] != 0; }
+
+// The clear field functions, then oulg_field itself: the selection, the baseline path (renamed
+// oulg_field_base, unchanged) or the clear one, which still runs oulg_shift_base for the profile,
+// strength and lighting coordinates of the baseline (profile 1: the v0.22 gradient and bevel) and then
+// overrides the shift and blur. oulg_dp, oulg_rad and oulg_e as in the baseline, from the final shift.
+// debug 3 stores the shift (px, device axes, y down) and debug 4 the blur radius in oulg_map.
+static int oulg_clear_field(char *out, size_t cap, size_t *at, int debug, const struct oulg_profile p[OULG_PROFILES],
+                            const struct oulg_clear *cl) {
+    for (int i = 0; i < 2; i++) {
+        if (!oulg_clear_on(cl, i)) continue;
+        double acap = (double) (long) (oulg_clear_acap(cl, i, p[i].refract) * 1e4) / 1e4;  // rounded down: the bound holds
+        char amp[48];
+        if (cl->mode[i] == 1) snprintf(amp, sizeof amp, "min(k, %.4f)", acap);
+        else snprintf(amp, sizeof amp, "%.4f", acap);
+        if (!oulg_append(out, cap, at, OULG_FS_CLEAR_FIELD_FMT, i, (double) cl->band[i], (double) cl->blurexp[i],
+                         (double) cl->edge[i], (double) cl->core[i], (double) cl->body[i], (double) cl->body2[i], amp)) return 0;
+    }
+    if (!oulg_append(out, cap, at, "%s",
+        "highp vec2 oulg_field(highp vec2 q, highp vec2 hs, highp float r, highp float kp) {\n"
+        "  highp float pf = kp >= 6.0 ? 3.0 : kp >= 4.0 ? 2.0 : kp >= 2.0 ? 1.0 : 0.0;\n"
+        "  highp float k = kp - 2.0 * pf;\n"
+        "  oulg_cl = 0.0;\n")) return 0;
+    static const char *const sel[2] = {"pf < 0.5", "pf > 0.5 && pf < 1.5"};
+    for (int i = 0; i < 2; i++)
+        if (oulg_clear_on(cl, i) && !oulg_append(out, cap, at, "  if (kp > 0.0 && %s%s) oulg_cl = 1.0;\n", sel[i],
+                                                 cl->mode[i] == 2 ? " && k >= 1.035" : "")) return 0;
+    if (!oulg_append(out, cap, at, "%s", "  highp vec2 s;\n  if (oulg_cl < 0.5) {\n    s = oulg_field_base(q, hs, r, kp);\n  } else {\n"
+                                        "    oulg_shift_base(q, hs, r, kp);\n")) return 0;
+    int both = oulg_clear_on(cl, 0) && oulg_clear_on(cl, 1);
+    if (both) {
+        if (!oulg_append(out, cap, at,
+                         "    s = pf < 0.5 ? oulg_clear0(q, hs, r, k) * %.3f : oulg_clear1(q, hs, r, k) * %.3f;\n"
+                         "    oulg_br *= pf < 0.5 ? %.3f : %.3f;\n",
+                         (double) p[0].refract, (double) p[1].refract, (double) p[0].blur, (double) p[1].blur)) return 0;
+    } else if (oulg_clear_on(cl, 0) || oulg_clear_on(cl, 1)) {
+        int i = oulg_clear_on(cl, 0) ? 0 : 1;
+        if (!oulg_append(out, cap, at, "    s = oulg_clear%d(q, hs, r, k) * %.3f;\n    oulg_br *= %.3f;\n",
+                         i, (double) p[i].refract, (double) p[i].blur)) return 0;
+    } else if (!oulg_append(out, cap, at, "%s", "    s = vec2(0.0);\n")) return 0;  // field maps only: no card is clear
+    if (!oulg_append(out, cap, at, "%s",
+        "    highp vec2 w = abs(q) - (hs - vec2(r));\n"
+        "    highp vec2 v = max(w, vec2(0.0));\n"
+        "    highp float l = length(v);\n"
+        "    highp vec2 n = l > 0.0 ? (v / l) * sign(q) : (w.x > w.y ? vec2(sign(q.x), 0.0) : vec2(0.0, sign(q.y)));\n"
+        "    oulg_dp = r - l - min(max(w.x, w.y), 0.0);\n"
+        "    oulg_rad = r;\n"
+        "    oulg_e = n * max(oulg_dp - 2.0, 0.0) - s;\n"
+        "  }\n")) return 0;
+    if (debug == 3 && !oulg_append(out, cap, at, "%s",
+        "  highp vec2 mq = clamp(s / 256.0 + 0.5, 0.0, 1.0) * 255.0;\n"
+        "  oulg_map = vec4(floor(mq.x) / 255.0, fract(mq.x), floor(mq.y) / 255.0, fract(mq.y));\n")) return 0;
+    if (debug == 4 && !oulg_append(out, cap, at, "%s",
+        "  highp float mb = clamp(oulg_br / 128.0, 0.0, 1.0) * 255.0;\n"
+        "  oulg_map = vec4(floor(mb) / 255.0, fract(mb), oulg_cl, 1.0);\n")) return 0;
+    return oulg_append(out, cap, at, "%s", "  return s;\n}\n");
+}
+
+// Profile 1's material with the clear variant: the baseline oulg_material renamed oulg_material_base,
+// the clear material (its edge block copied from the baseline text), and the dispatching oulg_material,
+// before oulg_body/oulg_lens/oulg_sample.
+static int oulg_clear_lens(char *out, size_t cap, size_t *at, char *lens, size_t lensCap, const struct oulg_clear *cl) {
+    if (!oulg_replace_once(lens, lensCap, "mediump vec4 oulg_material(mediump vec4 c) {\n", "mediump vec4 oulg_material_base(mediump vec4 c) {\n")) return 0;
+    char *body = strstr(lens, "mediump vec4 oulg_body(");
+    char *edge = strstr(lens, OULG_EDGE_BLOCK_START);
+    char *ret = edge ? strstr(edge, OULG_MATERIAL_RETURN) : NULL;
+    if (!body || !edge || !ret || ret > body) return 0;
+    double cr = 1.0 - 0.06 * cl->cool, cg = 1.0 - 0.01 * cl->cool, cb = 1.0 + 0.08 * cl->cool;
+    double cw = 0.2126 * cr + 0.7152 * cg + 0.0722 * cb;
+    return oulg_append(out, cap, at, "%.*s", (int) (body - lens), lens)
+        && oulg_append(out, cap, at, OULG_FS_CLEAR_MATERIAL_FMT, (double) cl->sat, (double) cl->knee, (double) cl->veil,
+                       (double) cl->level, 1.0 - (double) cl->dim, cr / cw, cg / cw, cb / cw)
+        && oulg_append(out, cap, at, "%.*s", (int) (ret - edge), edge)
+        && oulg_append(out, cap, at, "%s", OULG_FS_CLEAR_MATERIAL_TAIL)
+        && oulg_append(out, cap, at, "%s", body);
+}
+
+// The shared library for one program. External (camera/video) textures allow neither textureLod nor
+// the filtered path: they get the globals and the field only, and keep their plain sample. With cl
+// NULL or both clear modes 0 and debug <= 2 the text is exactly that of optics 11.
+#define OULG_TEXT_CAP 16384
+static int oulg_lib_into(char *out, size_t cap, int external, int debug, const struct oulg_profile p[OULG_PROFILES],
+                         const struct oulg_clear *cl, char *tmp) {
+    size_t at = 0;
+    int wrap = oulg_clear_on(cl, 0) || oulg_clear_on(cl, 1) || debug >= 3;
     if (!oulg_append(out, cap, &at, "%s", OULG_FS_GLOBALS)) return 0;
+    if (wrap && !oulg_append(out, cap, &at, "%s", "highp float oulg_cl;\nhighp vec4 oulg_map;\n")) return 0;
     if (!external) {
         if (!oulg_append(out, cap, &at, "%s", OULG_FS_BSPLINE)) return 0;
         for (int i = 0; i < 2; i++) {
@@ -712,14 +944,12 @@ static int oulg_lib(char *out, size_t cap, int external, int debug, const struct
             if (!ok) return 0;
         }
     }
-    if (!oulg_append(out, cap, &at, OULG_FS_FIELD_FMT, (double) p[1].gradient, (double) p[3].lens, (double) p[1].ramp, (double) p[1].core, (double) p[1].ccap,
-                     (double) p[0].core, (double) p[0].ramp, (double) p[0].edge, (double) p[0].edge, (double) p[0].core, (double) p[0].ramp,
-                     (double) p[1].ramp, (double) p[1].core, (double) p[1].ccap,
-                     (double) p[1].band, (double) p[1].blurexp, (double) p[1].edge, (double) p[1].core, (double) p[1].ccap, (double) p[1].lensbody,
-                     (0.75 - (double) p[1].lensbody) / 1.5 < 0.5 ? (0.75 - (double) p[1].lensbody) / 1.5 : 0.5,
-                     (double) p[1].edge, (double) p[1].edge,
-                     (double) p[0].lensbody, (double) p[0].refract, (double) p[1].refract,
-                     (double) p[0].blur, (double) p[1].blur)) return 0;
+    if (!oulg_field_text(tmp, OULG_TEXT_CAP, p)) return 0;
+    if (wrap && !(oulg_replace_once(tmp, OULG_TEXT_CAP, "highp vec2 oulg_shift(highp vec2 q", "highp vec2 oulg_shift_base(highp vec2 q")
+                  && oulg_replace_once(tmp, OULG_TEXT_CAP, "highp vec2 oulg_field(highp vec2 q", "highp vec2 oulg_field_base(highp vec2 q")
+                  && oulg_replace_once(tmp, OULG_TEXT_CAP, "  highp vec2 s = oulg_shift(q, hs, r, kp);\n", "  highp vec2 s = oulg_shift_base(q, hs, r, kp);\n"))) return 0;
+    if (!oulg_append(out, cap, &at, "%s", tmp)) return 0;
+    if (wrap && !oulg_clear_field(out, cap, &at, debug, p, cl)) return 0;
     if (!external && !oulg_append(out, cap, &at, OULG_FS_TONE_FMT, (double) p[2].cap, (double) p[2].lift)) return 0;
     if (!external) {
         if (!oulg_append(out, cap, &at, "%s", OULG_FS_GLOW)) return 0;
@@ -731,24 +961,29 @@ static int oulg_lib(char *out, size_t cap, int external, int debug, const struct
         if (!oulg_append(out, cap, &at, "%s", "  return c;\n}\n")) return 0;
         if (!oulg_append(out, cap, &at, OULG_FS_EDGE_FMT, (double) p[3].light, (double) p[3].lwidth, (double) p[3].lfloor,
                          (double) p[3].lcap, p[3].lens > 0.0f ? (double) p[3].body : 0.0)) return 0;
+        const char *slot = debug == 2 ? "if (oulg_on > 0.0 && oulg_pf > 0.5 && oulg_pf < 1.5) return oulg_kg_luma_probe(s, uv);\n"
+                         : debug >= 3 ? "if (oulg_on > 0.0) return oulg_map;\n" : "";
+        if (!oulg_lens_text(tmp, OULG_TEXT_CAP, p, slot)) return 0;
+        if (oulg_clear_on(cl, 1)) { if (!oulg_clear_lens(out, cap, &at, tmp, OULG_TEXT_CAP, cl)) return 0; }
+        else if (!oulg_append(out, cap, &at, "%s", tmp)) return 0;
     }
-    // The cool tint, normalised to unit luma so it shifts hue only.
-    double cr = 1.0 - 0.06 * p[1].cool, cg = 1.0 - 0.01 * p[1].cool, cb = 1.0 + 0.08 * p[1].cool;
-    double cl = 0.2126 * cr + 0.7152 * cg + 0.0722 * cb;
-    double coreOn = p[1].core > 0.001f ? 1.0 : 0.0;
-    // One material across the card when the blur is one radius too (kgedgeblur >= the core's
-    // effective radius): the body weight (saturation, highlight knee, flattening, core dim) is then 1
-    // from the outline to the middle. DZIF 04/11/2026: with the blur already uniform at 48 px, the
-    // depth-weighted material still drew the "miolo" band. Otherwise the v0.23 depth weight.
-    float coreR = p[1].core < p[1].ccap ? p[1].core : p[1].ccap;
-    double uniformBody = p[1].edge + 0.001f >= coreR ? 1.0 : 0.0;
-    if (!external && !oulg_append(out, cap, &at, OULG_FS_LENS_FMT, uniformBody, coreOn, coreOn,
-                                  (double) p[1].sat, (double) p[1].tone, (double) p[1].flat, (double) p[1].fcap, (double) p[1].level, (double) p[1].cdim,
-                                  cr / cl, cg / cl, cb / cl, (double) p[1].glow, (double) p[1].rim, (double) p[1].tilt, (double) p[1].line,
-                                  (double) p[1].spec,
-                                  debug == 2 ? "if (oulg_on > 0.0 && oulg_pf > 0.5 && oulg_pf < 1.5) return oulg_kg_luma_probe(s, uv);\n" : "",
-                                  debug == 2 ? "if (oulg_on > 0.0 && oulg_pf > 0.5 && oulg_pf < 1.5) return oulg_kg_luma_probe(s, uv);\n" : "")) return 0;
     return 1;
+}
+
+static int oulg_lib(char *out, size_t cap, int external, int debug, const struct oulg_profile p[OULG_PROFILES],
+                    const struct oulg_clear *cl) {
+    char *tmp = malloc(OULG_TEXT_CAP);
+    if (!tmp) return 0;
+    int ok = oulg_lib_into(out, cap, external, debug, p, cl, tmp);
+    free(tmp);
+    return ok;
+}
+
+// Library capacity: optics 11's fixed 16 KiB while no clear variant or field map is compiled (so the
+// production text and its limit are unchanged); twice that otherwise (sfhook/tools/clear_check.c
+// measures the headroom of every combination).
+static size_t oulg_lib_cap(int debug, const struct oulg_clear *cl) {
+    return oulg_clear_on(cl, 0) || oulg_clear_on(cl, 1) || debug >= 3 ? 32768 : 16384;
 }
 
 // Replaces the sample's coordinates (at sampleAt in src) with oulg_tc and, unless the texture is
@@ -762,7 +997,7 @@ static char *oulg_route_sample(char *src, size_t sampleAt, size_t coordsLen, int
     return u;
 }
 
-static char *oulg_rewrite_fragment(const char *src, int debug, const struct oulg_profile *profiles) {
+static char *oulg_rewrite_fragment_cl(const char *src, int debug, const struct oulg_profile *profiles, const struct oulg_clear *clear) {
     if (!strstr(src, "sk_FragColor") || strstr(src, "oulg_")) return NULL;
     if (oulg_count(src, OULG_FS_DECL_AT) != 1 || oulg_count(src, OULG_FS_SAMPLE) != 1 || oulg_count(src, OULG_FS_FINAL) != 1) return NULL;
     const char *call = strstr(src, OULG_FS_SAMPLE), *mainAt = strstr(src, "void main() {\n");
@@ -772,6 +1007,8 @@ static char *oulg_rewrite_fragment(const char *src, int debug, const struct oulg
     if (!oulg_ident_after(call + strlen("texture(uTextureSampler_0_S1, "), "vTransformedCoords_", coords, sizeof coords)) return NULL;
     struct oulg_profile p[OULG_PROFILES] = {profiles[0], profiles[1], profiles[2], profiles[3]};
     oulg_fix_params(p);
+    struct oulg_clear cl = clear ? *clear : OULG_CLEAR_DEFAULT;
+    oulg_fix_clear(&cl);
 
     char block[2048];
     int n = snprintf(block, sizeof block,
@@ -811,10 +1048,13 @@ static char *oulg_rewrite_fragment(const char *src, int debug, const struct oulg
     char *u = oulg_route_sample(s, (size_t) (call - src) + strlen("texture(uTextureSampler_0_S1, "), strlen(coords), external);
     if (!u) return NULL;
     u = oulg_insert_after(u, 1, "void main() {\n", block);
-    char lib[16384];
-    if (!oulg_lib(lib, sizeof lib, external, debug, p)) { free(u); return NULL; }
+    size_t libCap = oulg_lib_cap(debug, &cl);
+    char *lib = malloc(libCap);
+    if (!lib || !oulg_lib(lib, libCap, external, debug, p, &cl)) { free(lib); free(u); return NULL; }
     char *v = oulg_insert_after(u, 1, OULG_FS_DECL_AT, OULG_FS_DECL);
-    return oulg_insert_after(v, 1, OULG_FS_DECL, lib);
+    char *out = oulg_insert_after(v, 1, OULG_FS_DECL, lib);
+    free(lib);
+    return out;
 }
 
 // Rounded-rect clip programs (CircularRRectEffect): the radius arrives as uradiusPlusHalf (r + 0.5)
@@ -824,7 +1064,7 @@ static char *oulg_rewrite_fragment(const char *src, int debug, const struct oulg
 // library as the FillRRect program: the field, the B-spline and the layered blur, in device pixels
 // (the clip is axis-aligned there). Before, this path only shifted the sample, so a card drawn by it
 // lost the B-spline and the body blur. Debug mode paints these cyan.
-static char *oulg_rewrite_clip(const char *src, int debug, const struct oulg_profile *profiles) {
+static char *oulg_rewrite_clip_cl(const char *src, int debug, const struct oulg_profile *profiles, const struct oulg_clear *clear) {
     if (!strstr(src, "sk_FragColor") || !strstr(src, "uradiusPlusHalf_S") || !strstr(src, "uinnerRect_S")) return NULL;
     if (strstr(src, "uinvRadiiXY") || strstr(src, "oulg_")) return NULL;
     char rect[64], rph[64], coords[64];
@@ -841,6 +1081,8 @@ static char *oulg_rewrite_clip(const char *src, int debug, const struct oulg_pro
     if (!mainAt || !fcEnd || fc < mainAt || !final || call < fcEnd || final < call || !strstr(src, "mediump vec4 output_S1 =")) return NULL;
     struct oulg_profile p[OULG_PROFILES] = {profiles[0], profiles[1], profiles[2], profiles[3]};
     oulg_fix_params(p);
+    struct oulg_clear cl = clear ? *clear : OULG_CLEAR_DEFAULT;
+    oulg_fix_clear(&cl);
     int flip = strstr(src, "u_skRTFlip") != NULL;
     char block[2048];
     int n = snprintf(block, sizeof block,
@@ -882,9 +1124,12 @@ static char *oulg_rewrite_clip(const char *src, int debug, const struct oulg_pro
     char *u = fe2 ? oulg_splice(t, (size_t) (fe2 - t) + 1, 0, block) : NULL;
     free(t);
     if (!u) return NULL;
-    char lib[16384];
-    if (!oulg_lib(lib, sizeof lib, external, debug, p)) { free(u); return NULL; }
-    return oulg_insert_before(u, 1, "void main() {\n", lib);
+    size_t libCap = oulg_lib_cap(debug, &cl);
+    char *lib = malloc(libCap);
+    if (!lib || !oulg_lib(lib, libCap, external, debug, p, &cl)) { free(lib); free(u); return NULL; }
+    char *out = oulg_insert_before(u, 1, "void main() {\n", lib);
+    free(lib);
+    return out;
 }
 
 #endif

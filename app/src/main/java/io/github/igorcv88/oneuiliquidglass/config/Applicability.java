@@ -124,6 +124,7 @@ public final class Applicability {
             case "sfrefract":
             case "sf.optics":
             case "sf.norewrite":
+            case "sf.clear":
                 return new Result(Kind.READ_ONLY, "Estado lido do aparelho");
             case "backdrop":
             case "liveblur":

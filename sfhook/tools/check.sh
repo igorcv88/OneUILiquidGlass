@@ -48,4 +48,9 @@ for f in "$OUT/probe"/mod_*.frag; do
   fi
 done
 [ $fail -eq 0 ] && echo "glsl: source-luminance probe compiles and links"
+# Clear Glass: the field twin and bounds (U1-U8), parameter ranges, library sizes and text invariance;
+# then the generated GLSL: byte identity with optics 11 while off, and every mode/debug pair.
+cc -std=c99 -Wall -Wextra -Werror -Wno-unused-function -O2 -I.. -o "$OUT/cc" clear_check.c -lm
+"$OUT/cc" || fail=1
+python3 clear_shader_check.py "$OUT/rc" "$DUMP" "$OUT/clear" || fail=1
 exit $fail
