@@ -681,5 +681,9 @@
   "sf.hcsat": ["Experimental Clear Glass parameter; registered for the compositor contract, not yet a control in the app.", "Parâmetro experimental do Clear Glass; registrado para o contrato do compositor, ainda sem controle no app."],
   "sf.hcscrim": ["Experimental Clear Glass parameter; registered for the compositor contract, not yet a control in the app.", "Parâmetro experimental do Clear Glass; registrado para o contrato do compositor, ainda sem controle no app."],
   "sf.hcscrimmax": ["Experimental Clear Glass parameter; registered for the compositor contract, not yet a control in the app.", "Parâmetro experimental do Clear Glass; registrado para o contrato do compositor, ainda sem controle no app."],
-  "sf.hcadapt": ["Experimental Clear Glass parameter; registered for the compositor contract, not yet a control in the app.", "Parâmetro experimental do Clear Glass; registrado para o contrato do compositor, ainda sem controle no app."]
+  "sf.hcadapt": ["Experimental Clear Glass parameter; registered for the compositor contract, not yet a control in the app.", "Parâmetro experimental do Clear Glass; registrado para o contrato do compositor, ainda sem controle no app."],
+  "sf.kcfold": ["Experimental Clear Glass parameter; registered for the compositor contract, not yet a control in the app.", "Parâmetro experimental do Clear Glass; registrado para o contrato do compositor, ainda sem controle no app."],
+  "sf.hclift": ["Experimental Clear Glass parameter; registered for the compositor contract, not yet a control in the app.", "Parâmetro experimental do Clear Glass; registrado para o contrato do compositor, ainda sem controle no app."],
+  "sf.kclift": ["Experimental Clear Glass parameter; registered for the compositor contract, not yet a control in the app.", "Parâmetro experimental do Clear Glass; registrado para o contrato do compositor, ainda sem controle no app."],
+  "sf.hcneutral": ["Experimental Clear Glass parameter; registered for the compositor contract, not yet a control in the app.", "Parâmetro experimental do Clear Glass; registrado para o contrato do compositor, ainda sem controle no app."]
 }

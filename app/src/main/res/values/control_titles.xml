@@ -19,6 +19,8 @@
     <string name="control_title_bf8389203ea5">Dark glass brightness</string>
     <string name="control_title_f40464148fea">Specular highlight</string>
     <string name="control_title_6953361f458b">Top sheen</string>
+    <string name="control_title_41284a3acf75">Clear Glass lift (lock screen)</string>
+    <string name="control_title_db92724cd09a">Clear Glass lift (pop-up)</string>
     <string name="control_title_64228432dde7">Clear Glass on the lock screen</string>
     <string name="control_title_414d7a830981">Clear Glass on pop-ups</string>
     <string name="control_title_e92668db46cf">Clear Glass highlight compression</string>
@@ -108,12 +110,14 @@
     <string name="control_title_04f26b1088fe">Clear Glass cool tint</string>
     <string name="control_title_8172137d462a">Measure each card</string>
     <string name="control_title_27e402875dc0">Measure hook timing</string>
+    <string name="control_title_f3b1dc710f06">Clear Glass meniscus (lock screen)</string>
     <string name="control_title_3d2d3f93bf63">Clear Glass meniscus (pop-up)</string>
     <string name="control_title_006548b15c01">Refraction model</string>
     <string name="control_title_ceaef40ab9b4">Rewrite mode</string>
     <string name="control_title_b634baeb7442">Compiled Clear Glass modes</string>
     <string name="control_title_6a5669f01728">Physical multiplier</string>
     <string name="control_title_a2faa45a9b05">Maximum visible icons</string>
+    <string name="control_title_a33a5e23b95e">Clear Glass white neutrality (pop-up)</string>
     <string name="control_title_203fe4f25f20">Uniformity level</string>
     <string name="control_title_90bf052cade3">Clear Glass veil level</string>
     <string name="control_title_b89e7df74a83">Hide strip during</string>
