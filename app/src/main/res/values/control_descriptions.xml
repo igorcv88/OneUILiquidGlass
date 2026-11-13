@@ -105,6 +105,7 @@
     <string name="control_description_sf_core">Adjusts blur at the center of pop-ups. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_debug">Diagnostic mode: 0 off, 1 magenta/cyan for rewritten shaders, 2 green map of local edge luminance on lock screen notifications. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_edgeblur">Adjusts pop-up edge blur and its transition toward the center. Changes apply after userspace restarts.</string>
+    <string name="control_description_sf_hcadapt">Experimental Clear Glass parameter; registered for the compositor contract, not yet a control in the app. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_hcamp">Experimental Clear Glass parameter; registered for the compositor contract, not yet a control in the app. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_hcband">Experimental Clear Glass parameter; registered for the compositor contract, not yet a control in the app. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_hcblurexp">Experimental Clear Glass parameter; registered for the compositor contract, not yet a control in the app. Changes apply after userspace restarts.</string>
@@ -112,6 +113,10 @@
     <string name="control_description_sf_hcbody2">Experimental Clear Glass parameter; registered for the compositor contract, not yet a control in the app. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_hccore">Experimental Clear Glass parameter; registered for the compositor contract, not yet a control in the app. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_hcedge">Experimental Clear Glass parameter; registered for the compositor contract, not yet a control in the app. Changes apply after userspace restarts.</string>
+    <string name="control_description_sf_hcfold">Experimental Clear Glass parameter; registered for the compositor contract, not yet a control in the app. Changes apply after userspace restarts.</string>
+    <string name="control_description_sf_hcsat">Experimental Clear Glass parameter; registered for the compositor contract, not yet a control in the app. Changes apply after userspace restarts.</string>
+    <string name="control_description_sf_hcscrim">Experimental Clear Glass parameter; registered for the compositor contract, not yet a control in the app. Changes apply after userspace restarts.</string>
+    <string name="control_description_sf_hcscrimmax">Experimental Clear Glass parameter; registered for the compositor contract, not yet a control in the app. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_hubloom">Reduces very bright samples in the pop-up center. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_hublur">Multiplies the compositor blur across the pop-up without changing base blur. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_hubodylens">Adjusts diffuse refraction across the pop-up, independently of its edge. Changes apply after userspace restarts.</string>

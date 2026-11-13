@@ -117,8 +117,9 @@ expect "$o" "set_kgsat=1.3"; expect "$o" "set_core="
 o="$(run setprops hublur=0.75 hubodylens=0.08 hurefract=1.10 kgedgeblur=5 kgblur=0.8 kgrefract=1.05)"
 expect "$o" "setprops=ok"; expect "$o" "set_hubodylens=0.08"; expect "$o" "set_kgedgeblur=5"
 [ "$(cat "$T/prop_debug.oulg.sf.kgcore")" = 72 ] || { echo "FAIL: setprops did not write"; exit 1; }
-o="$(run setprops huclear=2 kgclear=1 hcamp=0.33 kccore=12 kcveil=0.04)"
+o="$(run setprops huclear=2 kgclear=1 hcamp=0.33 kccore=12 kcveil=0.04 hcfold=2 hcsat=1.5 hcscrim=0.12 hcscrimmax=0.5 hcadapt=1)"
 expect "$o" "setprops=ok"; expect "$o" "set_huclear=2"; expect "$o" "set_kcveil=0.04"
+expect "$o" "set_hcfold=2"; expect "$o" "set_hcscrimmax=0.5"; expect "$o" "set_hcadapt=1"
 [ "$(cat "$T/prop_debug.oulg.sf.kgclear")" = 1 ] || { echo "FAIL: clear setprops did not write"; exit 1; }
 expect "$(run status)" "sf_clear="
 for bad in 'optics=9' 'clear=1' 'norewrite=1' 'kgcore=1;reboot' 'kgcore=$(id)' 'kgcore=1-2' 'kgcore=1.2.3' 'kgcore' '../x=1'; do

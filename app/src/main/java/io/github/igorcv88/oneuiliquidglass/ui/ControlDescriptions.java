@@ -113,6 +113,7 @@ final class ControlDescriptions {
             case "sf.core": return R.string.control_description_sf_core;
             case "sf.debug": return R.string.control_description_sf_debug;
             case "sf.edgeblur": return R.string.control_description_sf_edgeblur;
+            case "sf.hcadapt": return R.string.control_description_sf_hcadapt;
             case "sf.hcamp": return R.string.control_description_sf_hcamp;
             case "sf.hcband": return R.string.control_description_sf_hcband;
             case "sf.hcblurexp": return R.string.control_description_sf_hcblurexp;
@@ -120,6 +121,10 @@ final class ControlDescriptions {
             case "sf.hcbody2": return R.string.control_description_sf_hcbody2;
             case "sf.hccore": return R.string.control_description_sf_hccore;
             case "sf.hcedge": return R.string.control_description_sf_hcedge;
+            case "sf.hcfold": return R.string.control_description_sf_hcfold;
+            case "sf.hcsat": return R.string.control_description_sf_hcsat;
+            case "sf.hcscrim": return R.string.control_description_sf_hcscrim;
+            case "sf.hcscrimmax": return R.string.control_description_sf_hcscrimmax;
             case "sf.hubloom": return R.string.control_description_sf_hubloom;
             case "sf.hublur": return R.string.control_description_sf_hublur;
             case "sf.hubodylens": return R.string.control_description_sf_hubodylens;

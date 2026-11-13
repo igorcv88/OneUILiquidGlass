@@ -18,6 +18,7 @@ final class ControlTitles {
             case "Banda de refração do Clear Glass (pop-up)": return R.string.control_title_2671a4407d54;
             case "Barra de status sobre fundo claro": return R.string.control_title_2c9365fef254;
             case "Barra de status sobre fundo colorido": return R.string.control_title_de327df14533;
+            case "Blur adaptativo do Clear Glass (pop-up)": return R.string.control_title_f3fb30531aa8;
             case "Blur do contorno do Clear Glass (bloqueio)": return R.string.control_title_bc7b4c121db8;
             case "Blur do contorno do Clear Glass (pop-up)": return R.string.control_title_02e9861d821b;
             case "Blur do miolo do Clear Glass (bloqueio)": return R.string.control_title_c3d86bcf871f;
@@ -82,6 +83,8 @@ final class ControlTitles {
             case "Escurecer o painel": return R.string.control_title_ca965e93745e;
             case "Escurecimento": return R.string.control_title_d16920526011;
             case "Escurecimento do Clear Glass": return R.string.control_title_1add28f0cac7;
+            case "Escurecimento máximo do Clear Glass (pop-up)": return R.string.control_title_683a178d491a;
+            case "Escurecimento mínimo do Clear Glass (pop-up)": return R.string.control_title_194ab8c798ea;
             case "Espaço acima do título": return R.string.control_title_b1d0a9cb07ad;
             case "Espera após gesto": return R.string.control_title_11330fb4e644;
             case "Espera após transição": return R.string.control_title_bef898e88315;
@@ -113,6 +116,7 @@ final class ControlTitles {
             case "Matiz fria do Clear Glass": return R.string.control_title_04f26b1088fe;
             case "Medir cada cartão": return R.string.control_title_8172137d462a;
             case "Medir tempo dos ganchos": return R.string.control_title_27e402875dc0;
+            case "Menisco do Clear Glass (pop-up)": return R.string.control_title_3d2d3f93bf63;
             case "Modelo de refração": return R.string.control_title_006548b15c01;
             case "Modo de reescrita": return R.string.control_title_ceaef40ab9b4;
             case "Modos Clear Glass compilados": return R.string.control_title_b634baeb7442;
@@ -151,6 +155,7 @@ final class ControlTitles {
             case "Saturação": return R.string.control_title_23907232c21c;
             case "Saturação da captura": return R.string.control_title_76f1a4366eb4;
             case "Saturação do Clear Glass": return R.string.control_title_248d0863d7e0;
+            case "Saturação do Clear Glass (pop-up)": return R.string.control_title_c0d565be5b41;
             case "Sombra da borda no vidro claro": return R.string.control_title_5df7b3c6b57c;
             case "Subida do blur do Clear Glass (bloqueio)": return R.string.control_title_34d4857e12a5;
             case "Subida do blur do Clear Glass (pop-up)": return R.string.control_title_67f768b0004c;

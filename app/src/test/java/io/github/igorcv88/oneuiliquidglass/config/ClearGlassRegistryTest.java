@@ -44,6 +44,11 @@ public class ClearGlassRegistryTest {
             spec(p + "core", "FLOAT", "24", "0", "48");
             spec(p + "blurexp", "FLOAT", "2", "1", "4");
         }
+        spec("sf.hcfold", "FLOAT", "0", "0", "3");
+        spec("sf.hcsat", "FLOAT", "1", "0.9", "2");
+        spec("sf.hcscrim", "FLOAT", "0", "0", "0.6");
+        spec("sf.hcscrimmax", "FLOAT", "0", "0", "0.8");
+        spec("sf.hcadapt", "FLOAT", "0", "0", "1");
         spec("sf.kcveil", "FLOAT", "0.04", "0", "0.2");
         spec("sf.kclevel", "FLOAT", "0.85", "0.1", "0.85");
         spec("sf.kcdim", "FLOAT", "0", "0", "0.3");
@@ -65,7 +70,7 @@ public class ClearGlassRegistryTest {
 
     @Test
     public void everyClearPropertyIsRegisteredWithTheContractDomain() {
-        assertEquals(22, WRITABLE_SPECS.size());
+        assertEquals(27, WRITABLE_SPECS.size());
         for (Map.Entry<String, String[]> e : WRITABLE_SPECS.entrySet()) {
             SettingSpec s = SettingsRegistry.get(e.getKey());
             String[] want = e.getValue();
@@ -88,9 +93,15 @@ public class ClearGlassRegistryTest {
         Matcher m = Pattern.compile("c->(\\w+)(\\[i\\])? = oulg_in\\(c->\\w+(?:\\[i\\])?, ([0-9.]+)f, ([0-9.]+)f").matcher(fix);
         int checked = 0;
         while (m.find()) {
+            // Per-profile arrays are hc/kc pairs; the scalar fields are the lockscreen material, except
+            // the heads-up meniscus and material (fold, hsat, scrim, scrimmax).
+            String name = m.group(1);
+            boolean headsUpOnly = name.equals("fold") || name.equals("hsat") || name.equals("scrim") || name.equals("scrimmax")
+                    || name.equals("adapt");
             String[] keys = m.group(2) != null
-                    ? new String[] {"sf.hc" + m.group(1), "sf.kc" + m.group(1)}
-                    : new String[] {"sf.kc" + m.group(1)};
+                    ? new String[] {"sf.hc" + name, "sf.kc" + name}
+                    : headsUpOnly ? new String[] {"sf.hc" + (name.equals("hsat") ? "sat" : name)}
+                    : new String[] {"sf.kc" + name};
             for (String key : keys) {
                 SettingSpec s = SettingsRegistry.get(key);
                 assertNotNull(key, s);
@@ -99,7 +110,7 @@ public class ClearGlassRegistryTest {
                 checked++;
             }
         }
-        assertEquals(20, checked);
+        assertEquals(25, checked);
         assertTrue(fix.contains("c->mode[i] != 1 && c->mode[i] != 2"));
     }
 

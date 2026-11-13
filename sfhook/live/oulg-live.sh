@@ -195,7 +195,7 @@ setprops)
         case "$name" in
             core|taps|ramp|hubloom|edgeblur|hublur|hubodylens|hurefract|kgcore|kgtaps|kgramp|kgsat|kgtone|kgrim|kgspec|kgflat|kglevel|kgcool|kgtilt|kgline|kgfixedrim|kgcorecap|kggradient|kgband|kgbodylens|kgblurexp|kgedgeblur|kgblur|kgrefract|kgflatcap|kgcoredim|kgglow|shadecap|shadelift|hulight|kglight|kgdepth|shadelight|qslens|qsbody|qsdepth|qslight|debug) ;;
             # Clear Glass (refract.h): selection and parameters, read at shader compilation.
-            huclear|kgclear|hcband|hcamp|hcbody|hcbody2|hcedge|hccore|hcblurexp|kcband|kcamp|kcbody|kcbody2|kcedge|kccore|kcblurexp|kcveil|kclevel|kcdim|kcknee|kcsat|kccool) ;;
+            huclear|kgclear|hcband|hcamp|hcbody|hcbody2|hcedge|hccore|hcblurexp|kcband|kcamp|kcbody|kcbody2|kcedge|kccore|kcblurexp|kcveil|kclevel|kcdim|kcknee|kcsat|kccool|hcfold|hcsat|hcscrim|hcscrimmax|hcadapt) ;;
             *) die 2 "key_not_allowed_$name" ;;
         esac
         case "$value" in
