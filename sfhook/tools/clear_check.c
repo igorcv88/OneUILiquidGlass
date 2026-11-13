@@ -498,15 +498,15 @@ static void m2_m3_m4(void) {
 // The heads-up clear material: ranges, the monotone bound and the luma it outputs.
 static void hu_material(void) {
     struct oulg_clear c = OULG_CLEAR_DEFAULT, d = OULG_CLEAR_DEFAULT;
-    CHECK(d.fold[0] == 0 && d.fold[1] == 0 && d.lift[0] == 0 && d.lift[1] == 0 && d.neutral == 0.75f && d.hsat == 1 && d.scrim == 0 && d.scrimmax == 0, "hu material: defaults are not neutral");
+    CHECK(d.fold[0] == 2 && d.fold[1] == 2 && fabsf(d.lift[0] - 0.30f) < 1e-6f && d.lift[1] == 0 && d.neutral == 0.75f && fabsf(d.hsat - 1.05f) < 1e-6f && d.scrim == 0 && d.scrimmax == 0, "hu material: approved clear defaults changed");
     c.mode[0] = 1;
-    CHECK(!oulg_hu_material_on(&c), "hu material: emitted with neutral values");
+    CHECK(oulg_hu_material_on(&c), "hu material: approved material missing");
     c.fold[0] = 3.1f; c.fold[1] = 3.1f; c.lift[0] = 2.1f; c.lift[1] = -0.1f; c.neutral = 1.1f; c.hsat = 2.1f; c.scrim = 0.61f; c.scrimmax = 0.81f; oulg_fix_clear(&c);
-    CHECK(c.fold[1] == 0 && c.lift[0] == 0 && c.lift[1] == 0 && c.neutral == 0.75f, "kg fold, lift, neutral: out-of-range values kept");
-    CHECK(c.fold[0] == 0 && c.hsat == 1 && c.scrim == 0 && c.scrimmax == 0, "hu material: out-of-range values kept");
+    CHECK(c.fold[1] == d.fold[1] && c.lift[0] == d.lift[0] && c.lift[1] == 0 && c.neutral == 0.75f, "kg fold, lift, neutral: invalid did not fall back to approved values");
+    CHECK(c.fold[0] == d.fold[0] && c.hsat == d.hsat && c.scrim == 0 && c.scrimmax == 0, "hu material: invalid did not fall back to approved values");
     c.fold[0] = NAN; c.fold[1] = NAN; c.lift[0] = NAN; c.lift[1] = NAN; c.neutral = NAN; c.hsat = NAN; c.scrim = NAN; c.scrimmax = NAN; oulg_fix_clear(&c);
-    CHECK(c.fold[1] == 0 && c.lift[0] == 0 && c.lift[1] == 0 && c.neutral == 0.75f, "kg fold, lift, neutral: NaN kept");
-    CHECK(c.fold[0] == 0 && c.hsat == 1 && c.scrim == 0 && c.scrimmax == 0, "hu material: NaN kept");
+    CHECK(c.fold[1] == d.fold[1] && c.lift[0] == d.lift[0] && c.lift[1] == 0 && c.neutral == 0.75f, "kg fold, lift, neutral: NaN did not fall back to approved values");
+    CHECK(c.fold[0] == d.fold[0] && c.hsat == d.hsat && c.scrim == 0 && c.scrimmax == 0, "hu material: NaN did not fall back to approved values");
     c.scrim = 0.3f; c.scrimmax = 0.1f; oulg_fix_clear(&c);
     CHECK(c.scrimmax == c.scrim, "hu material: scrimmax below scrim not raised");
     double worst = 1e9;
@@ -522,7 +522,7 @@ static void hu_material(void) {
     }
     struct oulg_clear s = OULG_CLEAR_DEFAULT; s.mode[0] = 1; s.hsat = 1.5f; s.scrim = 0.12f; s.scrimmax = 0.5f; oulg_fix_clear(&s);
     CHECK(s.scrim == 0.12f && s.scrimmax == 0.5f && oulg_hu_material_on(&s), "hu material: the reference values were changed");
-    printf("hu material: neutral by default, ranges and NaN checked, output luma never falls as y rises (smallest slope %.3f); "
+    printf("hu material: approved defaults, ranges and NaN checked, output luma never falls as y rises (smallest slope %.3f); "
            "scrim 0.12-0.50 leaves y 0.25 at %.3f, 0.50 at %.3f, 0.75 at %.3f and white at %.2f\n", worst,
            0.25 * (1 - (0.12 + 0.38 * 0.15625)), 0.5 * (1 - (0.12 + 0.38 * 0.5)), 0.75 * (1 - (0.12 + 0.38 * 0.84375)), 1 - 0.5);
     CHECK(strstr(OULG_FS_HU_MATERIAL_FMT, "w = y * y * (3.0 - 2.0 * y)") && strstr(OULG_FS_HU_MATERIAL_FMT, "* w);"),
@@ -600,9 +600,9 @@ static double pat_at(int kind, int x) {
 // detail as the plain disc renders it. The first version's |yA - yB| weight is the positive control.
 static void hu_adapt(void) {
     struct oulg_clear c = OULG_CLEAR_DEFAULT; c.mode[0] = 1; oulg_fix_clear(&c);
-    CHECK(OULG_CLEAR_DEFAULT.adapt == 0 && !oulg_hu_adapt_on(&c), "hu adapt: on by default");
-    c.adapt = 1.1f; oulg_fix_clear(&c); CHECK(c.adapt == 0, "hu adapt: value above the range kept");
-    c.adapt = NAN; oulg_fix_clear(&c); CHECK(c.adapt == 0, "hu adapt: NaN kept");
+    CHECK(OULG_CLEAR_DEFAULT.adapt == 1 && oulg_hu_adapt_on(&c), "hu adapt: approved clear default must be on");
+    c.adapt = 1.1f; oulg_fix_clear(&c); CHECK(c.adapt == 1, "hu adapt: invalid value did not fall back to approved value");
+    c.adapt = NAN; oulg_fix_clear(&c); CHECK(c.adapt == 1, "hu adapt: NaN did not fall back to approved value");
     c.adapt = 1; oulg_fix_clear(&c); CHECK(c.adapt == 1 && oulg_hu_adapt_on(&c), "hu adapt: 1 rejected");
     c.mode[0] = 0; CHECK(!oulg_hu_adapt_on(&c), "hu adapt: on with the heads-up clear off");
     static struct amodel m; static double src[AN];
@@ -625,7 +625,7 @@ static void hu_adapt(void) {
     CHECK(oldx > 1, "hu adapt: the |yA - yB| weight no longer shows the doubled contours (positive control, %d extrema)", oldx);
     CHECK(keep40 < 0.7, "hu adapt: a 40 px stroke keeps %.2f of the plain disc's residual", keep40);
     CHECK(fine < 0.02, "hu adapt: fine detail differs from the plain disc by %.3f", fine);
-    printf("hu adapt: off by default, range and NaN checked; disc 24 px, wide x%.1f, with and without a 7.5 px region blur: strokes of 40 and 80 px, "
+    printf("hu adapt: enabled for Clear by default, range and NaN checked; disc 24 px, wide x%.1f, with and without a 7.5 px region blur: strokes of 40 and 80 px, "
            "a pair of strokes and a step keep the plain disc's count of extrema (the |yA - yB| weight gave %d across one 40 px stroke instead of 1); "
            "residual of a 40 px stroke %.2f and of an 80 px one %.2f of the plain disc's; 8 px stripes, and a 6 px line behind the region blur, within %.3f of the plain disc (the line on an unblurred source: %.3f)\n",
            OULG_ADAPT_WIDE, oldx, keep40, keep80, fine, bare);
@@ -653,7 +653,7 @@ static void kg_meniscus_and_lift(void) {
     char *idx = strstr(fb, "oulg_clear1("); if (idx) idx[10] = '0';
     CHECK(strcmp(fa, fb) == 0 && strstr(fa, "sqrt(max(1.0 - x * x, 0.0))"), "kg meniscus: the two profiles do not share one field text");
     // Independent parameters reach their own function; kcfold alone leaves the heads-up function a slab.
-    struct oulg_clear k = OULG_CLEAR_DEFAULT; k.mode[0] = 1; k.mode[1] = 1; k.fold[1] = 1.5f; k.band[1] = 0.6f; oulg_fix_clear(&k);
+    struct oulg_clear k = OULG_CLEAR_DEFAULT; k.mode[0] = 1; k.mode[1] = 1; k.fold[0] = 0; k.fold[1] = 1.5f; k.band[1] = 0.6f; oulg_fix_clear(&k);
     CHECK(oulg_lib(a, 1 << 17, 0, 0, p, &k), "kg meniscus: library failed (kg only)");
     CHECK(fn_text(a, "highp vec2 oulg_clear0(", fa, sizeof fa) && fn_text(a, "highp vec2 oulg_clear1(", fb, sizeof fb), "kg meniscus: field functions missing (kg only)");
     CHECK(!strstr(fa, "sqrt(max(1.0 - x * x") && strstr(fa, "t * t * (3.0 - 2.0 * t)"), "kg meniscus: kcfold changed the heads-up field");
