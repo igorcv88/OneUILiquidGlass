@@ -2,7 +2,7 @@
 
 Audience: the agent that builds the granular controls in the app. This file lists what the compositor accepts today for the heads-up (HU, profile 0) and the lockscreen (KG, profile 1) Clear Glass variants, what each control depends on, and how values are applied and rolled back. The optics are described in `INTEGRATION_CONTRACT.md`; nothing here needs a change in `sfhook/`.
 
-State of the code: the properties below are read by `sfhook/oulg_sf.c` (`clear_params`), validated by `oulg_fix_clear` (`sfhook/refract.h`), registered in `docs/PROPERTY_CATALOG_2026-10-26.md` and the generated `SettingsRegistry` (204 specs), and accepted by `oulg-live.sh setprops`. In `Controls` they are `Tier.INTERNAL` rows with `Format.READONLY`; they are listed in `CLEAR_GLASS_PENDING_INTEGRATION` (`CompositorValuesTest`) and are not in `SfLive.WRITABLE`. Making them editable is the UI work.
+State of the code: the properties below are read by `sfhook/oulg_sf.c` (`clear_params`), validated by `oulg_fix_clear` (`sfhook/refract.h`), registered in `docs/PROPERTY_CATALOG_2026-10-26.md` and the generated `SettingsRegistry` (204 specs), and accepted by `oulg-live.sh setprops`. When this file was written they were `Tier.INTERNAL` read-only rows outside `SfLive.WRITABLE`. The app now exposes them: the two selectors through the Home "Glass material" choice and the other 29 as controls shown for the matching material, all in `SfLive.WRITABLE` (see `MATERIAL_UI.md` and `MATERIAL_MATRIX.md`).
 
 ## 1. How a value takes effect
 

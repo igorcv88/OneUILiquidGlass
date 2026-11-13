@@ -4,6 +4,7 @@
     <string name="control_option_8d954776f1cd">Adaptive</string>
     <string name="control_option_0a0e3b18cbfb">Original adaptive color</string>
     <string name="control_option_a33344113b2b">Samsung adaptive color</string>
+    <string name="control_option_0c4e291a7b4b">The original look</string>
     <string name="control_option_20ec175d596a">Automatic</string>
     <string name="control_option_c9c992be184b">Automatic</string>
     <string name="control_option_ea8c83e1957a">Legacy path; may lag</string>
@@ -14,6 +15,7 @@
     <string name="control_option_4e1de10ed349">Outline</string>
     <string name="control_option_308ef5ac8d40">Custom fixed color</string>
     <string name="control_option_e03b6581feae">Separate colors for light and dark backgrounds</string>
+    <string name="control_option_ed469e5dc765">Set outside the app</string>
     <string name="control_option_8809a6227cfb">Off</string>
     <string name="control_option_9c6166ed846c">Broader blur and more vivid colors</string>
     <string name="control_option_164bf4ddd36b">Off</string>
@@ -22,8 +24,10 @@
     <string name="control_option_bc7b88d5097a">Darkened</string>
     <string name="control_option_df4175832ef6">Spatial</string>
     <string name="control_option_5c59ae60921b">Requires the dynamic lens</string>
+    <string name="control_option_98bb3300112e">Needs a userspace restart</string>
     <string name="control_option_cbfb56969ab1">Failed on some firmware</string>
     <string name="control_option_286cbcfd1496">Forces treatment of eligible icons, including custom icons</string>
+    <string name="control_option_7b9330ac47fd">Frosted</string>
     <string name="control_option_783067a8aca7">Physical</string>
     <string name="control_option_2212a1a4fd6a">Horizontal gestures</string>
     <string name="control_option_9a216516ec5f">Test grid</string>
@@ -55,6 +59,7 @@
     <string name="control_option_bc563cb30bb5">Default: preserves user apps and their icon packs</string>
     <string name="control_option_efd3e6962023">For comparison on device</string>
     <string name="control_option_cb302177b476">May lag behind movement</string>
+    <string name="control_option_e663156ae3c4">Per card (advanced)</string>
     <string name="control_option_797f1acc98bc">Black or white depending on the background, as before</string>
     <string name="control_option_5e752f3cd7ac">Any touch</string>
     <string name="control_option_5a83874989ff">Four corners</string>
@@ -71,6 +76,7 @@
     <string name="control_option_4ec6fa29d300">Only horizontal movements and two fingers</string>
     <string name="control_option_0706bd786e3a">Numbered synthetic texture</string>
     <string name="control_option_a4114a83f4c6">All</string>
+    <string name="control_option_d54e4e66c5ff">Clear (iOS style)</string>
     <string name="control_option_84a1c49268ae">Treats regular apps only when the displayed icon matches the original</string>
     <string name="control_option_50050d5b621c">Ultra</string>
     <string name="control_option_fa23538ab231">One color for all backgrounds</string>

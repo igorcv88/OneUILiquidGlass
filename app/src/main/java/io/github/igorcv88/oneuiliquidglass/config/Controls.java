@@ -124,6 +124,8 @@ public final class Controls {
         public final Preview preview;
         public final Channel channel;
         public final Set<Surface> surfaces;
+        /** Slider step of this control; 0 keeps the registry step. */
+        public final double step;
         /** Choice value -> {label, description}; insertion order is display order. */
         public final Map<String, String[]> choices;
 
@@ -141,6 +143,7 @@ public final class Controls {
             preview = b.preview;
             channel = b.channel;
             surfaces = Collections.unmodifiableSet(b.surfaces);
+            step = b.step;
             choices = Collections.unmodifiableMap(b.choices);
         }
 
@@ -166,6 +169,7 @@ public final class Controls {
         Format format = Format.PLAIN;
         Preview preview = Preview.NONE;
         Channel channel = Channel.NONE;
+        double step;
         final EnumSet<Surface> surfaces = EnumSet.noneOf(Surface.class);
         final Map<String, String[]> choices = new LinkedHashMap<>();
 
@@ -222,6 +226,12 @@ public final class Controls {
         Builder show(Preview p, Channel c) {
             preview = p;
             channel = c;
+            return this;
+        }
+
+        /** A coarser slider step than the registry's, for values read as whole numbers. */
+        Builder step(double s) {
+            step = s;
             return this;
         }
 
@@ -933,70 +943,76 @@ public final class Controls {
                 .in(TECH, Tier.INTERNAL).all()
                 .help("Marcador gravado pela biblioteca. Ausente significa desconhecido; não prova que um cartão foi desenhado com Clear Glass."));
 
-        // Clear Glass (experimental compositor variant): registered so the registry covers every
-        // library reader, but never an editable row until the Android integration exposes it.
-        put(c("sf.huclear", "Clear Glass no pop-up").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(HU)
-                .help("Experimental, ainda sem controle no app."));
-        put(c("sf.hcband", "Banda de refração do Clear Glass (pop-up)").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(HU)
-                .help("Experimental, ainda sem controle no app."));
-        put(c("sf.hcamp", "Refração da borda do Clear Glass (pop-up)").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(HU)
-                .help("Experimental, ainda sem controle no app."));
-        put(c("sf.hcbody", "Refração do corpo do Clear Glass (pop-up)").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(HU)
-                .help("Experimental, ainda sem controle no app."));
-        put(c("sf.hcbody2", "Domo cúbico do Clear Glass (pop-up)").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(HU)
-                .help("Experimental, ainda sem controle no app."));
-        put(c("sf.hcedge", "Blur do contorno do Clear Glass (pop-up)").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(HU)
-                .help("Experimental, ainda sem controle no app."));
-        put(c("sf.hccore", "Blur do miolo do Clear Glass (pop-up)").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(HU)
-                .help("Experimental, ainda sem controle no app."));
-        put(c("sf.hcblurexp", "Subida do blur do Clear Glass (pop-up)").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(HU)
-                .help("Experimental, ainda sem controle no app."));
-        put(c("sf.hcfold", "Menisco do Clear Glass (pop-up)").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(HU)
-                .help("Experimental, ainda sem controle no app."));
-        put(c("sf.hcsat", "Saturação do Clear Glass (pop-up)").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(HU)
-                .help("Experimental, ainda sem controle no app."));
-        put(c("sf.hcscrim", "Escurecimento mínimo do Clear Glass (pop-up)").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(HU)
-                .help("Experimental, ainda sem controle no app."));
-        put(c("sf.hcscrimmax", "Escurecimento máximo do Clear Glass (pop-up)").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(HU)
-                .help("Experimental, ainda sem controle no app."));
-        put(c("sf.hcadapt", "Blur adaptativo do Clear Glass (pop-up)").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(HU)
-                .help("Experimental, ainda sem controle no app."));
-        put(c("sf.kcfold", "Menisco do Clear Glass (bloqueio)").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(KG)
-                .help("Experimental, ainda sem controle no app."));
-        put(c("sf.hclift", "Clareamento do Clear Glass (pop-up)").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(HU)
-                .help("Experimental, ainda sem controle no app."));
-        put(c("sf.kclift", "Clareamento do Clear Glass (bloqueio)").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(KG)
-                .help("Experimental, ainda sem controle no app."));
-        put(c("sf.hcneutral", "Neutralidade dos brancos do Clear Glass (pop-up)").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(HU)
-                .help("Experimental, ainda sem controle no app."));
-        put(c("sf.kgclear", "Clear Glass no bloqueio").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(KG)
-                .help("Experimental, ainda sem controle no app."));
-        put(c("sf.kcband", "Banda de refração do Clear Glass (bloqueio)").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(KG)
-                .help("Experimental, ainda sem controle no app."));
-        put(c("sf.kcamp", "Refração da borda do Clear Glass (bloqueio)").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(KG)
-                .help("Experimental, ainda sem controle no app."));
-        put(c("sf.kcbody", "Refração do corpo do Clear Glass (bloqueio)").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(KG)
-                .help("Experimental, ainda sem controle no app."));
-        put(c("sf.kcbody2", "Domo cúbico do Clear Glass (bloqueio)").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(KG)
-                .help("Experimental, ainda sem controle no app."));
-        put(c("sf.kcedge", "Blur do contorno do Clear Glass (bloqueio)").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(KG)
-                .help("Experimental, ainda sem controle no app."));
-        put(c("sf.kccore", "Blur do miolo do Clear Glass (bloqueio)").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(KG)
-                .help("Experimental, ainda sem controle no app."));
-        put(c("sf.kcblurexp", "Subida do blur do Clear Glass (bloqueio)").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(KG)
-                .help("Experimental, ainda sem controle no app."));
-        put(c("sf.kcveil", "Véu do Clear Glass").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(KG)
-                .help("Experimental, ainda sem controle no app."));
-        put(c("sf.kclevel", "Nível do véu do Clear Glass").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(KG)
-                .help("Experimental, ainda sem controle no app."));
-        put(c("sf.kcdim", "Escurecimento do Clear Glass").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(KG)
-                .help("Experimental, ainda sem controle no app."));
-        put(c("sf.kcknee", "Compressão de realces do Clear Glass").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(KG)
-                .help("Experimental, ainda sem controle no app."));
-        put(c("sf.kcsat", "Saturação do Clear Glass").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(KG)
-                .help("Experimental, ainda sem controle no app."));
-        put(c("sf.kccool", "Matiz fria do Clear Glass").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(KG)
-                .help("Experimental, ainda sem controle no app."));
+        // Material do vidro: os seletores ficam internos (a escolha é feita na Início) e os
+        // parâmetros Clear aparecem só quando o material do ambiente é Clear (GlassMaterial).
+        put(c("sf.huclear", "Material do vidro").fmt(Format.CHOICE).in(TECH, Tier.INTERNAL).on(HU)
+                .choice("0", "Fosco", "Aparência original")
+                .choice("1", "Transparente (estilo iOS)", "Exige reiniciar o userspace")
+                .choice("2", "Por cartão (avançado)", "Definido fora do app")
+                .help("Material usado nos pop-ups. A escolha é feita na Início."));
+        put(c("sf.kgclear", "Material do vidro").fmt(Format.CHOICE).in(TECH, Tier.INTERNAL).on(KG)
+                .choice("0", "Fosco", "Aparência original")
+                .choice("1", "Transparente (estilo iOS)", "Exige reiniciar o userspace")
+                .choice("2", "Por cartão (avançado)", "Definido fora do app")
+                .help("Material usado nos cartões da tela de bloqueio. A escolha é feita na Início."));
+        put(c("sf.hcfold", "Menisco").fmt(Format.GAIN).in(EDGES, STD).on(HU).step(.05)
+                .help("Intensidade da borda curva e comprimida do vidro nos pop-ups." + restart));
+        put(c("sf.hcband", "Largura da borda curva").fmt(Format.PERCENT_1).in(EDGES, ADV).on(HU)
+                .help("Quanto a borda curva avança para dentro dos pop-ups, em fração do raio do canto." + restart));
+        put(c("sf.hcamp", "Curvatura sem menisco").fmt(Format.PERCENT_1).in(EDGES, ADV).on(HU)
+                .help("Curvatura da borda dos pop-ups com o menisco desligado. Só funciona com o menisco desligado." + restart));
+        put(c("sf.hcbody", "Ampliação do corpo").fmt(Format.PERCENT_1).in(EDGES, ADV).on(HU)
+                .help("Amplia o fundo de modo uniforme em todo o pop-up." + restart));
+        put(c("sf.hcbody2", "Abaulamento do centro").fmt(Format.PERCENT_1).in(EDGES, ADV).on(HU)
+                .help("Abaulamento extra no centro dos pop-ups. Deixe em 0 para um centro plano." + restart));
+        put(c("sf.hcedge", "Desfoque da borda externa").fmt(Format.PX).in(GLASS, STD).on(HU).step(1)
+                .help("Desfoque no contorno externo dos pop-ups." + restart));
+        put(c("sf.hccore", "Desfoque do centro").fmt(Format.PX).in(GLASS, STD).on(HU).step(1)
+                .help("Desfoque no centro dos pop-ups." + restart));
+        put(c("sf.hcblurexp", "Transição do desfoque").fmt(Format.PLAIN).in(GLASS, ADV).on(HU).step(.05)
+                .help("Com que rapidez o desfoque do pop-up sobe do contorno ao centro." + restart));
+        put(c("sf.hcadapt", "Desfoque adaptativo").fmt(Format.PERCENT_1).in(GLASS, STD).on(HU).step(.05)
+                .help("Aumenta o desfoque de formas grandes atrás dos pop-ups; usa mais GPU." + restart));
+        put(c("sf.hcsat", "Saturação do vidro").fmt(Format.PERCENT_1).in(COLOR, STD).on(HU)
+                .help("Intensidade das cores do fundo visto através dos pop-ups." + restart));
+        put(c("sf.hcscrim", "Escurecimento nas áreas escuras").fmt(Format.PERCENT_1).in(COLOR, ADV).on(HU)
+                .help("Escurece o vidro do pop-up sobre as partes escuras do fundo." + restart));
+        put(c("sf.hcscrimmax", "Escurecimento nas áreas claras").fmt(Format.PERCENT_1).in(COLOR, ADV).on(HU)
+                .help("Escurece o vidro do pop-up sobre as partes claras do fundo." + restart));
+        put(c("sf.hclift", "Clareamento").fmt(Format.PLAIN).in(COLOR, STD).on(HU).step(.05)
+                .help("Clareia o vidro do pop-up sem alterar a refração. Valores altos podem reduzir o contraste do texto." + restart));
+        put(c("sf.hcneutral", "Neutralizar brancos").fmt(Format.PERCENT_1).in(COLOR, ADV).on(HU)
+                .help("Reduz tons azulados ou coloridos nas áreas quase brancas." + restart));
+        put(c("sf.kcfold", "Menisco").fmt(Format.GAIN).in(EDGES, STD).on(KG).step(.05)
+                .help("Intensidade da borda curva nos cartões da tela de bloqueio." + restart));
+        put(c("sf.kcband", "Largura da borda curva").fmt(Format.PERCENT_1).in(EDGES, ADV).on(KG)
+                .help("Quanto a borda curva avança para dentro dos cartões da tela de bloqueio, em fração do raio do canto." + restart));
+        put(c("sf.kcamp", "Curvatura sem menisco").fmt(Format.PERCENT_1).in(EDGES, ADV).on(KG)
+                .help("Curvatura da borda dos cartões da tela de bloqueio com o menisco desligado. Só funciona com o menisco desligado." + restart));
+        put(c("sf.kcbody", "Ampliação do corpo").fmt(Format.PERCENT_1).in(EDGES, ADV).on(KG)
+                .help("Amplia o fundo de modo uniforme em todo o cartão da tela de bloqueio." + restart));
+        put(c("sf.kcbody2", "Abaulamento do centro").fmt(Format.PERCENT_1).in(EDGES, ADV).on(KG)
+                .help("Abaulamento extra no centro dos cartões da tela de bloqueio. Deixe em 0 para um centro plano." + restart));
+        put(c("sf.kcedge", "Desfoque da borda externa").fmt(Format.PX).in(GLASS, STD).on(KG).step(1)
+                .help("Desfoque no contorno externo dos cartões da tela de bloqueio." + restart));
+        put(c("sf.kccore", "Desfoque do centro").fmt(Format.PX).in(GLASS, STD).on(KG).step(1)
+                .help("Desfoque no centro dos cartões da tela de bloqueio." + restart));
+        put(c("sf.kcblurexp", "Transição do desfoque").fmt(Format.PLAIN).in(GLASS, ADV).on(KG).step(.05)
+                .help("Com que rapidez o desfoque da tela de bloqueio sobe do contorno ao centro." + restart));
+        put(c("sf.kcsat", "Saturação do vidro").fmt(Format.PERCENT_1).in(COLOR, STD).on(KG)
+                .help("Intensidade das cores do fundo visto através dos cartões da tela de bloqueio." + restart));
+        put(c("sf.kclift", "Clareamento").fmt(Format.PLAIN).in(COLOR, STD).on(KG).step(.05)
+                .help("Clareia o vidro na tela de bloqueio; valores altos podem reduzir o contraste do texto." + restart));
+        put(c("sf.kcveil", "Véu de nivelamento").fmt(Format.PERCENT_1).in(COLOR, ADV).on(KG)
+                .help("Puxa o vidro da tela de bloqueio para o nível do véu: clareia fundos escuros e escurece fundos claros." + restart));
+        put(c("sf.kclevel", "Nível do véu").fmt(Format.PERCENT_1).in(COLOR, ADV).on(KG)
+                .help("Brilho para o qual o véu puxa o vidro da tela de bloqueio. Só age com o véu acima de 0." + restart));
+        put(c("sf.kcdim", "Escurecimento do vidro").fmt(Format.PERCENT_1).in(COLOR, ADV).on(KG)
+                .help("Escurece o vidro da tela de bloqueio por igual." + restart));
+        put(c("sf.kcknee", "Compressão de realces").fmt(Format.PERCENT_1).in(COLOR, ADV).on(KG)
+                .help("Suaviza as áreas mais claras atrás dos cartões da tela de bloqueio." + restart));
+        put(c("sf.kccool", "Tom frio do vidro").fmt(Format.PERCENT_1).in(COLOR, ADV).on(KG)
+                .help("Dá um tom frio, azulado, ao vidro da tela de bloqueio sem mudar o brilho." + restart));
     }
 
     public static Control get(String key) {
@@ -1016,6 +1032,21 @@ public final class Controls {
                 && c.tier != Tier.INTERNAL
                 && s.type != SettingSpec.Type.READONLY
                 && !s.helperOwned();
+    }
+
+    /** The few controls shown first on a Clear surface: where the look is made. */
+    private static final List<String> CLEAR_PRIMARY_HU = Collections.unmodifiableList(Arrays.asList(
+            "sf.hcfold", "sf.hcedge", "sf.hccore", "sf.hcadapt", "sf.hcsat", "sf.hclift"));
+    private static final List<String> CLEAR_PRIMARY_KG = Collections.unmodifiableList(Arrays.asList(
+            "sf.kcfold", "sf.kcedge", "sf.kccore", "sf.kcsat", "sf.kclift"));
+
+    /** The main controls of a surface for the material that decides it (null: no single one). */
+    public static List<String> primary(Surface surface, Mode mode, GlassMaterial material) {
+        if (material == GlassMaterial.CLEAR) {
+            if (surface == Surface.HEADSUP) return CLEAR_PRIMARY_HU;
+            if (surface == Surface.KEYGUARD) return CLEAR_PRIMARY_KG;
+        }
+        return primary(surface, mode);
     }
 
     /** The few controls shown first on a surface, all active in {@code mode}. */

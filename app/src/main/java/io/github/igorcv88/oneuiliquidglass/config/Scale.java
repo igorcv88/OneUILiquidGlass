@@ -15,36 +15,39 @@ public final class Scale {
     /** First valid non-sentinel value. */
     public final double low;
     public final int steps;
+    private final double step;
     private final String legacyValue;
     private final int legacyIndex;
 
-    private Scale(SettingSpec spec, boolean auto, double low) {
-        this(spec, auto, low, null);
+    private Scale(SettingSpec spec, boolean auto, double low, double step) {
+        this(spec, auto, low, null, step);
     }
 
-    private Scale(SettingSpec spec, boolean auto, double low, String legacyValue) {
+    private Scale(SettingSpec spec, boolean auto, double low, String legacyValue, double step) {
         this.spec = spec;
+        this.step = step;
         this.auto = auto;
         this.nativeArt = spec.key.equals("mediaart");
         this.low = low;
-        int span = (int) Math.ceil((spec.max - low) / spec.step - 1e-6);
+        int span = (int) Math.ceil((spec.max - low) / step - 1e-6);
         int baseSteps = Math.max(1, span + (auto || nativeArt ? 1 : 0));
         this.legacyValue = legacyValue;
         double legacy = legacyValue == null ? 0 : Double.parseDouble(legacyValue);
-        int nearest = (int) Math.round((legacy - low) / spec.step) + 1;
-        boolean extra = legacyValue != null && Math.abs(low + (nearest - 1) * spec.step - legacy) > 1e-7;
-        legacyIndex = extra ? (int) Math.ceil((legacy - low) / spec.step) + 1 : -1;
+        int nearest = (int) Math.round((legacy - low) / step) + 1;
+        boolean extra = legacyValue != null && Math.abs(low + (nearest - 1) * step - legacy) > 1e-7;
+        legacyIndex = extra ? (int) Math.ceil((legacy - low) / step) + 1 : -1;
         steps = baseSteps + (extra ? 1 : 0);
     }
 
     public static Scale of(Controls.Control c) {
         SettingSpec s = c.spec();
-        if (c.key.equals("mediaart")) return new Scale(s, false, .5);
+        double step = c.step > 0 ? c.step : s.step;
+        if (c.key.equals("mediaart")) return new Scale(s, false, .5, step);
         if (c.autoLabel != null && s.min < 0) {
             double low = c.key.equals("kglens") ? .1 : 0;
-            return new Scale(s, true, low);
+            return new Scale(s, true, low, step);
         }
-        return new Scale(s, false, s.min);
+        return new Scale(s, false, s.min, step);
     }
 
     /** Use the extended range only while editing a saved or explicitly entered legacy value. */
@@ -52,7 +55,7 @@ public final class Scale {
         if (c.key.equals("mediaart")) {
             try {
                 double n = Double.parseDouble(raw);
-                if (n >= .05 && n < .5) return new Scale(c.spec(), false, .05, c.spec().validate(raw));
+                if (n >= .05 && n < .5) return new Scale(c.spec(), false, .05, c.spec().validate(raw), c.spec().step);
             } catch (RuntimeException ignored) { }
         }
         return of(c);
@@ -65,7 +68,7 @@ public final class Scale {
         if (auto && index == 0) return spec.validate("-1");
         if (index == legacyIndex) return legacyValue;
         if (legacyIndex >= 0 && index > legacyIndex) index--;
-        double n = low + (index - (auto || nativeArt ? 1 : 0)) * spec.step;
+        double n = low + (index - (auto || nativeArt ? 1 : 0)) * step;
         n = Math.min(spec.max, n);
         if (spec.type == SettingSpec.Type.INT) n = Math.rint(n);
         return spec.validate(
@@ -84,7 +87,7 @@ public final class Scale {
         if (auto && n < 0) return 0;
         if (n >= spec.max) return steps;
         if (legacyIndex >= 0 && Math.abs(n - Double.parseDouble(legacyValue)) < 1e-9) return legacyIndex;
-        int i = (int) Math.round((Math.max(low, n) - low) / spec.step) + (auto || nativeArt ? 1 : 0);
+        int i = (int) Math.round((Math.max(low, n) - low) / step) + (auto || nativeArt ? 1 : 0);
         if (legacyIndex >= 0 && i >= legacyIndex) i++;
         return Math.max(0, Math.min(steps, i));
     }

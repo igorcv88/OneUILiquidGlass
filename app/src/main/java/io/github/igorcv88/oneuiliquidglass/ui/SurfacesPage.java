@@ -32,6 +32,8 @@ public final class SurfacesPage implements Page {
     private final Set<String> open = new HashSet<>();
     private Controls.Surface surface = Controls.Surface.HEADSUP;
     private Mode builtMode;
+    private String builtMaterial = "";
+    private LinearLayout materialRow;
     private Controls.Surface builtSurface;
     private Set<String> builtFavorites = Collections.emptySet();
     private Map<String, String> baseline;
@@ -255,9 +257,14 @@ public final class SurfacesPage implements Page {
     private Set<String> favorites() {
         Set<String> out = new LinkedHashSet<>();
         for (Controls.Control c : Controls.all())
-            if (c.on(surface) && !IconsPage.isIconKey(c.key) && Controls.editable(c.key)
+            if (c.on(surface) && !IconsPage.isIconKey(c.key) && Controls.editable(c.key) && visible(c)
                     && host.model().ui.getBoolean("favorite." + c.key, false)) out.add(c.key);
         return out;
+    }
+
+    /** Whether a control belongs in this surface's lists for the material that decides it. */
+    private boolean visible(Controls.Control c) {
+        return GlassMaterial.visible(c.key, surface, host.model().state()::shown);
     }
 
     @Override
@@ -267,7 +274,14 @@ public final class SurfacesPage implements Page {
         Applicability app = st.applicability();
         if (baseline == null) baseline = new HashMap<>(st.shownMap());
         Set<String> fav = favorites();
-        if (builtSurface != surface || builtMode != app.mode || !fav.equals(builtFavorites)) build(app.mode, fav);
+        GlassMaterial material = GlassMaterial.forSurface(st::shown, surface);
+        String materialKey = material == null ? "-" : material.id;
+        if (builtSurface != surface || builtMode != app.mode || !fav.equals(builtFavorites)
+                || !materialKey.equals(builtMaterial)) build(app.mode, fav, material);
+        if (materialRow != null) Ui.setSubtitle(materialRow, material == null
+                ? UiLabels.selector(host.activity(), st.shown(surface == Controls.Surface.HEADSUP
+                        ? GlassMaterial.HU_SELECTOR : GlassMaterial.KG_SELECTOR))
+                : UiLabels.material(host.activity(), material));
         if (qsToggle != null) {
             qsToggle.set(!"0".equals(st.shown(ProductFlags.QUICK_SETTINGS)), true);
             Ui.enable(qsRow, st.enabled);
@@ -289,11 +303,13 @@ public final class SurfacesPage implements Page {
         preview.values(st::shown, baseline::get);
     }
 
-    private void build(Mode mode, Set<String> fav) {
+    private void build(Mode mode, Set<String> fav, GlassMaterial material) {
         android.app.Activity a = host.activity();
         builtSurface = surface;
         builtMode = mode;
         builtFavorites = fav;
+        builtMaterial = material == null ? "-" : material.id;
+        materialRow = null;
         rows.clear();
         layerRows.clear();
         list.removeAllViews();
@@ -310,6 +326,14 @@ public final class SurfacesPage implements Page {
         gate.addView(surfaceRow);
         list.addView(gate, Ui.match());
 
+        if (surface != Controls.Surface.SHADE) {
+            LinearLayout materialCard = Ui.card(a, t);
+            materialRow = Ui.listRow(a, t, Icon.LAYERS, a.getString(R.string.material_title), "", Ui.chevron(a, t));
+            materialRow.setOnClickListener(v -> new MaterialSheet(host).show());
+            materialCard.addView(materialRow);
+            list.addView(materialCard, Ui.match(t.dp(10), 0));
+        }
+
         Set<String> placed = new HashSet<>();
         if (!fav.isEmpty()) {
             list.addView(Ui.section(a, t, a.getString(R.string.surface_favorites)));
@@ -317,7 +341,7 @@ public final class SurfacesPage implements Page {
         }
         list.addView(Ui.section(a, t, a.getString(R.string.surface_main)));
         List<String> primary = new ArrayList<>();
-        for (String k : Controls.primary(surface, mode)) if (!placed.contains(k) && !IconsPage.isIconKey(k)) primary.add(k);
+        for (String k : Controls.primary(surface, mode, material)) if (!placed.contains(k) && !IconsPage.isIconKey(k)) primary.add(k);
         list.addView(card(primary, placed), Ui.match());
 
         if (surface == Controls.Surface.SHADE && !placed.contains("mediaart")) {
@@ -352,7 +376,7 @@ public final class SurfacesPage implements Page {
             if (section == Controls.Section.LENS_TUNING && mode != Mode.DYNAMIC_LENS) continue;
             List<String> std = new ArrayList<>(), adv = new ArrayList<>();
             for (Controls.Control c : Controls.all()) {
-                if (c.section != section || !c.on(surface) || !Controls.editable(c.key)
+                if (c.section != section || !c.on(surface) || !Controls.editable(c.key) || !visible(c)
                         || placed.contains(c.key) || IconsPage.isIconKey(c.key)) continue;
                 if (c.tier == Controls.Tier.STANDARD) std.add(c.key);
                 else if (c.tier == Controls.Tier.ADVANCED) adv.add(c.key);
@@ -386,7 +410,7 @@ public final class SurfacesPage implements Page {
         // "Todos os parâmetros". Keep them collapsed to avoid crowding the visual controls.
         List<String> technical = new ArrayList<>();
         for (Controls.Control c : Controls.all())
-            if (c.on(surface) && Controls.editable(c.key) && !placed.contains(c.key)
+            if (c.on(surface) && Controls.editable(c.key) && !placed.contains(c.key) && visible(c)
                     && !IconsPage.isIconKey(c.key)
                     && (c.section == Controls.Section.TECHNICAL || c.tier == Controls.Tier.TECHNICAL))
                 technical.add(c.key);
@@ -537,7 +561,7 @@ public final class SurfacesPage implements Page {
         boolean shared = false;
         for (Controls.Control c : Controls.all())
             if (c.on(surface) && Controls.editable(c.key) && c.tier != Controls.Tier.TECHNICAL
-                    && !IconsPage.isIconKey(c.key)) {
+                    && visible(c) && !IconsPage.isIconKey(c.key)) {
                 keys.add(c.key);
                 shared |= c.surfaces.size() > 1;
             }

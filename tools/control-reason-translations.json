@@ -28,5 +28,10 @@
   "Ative Central de controle": "Enable Quick Settings glass",
   "O vidro está desligado onde este ajuste vale": "Glass is off on the surfaces where this setting applies",
   "A central não usa lente": "The shade does not use this lens",
-  "Ative o desfoque próprio por cartão": "Enable per-card blur"
+  "Ative o desfoque próprio por cartão": "Enable per-card blur",
+  "Usado com o vidro Transparente": "Used with Clear glass",
+  "Usado com o vidro Fosco": "Used with Frosted glass",
+  "Só funciona com o menisco desligado": "Only used when Meniscus is off",
+  "Exige saturação, escurecimento ou clareamento": "Needs saturation, darkening or brightening to be changed",
+  "Só funciona com o véu acima de 0": "Only used when the veil is above 0"
 }

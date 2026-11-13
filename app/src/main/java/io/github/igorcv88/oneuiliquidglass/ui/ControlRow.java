@@ -132,6 +132,18 @@ public final class ControlRow extends LinearLayout {
         }
     }
 
+    /** Brightening this far can wash out text the module still colours for the original backdrop. */
+    private boolean caution(String raw) {
+        if (!control.key.equals("sf.hclift") && !control.key.equals("sf.kclift")) return false;
+        try {
+            return Double.parseDouble(raw) >= LIFT_CAUTION;
+        } catch (NumberFormatException e) {
+            return false;
+        }
+    }
+
+    private static final double LIFT_CAUTION = 1;
+
     private void open() {
         host.openControl(control.key, surface);
     }
@@ -207,6 +219,11 @@ public final class ControlRow extends LinearLayout {
             color = t.warn;
         } else if (host.model().observedAvailable() && host.model().repo.conflict(control.spec())) {
             line = host.activity().getString(R.string.control_external_change);
+            color = t.warn;
+        }
+        if (usable && caution(raw)) {
+            String warning = host.activity().getString(R.string.control_caution_contrast);
+            line = line == null ? warning : line + " · " + warning;
             color = t.warn;
         }
         status.setText(line == null ? "" : line);

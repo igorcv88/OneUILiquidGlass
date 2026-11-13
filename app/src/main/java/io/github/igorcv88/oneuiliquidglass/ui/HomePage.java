@@ -33,6 +33,7 @@ public final class HomePage implements Page {
     private static final int[] LIVE_DESCRIPTIONS = {R.string.home_live_activity_desc, R.string.home_nowbar_desc, R.string.home_toast_desc};
     private final Map<String, Toggle> liveToggles = new LinkedHashMap<>();
     private final Map<String, LinearLayout> liveRows = new LinkedHashMap<>();
+    private final MaterialPanel material;
     private final TextView testResult;
     private final Toggle traceToggle;
     private final LinearLayout traceRow;
@@ -95,6 +96,9 @@ public final class HomePage implements Page {
 
         noticeSlot = Ui.column(a);
         content.addView(noticeSlot, Ui.match(t.dp(12), 0));
+
+        material = new MaterialPanel(host);
+        content.addView(material.view(), Ui.match(0, t.dp(4)));
 
         content.addView(Ui.section(a, t, a.getString(R.string.home_surfaces)));
         LinearLayout surfaces = Ui.card(a, t);
@@ -251,7 +255,7 @@ public final class HomePage implements Page {
             Ui.enable(tg, st.enabled);
             int changed = 0;
             for (Controls.Control c : Controls.all())
-                if (c.on(s) && Controls.editable(c.key) && c.tier != Controls.Tier.TECHNICAL && st.saved.containsKey(c.key) && st.changed(c.key)) changed++;
+                if (c.on(s) && Controls.editable(c.key) && c.tier != Controls.Tier.TECHNICAL && GlassMaterial.visible(c.key, s, st::shown) && st.saved.containsKey(c.key) && st.changed(c.key)) changed++;
             String sub = !st.enabled ? host.activity().getString(R.string.home_glass_off) : !on ? host.activity().getString(R.string.home_off) : changed == 0 ? host.activity().getString(R.string.home_default) : changed == 1 ? host.activity().getString(R.string.home_custom_one) : host.activity().getString(R.string.home_custom_many, changed);
             Ui.setSubtitle(rows.get(s), sub);
         }
@@ -273,6 +277,7 @@ public final class HomePage implements Page {
         Ui.setSubtitle(traceRow, !traceRequested ? host.activity().getString(R.string.home_off) : traceSync == AppModel.Sync.SYNCED
                 ? host.activity().getString(R.string.home_system_received) : traceSync == AppModel.Sync.WAITING
                 ? host.activity().getString(R.string.home_trace_enabling) : host.activity().getString(R.string.home_unconfirmed));
+        material.bind();
         notice(st, sync);
     }
 

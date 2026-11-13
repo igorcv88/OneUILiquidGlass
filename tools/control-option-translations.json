@@ -75,5 +75,11 @@
   "Textura sintética numerada": "Numbered synthetic texture",
   "Ultra": "Ultra",
   "Vidro padrão sem captura": "Standard glass without capture",
-  "Véu fixo": "Fixed veil"
+  "Véu fixo": "Fixed veil",
+  "Fosco": "Frosted",
+  "Aparência original": "The original look",
+  "Transparente (estilo iOS)": "Clear (iOS style)",
+  "Exige reiniciar o userspace": "Needs a userspace restart",
+  "Por cartão (avançado)": "Per card (advanced)",
+  "Definido fora do app": "Set outside the app"
 }

@@ -3,6 +3,7 @@ package io.github.igorcv88.oneuiliquidglass.ui;
 import android.content.Context;
 import io.github.igorcv88.oneuiliquidglass.R;
 import io.github.igorcv88.oneuiliquidglass.config.Controls;
+import io.github.igorcv88.oneuiliquidglass.config.GlassMaterial;
 import io.github.igorcv88.oneuiliquidglass.ui.preview.NotificationPreview;
 
 /** Localized names for structural UI elements. Stable identifiers remain in the model. */
@@ -28,6 +29,18 @@ final class UiLabels {
             case "per_card_blur": return c.getString(R.string.layer_card_blur);
             default: return key;
         }
+    }
+    static String material(Context c, GlassMaterial material) {
+        switch (material) {
+            case CLEAR: return c.getString(R.string.material_clear);
+            default: return c.getString(R.string.material_frosted);
+        }
+    }
+    /** A compositor selector value in words: a material, per card, or the raw value. */
+    static String selector(Context c, String raw) {
+        GlassMaterial material = GlassMaterial.ofSelector(raw);
+        if (material != null) return material(c, material);
+        return "2".equals(raw == null ? "" : raw.trim()) ? c.getString(R.string.material_per_card) : String.valueOf(raw);
     }
     static String backdrop(Context c, NotificationPreview.Backdrop backdrop) {
         switch (backdrop) {
