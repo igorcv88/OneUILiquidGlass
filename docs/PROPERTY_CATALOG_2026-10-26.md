@@ -183,27 +183,27 @@ Observar que as propriedades `lightglass` e `shadelightglass` se aplicam a super
 | `sf.norewrite` | 0 | 1 desativa a reescrita dos shaders ao compilar |
 | `sf.huclear` | 0 | Clear Glass experimental no heads-up (inteiro 0–2): 0 desligado, GLSL idêntico ao optics 11; 1 todos os cartões do perfil; 2 por cartão, pela fatia de força da tag |
 | `sf.kgclear` | 0 | Clear Glass experimental no bloqueio (inteiro 0–2): 0 desligado, GLSL idêntico ao optics 11; 1 todos os cartões do perfil; 2 por cartão, pela fatia de força da tag |
-| `sf.hcband` | 0.85 | Clear Glass heads-up: largura da banda de refração (fração do raio do canto, 0.42–1) |
+| `sf.hcband` | 0.42 | Clear Glass heads-up: largura da banda de refração (fração do raio do canto, 0.42–1) |
 | `sf.hcamp` | 0.40 | Clear Glass heads-up: teto da amplitude da refração na borda (0–0.5; o compositor ainda limita por σ ≥ 0.25) |
-| `sf.hcbody` | 0.06 | Clear Glass heads-up: domo λ0 da refração do corpo (0–0.15) |
+| `sf.hcbody` | 0 | Clear Glass heads-up: domo λ0 da refração do corpo (0–0.15) |
 | `sf.hcbody2` | 0 | Clear Glass heads-up: domo cúbico λ2 (0–0.05; λ0 + 3λ2 acima de 0.45 volta ao padrão) |
-| `sf.hcedge` | 4 | Clear Glass heads-up: raio do blur no contorno em px (0–48; acima do miolo é reduzido ao miolo) |
+| `sf.hcedge` | 24 | Clear Glass heads-up: raio do blur no contorno em px (0–48; acima do miolo é reduzido ao miolo) |
 | `sf.hccore` | 24 | Clear Glass heads-up: raio do blur depois da banda em px (0–48) |
 | `sf.hcblurexp` | 2 | Clear Glass heads-up: expoente da subida do blur (1–4) |
-| `sf.hcfold` | 0 | Clear Glass heads-up: menisco, amplitude sobre a banda (0–3; 0 mantém a laje do optics 12) |
-| `sf.hcsat` | 1 | Clear Glass heads-up: saturação do corpo (0.9–2) |
+| `sf.hcfold` | 2 | Clear Glass heads-up: menisco, amplitude sobre a banda (0–3; 0 mantém a laje do optics 12) |
+| `sf.hcsat` | 1.05 | Clear Glass heads-up: saturação do corpo (0.9–2) |
 | `sf.hcscrim` | 0 | Clear Glass heads-up: escurecimento sobre fundo preto (0–0.6) |
-| `sf.hcadapt` | 0 | Clear Glass heads-up: blur adaptativo, parcela do blur largo onde sobra estrutura grande (0–1; 0 desliga) |
-| `sf.kcfold` | 0 | Clear Glass lockscreen: menisco, amplitude sobre a banda (0–3; 0 mantém a laje do optics 12) |
-| `sf.hclift` | 0 | Clear Glass heads-up: clareamento do corpo, 1 − (1 − c)^(1 + lift) (0–2; 0 desliga) |
+| `sf.hcadapt` | 1 | Clear Glass heads-up: blur adaptativo, parcela do blur largo onde sobra estrutura grande (0–1; 0 desliga) |
+| `sf.kcfold` | 2 | Clear Glass lockscreen: menisco, amplitude sobre a banda (0–3; 0 mantém a laje do optics 12) |
+| `sf.hclift` | 0.30 | Clear Glass heads-up: clareamento do corpo, 1 − (1 − c)^(1 + lift) (0–2; 0 desliga) |
 | `sf.kclift` | 0 | Clear Glass lockscreen: clareamento do corpo, 1 − (1 − c)^(1 + lift) (0–2; 0 desliga) |
 | `sf.hcneutral` | 0.75 | Clear Glass heads-up: neutralização dos quase-brancos do material (0–1; só age com o material ativo) |
 | `sf.hcscrimmax` | 0 | Clear Glass heads-up: escurecimento sobre fundo branco (0–0.8; limitado a scrim + (1 − scrim)/2) |
-| `sf.kcband` | 0.85 | Clear Glass bloqueio: largura da banda de refração (fração do raio do canto, 0.42–1) |
+| `sf.kcband` | 0.42 | Clear Glass bloqueio: largura da banda de refração (fração do raio do canto, 0.42–1) |
 | `sf.kcamp` | 0.40 | Clear Glass bloqueio: teto da amplitude da refração na borda (0–0.5; o compositor ainda limita por σ ≥ 0.25) |
-| `sf.kcbody` | 0.05 | Clear Glass bloqueio: domo λ0 da refração do corpo (0–0.15) |
+| `sf.kcbody` | 0 | Clear Glass bloqueio: domo λ0 da refração do corpo (0–0.15) |
 | `sf.kcbody2` | 0 | Clear Glass bloqueio: domo cúbico λ2 (0–0.05; λ0 + 3λ2 acima de 0.45 volta ao padrão) |
-| `sf.kcedge` | 4 | Clear Glass bloqueio: raio do blur no contorno em px (0–48; acima do miolo é reduzido ao miolo) |
+| `sf.kcedge` | 24 | Clear Glass bloqueio: raio do blur no contorno em px (0–48; acima do miolo é reduzido ao miolo) |
 | `sf.kccore` | 24 | Clear Glass bloqueio: raio do blur depois da banda em px (0–48) |
 | `sf.kcblurexp` | 2 | Clear Glass bloqueio: expoente da subida do blur (1–4) |
 | `sf.kcveil` | 0.04 | Clear Glass bloqueio: peso do véu aditivo em direção ao nível (0–0.2) |
@@ -275,4 +275,4 @@ Controles `qs.*` são lidos pelo snapshot `QsStyle` em callbacks de configuraç�
 | `qs.track` | .88 | 0.10–1 | Legado sem efeito visual; preservado para importar e exportar perfis |
 | `qs.fill` | .85 | 0.10–1 | Espessura do preenchimento branco dentro da cápsula; a mesma margem vale nas pontas |
 | `qs.lightstyle` | light | enum obsidian/light | Legado sem efeito visual; ambos usam vidro translúcido e tinta adaptativa |
-| `sf.qslight` | 0.90 | 0–2 | Quick Settings: luz que entra pelo contorno conforme o fundo ali (0 desliga) |
+| `sf.qslight` | 0.90 | QS: ganho de luz na borda, padrão nativo ligado em Frosted e Clear. Somente leitura no aplicativo; override de desenvolvedor por Termux/su (setprops qslight=0–2) e reinício para recompilar. | Quick Settings: luz que entra pelo contorno conforme o fundo ali (0 desliga) |
