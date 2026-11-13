@@ -835,9 +835,10 @@ public final class Controls {
                         + " mesma margem vale nas pontas e no mínimo ela fica um círculo. O valor do"
                         + " brilho ou do volume não muda.")
                 .show(BEHAV, Channel.NONE));
-        put(c("sf.qslight", "Luz pela borda").fmt(Format.GAIN).in(QS, ADV).on(SH)
-                .help("Luz que entra pelo contorno das cápsulas, vinda do fundo logo atrás: escuro"
-                        + " não acende nada, claro entra mais fundo. 0 desliga." + restart)
+        put(c("sf.qslight", "Luz pela borda").fmt(Format.READONLY).in(QS, ADV).on(SH)
+                .help("Luz do compositor nas bordas dos controles rápidos. Padrão 0,90 em Frosted"
+                        + " e Clear. Somente leitura no aplicativo; ajuste de desenvolvedor via"
+                        + " su/Termux (qslight=0–2) e recompilação do shader.")
                 .show(BEHAV, Channel.NONE));
         put(c("sf.qslens", "Refração da borda").fmt(Format.PERCENT_1).in(QS, ADV).on(SH)
                 .help("Refração do fundo junto ao contorno das cápsulas, mais forte na borda e"
