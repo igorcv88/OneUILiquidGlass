@@ -14,6 +14,12 @@
 // plus the range checks of oulg_fix_clear and the generated library's size against its buffer in
 // every mode/profile/debug/external combination (>= 25 % headroom) and the text invariance of the
 // glow, light, edge, tone, disc and B-spline functions (I4).
+// Meniscus (heads-up, fold > 0), a second twin (OULG_FS_MENISCUS_FIELD_FMT), which folds by design:
+//  M1  every sample stays inside the card and never moves outward;
+//  M2  the shift and its slope vanish at depth = band;
+//  M3  on a straight edge the source depth has one minimum, at band (1 - 1 / sqrt(1 + (a / band)^2));
+//  M4  the outline samples a px inside (a = min(fold band, cap min(hs)));
+// and the heads-up clear material: neutral defaults, ranges, output luma increasing with the backdrop's.
 // Build: cc -std=c99 -O2 -I.. -o cc clear_check.c -lm
 #include <math.h>
 #include "refract.h"
@@ -386,8 +392,166 @@ static void text_invariance(void) {
     printf("I4 glow, light cases, edge, tone, discs and B-spline: identical text in all 9 mode pairs\n");
 }
 
+// ---- Meniscus (heads-up, fold > 0) and the heads-up clear material ----
+struct mcfg { double beta, fold, cap, l0, l2, rho, be, bc, bexp; };
+
+// Twin of OULG_FS_MENISCUS_FIELD_FMT, times the profile's global refraction scale.
+static void field_meniscus(double qx, double qy, double hx, double hy, double r, const struct mcfg *c, double s[2], double *br) {
+    double wx = fabs(qx) - (hx - r), wy = fabs(qy) - (hy - r);
+    double vx = fmax(wx, 0), vy = fmax(wy, 0), l = sqrt(vx * vx + vy * vy);
+    double bevel = clampd(r * 0.42, 16, 56), band = clampd(c->beta * r, bevel, r);
+    double depth = r - l - fmin(fmax(wx, wy), 0);
+    double sb = smootherd(0, band, depth);
+    *br = c->be + (c->bc - c->be) * (sb > 0 ? pow(sb, c->bexp) : 0);
+    double R = fmin(hx, hy), ux = qx / fmax(hx, 1), uy = qy / fmax(hy, 1);
+    s[0] = -R * ux * (c->l0 + c->l2 * ux * ux);
+    s[1] = -R * uy * (c->l0 + c->l2 * uy * uy);
+    if (l > 0 && depth > 0 && depth < band) {
+        double x = 1 - depth / band, a = fmin(c->fold * band, c->cap * R), mag = a * (1 - sqrt(fmax(1 - x * x, 0)));
+        s[0] -= vx / l * signd(qx) * mag;
+        s[1] -= vy / l * signd(qy) * mag;
+    }
+    s[0] *= c->rho; s[1] *= c->rho;
+}
+static double mcap_of(double l0, double l2, double rho) {
+    struct oulg_clear c = OULG_CLEAR_DEFAULT;
+    c.body[0] = (float) l0; c.body2[0] = (float) l2;
+    return (double) (long) (oulg_meniscus_cap(&c, rho) * 1e4) / 1e4;
+}
+
+// M1: no sample leaves the card or moves outward, over shapes x band x fold x dome x rho.
+static void m1(void) {
+    static const double betas[] = {0.42, 0.85, 1.0}, folds[] = {0.5, 1, 2, 3}, domes[][2] = {{0, 0}, {0.06, 0}, {0.15, 0.05}},
+                        rhos[] = {0.8, 1.0, 1.2};
+    long n = 0; double inward = 1e9, deepest = 0;
+    for (int bi = 0; bi < 3; bi++) for (int fi = 0; fi < 4; fi++) for (int di = 0; di < 3; di++) for (int ri = 0; ri < 3; ri++) {
+        struct mcfg c = {betas[bi], folds[fi], mcap_of(domes[di][0], domes[di][1], rhos[ri]), domes[di][0], domes[di][1], rhos[ri], 24, 24, 1};
+        for (int si = 0; si < NSHAPES; si++) {
+            double hx = SHAPES[si][0] / 2, hy = SHAPES[si][1] / 2, r = fmin(SHAPES[si][2], hy);
+            for (double qy = -hy + 0.31; qy < hy; qy += 1.93) for (double qx = -hx + 0.17; qx < hx; qx += 1.93) {
+                double d = depth_of(qx, qy, hx, hy, r);
+                if (d <= 0.05) continue;
+                double s[2], br;
+                field_meniscus(qx, qy, hx, hy, r, &c, s, &br); n++;
+                double d2 = depth_of(qx + s[0], qy + s[1], hx, hy, r);
+                CHECK(d2 > 0, "M1 sample outside the card (depth %.3f) at (%.2f,%.2f) shape %d beta %.2f fold %.1f rho %.1f", d2, qx, qy, si, c.beta, c.fold, c.rho);
+                CHECK(d2 >= d - 1e-9, "M1 sample outward by %.3g px at (%.2f,%.2f) shape %d beta %.2f fold %.1f l0 %.2f rho %.1f", d - d2, qx, qy, si, c.beta, c.fold, c.l0, c.rho);
+                CHECK(fabs(qx + s[0]) <= hx && fabs(qy + s[1]) <= hy, "M1 sample beyond the box of the card");
+                inward = fmin(inward, d2 - d);
+                deepest = fmax(deepest, hypot(s[0], s[1]) / fmin(hx, hy));
+            }
+        }
+    }
+    printf("M1 meniscus samples: %ld points over 108 parameter sets x %d shapes; all inside the card, min depth(q+F) - depth(q) = %+.4f px, "
+           "largest |F| / min(hs) = %.3f\n", n, NSHAPES, inward, deepest);
+}
+
+// M2/M3/M4 on the straight top edge (qx = 0), where the map is one-dimensional in depth.
+static void m2_m3_m4(void) {
+    static const double folds[] = {0.5, 1, 2, 3};
+    double worstC1 = 0, worstFold = 0, worstRim = 0, worstC0 = 0;
+    for (int si = 0; si < NSHAPES; si++) for (int fi = 0; fi < 4; fi++) for (int bi = 0; bi < 2; bi++) {
+        struct mcfg c = {bi ? 0.85 : 0.42, folds[fi], mcap_of(0, 0, 1), 0, 0, 1, 24, 24, 1};
+        double hx = SHAPES[si][0] / 2, hy = SHAPES[si][1] / 2, r = fmin(SHAPES[si][2], hy);
+        double bevel = clampd(r * 0.42, 16, 56), band = clampd(c.beta * r, bevel, r), a = fmin(c.fold * band, c.cap * fmin(hx, hy));
+        double s[2], t[2], br;
+        // M2: the shift and its slope vanish at depth = band (C1), and the shift is continuous there.
+        if (band < hy - 0.05) {
+            field_meniscus(0, -hy + band - 0.01, hx, hy, r, &c, s, &br); field_meniscus(0, -hy + band - 0.02, hx, hy, r, &c, t, &br);
+            worstC0 = fmax(worstC0, fabs(s[1]));
+            worstC1 = fmax(worstC1, fabs(s[1] - t[1]) / 0.01);
+        }
+        // M4: at the outline the sample is a px inside.
+        field_meniscus(0, -hy + 1e-10, hx, hy, r, &c, s, &br);  // the profile is vertical at the outline: stay very close
+        worstRim = fmax(worstRim, fabs(s[1] - a));
+        // M3: the source depth falls to one minimum at band (1 - 1 / sqrt(1 + (a / band)^2)), then rises.
+        double best = 1e9, at = 0, prev = 1e9; int rising = 0, turns = 0;
+        for (double d = 0.005; d < band; d += 0.01) {
+            field_meniscus(0, -hy + d, hx, hy, r, &c, s, &br);
+            double src = d + s[1];
+            if (src < best) { best = src; at = d; }
+            if (rising && src < prev - 1e-9) turns++;
+            if (src > prev + 1e-9) rising = 1;
+            prev = src;
+        }
+        double want = band * (1 - 1 / sqrt(1 + (a / band) * (a / band)));
+        CHECK(fabs(at - want) < 0.03, "M3 fold at depth %.3f, expected %.3f (shape %d fold %.1f band %.1f a %.1f)", at, want, si, c.fold, band, a);
+        CHECK(turns == 0, "M3 source depth turns %d more times after the fold (shape %d fold %.1f)", turns, si, c.fold);
+        worstFold = fmax(worstFold, fabs(at - want));
+    }
+    CHECK(worstC0 < 1e-5, "M2 shift at depth = band %.2e px", worstC0);
+    CHECK(worstC1 < 2e-3, "M2 slope at depth = band %.2e", worstC1);
+    CHECK(worstRim < 1e-3, "M4 outline shift differs from a by %.2e px", worstRim);
+    // The two shapes the proposal is sized for (printed): the heads-up card and a 2 x band pill.
+    static const double shown[2][3] = {{1340, 374, 108}, {1340, 216, 108}};
+    for (int i = 0; i < 2; i++) {
+        double hy = shown[i][1] / 2, r = fmin(shown[i][2], hy), band = clampd(0.42 * r, clampd(r * 0.42, 16, 56), r);
+        double a = fmin(2.0 * band, mcap_of(0, 0, 1) * hy), f = band * (1 - 1 / sqrt(1 + (a / band) * (a / band)));
+        printf("M3 card %.0fx%.0f r %.0f, band 0.42, fold 2: band %.1f px, a %.1f px, mirrored rim %.1f px, stretched zone %.1f px\n",
+               shown[i][0], shown[i][1], r, band, a, f, band - f);
+    }
+    printf("M2 C1 at depth = band: |shift| <= %.1e px, |slope| <= %.1e; M3 fold depth within %.3f px of band (1 - 1/sqrt(1 + (a/band)^2)), "
+           "one minimum; M4 outline shift = a within %.1e px\n", worstC0, worstC1, worstFold, worstRim);
+}
+
+// The heads-up clear material: ranges, the monotone bound and the luma it outputs.
+static void hu_material(void) {
+    struct oulg_clear c = OULG_CLEAR_DEFAULT, d = OULG_CLEAR_DEFAULT;
+    CHECK(d.fold == 0 && d.hsat == 1 && d.scrim == 0 && d.scrimmax == 0, "hu material: defaults are not neutral");
+    c.mode[0] = 1;
+    CHECK(!oulg_hu_material_on(&c), "hu material: emitted with neutral values");
+    c.fold = 3.1f; c.hsat = 2.1f; c.scrim = 0.61f; c.scrimmax = 0.81f; oulg_fix_clear(&c);
+    CHECK(c.fold == 0 && c.hsat == 1 && c.scrim == 0 && c.scrimmax == 0, "hu material: out-of-range values kept");
+    c.fold = NAN; c.hsat = NAN; c.scrim = NAN; c.scrimmax = NAN; oulg_fix_clear(&c);
+    CHECK(c.fold == 0 && c.hsat == 1 && c.scrim == 0 && c.scrimmax == 0, "hu material: NaN kept");
+    c.scrim = 0.3f; c.scrimmax = 0.1f; oulg_fix_clear(&c);
+    CHECK(c.scrimmax == c.scrim, "hu material: scrimmax below scrim not raised");
+    double worst = 1e9;
+    for (double lo = 0; lo <= 0.6001; lo += 0.05) for (double hi = 0; hi <= 0.8001; hi += 0.05) {
+        struct oulg_clear e = OULG_CLEAR_DEFAULT; e.scrim = (float) lo; e.scrimmax = (float) hi; oulg_fix_clear(&e);
+        double prev = -1;
+        for (double y = 0; y <= 1.0001; y += 0.001) {
+            double out = y * (1 - (e.scrim + (e.scrimmax - e.scrim) * y));
+            CHECK(out >= prev - 1e-9, "hu material: luma falls at y %.3f (scrim %.2f, scrimmax %.2f)", y, e.scrim, e.scrimmax);
+            if (prev >= 0) worst = fmin(worst, (out - prev) / 0.001);
+            prev = out;
+        }
+    }
+    struct oulg_clear s = OULG_CLEAR_DEFAULT; s.mode[0] = 1; s.hsat = 1.5f; s.scrim = 0.12f; s.scrimmax = 0.5f; oulg_fix_clear(&s);
+    CHECK(s.scrim == 0.12f && s.scrimmax == 0.5f && oulg_hu_material_on(&s), "hu material: the reference values were changed");
+    printf("hu material: neutral by default, ranges and NaN checked, output luma never falls as y rises (smallest slope %.3f); "
+           "scrim 0.12-0.50 leaves white at %.2f and mid grey 0.50 at %.3f\n", worst, 1 - 0.5, 0.5 * (1 - (0.12 + 0.38 * 0.5)));
+}
+
+// Sizes and text with the meniscus and the heads-up material compiled.
+static void meniscus_text(void) {
+    char *buf = malloc(1 << 17), *ref = malloc(1 << 17); size_t most = 0;
+    struct oulg_profile p[OULG_PROFILES] = {OULG_PROFILES_DEFAULT[0], OULG_PROFILES_DEFAULT[1], OULG_PROFILES_DEFAULT[2], OULG_PROFILES_DEFAULT[3]};
+    p[0].bloom = 1.5f;
+    for (int hu = 0; hu < 3; hu++) for (int kg = 0; kg < 3; kg++) for (int dbg = 0; dbg <= 4; dbg++) for (int ext = 0; ext < 2; ext++) {
+        struct oulg_clear c = OULG_CLEAR_DEFAULT; c.mode[0] = hu; c.mode[1] = kg; c.fold = 2; c.hsat = 1.5f; c.scrim = 0.12f; c.scrimmax = 0.5f;
+        CHECK(oulg_lib(buf, 1 << 17, ext, dbg, p, &c), "meniscus: library failed hu %d kg %d debug %d ext %d", hu, kg, dbg, ext);
+        size_t n = strlen(buf), cap = oulg_lib_cap(dbg, &c);
+        CHECK(n * 4 <= cap * 3, "meniscus size: hu %d kg %d debug %d ext %d uses %zu of %zu", hu, kg, dbg, ext, n, cap);
+        if (hu && n > most) most = n;
+        int field = strstr(buf, "sqrt(max(1.0 - x * x, 0.0))") != NULL, mat = strstr(buf, "mediump vec4 oulg_material_hu(") != NULL;
+        int routed = strstr(buf, "return oulg_cl > 0.5 ? oulg_material_hu(c) : c;") != NULL;
+        CHECK(field == (hu != 0), "meniscus field presence wrong: hu %d kg %d debug %d ext %d", hu, kg, dbg, ext);
+        CHECK(mat == (hu != 0 && !ext) && routed == mat, "hu material presence wrong: hu %d kg %d debug %d ext %d", hu, kg, dbg, ext);
+        // With the heads-up off, the text is the one the same modes give without these parameters.
+        if (!hu) {
+            struct oulg_clear z = OULG_CLEAR_DEFAULT; z.mode[1] = kg;
+            oulg_lib(ref, 1 << 17, ext, dbg, p, &z);
+            CHECK(strcmp(ref, buf) == 0, "meniscus parameters changed the text with the heads-up off (kg %d debug %d ext %d)", kg, dbg, ext);
+        }
+    }
+    printf("meniscus text: field and material only in heads-up clear programs; largest library with both %zu of 32768 bytes\n", most);
+    free(buf); free(ref);
+}
+
 int main(void) {
     u1_u2(); u3_u4(); u5(); u6(); u7(); u8(); fix_ranges(); sizes(); text_invariance();
+    m1(); m2_m3_m4(); hu_material(); meniscus_text();
     if (fails) { printf("clear_check: %d FAILURES\n", fails); return 1; }
     printf("clear_check: all checks passed\n");
     return 0;

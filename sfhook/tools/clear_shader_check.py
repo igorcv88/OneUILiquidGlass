@@ -10,7 +10,11 @@ usage: clear_shader_check.py <refract_check binary> <dump> <work dir>
    fragment rewrite compiles and links with glslangValidator (vertex rewrite and its zero fallback);
  - the main() block is unchanged by Clear Glass (byte-equal suffix from "void main() {"), and its
    size keeps >= 25 % headroom in the fixed 2048-byte buffer;
- - mode isolation in the text: an off profile emits no clear function; mode 2 compiles the tag test.
+ - mode isolation in the text: an off profile emits no clear function; mode 2 compiles the tag test;
+ - I2: with the meniscus and the heads-up material off (not set, or their neutral values), the clear
+   output is byte for byte that of optics 12 at 25acdc7 (hashes in testdata/optics12_golden);
+ - the meniscus (hcfold > 0) and the heads-up material compile and link in every heads-up mode, appear
+   only in heads-up clear programs, and leave main() unchanged.
 """
 import hashlib
 import itertools
@@ -94,6 +98,49 @@ for hu, kg in itertools.product((0, 1, 2), repeat=2):
                     if r.returncode:
                         fails.append(f"link {vert} + {frag}: {r.stdout[-400:]}")
             compiled += 1
+# I2: the optics-12 clear text is unchanged while the meniscus and the heads-up material are off.
+golden12 = golden.parent / "optics12_golden"
+for hu, kg, debug in itertools.product((0, 1, 2), (0, 1, 2), (0, 3)):
+    path = golden12 / f"m{hu}{kg}_d{debug}.sha256"
+    if not path.exists():
+        continue
+    want = dict(reversed(l.split()) for l in path.read_text().split("\n") if l.strip())
+    for name, args in (("unset", ""), ("neutral", ",hcfold=0,hcsat=1,hcscrim=0,hcscrimmax=0"), ("invalid", ",hcfold=9,hcsat=NaN,hcscrim=-1")):
+        out = gen(f"i2_{name}_{hu}{kg}_{debug}", debug, f"huclear={hu},kgclear={kg}{args}")
+        got = {q.name: sha(q) for q in out.glob("mod_*")}
+        if got != want:
+            fails.append(f"I2 hu {hu} kg {kg} debug {debug} ({name}): " + ", ".join(sorted(k for k in set(got) | set(want) if got.get(k) != want.get(k))))
+print("I2: with the meniscus and heads-up material unset, neutral or invalid, clear output is byte-identical to optics 12 (25acdc7)"
+      if not any(f.startswith("I2") for f in fails) else "I2: FAILED")
+
+# Meniscus and heads-up material.
+meniscus = 0
+for hu, kg in itertools.product((0, 1, 2), repeat=2):
+    for debug in range(5):
+        out = gen(f"men{hu}{kg}_d{debug}", debug, f"huclear={hu},kgclear={kg},hcband=0.42,hcfold=2,hcedge=24,hccore=24,hcsat=1.5,hcscrim=0.12,hcscrimmax=0.5")
+        base = ref[1 if debug == 1 else 0]
+        for frag in sorted(out.glob("mod_*.frag")):
+            text = frag.read_text()
+            external = "samplerExternalOES" in text
+            if suffix(text) != suffix((base / frag.name).read_text()):
+                fails.append(f"meniscus changed main(): hu {hu} kg {kg} debug {debug} {frag.name}")
+            if ("sqrt(max(1.0 - x * x, 0.0))" in text) != bool(hu):
+                fails.append(f"meniscus field presence wrong: hu {hu} kg {kg} {frag.name}")
+            if ("oulg_material_hu(" in text) != bool(hu and not external):
+                fails.append(f"heads-up material presence wrong: hu {hu} kg {kg} {frag.name}")
+            if not hu and not kg and debug in (0, 1) and text != (ref[debug] / frag.name).read_text():
+                fails.append(f"meniscus parameters changed an off program: debug {debug} {frag.name}")
+            r = subprocess.run(["glslangValidator", "-S", "frag", str(frag)], capture_output=True, text=True)
+            if r.returncode:
+                fails.append(f"compile {frag}: {r.stdout[-400:]}")
+            if "voulg_tag" in text:
+                for vert in ("mod_001.vert", "min_001.vert"):
+                    r = subprocess.run(["glslangValidator", "-l", str(out / vert), str(frag)], capture_output=True, text=True)
+                    if r.returncode:
+                        fails.append(f"link {vert} + {frag}: {r.stdout[-400:]}")
+            meniscus += 1
+print(f"meniscus: {meniscus} fragment rewrites (9 mode pairs x debug 0-4, fold 2, sat 1.5, scrim 0.12-0.50) compile and link; "
+      "main() unchanged; field and material only where the heads-up is clear")
 for d in (0, 1):
     for frag in ref[d].glob("mod_*.frag"):
         text = frag.read_text()

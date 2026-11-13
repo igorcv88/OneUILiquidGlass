@@ -9,7 +9,7 @@
 // qsfloor, qscap, qslens and qsbody profile 3's; hulight, kglight and shadelight the edge light gain of
 // profiles 0, 1 and 2 (0: none), kgdepth the KG inward-veil maximum reach (px), not rim width;
 // huclear/kgclear (0, 1, 2) select Clear Glass and hc<name>/kc<name> set its parameters (band amp body
-// body2 edge core blurexp; kc only: veil level dim knee sat cool). Build:
+// body2 edge core blurexp; kc only: veil level dim knee sat cool; hc only: fold sat scrim scrimmax). Build:
 // gcc -I.. -o rc refract_check.c
 #include "refract.h"
 static void put(const char *dir, const char *kind, int idx, const char *ext, const char *text) {
@@ -25,6 +25,8 @@ static void clear_key(struct oulg_clear *c, int i, const char *k, float v) {
     else if (i == 1 && !strcmp(k, "veil")) c->veil = v; else if (i == 1 && !strcmp(k, "level")) c->level = v;
     else if (i == 1 && !strcmp(k, "dim")) c->dim = v; else if (i == 1 && !strcmp(k, "knee")) c->knee = v;
     else if (i == 1 && !strcmp(k, "sat")) c->sat = v; else if (i == 1 && !strcmp(k, "cool")) c->cool = v;
+    else if (i == 0 && !strcmp(k, "fold")) c->fold = v; else if (i == 0 && !strcmp(k, "sat")) c->hsat = v;
+    else if (i == 0 && !strcmp(k, "scrim")) c->scrim = v; else if (i == 0 && !strcmp(k, "scrimmax")) c->scrimmax = v;
 }
 int main(int argc, char **argv) {
     int dbg = argc > 3 ? atoi(argv[3]) : 1;
