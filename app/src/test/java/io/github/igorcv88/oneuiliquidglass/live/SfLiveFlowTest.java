@@ -133,19 +133,19 @@ public final class SfLiveFlowTest {
     public void oldDecimalNotationIsConfirmedAndAdoptedCanonicallyBeforeRestart() throws Exception {
         Fake fake = new Fake().add(0, status("0", "1", "0"))
                 .add(0, status("0", "1", "0")).add(0, "restart=started\n");
-        fake.props.add(new SfLiveFlow.Reply(0, "set_qslight=0.9\nsetprops=ok\n"));
+        fake.props.add(new SfLiveFlow.Reply(0, "set_qsbody=0.9\nsetprops=ok\n"));
         List<Map<String, String>> adopted = new ArrayList<>();
-        new SfLiveFlow(fake).applyAndRestart(Collections.singletonMap("sf.qslight", ".90"), adopted::add);
-        assertEquals(Arrays.asList("STATUS", "SETPROPS {sf.qslight=0.9}",
+        new SfLiveFlow(fake).applyAndRestart(Collections.singletonMap("sf.qsbody", ".90"), adopted::add);
+        assertEquals(Arrays.asList("STATUS", "SETPROPS {sf.qsbody=0.9}",
                 "STATUS", "RESTART rewrite"), fake.calls);
-        assertEquals(Collections.singletonMap("sf.qslight", "0.9"), adopted.get(0));
+        assertEquals(Collections.singletonMap("sf.qsbody", "0.9"), adopted.get(0));
     }
 
     @Test
     public void invalidInputStopsBeforeAnyRootRequestOrRestart() {
         Fake fake = new Fake();
         assertThrows(IllegalArgumentException.class, () -> new SfLiveFlow(fake)
-                .applyAndRestart(Collections.singletonMap("sf.qslight", ".90; reboot")));
+                .applyAndRestart(Collections.singletonMap("sf.qsbody", ".90; reboot")));
         assertTrue(fake.calls.isEmpty());
     }
 
