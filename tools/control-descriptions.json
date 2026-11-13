@@ -407,8 +407,8 @@
     "Ajusta a luz do fundo que entra pelas bordas dos cartões da central."
   ],
   "sf.qslight": [
-    "Adjusts background light entering Quick Settings capsule edges.",
-    "Ajusta a luz do fundo que entra pelas bordas das cápsulas da central de controle."
+    "Developer-only edge-light gain for Quick Settings; 0.90 is on by default in Frosted and Clear. Read-only here; change with root/Termux.",
+    "Ganho de luz das bordas dos controles rápidos; 0,90 é o padrão ligado em Frosted e Clear. Somente leitura aqui; ajuste pelo Termux com root."
   ],
   "sf.qslens": [
     "Adjusts background refraction near Quick Settings capsule edges.",

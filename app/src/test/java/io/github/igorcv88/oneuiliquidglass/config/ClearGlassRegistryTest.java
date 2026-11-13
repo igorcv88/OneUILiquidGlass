@@ -36,21 +36,21 @@ public class ClearGlassRegistryTest {
         spec("sf.huclear", "INT", "0", "0", "2");
         spec("sf.kgclear", "INT", "0", "0", "2");
         for (String p : new String[] {"sf.hc", "sf.kc"}) {
-            spec(p + "band", "FLOAT", "0.85", "0.42", "1");
+            spec(p + "band", "FLOAT", "0.42", "0.42", "1");
             spec(p + "amp", "FLOAT", "0.40", "0", "0.5");
-            spec(p + "body", "FLOAT", p.equals("sf.hc") ? "0.06" : "0.05", "0", "0.15");
+            spec(p + "body", "FLOAT", "0", "0", "0.15");
             spec(p + "body2", "FLOAT", "0", "0", "0.05");
-            spec(p + "edge", "FLOAT", "4", "0", "48");
+            spec(p + "edge", "FLOAT", "24", "0", "48");
             spec(p + "core", "FLOAT", "24", "0", "48");
             spec(p + "blurexp", "FLOAT", "2", "1", "4");
         }
-        spec("sf.hcfold", "FLOAT", "0", "0", "3");
-        spec("sf.hcsat", "FLOAT", "1", "0.9", "2");
+        spec("sf.hcfold", "FLOAT", "2", "0", "3");
+        spec("sf.hcsat", "FLOAT", "1.05", "0.9", "2");
         spec("sf.hcscrim", "FLOAT", "0", "0", "0.6");
         spec("sf.hcscrimmax", "FLOAT", "0", "0", "0.8");
-        spec("sf.hcadapt", "FLOAT", "0", "0", "1");
-        spec("sf.kcfold", "FLOAT", "0", "0", "3");
-        spec("sf.hclift", "FLOAT", "0", "0", "2");
+        spec("sf.hcadapt", "FLOAT", "1", "0", "1");
+        spec("sf.kcfold", "FLOAT", "2", "0", "3");
+        spec("sf.hclift", "FLOAT", "0.30", "0", "2");
         spec("sf.kclift", "FLOAT", "0", "0", "2");
         spec("sf.hcneutral", "FLOAT", "0.75", "0", "1");
         spec("sf.kcveil", "FLOAT", "0.04", "0", "0.2");

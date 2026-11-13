@@ -44,7 +44,7 @@ public class SettingsRegistryTest {
     public void everyDefaultPassesAndReadonlyCannotBeWritten() {
         for (SettingSpec spec : SettingsRegistry.all()) {
             if (spec.type == SettingSpec.Type.READONLY) {
-                assertTrue(spec.key, spec.key.equals("sf.optics") || spec.key.equals("sf.clear"));
+                assertTrue(spec.key, spec.key.equals("sf.optics") || spec.key.equals("sf.clear") || spec.key.equals("sf.qslight"));
                 try {
                     spec.validate("9");
                     fail();
@@ -116,6 +116,14 @@ public class SettingsRegistryTest {
         assertEquals("60", SettingsRegistry.get("liveshaderadius").defaultValue);
         assertEquals("1", SettingsRegistry.get("sf.kgfixedrim").defaultValue);
         assertEquals("1", SettingsRegistry.get("kgsharedoptics").defaultValue);
+        SettingSpec qs = SettingsRegistry.get("sf.qslight");
+        assertEquals("0.90", qs.defaultValue);
+        assertEquals(SettingSpec.Type.READONLY, qs.type);
+        assertEquals(SettingSpec.ApplyMode.READONLY, qs.applyMode);
+        assertEquals("0.30", SettingsRegistry.get("sf.hclift").defaultValue);
+        assertEquals("2", SettingsRegistry.get("sf.hcfold").defaultValue);
+        assertEquals("2", SettingsRegistry.get("sf.kcfold").defaultValue);
+        assertEquals("1", SettingsRegistry.get("sf.hcadapt").defaultValue);
     }
 
     @Test

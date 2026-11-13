@@ -507,7 +507,7 @@ struct oulg_profile { float core; int taps; float ramp; float sat; float tone; f
 // on the light entering. Black adds nothing; a mid-grey (0.5) ~0.42 at the outline, decaying over
 // ~5.5 px; white the cap, over 18 px. Refraction strength (slab A, at most 1.8x magnification at
 // 0.30) and the refracted backdrop's opacity at the outline.
-#define OULG_QS_LIGHT_DEFAULT 0.0f // APK AGSL owns the contour; SF owns refraction.
+#define OULG_QS_LIGHT_DEFAULT 0.90f // Approved gain in Frosted and Clear; manual Termux overrides remain available.
 #define OULG_QS_LWIDTH_DEFAULT 18.0f
 #define OULG_QS_LFLOOR_DEFAULT 0.06f
 #define OULG_QS_LCAP_DEFAULT 0.60f
@@ -756,12 +756,16 @@ struct oulg_clear {
     float lift[2];                                  // positive tone map of the body (0 = none)
     float neutral;                                  // profile 0: near-white neutralisation strength
 };
+// The approved visual defaults apply ONLY when each Clear selector opts in. Mode selectors
+// remain off by default (Frosted unchanged). Valid debug.oulg.sf.* overrides take precedence.
+// HU: meniscus, uniform 24px diffusion, adaptive body, sat 1.05 and lift 0.30.
+// KG: meniscus, 24px diffusion; keeps the existing Clear material and neutral lift.
 static const struct oulg_clear OULG_CLEAR_DEFAULT = {
-    {0, 0}, {0.85f, 0.85f}, {0.40f, 0.40f}, {0.06f, 0.05f}, {0.0f, 0.0f},
-    {4.0f, 4.0f}, {24.0f, 24.0f}, {2.0f, 2.0f},
+    {0, 0}, {0.42f, 0.42f}, {0.40f, 0.40f}, {0.0f, 0.0f}, {0.0f, 0.0f},
+    {24.0f, 24.0f}, {24.0f, 24.0f}, {2.0f, 2.0f},
     0.04f, 0.85f, 0.0f, 0.0f, 1.0f, 0.5f,
-    {0.0f, 0.0f}, 1.0f, 0.0f, 0.0f,
-    0.0f, {0.0f, 0.0f}, 0.75f};
+    {2.0f, 2.0f}, 1.05f, 0.0f, 0.0f,
+    1.0f, {0.30f, 0.0f}, 0.75f};
 
 static float oulg_in(float v, float lo, float hi, float fallback) { return v >= lo && v <= hi ? v : fallback; }
 

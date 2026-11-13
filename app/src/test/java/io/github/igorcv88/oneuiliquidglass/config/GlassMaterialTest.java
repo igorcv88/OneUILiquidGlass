@@ -190,8 +190,8 @@ public class GlassMaterialTest {
         assertEquals("0.42", r.get("sf.kcband"));
         assertEquals("24", r.get("sf.kcedge"));
         assertEquals("24", r.get("sf.kccore"));
-        // Brightening and the white neutraliser are not part of the reviewed look.
-        assertFalse(r.containsKey("sf.hclift"));
+        // HU lift 0.30 was approved in the final physical calibration.
+        assertEquals("0.3", r.get("sf.hclift"));
         assertFalse(r.containsKey("sf.kclift"));
         assertFalse(r.containsKey("sf.hcneutral"));
         for (Map.Entry<String, String> e : r.entrySet()) {
@@ -199,8 +199,10 @@ public class GlassMaterialTest {
             assertEquals(e.getKey(), e.getValue(), spec.validate(e.getValue()));
             assertEquals(e.getKey(), GlassMaterial.Scope.CLEAR_ONLY, GlassMaterial.scope(e.getKey()));
         }
-        // Not the library defaults: a user who marks Clear without it gets the neutral slab.
-        assertNotEquals(SettingsRegistry.get("sf.hcfold").defaultValue, r.get("sf.hcfold"));
+        // Clear-only defaults now start with the approved look, without stored overrides.
+        assertEquals(SettingsRegistry.get("sf.hcfold").defaultValue, r.get("sf.hcfold"));
+        assertEquals(0, new java.math.BigDecimal(SettingsRegistry.get("sf.hclift").defaultValue)
+                .compareTo(new java.math.BigDecimal(r.get("sf.hclift"))));
     }
 
     @Test

@@ -142,7 +142,7 @@ public final class SfLive {
             "core", "taps", "ramp", "hubloom", "edgeblur", "hublur", "hubodylens", "hurefract", "kgcore", "kgtaps", "kgramp", "kgsat", "kgtone",
             "kgrim", "kgspec", "kgflat", "kglevel", "kgcool", "kgtilt", "kgline", "kgfixedrim", "kgcorecap",
             "kggradient", "kgband", "kgbodylens", "kgblurexp", "kgedgeblur", "kgblur", "kgrefract", "kgflatcap", "kgcoredim", "kgglow", "shadecap", "shadelift",
-            "hulight", "kglight", "kgdepth", "shadelight", "qslens", "qsbody", "qsdepth", "qslight", "debug",
+            "hulight", "kglight", "kgdepth", "shadelight", "qslens", "qsbody", "qsdepth", "debug",
             // Clear Glass (docs/clear-glass/UI_HANDOFF.md): the two profile selectors and the
             // parameters each profile reads while its selector is above 0.
             "huclear", "kgclear",

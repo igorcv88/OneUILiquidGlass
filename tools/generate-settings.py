@@ -12,7 +12,7 @@ for line in text.splitlines():
  # Clear Glass compiled-mode marker: absent means unknown, never "off" or "active".
  if key=='sf.clear': default=''; domain='readonly'; desc='Modos Clear Glass do último programa compilado (hu:<modo>,kg:<modo>); ausente = desconhecido, não confirma ativação.'
  rows[key]=(default,domain,desc or domain)
-READONLY=('sf.optics','sf.clear')
+READONLY=('sf.optics','sf.clear','sf.qslight')
 assert len(rows)==204,len(rows)
 # Literal bounds follow Tuning; native limits are deliberately conservative UI limits, not C clamps.
 bools=set('livelens shadeblur sfrefract liveblur kgwinblur kgsharedoptics pillglass textswap headertone icontone popuptone popuplock orphandraw shadelocal panelnativegray perf trace sf.norewrite sf.kgfixedrim qs.tilelight qs.tiledark qs.hideoffdiscs'.split())
@@ -85,6 +85,7 @@ for key,(default,domain,desc) in rows.items():
  scope='shade' if key.startswith('qs.') else 'headsup' if key in ('popuplock','popuplinegain') else 'shade' if key=='orphandraw' else 'keyguard' if key.startswith(('kg','pill','sf.kg')) or key=='hzkg' else 'shade' if key.startswith(('shade','sf.shade','sf.qs')) or key in ('headertone','paneldim','panelblurcap','panelnativegray','panelcolor') else 'headsup' if key.startswith(('hu','sf.hu')) or key in ('liveglint','liverim','livedarkalpha','livedarkfill','sf.core','sf.taps','sf.ramp','sf.edgeblur') else 'all'
  group='Central de controle' if key.startswith('qs.') else 'Compositor' if sf else 'Diagnóstico' if key in ('sf.optics','sf.clear','trace','perf','edgepremul') else 'Captura' if key in 'backdrop profile lens refract rimhz rimblur ior blur sat disp hz hzkg tint livelens lensmaxage lenssettle lenstransition lensgate lensregiondiff'.split() else 'Cor e contraste' if key in 'shadetone shadecap shadelift veilmax stylelo stylehi lightglass lighttone shadelightglass livedarkalpha livedarkfill kgdarkalpha kgdarkfill textswap headertone icontone popuptone popuplock orphandraw shadescaleveil shadelocal paneldim panelnativegray panelcolor semcurve semalpha'.split() else 'Bordas e luz' if key in 'liveoptics livesheen liveglint shadeglint liverim kgrim kgglint lightedge lightoutline sflens kglens kgoptics huoptics kgsharedoptics popuplinegain kglinegain shadelinegain'.split() else 'Blur e material'
  if key=='shadedarkglass': group='Cor e contraste'
+ if key=='sf.qslight': group='Compositor'
  if key=='iconmode' or key.startswith(('icon','statusicon','statusmax','statusfixed','statuslight','statusdark')): group='Ícones'
  if key=='mediaart': scope='shade'
  if key.startswith('sf.hc'): scope='headsup'
@@ -95,6 +96,8 @@ for key,(default,domain,desc) in rows.items():
  dependency='sfrefract=1' if sf or key in ('qs.edgeblur','sflens','kglens','kgoptics','huoptics','kgsharedoptics','semradiuslens') else 'liveblur=1;sfrefract=0;backdrop=auto' if key in ('livelens','liveradius','liveshaderadius','liveoptics','livesheen','liveglint','shadeglint','liverim','kgrim','kgglint','livedarkalpha','livedarkfill','kgdarkalpha','kgdarkfill') else 'backdrop=capture|hybrid|grid' if key in ('profile','lens','refract','ior','disp','blur','sat','hz','hzkg') else ''
  strategy='MATERIAL' if key in 'liveradius liveshaderadius kgblurradius sflens kglens sat lighttone lightglass shadelightglass liveglint shadeglint kgglint liverim kgrim veilmax livedarkalpha livedarkfill kgdarkalpha kgdarkfill sf.core sf.kgcore sf.kgsat'.split() else 'DIAGRAM'
  if key=='shadedarkglass': strategy='MATERIAL'
+ if key=='sf.qslight': dependency='sfrefract=1'; advanced=True
+ if key=='sf.qslight': lo,hi=0,2  # Developer-only range; READONLY has no editable slider.
  lines.append('        add(new SettingSpec('+','.join([q(key),q(group),q(scope),q(title),q(desc), 'SettingSpec.Type.'+typ,q(default),str(lo),str(hi),'1' if typ=='INT' else '.05' if key=='mediaart' else '.01',q(unit),q(enums.get(key,'')),q(dependency),'true' if advanced else 'false',q(strategy)])+'));')
 (out/'SettingsRegistry.java').write_text('''package io.github.igorcv88.oneuiliquidglass.config;
 import java.util.*;

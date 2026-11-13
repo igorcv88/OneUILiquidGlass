@@ -172,7 +172,7 @@
     <string name="control_description_sf_qsbody">Ajusta o fundo refratado visível nas bordas das cápsulas da central de controle. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_qsdepth">Ajusta o alcance da luz de um fundo claro para dentro das cápsulas da central de controle. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_qslens">Ajusta a refração do fundo junto às bordas das cápsulas da central de controle. As mudanças são aplicadas após reiniciar o userspace.</string>
-    <string name="control_description_sf_qslight">Ajusta a luz do fundo que entra pelas bordas das cápsulas da central de controle. As mudanças são aplicadas após reiniciar o userspace.</string>
+    <string name="control_description_sf_qslight">Ganho de luz das bordas dos controles rápidos; 0,90 é o padrão ligado em Frosted e Clear. Somente leitura aqui; ajuste pelo Termux com root.</string>
     <string name="control_description_sf_ramp">Define a profundidade em que o desfoque interno do pop-up atinge a força máxima. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_shadecap">Define o brilho máximo sob texto claro no mapa de tons da lente na central. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_shadelift">Define o brilho mínimo sob texto escuro no mapa de tons da lente na central. As mudanças são aplicadas após reiniciar o userspace.</string>

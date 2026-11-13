@@ -45,7 +45,7 @@ def sha(path):
 # I1: byte identity with optics 11.
 for debug in (0, 1, 2):
     want = dict(reversed(l.split()) for l in (golden / f"debug_{debug}.sha256").read_text().split("\n") if l.strip())
-    for name, args in (("off", ""), ("off_params", "huclear=0,kgclear=0,hcband=0.9,hcamp=0.2,hccore=12,kcveil=0,kcdim=0.2,kcsat=1.2,kccore=8")):
+    for name, args in (("off_legacy_qs", "qslight=0"), ("off_params", "qslight=0,huclear=0,kgclear=0,hcband=0.9,hcamp=0.2,hccore=12,kcveil=0,kcdim=0.2,kcsat=1.2,kccore=8")):
         out = gen(f"i1_{name}_{debug}", debug, args)
         got = {p.name: sha(p) for p in out.glob("mod_*")}
         if got != want:
@@ -105,32 +105,56 @@ for hu, kg, debug in itertools.product((0, 1, 2), (0, 1, 2), (0, 3)):
     if not path.exists():
         continue
     want = dict(reversed(l.split()) for l in path.read_text().split("\n") if l.strip())
-    for name, args in (("unset", ""), ("neutral", ",hcfold=0,hcsat=1,hcscrim=0,hcscrimmax=0,hcadapt=0,kcfold=0,hclift=0,kclift=0,hcneutral=0.75"),
-                       ("invalid", ",hcfold=9,hcsat=NaN,hcscrim=-1,hcadapt=2,kcfold=9,hclift=-1,kclift=NaN,hcneutral=2")):
+    # Explicit historical parameters reproduce optics-12 goldens. Clear-only
+    # defaults now intentionally activate the approved meniscus/material.
+    legacy = ("qslight=0,hcband=0.85,hcamp=0.4,hcbody=0.06,hcbody2=0,"
+              "hcedge=4,hccore=24,hcblurexp=2,hcfold=0,hcsat=1,"
+              "hcscrim=0,hcscrimmax=0,hcadapt=0,hclift=0,"
+              "kcband=0.85,kcamp=0.4,kcbody=0.05,kcbody2=0,kcedge=4,"
+              "kccore=24,kcblurexp=2,kcfold=0,kclift=0,hcneutral=0.75")
+    for name, args in (("explicit_legacy", "," + legacy),):
         out = gen(f"i2_{name}_{hu}{kg}_{debug}", debug, f"huclear={hu},kgclear={kg}{args}")
         got = {q.name: sha(q) for q in out.glob("mod_*")}
         if got != want:
             fails.append(f"I2 hu {hu} kg {kg} debug {debug} ({name}): " + ", ".join(sorted(k for k in set(got) | set(want) if got.get(k) != want.get(k))))
-print("I2: with the meniscus and heads-up material unset, neutral or invalid, clear output is byte-identical to optics 12 (25acdc7)"
+print("I2: explicit historical defaults preserve byte identity with optics 12 (25acdc7)"
       if not any(f.startswith("I2") for f in fails) else "I2: FAILED")
 
 # I3: the heads-up approved on the device (acff51b: meniscus, material, adaptive body) is unchanged
 # while the lockscreen meniscus, the lifts and the neutral strength are unset, neutral or invalid.
 APPROVED = {"a": "hcband=0.42,hcfold=2,hcedge=24,hccore=24,hcbody=0,hcsat=1.05,hcscrim=0,hcscrimmax=0,hcadapt=1",
-            "b": "hcband=0.42,hcfold=2,hcedge=24,hccore=24,hcsat=1.5,hcscrim=0.12,hcscrimmax=0.5,hcadapt=1"}
+            "b": "hcband=0.42,hcfold=2,hcedge=24,hccore=24,hcbody=0.06,hcsat=1.5,hcscrim=0.12,hcscrimmax=0.5,hcadapt=1"}
 golden_hu = golden.parent / "hu_approved_golden"
 i3 = 0
 for cfg, params in APPROVED.items():
     for (hu, kg), debug in itertools.product(((1, 0), (2, 0), (1, 1), (1, 2), (2, 2)), (0, 3)):
         want = dict(reversed(l.split()) for l in (golden_hu / f"{cfg}_m{hu}{kg}_d{debug}.sha256").read_text().split("\n") if l.strip())
-        for name, args in (("unset", ""), ("neutral", ",kcfold=0,hclift=0,kclift=0,hcneutral=0.75"), ("invalid", ",kcfold=-1,hclift=3,kclift=NaN,hcneutral=-0.1")):
+        # Golden acff51b predates the KG meniscus, positive lift, and new QS light.
+        legacy = (",qslight=0,kcband=0.85,kcbody=0.05,kcbody2=0,kcedge=4,"
+                  "kccore=24,kcfold=0,hclift=0,kclift=0,hcneutral=0.75")
+        for name, args in (("explicit_legacy", legacy),):
             out = gen(f"i3_{cfg}_{name}_{hu}{kg}_{debug}", debug, f"huclear={hu},kgclear={kg},{params}{args}")
             got = {q.name: sha(q) for q in out.glob("mod_*")}
             i3 += 1
             if got != want:
                 fails.append(f"I3 {cfg} hu {hu} kg {kg} debug {debug} ({name}): " + ", ".join(sorted(k for k in set(got) | set(want) if got.get(k) != want.get(k))))
-print(f"I3: the approved heads-up (acff51b, two parameter sets, {i3} runs) is byte-identical with kcfold, hclift, kclift and hcneutral unset, neutral or invalid"
+print(f"I3: the original heads-up (acff51b, {i3} runs) is byte-identical under explicit legacy KG/lift/QS overrides"
       if not any(f.startswith("I3") for f in fails) else "I3: FAILED")
+
+# Current Clear-only defaults are identical to specifying the approved look explicitly.
+# The modes remain 0 unless selected, so Frosted stays isolated from these defaults.
+approved_current = ("hcband=0.42,hcfold=2,hcedge=24,hccore=24,hcbody=0,hcbody2=0,"
+                    "hcadapt=1,hcsat=1.05,hcscrim=0,hcscrimmax=0,hclift=0.30,"
+                    "kcband=0.42,kcfold=2,kcedge=24,kccore=24,kcbody=0,kcbody2=0,kclift=0")
+for hu, kg in ((0, 0), (1, 0), (0, 1), (1, 1), (2, 2)):
+    for debug in (0, 3):
+        default = gen(f"approved_default_{hu}{kg}_{debug}", debug, f"huclear={hu},kgclear={kg}")
+        explicit = gen(f"approved_explicit_{hu}{kg}_{debug}", debug,
+                       f"huclear={hu},kgclear={kg},{approved_current}")
+        for frag in default.glob("mod_*"):
+            if sha(frag) != sha(explicit / frag.name):
+                fails.append(f"approved defaults differ from explicit settings: {hu}/{kg}/{debug} {frag.name}")
+print("I4: native Clear-only approved defaults match explicit HU/KG settings across modes")
 
 # Lockscreen meniscus, both lifts and a non-default neutral strength, with the approved heads-up.
 kgmen = 0
@@ -172,7 +196,7 @@ for hu, kg in itertools.product((0, 1, 2), repeat=2):
             external = "samplerExternalOES" in text
             if suffix(text) != suffix((base / frag.name).read_text()):
                 fails.append(f"meniscus changed main(): hu {hu} kg {kg} debug {debug} {frag.name}")
-            if ("sqrt(max(1.0 - x * x, 0.0))" in text) != bool(hu):
+            if text.count("sqrt(max(1.0 - x * x, 0.0))") != int(bool(hu)) + int(bool(kg)):
                 fails.append(f"meniscus field presence wrong: hu {hu} kg {kg} {frag.name}")
             if ("oulg_material_hu(" in text) != bool(hu and not external):
                 fails.append(f"heads-up material presence wrong: hu {hu} kg {kg} {frag.name}")

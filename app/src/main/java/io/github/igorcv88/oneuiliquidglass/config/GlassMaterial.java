@@ -163,7 +163,7 @@ public enum GlassMaterial {
 
     /**
      * The look approved on the device (docs/clear-glass/UI_HANDOFF.md, section 5 and the visual
-     * review): a starting point the person may choose, never a library default and never applied
+     * review): the native Clear-only defaults, offered only when requested and never applied
      * on its own. {@code hclift} and {@code hcneutral} are left to their own values.
      */
     public static Map<String, String> recommendedClear() {
@@ -176,6 +176,7 @@ public enum GlassMaterial {
         m.put("sf.hcbody2", "0");
         m.put("sf.hcadapt", "1");
         m.put("sf.hcsat", "1.05");
+        m.put("sf.hclift", "0.3");
         m.put("sf.hcscrim", "0");
         m.put("sf.hcscrimmax", "0");
         m.put("sf.kcband", "0.42");

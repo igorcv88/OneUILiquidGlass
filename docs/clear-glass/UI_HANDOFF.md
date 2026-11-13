@@ -25,8 +25,8 @@ Every other row below is ignored while its profile's mode is 0.
 
 | Key (HU / KG) | Default (HU / KG) | Range | Neutral | Meaning |
 |---|---|---|---|---|
-| `hcband` / `kcband` | 0.85 / 0.85 | 0.42–1 | — | optical band as a share of the corner radius; never below the bevel `clamp(0.42 r, 16, 56)` px |
-| `hcfold` / `kcfold` | 0 / 0 | 0–3 | 0 | 0: slab (optics 12). Above 0: meniscus, amplitude over the band. Same field text for both profiles |
+| `hcband` / `kcband` | 0.42 / 0.42 | 0.42–1 | — | optical band as a share of the corner radius; never below the bevel `clamp(0.42 r, 16, 56)` px |
+| `hcfold` / `kcfold` | 2 / 2 | 0–3 | 0 | 0: slab (optics 12). Above 0: meniscus, amplitude over the band. Same field text for both profiles |
 | `hcamp` / `kcamp` | 0.40 / 0.40 | 0–0.5 | 0 | slab edge amplitude. Used only while the profile's fold is 0 |
 | `hcbody` / `kcbody` | 0.06 / 0.05 | 0–0.15 | 0 | dome, linear term (uniform magnification of the body) |
 | `hcbody2` / `kcbody2` | 0 / 0 | 0–0.05 | 0 | dome, cubic term. `body + 3 body2 > 0.45` reverts both to their defaults |
@@ -40,12 +40,12 @@ Dependencies: `hcamp`/`kcamp` are inert when the fold is above 0; in mode 1 the 
 
 | Key (HU / KG) | Default | Range | Meaning |
 |---|---|---|---|
-| `hcedge` / `kcedge` | 4 / 4 | 0–48 px | blur radius at the outline. A value above the core is lowered to the core |
+| `hcedge` / `kcedge` | 24 / 24 | 0–48 px | blur radius at the outline. A value above the core is lowered to the core |
 | `hccore` / `kccore` | 24 / 24 | 0–48 px | blur radius past the band |
 | `hcblurexp` / `kcblurexp` | 2 / 2 | 1–4 | shape of the rise from edge to core |
 | `hublur` / `kgblur` | 1 / 1 | existing | multiplier of the radius above |
 | `taps` / `kgtaps` | 48 / 48 | 4–48 | existing: samples of the disc; cost is linear in it |
-| `hcadapt` | 0 | 0–1 | HU only. Share of a second disc of 2.5 times the radius, taken where the luma deviation inside it shows structure the disc cannot average out. Doubles the samples of the HU body while above 0 |
+| `hcadapt` | 1 | 0–1 | HU only. Share of a second disc of 2.5 times the radius, taken where the luma deviation inside it shows structure the disc cannot average out. Doubles the samples of the HU body while above 0 |
 
 A uniform blur is edge = core. The baseline keys `core`, `edgeblur`, `ramp`, `kgcore`, `kgedgeblur`, `kgcorecap`, `kgramp`, `kgblurexp` do not act on a clear card.
 
@@ -55,13 +55,13 @@ Heads-up (the HU has no material in optics 11; this block is emitted only when a
 
 | Key | Default | Range | Neutral | Meaning |
 |---|---|---|---|---|
-| `hcsat` | 1 | 0.9–2 | 1 | saturation; fades to 1 over highlights |
+| `hcsat` | 1.05 | 0.9–2 | 1 | saturation; fades to 1 over highlights |
 | `hcscrim` | 0 | 0–0.6 | 0 | darkening where the backdrop is black |
 | `hcscrimmax` | 0 | 0–0.8 | 0 | darkening where it is white. Raised to `hcscrim`, capped at `hcscrim + (1 − hcscrim) / 2` |
-| `hclift` | 0 | 0–2 | 0 | brightening: `c → 1 − (1 − c)^(1 + lift)` per channel, after the scrim |
+| `hclift` | 0.30 | 0–2 | 0 | brightening: `c → 1 − (1 − c)^(1 + lift)` per channel, after the scrim |
 | `hcneutral` | 0.75 | 0–1 | 0 | strength of the pull of near-white, low-chroma pixels toward their own grey |
 
-`hcneutral` acts only while the block is emitted. To use it alone, the UI must also keep one of the three conditions true (for example `hcsat 1.01`). The configuration approved on the device is `hcsat 1.05`, `hcscrim 0`, `hcscrimmax 0`, `hcadapt 1`, `hclift` unset, `hcneutral` unset.
+`hcneutral` acts only while the block is emitted. To use it alone, the UI must also keep one of the three conditions true (for example `hcsat 1.01`). The configuration approved on the device is `hcsat 1.05`, `hcscrim 0`, `hcscrimmax 0`, `hcadapt 1`, `hclift` 0.30, `hcneutral` unset. The approved Clear-only defaults are now built into the native shader: these values are fallbacks, not forced overrides.
 
 Lockscreen (replaces the optics-11 body material on a clear card):
 

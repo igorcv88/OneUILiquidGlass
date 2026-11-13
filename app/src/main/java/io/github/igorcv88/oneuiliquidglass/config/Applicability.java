@@ -125,6 +125,8 @@ public final class Applicability {
             case "sf.optics":
             case "sf.norewrite":
             case "sf.clear":
+            case "sf.qslight":
+                // Developer-only; Android reads the effective property/default without writing.
                 return new Result(Kind.READ_ONLY, "Estado lido do aparelho");
             case "backdrop":
             case "liveblur":
