@@ -526,13 +526,61 @@ static void hu_material(void) {
           "hu material: the shader weight is not the one checked here");
 }
 
+// The disc of the shader over a pattern that varies along x only (1 px grid, weights exp(-2 rho^2)).
+static double disc_over(double (*f)(double), double x0, double R) {
+    double acc = 0, sum = 0;
+    for (int i = -(int) R; i <= (int) R; i++) for (int j = -(int) R; j <= (int) R; j++) {
+        double rr = (i * i + j * j) / (R * R);
+        if (rr > 1) continue;
+        double w = exp(-2 * rr);
+        acc += w * f(x0 + i); sum += w;
+    }
+    return acc / sum;
+}
+static double pat_stripes8(double x) { return fmod(floor(x / 4.0) + 1000.0, 2.0) < 0.5 ? 1.0 : 0.0; }
+static double pat_stroke6(double x) { return fabs(x) < 3 ? 1.0 : 0.0; }
+static double pat_stroke40(double x) { return fabs(x) < 20 ? 1.0 : 0.0; }
+static double pat_stroke80(double x) { return fabs(x) < 40 ? 1.0 : 0.0; }
+static double adapt_weight(double (*f)(double), double x, double R, double contrast) {
+    double d = contrast * fabs(disc_over(f, x, R) - disc_over(f, x, R * OULG_ADAPT_WIDE));
+    double t = fmin(fmax((d - OULG_ADAPT_LO) / (OULG_ADAPT_HI - OULG_ADAPT_LO), 0), 1);
+    return t * t * (3 - 2 * t);
+}
+// The heads-up adaptive blur: neutral default, range, and what the two-scale detector answers on a
+// 24 px disc: periodic fine detail is unchanged, an isolated full-contrast hairline moves a little,
+// a stroke about as wide as the disc moves fully. A stroke wider than the wide disc is detected at
+// its flanks more than at its centre: no disc of this size can average it out.
+static void hu_adapt(void) {
+    struct oulg_clear c = OULG_CLEAR_DEFAULT; c.mode[0] = 1; oulg_fix_clear(&c);
+    CHECK(OULG_CLEAR_DEFAULT.adapt == 0 && !oulg_hu_adapt_on(&c), "hu adapt: on by default");
+    c.adapt = 1.1f; oulg_fix_clear(&c); CHECK(c.adapt == 0, "hu adapt: value above the range kept");
+    c.adapt = NAN; oulg_fix_clear(&c); CHECK(c.adapt == 0, "hu adapt: NaN kept");
+    c.adapt = 1; oulg_fix_clear(&c); CHECK(c.adapt == 1 && oulg_hu_adapt_on(&c), "hu adapt: 1 rejected");
+    c.mode[0] = 0; CHECK(!oulg_hu_adapt_on(&c), "hu adapt: on with the heads-up clear off");
+    const double R = 24;
+    double fine = 0, thin = 0;
+    for (double x = 0; x < 8; x += 0.5) fine = fmax(fine, adapt_weight(pat_stripes8, x, R, 1.0));
+    for (double x = -40; x <= 40; x += 1) thin = fmax(thin, adapt_weight(pat_stroke6, x, R, 1.0));
+    double w40 = adapt_weight(pat_stroke40, 0, R, 0.75), w80 = adapt_weight(pat_stroke80, 0, R, 0.75);
+    CHECK(fine == 0, "hu adapt: 8 px stripes move to the wide blur (weight %.3f)", fine);
+    CHECK(thin < 0.2, "hu adapt: a 6 px line moves to the wide blur (weight %.3f)", thin);
+    double f80 = 0;
+    for (double x = 0; x <= 80; x += 1) f80 = fmax(f80, adapt_weight(pat_stroke80, x, R, 0.75));
+    CHECK(w40 > 0.8 && w80 > 0.25 && f80 > 0.6, "hu adapt: wide strokes are not detected (40 px %.3f, 80 px %.3f, flank %.3f)", w40, w80, f80);
+    double a40 = disc_over(pat_stroke40, 0, R), b40 = disc_over(pat_stroke40, 0, R * OULG_ADAPT_WIDE);
+    printf("hu adapt: off by default, range and NaN checked; disc 24 px, wide x%.0f: weight 0 on 8 px stripes, at most %.2f on a 6 px line at full contrast, "
+           "%.2f at the centre of a 40 px stroke, %.2f at the centre and up to %.2f on the flanks of an 80 px one (contrast 0.75); "
+           "the 40 px stroke's residual falls from %.2f to %.2f of its contrast\n",
+           OULG_ADAPT_WIDE, thin, w40, w80, f80, a40, a40 + w40 * (b40 - a40));
+}
+
 // Sizes and text with the meniscus and the heads-up material compiled.
 static void meniscus_text(void) {
     char *buf = malloc(1 << 17), *ref = malloc(1 << 17); size_t most = 0;
     struct oulg_profile p[OULG_PROFILES] = {OULG_PROFILES_DEFAULT[0], OULG_PROFILES_DEFAULT[1], OULG_PROFILES_DEFAULT[2], OULG_PROFILES_DEFAULT[3]};
     p[0].bloom = 1.5f;
     for (int hu = 0; hu < 3; hu++) for (int kg = 0; kg < 3; kg++) for (int dbg = 0; dbg <= 4; dbg++) for (int ext = 0; ext < 2; ext++) {
-        struct oulg_clear c = OULG_CLEAR_DEFAULT; c.mode[0] = hu; c.mode[1] = kg; c.fold = 2; c.hsat = 1.5f; c.scrim = 0.12f; c.scrimmax = 0.5f;
+        struct oulg_clear c = OULG_CLEAR_DEFAULT; c.mode[0] = hu; c.mode[1] = kg; c.fold = 2; c.hsat = 1.5f; c.scrim = 0.12f; c.scrimmax = 0.5f; c.adapt = 1;
         CHECK(oulg_lib(buf, 1 << 17, ext, dbg, p, &c), "meniscus: library failed hu %d kg %d debug %d ext %d", hu, kg, dbg, ext);
         size_t n = strlen(buf), cap = oulg_lib_cap(dbg, &c);
         CHECK(n * 4 <= cap * 3, "meniscus size: hu %d kg %d debug %d ext %d uses %zu of %zu", hu, kg, dbg, ext, n, cap);
@@ -541,6 +589,8 @@ static void meniscus_text(void) {
         int routed = strstr(buf, "return oulg_cl > 0.5 ? oulg_material_hu(c) : c;") != NULL;
         CHECK(field == (hu != 0), "meniscus field presence wrong: hu %d kg %d debug %d ext %d", hu, kg, dbg, ext);
         CHECK(mat == (hu != 0 && !ext) && routed == mat, "hu material presence wrong: hu %d kg %d debug %d ext %d", hu, kg, dbg, ext);
+        int wide = strstr(buf, "mediump vec4 oulg_body_hu(") != NULL, wrouted = strstr(buf, OULG_HU_BODY_TO) != NULL;
+        CHECK(wide == (hu != 0 && !ext) && wrouted == wide, "hu adaptive body presence wrong: hu %d kg %d debug %d ext %d", hu, kg, dbg, ext);
         // With the heads-up off, the text is the one the same modes give without these parameters.
         if (!hu) {
             struct oulg_clear z = OULG_CLEAR_DEFAULT; z.mode[1] = kg;
@@ -548,13 +598,13 @@ static void meniscus_text(void) {
             CHECK(strcmp(ref, buf) == 0, "meniscus parameters changed the text with the heads-up off (kg %d debug %d ext %d)", kg, dbg, ext);
         }
     }
-    printf("meniscus text: field and material only in heads-up clear programs; largest library with both %zu of 32768 bytes\n", most);
+    printf("meniscus text: field, material and adaptive body only in heads-up clear programs; largest library with all %zu of 32768 bytes\n", most);
     free(buf); free(ref);
 }
 
 int main(void) {
     u1_u2(); u3_u4(); u5(); u6(); u7(); u8(); fix_ranges(); sizes(); text_invariance();
-    m1(); m2_m3_m4(); hu_material(); meniscus_text();
+    m1(); m2_m3_m4(); hu_material(); hu_adapt(); meniscus_text();
     if (fails) { printf("clear_check: %d FAILURES\n", fails); return 1; }
     printf("clear_check: all checks passed\n");
     return 0;

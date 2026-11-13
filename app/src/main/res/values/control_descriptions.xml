@@ -105,6 +105,7 @@
     <string name="control_description_sf_core">Adjusts blur at the center of pop-ups. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_debug">Diagnostic mode: 0 off, 1 magenta/cyan for rewritten shaders, 2 green map of local edge luminance on lock screen notifications. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_edgeblur">Adjusts pop-up edge blur and its transition toward the center. Changes apply after userspace restarts.</string>
+    <string name="control_description_sf_hcadapt">Experimental Clear Glass parameter; registered for the compositor contract, not yet a control in the app. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_hcamp">Experimental Clear Glass parameter; registered for the compositor contract, not yet a control in the app. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_hcband">Experimental Clear Glass parameter; registered for the compositor contract, not yet a control in the app. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_hcblurexp">Experimental Clear Glass parameter; registered for the compositor contract, not yet a control in the app. Changes apply after userspace restarts.</string>

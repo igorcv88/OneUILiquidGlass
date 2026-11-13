@@ -193,6 +193,7 @@ Observar que as propriedades `lightglass` e `shadelightglass` se aplicam a super
 | `sf.hcfold` | 0 | Clear Glass heads-up: menisco, amplitude sobre a banda (0–3; 0 mantém a laje do optics 12) |
 | `sf.hcsat` | 1 | Clear Glass heads-up: saturação do corpo (0.9–2) |
 | `sf.hcscrim` | 0 | Clear Glass heads-up: escurecimento sobre fundo preto (0–0.6) |
+| `sf.hcadapt` | 0 | Clear Glass heads-up: blur adaptativo, parcela do blur largo onde sobra estrutura grande (0–1; 0 desliga) |
 | `sf.hcscrimmax` | 0 | Clear Glass heads-up: escurecimento sobre fundo branco (0–0.8; limitado a scrim + (1 − scrim)/2) |
 | `sf.kcband` | 0.85 | Clear Glass bloqueio: largura da banda de refração (fração do raio do canto, 0.42–1) |
 | `sf.kcamp` | 0.40 | Clear Glass bloqueio: teto da amplitude da refração na borda (0–0.5; o compositor ainda limita por σ ≥ 0.25) |

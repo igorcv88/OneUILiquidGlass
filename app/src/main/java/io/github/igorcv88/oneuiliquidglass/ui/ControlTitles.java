@@ -18,6 +18,7 @@ final class ControlTitles {
             case "Banda de refração do Clear Glass (pop-up)": return R.string.control_title_2671a4407d54;
             case "Barra de status sobre fundo claro": return R.string.control_title_2c9365fef254;
             case "Barra de status sobre fundo colorido": return R.string.control_title_de327df14533;
+            case "Blur adaptativo do Clear Glass (pop-up)": return R.string.control_title_f3fb30531aa8;
             case "Blur do contorno do Clear Glass (bloqueio)": return R.string.control_title_bc7b4c121db8;
             case "Blur do contorno do Clear Glass (pop-up)": return R.string.control_title_02e9861d821b;
             case "Blur do miolo do Clear Glass (bloqueio)": return R.string.control_title_c3d86bcf871f;

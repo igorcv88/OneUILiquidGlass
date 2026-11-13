@@ -105,6 +105,7 @@
     <string name="control_description_sf_core">Ajusta o desfoque no centro dos pop-ups. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_debug">Modo de diagnóstico: 0 desligado, 1 magenta/ciano nos shaders reescritos, 2 mapa verde da luminância local nas bordas das notificações do bloqueio. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_edgeblur">Ajusta o desfoque da borda do pop-up e sua transição até o centro. As mudanças são aplicadas após reiniciar o userspace.</string>
+    <string name="control_description_sf_hcadapt">Parâmetro experimental do Clear Glass; registrado para o contrato do compositor, ainda sem controle no app. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_hcamp">Parâmetro experimental do Clear Glass; registrado para o contrato do compositor, ainda sem controle no app. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_hcband">Parâmetro experimental do Clear Glass; registrado para o contrato do compositor, ainda sem controle no app. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_hcblurexp">Parâmetro experimental do Clear Glass; registrado para o contrato do compositor, ainda sem controle no app. As mudanças são aplicadas após reiniciar o userspace.</string>

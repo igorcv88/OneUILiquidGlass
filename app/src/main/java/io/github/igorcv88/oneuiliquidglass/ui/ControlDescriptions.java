@@ -113,6 +113,7 @@ final class ControlDescriptions {
             case "sf.core": return R.string.control_description_sf_core;
             case "sf.debug": return R.string.control_description_sf_debug;
             case "sf.edgeblur": return R.string.control_description_sf_edgeblur;
+            case "sf.hcadapt": return R.string.control_description_sf_hcadapt;
             case "sf.hcamp": return R.string.control_description_sf_hcamp;
             case "sf.hcband": return R.string.control_description_sf_hcband;
             case "sf.hcblurexp": return R.string.control_description_sf_hcblurexp;

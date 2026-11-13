@@ -719,6 +719,18 @@ static void oulg_fix_params(struct oulg_profile p[OULG_PROFILES]) {
 // three channels, so it adds no tint. hsat fades to 1 with the same weight, so a near-white backdrop
 // is not pushed toward the colour around it. w + y w' peaks at 1.6875, so scrimmax <= scrim +
 // (1 - scrim) / 2 keeps the output luma increasing in y. The edge light is added after it, as before.
+// Near-white, low-chroma pixels (luma above 0.55, max - min below 0.45) are also pulled toward their
+// own grey, up to 75 %: white content blurred over a coloured wallpaper stops reading as a tinted
+// white. Luma is kept, so the bound above is unchanged; vivid highlights are not touched.
+// Heads-up adaptive blur (adapt, 0 = off, nothing emitted): the body is the usual disc A plus a
+// second disc B of OULG_ADAPT_WIDE times the radius, mixed by adapt * smoothstep(LO, HI, |yA - yB|).
+// Where the disc already averaged the backdrop out (fine detail, flat areas) A and B agree and the
+// result is A, as before; where a structure wider than the disc survives it (a large clock, a broad
+// bright shape) they differ and the pixel moves to the wider blur. The lens is not involved: both
+// discs are centred on the same refracted position.
+#define OULG_ADAPT_WIDE 3.0
+#define OULG_ADAPT_LO 0.06
+#define OULG_ADAPT_HI 0.30
 #define OULG_CLEAR_M 0.25
 struct oulg_clear {
     int mode[2];                                   // per profile: 0 off, 1 whole profile, 2 per card
@@ -727,12 +739,14 @@ struct oulg_clear {
     float veil, level, dim, knee, sat, cool;        // profile 1's material
     float fold;                                     // profile 0: meniscus amplitude / band (0 = slab)
     float hsat, scrim, scrimmax;                    // profile 0's clear material
+    float adapt;                                    // profile 0: share of the wide disc where structure survives
 };
 static const struct oulg_clear OULG_CLEAR_DEFAULT = {
     {0, 0}, {0.85f, 0.85f}, {0.40f, 0.40f}, {0.06f, 0.05f}, {0.0f, 0.0f},
     {4.0f, 4.0f}, {24.0f, 24.0f}, {2.0f, 2.0f},
     0.04f, 0.85f, 0.0f, 0.0f, 1.0f, 0.5f,
-    0.0f, 1.0f, 0.0f, 0.0f};
+    0.0f, 1.0f, 0.0f, 0.0f,
+    0.0f};
 
 static float oulg_in(float v, float lo, float hi, float fallback) { return v >= lo && v <= hi ? v : fallback; }
 
@@ -765,6 +779,7 @@ static void oulg_fix_clear(struct oulg_clear *c) {
     if (c->scrimmax < c->scrim) c->scrimmax = c->scrim;
     float top = c->scrim + (1.0f - c->scrim) / 2.0f;  // above it the output luma would fall as y rises
     if (c->scrimmax > top) c->scrimmax = top;
+    c->adapt = oulg_in(c->adapt, 0.0f, 1.0f, d->adapt);
 }
 
 // The meniscus amplitude cap as a share of min(hs): with it the deepest sample (the outline's, at
@@ -776,6 +791,7 @@ static double oulg_meniscus_cap(const struct oulg_clear *c, double rho) {
 static int oulg_hu_material_on(const struct oulg_clear *c) {
     return c && c->mode[0] != 0 && (c->hsat != 1.0f || c->scrimmax > 0.0f);
 }
+static int oulg_hu_adapt_on(const struct oulg_clear *c) { return c && c->mode[0] != 0 && c->adapt > 0.0f; }
 
 // The clear amplitude cap for one profile: min(amp, amax), amax from the global scale rho so that
 // rho (l0 + 3 l2 + 1.5 A) <= 1 - OULG_CLEAR_M. Never negative.
@@ -887,10 +903,25 @@ static int oulg_replace_once(char *buf, size_t cap, const char *from, const char
     "  mediump vec3 rgb = c.rgb / a;\n" \
     "  mediump float y = clamp(dot(rgb, vec3(0.2126, 0.7152, 0.0722)), 0.0, 1.0);\n" \
     "  mediump float w = y * y * (3.0 - 2.0 * y);\n" \
-    "  rgb = mix(vec3(y), rgb, mix(%.3f, 1.0, w));\n" \
+    "  mediump float ch = max(max(rgb.r, rgb.g), rgb.b) - min(min(rgb.r, rgb.g), rgb.b);\n" \
+    "  mediump float n = 0.75 * smoothstep(0.55, 0.90, y) * (1.0 - smoothstep(0.15, 0.45, ch));\n" \
+    "  rgb = mix(vec3(y), rgb, mix(%.3f, 1.0, w) * (1.0 - n));\n" \
     "  rgb *= 1.0 - (%.3f + %.3f * w);\n" \
     "  return vec4(clamp(rgb, 0.0, 1.0) * c.a, c.a);\n" \
     "}\n"
+// The heads-up adaptive body (wide factor, lo, hi, adapt): two discs and the scale-space mix.
+#define OULG_FS_HU_BODY_FMT \
+    "mediump vec4 oulg_body_hu(sampler2D s, highp vec2 uv) {\n" \
+    "  mediump vec4 a = oulg_disc0(s, uv);\n" \
+    "  highp float br = oulg_br;\n" \
+    "  oulg_br = br * %.2f;\n" \
+    "  mediump vec4 b = oulg_disc0(s, uv);\n" \
+    "  oulg_br = br;\n" \
+    "  mediump float d = abs(dot(a.rgb - b.rgb, vec3(0.2126, 0.7152, 0.0722)));\n" \
+    "  return mix(a, b, %.3f * smoothstep(%.2f, %.2f, d));\n" \
+    "}\n"
+#define OULG_HU_BODY_AT "oulg_pf > 0.5 ? oulg_disc1(s, uv) : oulg_disc0(s, uv); }\n"
+#define OULG_HU_BODY_TO "oulg_pf > 0.5 ? oulg_disc1(s, uv) : oulg_cl > 0.5 ? oulg_body_hu(s, uv) : oulg_disc0(s, uv); }\n"
 #define OULG_HU_MATERIAL_AT "  if (oulg_pf < 0.5) return c;\n"
 #define OULG_HU_MATERIAL_TO "  if (oulg_pf < 0.5) return oulg_cl > 0.5 ? oulg_material_hu(c) : c;\n"
 // Profile 1's clear material (sat, knee, veil, level, 1 - dim, cool x3), then the baseline's edge
@@ -1044,6 +1075,11 @@ static int oulg_lib_into(char *out, size_t cap, int external, int debug, const s
             if (!oulg_append(out, cap, &at, OULG_FS_HU_MATERIAL_FMT, (double) cl->hsat, (double) cl->scrim,
                              (double) (cl->scrimmax - cl->scrim))) return 0;
             if (!oulg_replace_once(tmp, OULG_TEXT_CAP, OULG_HU_MATERIAL_AT, OULG_HU_MATERIAL_TO)) return 0;
+        }
+        if (oulg_hu_adapt_on(cl)) {
+            if (!oulg_append(out, cap, &at, OULG_FS_HU_BODY_FMT, OULG_ADAPT_WIDE, (double) cl->adapt, OULG_ADAPT_LO,
+                             OULG_ADAPT_HI)) return 0;
+            if (!oulg_replace_once(tmp, OULG_TEXT_CAP, OULG_HU_BODY_AT, OULG_HU_BODY_TO)) return 0;
         }
         if (oulg_clear_on(cl, 1)) { if (!oulg_clear_lens(out, cap, &at, tmp, OULG_TEXT_CAP, cl)) return 0; }
         else if (!oulg_append(out, cap, &at, "%s", tmp)) return 0;

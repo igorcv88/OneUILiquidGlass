@@ -402,6 +402,7 @@ static void clear_params(struct oulg_clear *c) {
     c->hsat = prop_float("debug.oulg.sf.hcsat", c->hsat);
     c->scrim = prop_float("debug.oulg.sf.hcscrim", c->scrim);
     c->scrimmax = prop_float("debug.oulg.sf.hcscrimmax", c->scrimmax);
+    c->adapt = prop_float("debug.oulg.sf.hcadapt", c->adapt);
     oulg_fix_clear(c);
 }
 
@@ -426,14 +427,14 @@ static void announce_clear(const struct oulg_clear *c, const struct oulg_profile
         " hc=band:%.3f,amp:%.4f,body:%.4f,body2:%.4f,edge:%.2f,core:%.2f,blurexp:%.3f,refract:%.3f,blur:%.3f"
         " kc=band:%.3f,amp:%.4f,body:%.4f,body2:%.4f,edge:%.2f,core:%.2f,blurexp:%.3f,refract:%.3f,blur:%.3f"
         " kcmat=veil:%.3f,level:%.3f,dim:%.3f,knee:%.3f,sat:%.3f,cool:%.3f"
-        " hcmat=fold:%.3f,cap:%.4f,sat:%.3f,scrim:%.3f,scrimmax:%.3f",
+        " hcmat=fold:%.3f,cap:%.4f,sat:%.3f,scrim:%.3f,scrimmax:%.3f,adapt:%.3f",
         OULG_OPTICS_VERSION, c->mode[0], c->mode[1], rc == 0,
         (double) c->band[0], oulg_clear_acap(c, 0, p[0].refract), (double) c->body[0], (double) c->body2[0],
         (double) c->edge[0], (double) c->core[0], (double) c->blurexp[0], (double) p[0].refract, (double) p[0].blur,
         (double) c->band[1], oulg_clear_acap(c, 1, p[1].refract), (double) c->body[1], (double) c->body2[1],
         (double) c->edge[1], (double) c->core[1], (double) c->blurexp[1], (double) p[1].refract, (double) p[1].blur,
         (double) c->veil, (double) c->level, (double) c->dim, (double) c->knee, (double) c->sat, (double) c->cool,
-        (double) c->fold, oulg_meniscus_cap(c, p[0].refract), (double) c->hsat, (double) c->scrim, (double) c->scrimmax);
+        (double) c->fold, oulg_meniscus_cap(c, p[0].refract), (double) c->hsat, (double) c->scrim, (double) c->scrimmax, (double) c->adapt);
 }
 
 // Tells the module that this library's optics are live (debug.oulg.sf.optics = OULG_OPTICS_VERSION)

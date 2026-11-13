@@ -959,6 +959,8 @@ public final class Controls {
                 .help("Experimental, ainda sem controle no app."));
         put(c("sf.hcscrimmax", "Escurecimento máximo do Clear Glass (pop-up)").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(HU)
                 .help("Experimental, ainda sem controle no app."));
+        put(c("sf.hcadapt", "Blur adaptativo do Clear Glass (pop-up)").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(HU)
+                .help("Experimental, ainda sem controle no app."));
         put(c("sf.kgclear", "Clear Glass no bloqueio").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(KG)
                 .help("Experimental, ainda sem controle no app."));
         put(c("sf.kcband", "Banda de refração do Clear Glass (bloqueio)").fmt(Format.READONLY).in(TECH, Tier.INTERNAL).on(KG)

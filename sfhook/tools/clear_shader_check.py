@@ -105,7 +105,7 @@ for hu, kg, debug in itertools.product((0, 1, 2), (0, 1, 2), (0, 3)):
     if not path.exists():
         continue
     want = dict(reversed(l.split()) for l in path.read_text().split("\n") if l.strip())
-    for name, args in (("unset", ""), ("neutral", ",hcfold=0,hcsat=1,hcscrim=0,hcscrimmax=0"), ("invalid", ",hcfold=9,hcsat=NaN,hcscrim=-1")):
+    for name, args in (("unset", ""), ("neutral", ",hcfold=0,hcsat=1,hcscrim=0,hcscrimmax=0,hcadapt=0"), ("invalid", ",hcfold=9,hcsat=NaN,hcscrim=-1,hcadapt=2")):
         out = gen(f"i2_{name}_{hu}{kg}_{debug}", debug, f"huclear={hu},kgclear={kg}{args}")
         got = {q.name: sha(q) for q in out.glob("mod_*")}
         if got != want:
@@ -117,7 +117,7 @@ print("I2: with the meniscus and heads-up material unset, neutral or invalid, cl
 meniscus = 0
 for hu, kg in itertools.product((0, 1, 2), repeat=2):
     for debug in range(5):
-        out = gen(f"men{hu}{kg}_d{debug}", debug, f"huclear={hu},kgclear={kg},hcband=0.42,hcfold=2,hcedge=24,hccore=24,hcsat=1.5,hcscrim=0.12,hcscrimmax=0.5")
+        out = gen(f"men{hu}{kg}_d{debug}", debug, f"huclear={hu},kgclear={kg},hcband=0.42,hcfold=2,hcedge=24,hccore=24,hcsat=1.5,hcscrim=0.12,hcscrimmax=0.5,hcadapt=1")
         base = ref[1 if debug == 1 else 0]
         for frag in sorted(out.glob("mod_*.frag")):
             text = frag.read_text()
@@ -128,6 +128,8 @@ for hu, kg in itertools.product((0, 1, 2), repeat=2):
                 fails.append(f"meniscus field presence wrong: hu {hu} kg {kg} {frag.name}")
             if ("oulg_material_hu(" in text) != bool(hu and not external):
                 fails.append(f"heads-up material presence wrong: hu {hu} kg {kg} {frag.name}")
+            if ("oulg_body_hu(" in text) != bool(hu and not external):
+                fails.append(f"heads-up adaptive body presence wrong: hu {hu} kg {kg} {frag.name}")
             if not hu and not kg and debug in (0, 1) and text != (ref[debug] / frag.name).read_text():
                 fails.append(f"meniscus parameters changed an off program: debug {debug} {frag.name}")
             r = subprocess.run(["glslangValidator", "-S", "frag", str(frag)], capture_output=True, text=True)
@@ -139,8 +141,8 @@ for hu, kg in itertools.product((0, 1, 2), repeat=2):
                     if r.returncode:
                         fails.append(f"link {vert} + {frag}: {r.stdout[-400:]}")
             meniscus += 1
-print(f"meniscus: {meniscus} fragment rewrites (9 mode pairs x debug 0-4, fold 2, sat 1.5, scrim 0.12-0.50) compile and link; "
-      "main() unchanged; field and material only where the heads-up is clear")
+print(f"meniscus: {meniscus} fragment rewrites (9 mode pairs x debug 0-4, fold 2, sat 1.5, scrim 0.12-0.50, adapt 1) compile and link; "
+      "main() unchanged; field, material and adaptive body only where the heads-up is clear")
 for d in (0, 1):
     for frag in ref[d].glob("mod_*.frag"):
         text = frag.read_text()

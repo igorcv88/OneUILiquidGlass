@@ -110,7 +110,7 @@ Rules for the module:
 - Treat a written `huclear`/`kgclear` as **pending** until `debug.oulg.sf.clear` (or the `CLEAR_OPTICS` line) reports it. Before that, the device renders the previous modes.
 - A reported mode is what a program was compiled with, not proof that a card was drawn clear. Per-card confirmation needs the debug maps (section 7) or a screenshot.
 
-The live helper (`sfhook/live/oulg-live.sh`) accepts `huclear kgclear hcband hcamp hcbody hcbody2 hcedge hccore hcblurexp kcband kcamp kcbody kcbody2 kcedge kccore kcblurexp kcveil kclevel kcdim kcknee kcsat kccool hcfold hcsat hcscrim hcscrimmax` in `setprops`. It refuses the bare key `clear` (the reported state is not writable).
+The live helper (`sfhook/live/oulg-live.sh`) accepts `huclear kgclear hcband hcamp hcbody hcbody2 hcedge hccore hcblurexp kcband kcamp kcbody kcbody2 kcedge kccore kcblurexp kcveil kclevel kcdim kcknee kcsat kccool hcfold hcsat hcscrim hcscrimmax hcadapt` in `setprops`. It refuses the bare key `clear` (the reported state is not writable).
 
 ## 6. Changes expected on the Android side (not done here)
 
@@ -197,7 +197,29 @@ sat  = hcsat + (1 - hcsat) * w                         the saturation fades to 1
 - The material is applied to the refracted, blurred backdrop before the edge light, so the light is not dimmed. The limit on `hcscrimmax` keeps the output luma from falling as the backdrop gets brighter (checked over the whole range).
 - The blur stays the section-1 curve. A uniform blur is `hcedge = hccore`.
 - Starting values for the device, sized on the 1340×374 card (r 108): `hcband 0.42` (45.4 px), `hcfold 2` (a 90.7 px, mirrored rim 25.1 px, stretched zone 20.3 px), `hcedge 24`, `hccore 24`, `hcbody 0`, `hcsat 1.5`, `hcscrim 0.12`, `hcscrimmax 0.5` (backdrop luma 0.25 → 0.205, 0.50 → 0.345, 0.75 → 0.420, white → 0.50). These are arithmetic from the reference's parameters and the measurements above, not device results.
-- Registry: the four keys are in the catalogue and `SettingsRegistry` (199 specs), `Tier.INTERNAL` read-only rows, in `CLEAR_GLASS_PENDING_INTEGRATION`, not in `SfLive.WRITABLE`.
-- Sizes: largest library with meniscus and material 16432 of 32768 bytes; `main()` unchanged.
+- Registry: the four keys are in the catalogue and `SettingsRegistry` (200 specs, with `sf.hcadapt` of section 13), `Tier.INTERNAL` read-only rows, in `CLEAR_GLASS_PENDING_INTEGRATION`, not in `SfLive.WRITABLE`.
+- Sizes: largest library with meniscus, material and adaptive body 16988 of 32768 bytes; `main()` unchanged.
 - Not covered: the lockscreen (profile 1) keeps the slab; `clear_render_check.mjs` (WebGL) has no meniscus case yet, so the GLSL/twin agreement of the meniscus rests on the shared text structure and glslang, not on a rendered comparison.
 - Pending on the device: everything visual. In particular the module flips notification text to dark over light backdrops; with a scrim that brings white down to 0.50 the text colour rule may need a different threshold.
+
+## 13. Heads-up adaptive blur and neutral highlights
+
+After the device round with the meniscus: lens, rim and blur level were accepted. What remained is a scale problem. A fixed disc removes detail smaller than itself and leaves structures wider than itself nearly intact (the launcher's clock behind the pop-up), and white content blurred over a blue wallpaper read as a blue-grey white.
+
+| Property | Default | Range | Meaning |
+|---|---|---|---|
+| `debug.oulg.sf.hcadapt` | 0 | 0–1 | 0: nothing emitted, the body is the single disc as before. Above 0: the largest share of the wide disc a pixel can take |
+
+```
+A = disc(radius br)            the body as before
+B = disc(radius 3 br)          same centre (the refracted position), same taps
+d = |luma(A) - luma(B)|
+body = mix(A, B, hcadapt * smoothstep(0.06, 0.30, d))
+```
+
+- Where the disc already averaged the backdrop out, A and B agree and the pixel is A. Where a structure wider than the disc survives it, they differ and the pixel moves toward B. The lens is not involved.
+- Model on the host (`clear_check.c`, a 24 px disc over patterns varying along one axis): weight 0 on 8 px stripes; at most 0.16 on an isolated 6 px line at full contrast; 1.00 at the centre of a 40 px stroke at contrast 0.75, whose residual falls from 0.96 to 0.45 of its contrast; for an 80 px stroke 0.34 at the centre and up to 0.64 on the flanks. A structure wider than the wide disc cannot be averaged out by it.
+- Cost: the heads-up clear body takes twice the taps while `hcadapt > 0`. The wide disc spreads the same taps over nine times the area; its grain on the device is not measured.
+- Neutral highlights (part of the heads-up material, active whenever it is emitted): pixels with luma above 0.55 and `max − min` below 0.45 are pulled toward their own grey, by up to 75 % at luma ≥ 0.90 and chroma ≤ 0.15. Luma is kept, so the scrim's monotone bound is unchanged. Example: (0.80, 0.85, 1.00) keeps luma 0.85 and its chroma falls from 0.20 to about 0.07. Vivid highlights (chroma above 0.45) are not touched.
+- The scrim is unchanged. With the clock handled by the blur, a lower `hcscrimmax` darkens near-white areas less.
+- Not validated on the device. The WebGL render check has no case for either.

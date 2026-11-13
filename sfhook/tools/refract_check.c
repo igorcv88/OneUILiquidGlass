@@ -27,6 +27,7 @@ static void clear_key(struct oulg_clear *c, int i, const char *k, float v) {
     else if (i == 1 && !strcmp(k, "sat")) c->sat = v; else if (i == 1 && !strcmp(k, "cool")) c->cool = v;
     else if (i == 0 && !strcmp(k, "fold")) c->fold = v; else if (i == 0 && !strcmp(k, "sat")) c->hsat = v;
     else if (i == 0 && !strcmp(k, "scrim")) c->scrim = v; else if (i == 0 && !strcmp(k, "scrimmax")) c->scrimmax = v;
+    else if (i == 0 && !strcmp(k, "adapt")) c->adapt = v;
 }
 int main(int argc, char **argv) {
     int dbg = argc > 3 ? atoi(argv[3]) : 1;
