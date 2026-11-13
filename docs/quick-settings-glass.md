@@ -452,7 +452,7 @@ sem reiniciar o compositor. Os demais valores invalidam somente scopes QS. O má
 externa está explicado na UI.
 
 `sf.qslens`, `sf.qsbody`, `sf.qsdepth` e o novo `sf.qslight` usam o mecanismo existente de pending
-até a aplicação real. `sf.qslight` tem default 0,90, domínio 0–2; é lido em `p[3].light`, permitido
+até a aplicação real. `sf.qslight` tem padrão nativo 0,90 (em Frosted e Clear), domínio manual 0–2, é somente leitura no aplicativo e continua permitido
 por `SfLive` e pelo helper e registrado no catálogo gerado. O parser C rejeita valores não finitos
 e sufixos inválidos. O ganho não altera os perfis 0–2; a biblioteca bundled passa a v0.28.0/29.
 Não foi alterado `sf.shadelight`, `paneldim`, `shadelightglass` ou o material de popup/bloqueio.
