@@ -336,7 +336,7 @@ static void fix_ranges(void) {
     struct oulg_clear g = OULG_CLEAR_DEFAULT; g.body[0] = 0.8f;
     CHECK(oulg_clear_acap(&g, 0, 1.0) == 0.0, "acap: negative amax not clamped to 0");
     CHECK(fabs(oulg_clear_acap(&d, 0, 0.0) - 0.40) < 1e-6, "acap: rho 0");
-    CHECK(fabs(oulg_clear_acap(&d, 1, 1.2) - fmin(0.40, (0.75 / 1.2 - 0.05) / 1.5)) < 1e-6, "acap: rho 1.2");
+    CHECK(fabs(oulg_clear_acap(&d, 1, 1.2) - fmin((double)d.amp[1], (0.75 / 1.2 - d.body[1] - 3.0 * d.body2[1]) / 1.5)) < 1e-6, "acap: rho 1.2");
     printf("fix: modes, every clear domain (NaN, below, above), b_e > b_c, amax < 0 and rho in {0, 1.2} checked\n");
 }
 
@@ -711,7 +711,7 @@ static void meniscus_text(void) {
         if (hu && n > most) most = n;
         int field = strstr(buf, "sqrt(max(1.0 - x * x, 0.0))") != NULL, mat = strstr(buf, "mediump vec4 oulg_material_hu(") != NULL;
         int routed = strstr(buf, "return oulg_cl > 0.5 ? oulg_material_hu(c) : c;") != NULL;
-        CHECK(field == (hu != 0), "meniscus field presence wrong: hu %d kg %d debug %d ext %d", hu, kg, dbg, ext);
+        CHECK(field == (hu != 0 || kg != 0), "meniscus field presence wrong: hu %d kg %d debug %d ext %d", hu, kg, dbg, ext);
         CHECK(mat == (hu != 0 && !ext) && routed == mat, "hu material presence wrong: hu %d kg %d debug %d ext %d", hu, kg, dbg, ext);
         int wide = strstr(buf, "mediump vec4 oulg_body_hu(") != NULL, wrouted = strstr(buf, OULG_HU_BODY_TO) != NULL;
         CHECK(wide == (hu != 0 && !ext) && wrouted == wide, "hu adaptive body presence wrong: hu %d kg %d debug %d ext %d", hu, kg, dbg, ext);
@@ -722,7 +722,7 @@ static void meniscus_text(void) {
             CHECK(strcmp(ref, buf) == 0, "meniscus parameters changed the text with the heads-up off (kg %d debug %d ext %d)", kg, dbg, ext);
         }
     }
-    printf("meniscus text: field, material and adaptive body only in heads-up clear programs; largest library with all %zu of 32768 bytes\n", most);
+    printf("meniscus text: meniscus field in each opted-in Clear profile; heads-up material and adaptive body only in HU clear; largest library with all %zu of 32768 bytes\n", most);
     free(buf); free(ref);
 }
 
