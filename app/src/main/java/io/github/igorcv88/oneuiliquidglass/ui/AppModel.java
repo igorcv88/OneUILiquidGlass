@@ -390,7 +390,12 @@ public final class AppModel {
     public boolean compositorUnverified() {
         SharedPreferences p = lensPrefs();
         Map<String, String> status = lens.model().status;
-        return !CompositorValues.hasCompiled(p)
+        // Earlier versions recorded a compile baseline before Clear selectors were writable.
+        // A matching getprop is not proof that those selectors were compiled into the shader.
+        Map<String, String> compiled = CompositorValues.compiledValues(p);
+        return !compiled.containsKey(GlassMaterial.HU_SELECTOR)
+                || !compiled.containsKey(GlassMaterial.KG_SELECTOR)
+                || !CompositorValues.hasCompiled(p)
                 || !"1".equals(status.get("sf_loaded"))
                 || !"1".equals(status.get("sf_got"))
                 || !"1".equals(status.get("sf_rewrite_ok"))
