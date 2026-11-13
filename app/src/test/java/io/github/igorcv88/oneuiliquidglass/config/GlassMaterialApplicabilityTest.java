@@ -65,7 +65,7 @@ public class GlassMaterialApplicabilityTest {
 
     @Test
     public void edgeAmplitudeOnlyActsWithTheMeniscusOff() {
-        Applicability off = of(true, "sf.huclear", "1", "sf.kgclear", "1");
+        Applicability off = of(true, "sf.huclear", "1", "sf.kgclear", "1", "sf.hcfold", "0", "sf.kcfold", "0");
         assertKind(Applicability.Kind.NEEDS_RESTART, off, "sf.hcamp");
         assertKind(Applicability.Kind.NEEDS_RESTART, off, "sf.kcamp");
         Applicability on = of(true, "sf.huclear", "1", "sf.kgclear", "1", "sf.hcfold", "2", "sf.kcfold", "0.5");
@@ -73,14 +73,17 @@ public class GlassMaterialApplicabilityTest {
         assertKind(Applicability.Kind.INACTIVE, on, "sf.kcamp");
         assertEquals(Applicability.NEEDS_MENISCUS_OFF, on.rule("sf.hcamp").reason);
         // Each profile has its own meniscus.
-        Applicability hu = of(true, "sf.huclear", "1", "sf.kgclear", "1", "sf.hcfold", "2");
+        Applicability hu = of(true, "sf.huclear", "1", "sf.kgclear", "1", "sf.hcfold", "2", "sf.kcfold", "0");
         assertKind(Applicability.Kind.INACTIVE, hu, "sf.hcamp");
         assertKind(Applicability.Kind.NEEDS_RESTART, hu, "sf.kcamp");
     }
 
     @Test
     public void whiteNeutralisingNeedsTheMaterialBlock() {
-        String[] clear = {"sf.huclear", "1", "sf.kgclear", "1"};
+        // Exercise the legacy neutral material explicitly; the new Clear-only defaults
+        // activate saturation and lift, so the material is otherwise always present.
+        String[] clear = {"sf.huclear", "1", "sf.kgclear", "1", "sf.hcsat", "1",
+                "sf.hclift", "0", "sf.hcscrim", "0", "sf.hcscrimmax", "0"};
         assertKind(Applicability.Kind.INACTIVE, of(true, clear), "sf.hcneutral");
         assertEquals(Applicability.NEEDS_MATERIAL_BLOCK, of(true, clear).rule("sf.hcneutral").reason);
         assertKind(Applicability.Kind.NEEDS_RESTART, of(true, concat(clear, "sf.hcsat", "1.05")), "sf.hcneutral");
@@ -123,7 +126,7 @@ public class GlassMaterialApplicabilityTest {
     public void theGenericCompositorRuleStillAppliesToOtherCompositorKeys() {
         assertKind(Applicability.Kind.NEEDS_RESTART, of(true), "sf.hulight");
         assertKind(Applicability.Kind.INACTIVE, of(false), "sf.hulight");
-        assertKind(Applicability.Kind.NEEDS_RESTART, of(true), "sf.qslight");
+        assertKind(Applicability.Kind.READ_ONLY, of(true), "sf.qslight");
     }
 
     @Test
