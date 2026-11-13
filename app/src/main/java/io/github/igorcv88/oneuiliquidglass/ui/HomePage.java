@@ -6,6 +6,7 @@ import android.widget.*;
 import io.github.igorcv88.oneuiliquidglass.R;
 import io.github.igorcv88.oneuiliquidglass.config.*;
 import io.github.igorcv88.oneuiliquidglass.live.CompositorValues;
+import io.github.igorcv88.oneuiliquidglass.live.MaterialStatus;
 import io.github.igorcv88.oneuiliquidglass.ui.kit.*;
 
 import java.util.*;
@@ -297,7 +298,11 @@ public final class HomePage implements Page {
         } else if (!pending.isEmpty()) {
             key = "pending" + pending.size();
             n = Ui.notice(a, t, Ui.Tone.INFO, pending.size() == 1 ? a.getString(R.string.home_lens_pending_one) : a.getString(R.string.home_lens_pending_many, pending.size()), a.getString(R.string.home_apply), host::openLens);
-        } else if (m.mode() == Mode.DYNAMIC_LENS && m.compositorUnverified()) {
+        // The material card immediately below already explains this exact unverified state.
+        // Do not display an identical lens warning above it; independent errors/pending
+        // settings retain their own Home notices.
+        } else if (m.mode() == Mode.DYNAMIC_LENS && m.compositorUnverified()
+                && m.materialStatus() != MaterialStatus.UNCONFIRMED) {
             key = "lens-unverified";
             n = Ui.notice(a, t, Ui.Tone.WARN,
                     a.getString(R.string.home_lens_unverified),
