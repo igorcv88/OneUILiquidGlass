@@ -311,6 +311,45 @@ public final class QuickSettingsEdgeLightTest {
             assertEquals(java.util.Collections.singletonList("container:false"), results);
         } finally { broken.set(null, wasBroken); }
     }
+    /** A flat/invalid Compose corner must not be counted as AGSL light or dim the native rim. */
+    @Test public void invalidCornerRestoresTheFullRimWithoutEnteringTheShader() throws Exception {
+        QuickSettingsEdgeLight edge = edge(true, true, true);
+        edge.optics(new QsCapsuleOptics(), () -> false);
+        Object element = new Object(), node = new Object();
+        edge.element(element, new ZeroCornerShape(), 4f, 1f, edge.selected("container"));
+        call(edge, "bind", new Class<?>[]{Object.class, Object.class}, element, node);
+        set(edge, "getSize", Scope.class.getMethod("size"));
+        set(edge, "getDensity", Scope.class.getMethod("density"));
+        set(edge, "drawContext", Scope.class.getMethod("context"));
+        set(edge, "contextCanvas", DrawContext.class.getMethod("canvas"));
+        set(edge, "nativeCanvas", CanvasWrapper.class.getField("raw"));
+        set(edge, "topStart", ZeroCornerShape.class.getField("corner"));
+        set(edge, "toPx", Corner.class.getMethod("radius", Object.class, long.class));
+
+        QsLitRims rims = new QsLitRims();
+        Object box = new Object();
+        assertTrue(rims.report(box, true, 0L));
+        assertTrue(rims.lit(box));
+        java.util.List<Boolean> results = new java.util.ArrayList<>();
+        edge.onOptics((token, drawn, session) -> {
+            results.add(drawn);
+            rims.report(box, drawn, session);
+        });
+
+        // The synthetic shape has topStart=0; a 4px border produces AGSL radius=-4.
+        // Even with a hardware canvas, the shader must not report a successful draw.
+        call(edge, "optics", new Class<?>[]{Object.class, Object.class}, node, new Scope(true));
+        call(edge, "optics", new Class<?>[]{Object.class, Object.class}, node, new Scope(true));
+        assertEquals(java.util.Arrays.asList(false, false), results);
+        assertFalse("invalid geometry must restore the full Compose outline", rims.lit(box));
+        assertEquals("one bounded diagnostic per bound node", 1L,
+                ShadowLog.getLogsForTag("OULG").stream()
+                        .filter(l -> l.msg.contains("event=QS_OPTICS_INVALID_RADIUS")).count());
+        assertTrue(ShadowLog.getLogsForTag("OULG").stream()
+                .anyMatch(l -> l.msg.contains("event=QS_OPTICS_INVALID_RADIUS")
+                        && l.msg.contains("radius=-4.0")));
+    }
+
     @Test public void duplicateUpdateOfSameElementDoesNotLoseBinding() throws Exception {
         QuickSettingsEdgeLight edge=edge(true,true,true);
         Object element=new Object(),node=new Object();edge.element(element,new Object(),1);
@@ -324,6 +363,11 @@ public final class QuickSettingsEdgeLightTest {
 
     public static class EmptyScope { public long size(){return 0L;} }
     public static class Shape { public final Corner corner=new Corner(); }
+    public static class ZeroCornerShape {
+        public final Corner corner = new Corner() {
+            @Override public float radius(Object scope, long size) { return 0f; }
+        };
+    }
     public static class Corner { public float radius(Object scope,long size){return 50f;} }
     public static class Scope {
         final DrawContext context;
