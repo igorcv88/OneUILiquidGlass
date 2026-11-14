@@ -46,7 +46,7 @@ final class Foreground {
     private static int intercepted;
     static int interceptions() { int n = intercepted; intercepted = 0; return n; }
     /** Whether any view carries a swapped tone (the hooks' fast path). */
-    static boolean tracking() { return !swapped.isEmpty(); }
+    static boolean tracking() { return !swapped.isEmpty() || UberRemoteViewsTone.tracking(); }
     /**
      * TextView.setTextColor / ImageView.setImageTintList on a view this class swapped, from SystemUI
      * (a rebind, a heads-up-to-shade transformation, an animated group title). Without this the
@@ -60,7 +60,7 @@ final class Foreground {
         Rec r = swapped.get(key);
         if (r == null) return null;
         // A RemoteViews reapply may add a private background before writing the text colour.
-        if (r.custom && key instanceof TextView && !customSurface((View) key)) {
+        if (r.custom && key instanceof TextView && !textEligible((View) key)) {
             swapped.remove(key);
             reshadow((TextView) key);
             return null;
@@ -214,7 +214,7 @@ final class Foreground {
      * icon, so the template gives it no glyph colour (device: Termux, ChatGPT, Gmail with an Icon
      * Pack Studio pack stayed white on light glass, 26/10). Full-colour icons fail the test.
      */
-    private static Integer lightGlyph(android.graphics.drawable.Drawable d) {
+    static Integer lightGlyph(android.graphics.drawable.Drawable d) {
         Integer known = sampled.get(d);
         if (known != null) return known == 0 ? null : known;
         int found = 0;
@@ -655,11 +655,15 @@ final class Foreground {
                 }
                 continue;
             }
+            if (UberRemoteViewsTone.owns(v)) {
+                if (UberRemoteViewsTone.drift(v)) return "uber-rebind";
+                continue;
+            }
             Rec r = swapped.get(v);
             // Read in place (no Ink wrapper): this runs for every swapped view on every pre-draw.
             if (r == null) return "rebind";
             if (v instanceof TextView) {
-                if (r.custom && !customSurface(v)) return "surface";
+                if (r.custom && !textEligible(v)) return "surface";
                 if (((TextView) v).getCurrentTextColor() != r.applied && !InkAnimator.running(v)) return "rebind";
             }
             else if (v instanceof ImageView) {
@@ -684,7 +688,7 @@ final class Foreground {
     }
 
     private static int walk(View v, boolean swap, boolean lightText, java.util.List<View> tracked) {
-        int changed = 0;
+        int changed = UberRemoteViewsTone.apply(v, swap, lightText) ? 1 : 0;
         if (v instanceof TextView) {
             boolean eligible = textEligible(v);
             if (io.github.igorcv88.oneuiliquidglass.diagnostics.Probe.trace && !standard(v, false)
@@ -715,7 +719,8 @@ final class Foreground {
             if (i.getImageTintList() == null) swapped.remove(v);
             else if (standard(v, true)) changed += ink(new Icon(i), swap, lightText, swapped, animating) ? 1 : 0;
         }
-        if (tracked != null && swap && (swapped.containsKey(v) || chevrons.containsKey(v))) tracked.add(v);
+        if (tracked != null && swap && (swapped.containsKey(v) || chevrons.containsKey(v)
+                || UberRemoteViewsTone.owns(v))) tracked.add(v);
         if (v instanceof ViewGroup) {
             ViewGroup g = (ViewGroup) v;
             for (int i = 0; i < g.getChildCount(); i++) {
@@ -791,7 +796,9 @@ final class Foreground {
         } else { InkAnimator.cancel(key); ink.set(r.applied); }
         return true;
     }
-    static boolean textEligible(View v) { return standard(v, false) || customSurface(v); }
+    static boolean textEligible(View v) {
+        return standard(v, false) || customSurface(v) || UberRemoteViewsTone.vehicleText(v);
+    }
 
     /**
      * A custom label may follow the glass only inside a notification row, with no private
