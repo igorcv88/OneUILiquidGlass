@@ -129,7 +129,7 @@ public final class UberRemoteViewsToneTest {
         assertSame(rounded,filled.getBackground());
         assertEquals(0xfffafaff,rounded.getColor().getDefaultColor());
         assertEquals(2,tracked.size());
-        assertNull(Foreground.drift(tracked));
+        assertFalse("the active segment tint is current",UberRemoteViewsTone.drift(filled));
         Foreground.apply(f.row,true,true,tracked);
         assertEquals("repeat shade walk keeps the mapped tint",0xff050500,
                 filled.getBackgroundTintList().getDefaultColor());
@@ -154,7 +154,8 @@ public final class UberRemoteViewsToneTest {
         ColorStateList publisherAccent=ColorStateList.valueOf(0xffaa5500);
         filled.setBackground(new ColorDrawable(0xffddcc11));
         filled.setBackgroundTintList(publisherAccent);
-        assertEquals("uber-rebind",Foreground.drift(tracked));
+        assertTrue("the publisher's new drawable/tint must invalidate the lease",
+                UberRemoteViewsTone.drift(filled));
         Foreground.apply(f.row,true,true,tracked);
         assertSame(publisherAccent,filled.getBackgroundTintList());
         Foreground.apply(f.row,false,true,tracked);
