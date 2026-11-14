@@ -169,9 +169,16 @@ final class UberRemoteViewsTone {
         PorterDuff.Mode originalMode = previous == null ? mode(v, image) : previous.originalMode;
         Integer source = null;
         if (originalTint != null && !originalTint.isStateful()) source = originalTint.getDefaultColor();
-        else if (originalTint == null) source = image
-                ? (previous == null ? Foreground.lightGlyph(d) : previous.originalColor)
-                : solid(d, previous != null);
+        else if (originalTint == null) {
+            // Do not mix nullable Integer with primitive int in a ternary: Java would
+            // unbox a null from lightGlyph() when the image is not monochrome.
+            if (image) {
+                if (previous == null) source = Foreground.lightGlyph(d);
+                else source = Integer.valueOf(previous.originalColor);
+            } else {
+                source = solid(d, previous != null);
+            }
+        }
         if (source == null || (source >>> 24) == 0 || !Foreground.themeTone(source, lightText)) {
             report(role, source == null ? "unsupported" : "native-accent", source == null ? 0 : source, d);
             return restore(v, previous);
