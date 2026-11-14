@@ -146,13 +146,16 @@ public final class UberRemoteViewsToneTest {
         ArrayList<View> tracked=new ArrayList<>();
         Foreground.apply(f.row,true,true,tracked);
         assertEquals(0xff212121,filled.getBackgroundTintList().getDefaultColor());
-        // Rebind replaces the drawable while we own the tint; ownership cannot leak to new art.
+        // The publisher replaces both art and tint while we own the old one.
+        // Its new accent takes priority: the module must not restore stale grey over it.
+        ColorStateList publisherAccent=ColorStateList.valueOf(0xffaa5500);
         filled.setBackground(new ColorDrawable(0xffddcc11));
+        filled.setBackgroundTintList(publisherAccent);
         assertEquals("uber-rebind",Foreground.drift(tracked));
         Foreground.apply(f.row,true,true,tracked);
-        assertSame(nativeTint,filled.getBackgroundTintList());
+        assertSame(publisherAccent,filled.getBackgroundTintList());
         Foreground.apply(f.row,false,true,tracked);
-        assertSame(nativeTint,filled.getBackgroundTintList());
+        assertSame(publisherAccent,filled.getBackgroundTintList());
     }
 
     @Test public void originalAccentsAndGradientsRemainUnmodified() {
