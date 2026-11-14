@@ -137,8 +137,11 @@ final class UberRemoteViewsTone {
         return true;
     }
 
-    private static Integer solid(Drawable d) {
-        if (d == null || d.getColorFilter() != null) return null;
+    private static Integer solid(Drawable d, boolean ourTintActive) {
+        // setBackgroundTintList may install a filter on the same drawable. While our lease
+        // owns that tint, still read its original solid fill rather than treating it as
+        // a new publisher filter and oscillating on every shade refresh.
+        if (d == null || (!ourTintActive && d.getColorFilter() != null)) return null;
         if (d instanceof ColorDrawable) return ((ColorDrawable) d).getColor();
         if (d instanceof GradientDrawable) {
             GradientDrawable g = (GradientDrawable) d;
@@ -166,7 +169,9 @@ final class UberRemoteViewsTone {
         PorterDuff.Mode originalMode = previous == null ? mode(v, image) : previous.originalMode;
         Integer source = null;
         if (originalTint != null && !originalTint.isStateful()) source = originalTint.getDefaultColor();
-        else if (originalTint == null) source = image ? Foreground.lightGlyph(d) : solid(d);
+        else if (originalTint == null) source = image
+                ? (previous == null ? Foreground.lightGlyph(d) : previous.originalColor)
+                : solid(d, previous != null);
         if (source == null || (source >>> 24) == 0 || !Foreground.themeTone(source, lightText)) {
             report(role, source == null ? "unsupported" : "native-accent", source == null ? 0 : source, d);
             return restore(v, previous);
