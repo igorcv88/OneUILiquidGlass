@@ -130,6 +130,9 @@ public final class UberRemoteViewsToneTest {
         assertEquals(0xfffafaff,rounded.getColor().getDefaultColor());
         assertEquals(2,tracked.size());
         assertNull(Foreground.drift(tracked));
+        Foreground.apply(f.row,true,true,tracked);
+        assertEquals("repeat shade walk keeps the mapped tint",0xff050500,
+                filled.getBackgroundTintList().getDefaultColor());
         Foreground.apply(f.row,false,true,tracked);
         assertNull(filled.getBackgroundTintList());
         assertNull(remainder.getBackgroundTintList());
