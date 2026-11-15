@@ -124,6 +124,8 @@ final class QuickSettingsEdgeLight {
         Object root;
         float tag = -1f;
         boolean drawn;
+        /** Report malformed Compose corner geometry at most once for this bound node. */
+        boolean invalidCornerReported;
         Edge(Spec spec) { this.spec = spec; }
         void release() {
             if (bridge != null) {
@@ -674,6 +676,23 @@ final class QuickSettingsEdgeLight {
                 float[] env = QuickSettingsGlass.envelope(w, h, e.spec.outer);
                 x = env[0]; y = env[1]; w = env[2] - env[0]; h = env[3] - env[1];
                 radius = Math.min(w, h) / 2f;
+            }
+            // A zero/negative corner (observed as -4 px after Samsung's border inset)
+            // used to be clamped to zero by QsCapsuleOptics while reporting a successful
+            // AGSL draw. That incorrectly let QsLitRims attenuate the native rounded rim,
+            // even though the compositor refused the corresponding radius tag.
+            // Fail closed: keep the full Compose outline rather than claiming optical light.
+            if (!Float.isFinite(radius) || radius <= 0f) {
+                if (!e.invalidCornerReported) {
+                    e.invalidCornerReported = true;
+                    Probe.log("QS_OPTICS_INVALID_RADIUS", "session=" + coverage.session()
+                            + " id=" + e.spec.token.id + " role=" + e.spec.token.role
+                            + " w=" + w + " h=" + h + " borderPx=" + out
+                            + " radius=" + radius + " shape=" + e.spec.shape.getClass().getName()
+                            + " hasBox=" + (e.spec.token.box != null && e.spec.token.box.get() != null));
+                }
+                result(e.spec.token, false, "invalid-corner-radius");
+                return;
             }
             boolean media = !usesCompositor(e.spec.token.role);
             boolean success = o.draw(node, (android.graphics.Canvas) raw, x, y, w, h, radius,
