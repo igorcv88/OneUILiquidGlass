@@ -25,9 +25,10 @@ import org.robolectric.annotation.Config;
 public class LiveRimNeutralTest {
     private static final class Recorded { int color, alpha; float width; BlendMode mode; }
     /** Records the SRC_ATOP path strokes; the rest draws as usual. */
-    private static final class Recording extends TestCanvas {
+    private static final class Recording extends Canvas {
         final List<Recorded> atop = new ArrayList<>();
-        Recording() { super(400, 120); }
+        Recording() { super(android.graphics.Bitmap.createBitmap(400, 120, android.graphics.Bitmap.Config.ARGB_8888)); }
+        @Override public boolean isHardwareAccelerated() { return true; }
         @Override public void drawPath(Path p, Paint paint) {
             if (paint.getBlendMode() == BlendMode.SRC_ATOP) {
                 Recorded r = new Recorded();
