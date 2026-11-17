@@ -19,17 +19,33 @@ from PIL import Image
 K = 12.75
 
 
-def decode(rgb):
-    """rgb: H x W x 3 uint8. Returns (data pixels N x 3 as fractions of transmission, id counter)."""
-    flat = rgb.reshape(-1, 3).astype(int)
-    idmask = flat[:, 2] >= 254
-    data = flat[~idmask] / 255.0 / K
-    ids = Counter(int(r) << 8 | int(g) for r, g, _ in flat[idmask])
-    return data, ids
+def tiles(rgb, x0=0, y0=0):
+    """Split pixels by tile geometry, not by colour (a display transform moves the codes: ids read as
+    B ~245 on DZIF). Tiles are 8 x 8 device px; the phase is found as the parity class with the
+    higher mean blue (id tiles carry B = 255 before any transform). Pixels within 1 px of a tile edge
+    are dropped (resampling and antialiasing). Returns (data pixels, id pixels) as N x 3 ints."""
+    h, w, _ = rgb.shape
+    yy, xx = np.mgrid[0:h, 0:w]; X, Y = xx + x0, yy + y0
+    par = ((X // 8 + Y // 8) % 2).astype(bool)
+    inner = ((X % 8) >= 1) & ((X % 8) <= 6) & ((Y % 8) >= 1) & ((Y % 8) <= 6)
+    b = rgb[..., 2].astype(float)
+    idpar = b[par & inner].mean() > b[~par & inner].mean() if (par & inner).any() and (~par & inner).any() else True
+    ids = inner & (par if idpar else ~par); data = inner & (~par if idpar else par)
+    return rgb[data].astype(int), rgb[ids].astype(int)
 
 
-def report(rgb, out=print):
-    data, ids = decode(rgb)
+def decode(rgb, x0=0, y0=0, scale=1.0):
+    """Data pixels as fractions of transmission (final, paint, texture) and the id tiles' RGB.
+    scale: the display transform's gain on a known code, estimated from the id tiles' blue
+    (255 encoded); 1.0 leaves codes as read."""
+    d, i = tiles(rgb, x0, y0)
+    return d / 255.0 / K / scale, Counter(tuple(int(v) for v in px) for px in i)
+
+
+def report(rgb, out=print, x0=0, y0=0):
+    _, idpx = tiles(rgb, x0, y0)
+    gain = float(np.median(idpx[:, 2])) / 255.0 if len(idpx) else 1.0
+    data, ids = decode(rgb, x0, y0)
     if len(data) == 0:
         out('no data tiles: is the probe on (sf.debug=5 after a userspace restart) and the region over the glass?')
         return None
@@ -38,8 +54,11 @@ def report(rgb, out=print):
     out(f'{len(data)} data pixels, {sum(ids.values())} id pixels')
     for i, n in enumerate(names):
         out(f'  1 - {n:32s} median {med[i] * 100:6.3f} %   p95 {p95[i] * 100:6.3f} %   non-zero on {nz[i] * 100:5.1f} % of pixels')
-    for pid, c in ids.most_common(6):
-        out(f'  program id {pid:04x}: {c} px')
+    if gain < 0.995:
+        out(f'  id tiles read B = {gain * 255:.0f} for 255 encoded: a display transform of gain ~{gain:.3f} is applied after'
+            f' the code; corrected final deficit {med[0] / gain * 100:.3f} %')
+    for rgbv, c in ids.most_common(4):
+        out(f'  id tile RGB {rgbv} ({c} px); as encoded ~ id {round(rgbv[0] / gain) << 8 | round(rgbv[1] / gain):04x} (exact id: the PROBE log)')
     return med
 
 
@@ -53,8 +72,11 @@ def selftest():
         px[data] = enc; px[~data] = (0xad, 0x8b, 255)
         data_px, ids = decode(px); med = np.median(data_px, axis=0)
         assert np.allclose(med, [1 - fa, 1 - pa, 1 - ta], atol=0.0004), (fa, pa, ta, med)
-        assert ids.most_common(1)[0][0] == 0xad8b
-    print('selftest: encoding round trip within 0.04 % for opaque, 2 % final/paint and 2 % texture deficits')
+        assert ids.most_common(1)[0][0] == (0xad, 0x8b, 255)
+        # A display transform (ids read 156,36,245 on DZIF): geometry still separates the tiles.
+        dim = (px * 0.96).astype(np.uint8); d2, i2 = tiles(dim)
+        assert len(d2) == len(data_px) and np.median(i2[:, 2]) >= 244
+    print('selftest: round trip within 0.04 % (opaque, 2 % final/paint, 2 % texture); tiles split by geometry under a 0.96 transform')
 
 
 if __name__ == '__main__':
@@ -64,5 +86,6 @@ if __name__ == '__main__':
         print(__doc__); sys.exit(2)
     im = np.asarray(Image.open(sys.argv[1]).convert('RGB'))
     if len(sys.argv) >= 6:
-        x0, y0, x1, y1 = map(int, sys.argv[2:6]); im = im[y0:y1, x0:x1]
-    report(im)
+        x0, y0, x1, y1 = map(int, sys.argv[2:6]); report(im[y0:y1, x0:x1], x0=x0, y0=y0)
+    else:
+        report(im)
