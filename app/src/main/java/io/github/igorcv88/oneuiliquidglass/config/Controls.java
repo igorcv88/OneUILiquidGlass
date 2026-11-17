@@ -574,6 +574,14 @@ public final class Controls {
                 .help("Abaixo desta opacidade o desfoque do cartão é removido de uma vez,"
                         + " evitando uma mancha branca ao fechar a central.")
                 .show(BEHAV, Channel.NONE));
+        put(c("hufadecut", "Lente do pop-up na entrada").fmt(Format.CHOICE)
+                .in(BEHAVIOR, ADV).on(HU)
+                .choice("-1", "Igual à central", "Corte atual (shadefadecut)")
+                .choice("0.25", "25 %", "Lente durante a maior parte do deslize")
+                .choice("0.1", "10 %", "Lente durante a maior parte do deslize")
+                .choice("0", "Desde o início", "Região inteira já no primeiro quadro")
+                .help("Opacidade do pop-up a partir da qual a lente e o desfoque aparecem ao"
+                        + " entrar e somem ao sair. Vale para o pop-up sobre apps."));
         put(c("kgwinblur", "Desfoque da janela no bloqueio parado").fmt(Format.TOGGLE)
                 .in(BEHAVIOR, ADV).on(KG)
                 .help("Permite as pequenas rampas de desfoque que um toque inicia no bloqueio"
@@ -924,6 +932,11 @@ public final class Controls {
                 .choice("1", "No cartão", "Segue o esmaecimento do cartão")
                 .choice("0", "Na view", "Caminho antigo; pode deixar rastro")
                 .help("Onde o desfoque dos cartões da central é desenhado."));
+        put(c("hublurpath", "Desfoque do pop-up com a lente").fmt(Format.CHOICE).in(TECH, TEC).on(HU)
+                .choice("0", "Na view (Samsung)", "Região do sistema; padrão atual")
+                .choice("1", "No cartão", "Alpha da região controlado pelo módulo")
+                .help("Onde o desfoque do pop-up é desenhado com a lente dinâmica. Comparação do"
+                        + " fundo residual; vale para pop-ups novos."));
         put(c("perf", "Medir tempo dos ganchos").fmt(Format.TOGGLE).in(TECH, TEC).all()
                 .help("Registra no log o tempo gasto pelo módulo. Tem custo; use só para"
                         + " diagnóstico."));
@@ -991,8 +1004,13 @@ public final class Controls {
                 .help("Escurece o vidro do pop-up sobre as partes claras do fundo." + restart));
         put(c("sf.hclift", "Clareamento").fmt(Format.PLAIN).in(COLOR, STD).on(HU).step(.05)
                 .help("Clareia o vidro do pop-up sem alterar a refração. Valores altos podem reduzir o contraste do texto." + restart));
-        put(c("sf.hcneutral", "Neutralizar brancos").fmt(Format.PERCENT_1).in(COLOR, ADV).on(HU)
-                .help("Reduz tons azulados ou coloridos nas áreas quase brancas." + restart));
+        put(c("sf.hchlneutral", "Neutralidade dos realces").fmt(Format.PERCENT_1).in(COLOR, STD).on(HU)
+                .help("Leva ao cinza neutro os brancos tingidos pela cor desfocada em volta (texto, relógio),"
+                        + " sem mudar a luminância nem as áreas de cor uniforme. 0 desliga; a força é linear."
+                        + " Exige o desfoque adaptativo." + restart));
+        put(c("sf.hcneutral", "Neutralização antiga (legado)").fmt(Format.PERCENT_1).in(COLOR, ADV).on(HU)
+                .help("Curva anterior: age só em pixels quase brancos de baixa cromaticidade e também"
+                        + " acinzenta áreas pastel uniformes. Mantida por compatibilidade; prefira Neutralidade dos realces." + restart));
         put(c("sf.kcfold", "Menisco").fmt(Format.GAIN).in(EDGES, STD).on(KG).step(.05)
                 .help("Intensidade da borda curva nos cartões da tela de bloqueio." + restart));
         put(c("sf.kcband", "Largura da borda curva").fmt(Format.PERCENT_1).in(EDGES, ADV).on(KG)
@@ -1046,7 +1064,7 @@ public final class Controls {
 
     /** The few controls shown first on a Clear surface: where the look is made. */
     private static final List<String> CLEAR_PRIMARY_HU = Collections.unmodifiableList(Arrays.asList(
-            "sf.hcfold", "sf.hcedge", "sf.hccore", "sf.hcadapt", "sf.hcsat", "sf.hclift"));
+            "sf.hcfold", "sf.hcedge", "sf.hccore", "sf.hcadapt", "sf.hcsat", "sf.hclift", "sf.hchlneutral"));
     private static final List<String> CLEAR_PRIMARY_KG = Collections.unmodifiableList(Arrays.asList(
             "sf.kcfold", "sf.kcedge", "sf.kccore", "sf.kcsat", "sf.kclift"));
 

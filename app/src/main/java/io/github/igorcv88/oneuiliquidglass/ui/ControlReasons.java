@@ -22,13 +22,15 @@ final class ControlReasons {
             case "Com o material do pop-up, vale a refração do pop-up": return context.getString(R.string.control_reason_72a5beb4b605);
             case "Desative Discos desligados sem fundo": return context.getString(R.string.control_reason_37d1bfc3168b);
             case "Estado lido do aparelho": return context.getString(R.string.control_reason_e061dd5d8ae0);
+            case "Exige o desfoque adaptativo ligado": return context.getString(R.string.control_reason_a2864f0856d6);
             case "Exige o desfoque desenhado no cartão": return context.getString(R.string.control_reason_17236c820833);
             case "Exige saturação, escurecimento ou clareamento": return context.getString(R.string.control_reason_7bc5b40329fd);
             case "Legado sem efeito visual": return context.getString(R.string.control_reason_79d513d51655);
-            case "O vidro está desligado": return context.getString(R.string.control_reason_61e39f9c26d3);
             case "O vidro está desligado onde este ajuste vale": return context.getString(R.string.control_reason_317c7653bd1b);
+            case "O vidro está desligado": return context.getString(R.string.control_reason_61e39f9c26d3);
             case "Sem efeito na proteção Adaptativa": return context.getString(R.string.control_reason_b7d2e9ae3d5f);
             case "Sem efeito no vidro padrão": return context.getString(R.string.control_reason_65e66e7ee1c0);
+            case "Sem efeito nos kernels gaussianos; use o Original": return context.getString(R.string.control_reason_e5962977c557);
             case "Só funciona com o menisco desligado": return context.getString(R.string.control_reason_9c1dfe250b2b);
             case "Só funciona com o véu acima de 0": return context.getString(R.string.control_reason_a68b50de9042);
             case "Usado com a lente dinâmica": return context.getString(R.string.control_reason_d819d244b0d8);
@@ -37,10 +39,10 @@ final class ControlReasons {
             case "Usado com o vidro Fosco": return context.getString(R.string.control_reason_f4f63ea644e0);
             case "Usado com o vidro Transparente": return context.getString(R.string.control_reason_bd5401253fcd);
             case "Usado no modo de captura": return context.getString(R.string.control_reason_f27398911a67);
-            case "Usado no vidro padrão": return context.getString(R.string.control_reason_7d2a689e3b24);
             case "Usado no vidro padrão com a faixa de lente": return context.getString(R.string.control_reason_f3bf628a079b);
             case "Usado no vidro padrão ou com a lente dinâmica": return context.getString(R.string.control_reason_01bce8dcfea3);
             case "Usado no vidro padrão ou na captura": return context.getString(R.string.control_reason_67e88d51c693);
+            case "Usado no vidro padrão": return context.getString(R.string.control_reason_7d2a689e3b24);
             case "Use a proteção Adaptativa": return context.getString(R.string.control_reason_75fc35286ab7);
             case "Use o mapa de tons da lente na central": return context.getString(R.string.control_reason_3184fcb1d60f);
             case "Use o véu fixo ou o mapa de tons da lente": return context.getString(R.string.control_reason_1ab80b407e46);

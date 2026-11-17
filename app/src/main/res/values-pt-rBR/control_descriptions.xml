@@ -6,6 +6,8 @@
     <string name="control_description_edgepremul">O padrão 0 mantém a borda original fora de Display P3. Notificações em Display P3 usam automaticamente o modo aditivo 3 com luz RGB 1,5x; desative com debug.oulg.p3edgecompat=0. Modos manuais de diagnóstico: 1 usa mistura normal premultiplicada; 2 soma a 1x; 3 a 1,5x; 4 a 1,4x. Valores salvos são preservados.</string>
     <string name="control_description_headergap">Ajusta o espaço entre o cabeçalho e o título das notificações expandidas.</string>
     <string name="control_description_headertone">Adapta o relógio, a data e a operadora da central ao fundo.</string>
+    <string name="control_description_hublurpath">Seleciona onde o desfoque do pop-up é desenhado com a lente dinâmica; para comparar o fundo residual.</string>
+    <string name="control_description_hufadecut">Define a opacidade do pop-up a partir da qual a lente e o desfoque aparecem durante a entrada.</string>
     <string name="control_description_huoptics">Seleciona o material da lente dinâmica nos pop-ups.</string>
     <string name="control_description_hz">Define a frequência de captura do pop-up no modo de captura.</string>
     <string name="control_description_hzkg">Define a frequência de captura da tela de bloqueio quando necessária.</string>
@@ -114,9 +116,10 @@
     <string name="control_description_sf_hccore">Desfoque no centro dos pop-ups. Valores iguais na borda e no centro dão um desfoque uniforme. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_hcedge">Desfoque no contorno externo dos pop-ups. Se for maior que o do centro, é reduzido para igualar. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_hcfold">Intensidade da borda curva e comprimida do vidro nos pop-ups. As mudanças são aplicadas após reiniciar o userspace.</string>
+    <string name="control_description_sf_hchlneutral">Leva ao cinza neutro os brancos do pop-up tingidos pela cor desfocada em volta (texto, relógio), mantendo a luminância e sem tocar áreas de cor uniforme. 0 desliga; a força é linear. Exige o desfoque adaptativo. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_hckernel">Compara o método de desfoque dos pop-ups sem mudar o raio. De 1 a 3, um Gaussiano aninhado remove mais estrutura de texto do fundo e espalha menos os brancos. Só age com o desfoque adaptativo ligado. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_hclift">Clareia o vidro do pop-up sem alterar a refração. Valores altos podem reduzir o contraste do texto. As mudanças são aplicadas após reiniciar o userspace.</string>
-    <string name="control_description_sf_hcneutral">Reduz tons azulados ou coloridos nas áreas quase brancas dos pop-ups. Só funciona com saturação, escurecimento ou clareamento alterados. As mudanças são aplicadas após reiniciar o userspace.</string>
+    <string name="control_description_sf_hcneutral">Curva antiga do pop-up: age só em pixels quase brancos de baixa cromaticidade e também acinzenta áreas pastel uniformes. Mantida por compatibilidade; prefira Neutralidade dos realces. Só funciona com saturação, escurecimento ou clareamento alterados. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_hcsat">Intensidade das cores do fundo visto através dos pop-ups. Valores maiores deixam as cores mais vivas; os realces ficam como estão. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_hcscrim">Escurece o vidro do pop-up sobre as partes escuras do fundo. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_hcscrimmax">Escurece o vidro do pop-up sobre as partes claras do fundo. Nunca fica abaixo do valor das áreas escuras. As mudanças são aplicadas após reiniciar o userspace.</string>

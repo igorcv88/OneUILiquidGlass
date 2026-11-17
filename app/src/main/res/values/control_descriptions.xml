@@ -6,6 +6,8 @@
     <string name="control_description_edgepremul">Default mode 0 keeps the original edge outside Display P3. Notifications on Display P3 automatically use additive mode 3 with 1.5x RGB light; disable with debug.oulg.p3edgecompat=0. Manual diagnostic modes: 1 uses premultiplied normal blending; 2 adds light at 1.0x; 3 at 1.5x; 4 at 1.4x. Saved values are preserved.</string>
     <string name="control_description_headergap">Adjusts the space between the header and title of expanded notifications.</string>
     <string name="control_description_headertone">Adapts the shade clock, date, and carrier text to the background.</string>
+    <string name="control_description_hublurpath">Selects where pop-up blur is drawn with the dynamic lens; for comparing the residual backdrop.</string>
+    <string name="control_description_hufadecut">Sets the pop-up opacity from which its lens and blur appear while it slides in.</string>
     <string name="control_description_huoptics">Selects the dynamic lens material used on pop-ups.</string>
     <string name="control_description_hz">Sets the pop-up capture rate in capture mode.</string>
     <string name="control_description_hzkg">Sets the lock screen capture rate when capture is needed.</string>
@@ -114,9 +116,10 @@
     <string name="control_description_sf_hccore">Blur across the center of pop-ups. Equal edge and center values give one uniform blur. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_hcedge">Blur at the outer edge of pop-ups. If higher than the center blur, it is lowered to match. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_hcfold">Strength of the curved, compressed glass rim on pop-ups. Changes apply after userspace restarts.</string>
+    <string name="control_description_sf_hchlneutral">Moves pop-up whites tinted by the colour blurred around them (text, clock) toward neutral grey, keeping their luminance and leaving uniform colour areas alone. 0 is off; strength is linear. Needs adaptive blur. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_hckernel">Compares the pop-up blur method without changing its radius. 1 to 3 use a nested Gaussian that removes more background text structure and spreads highlights less. Only acts with adaptive blur on. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_hclift">Brightens the pop-up glass without changing its refraction. High values can reduce text contrast. Changes apply after userspace restarts.</string>
-    <string name="control_description_sf_hcneutral">Reduces blue or colored tint in the almost-white highlights of pop-ups. Only works while saturation, darkening or brightening is changed. Changes apply after userspace restarts.</string>
+    <string name="control_description_sf_hcneutral">Legacy pop-up curve: acts only on almost-white, low-chroma pixels and also greys uniform pastel areas. Kept for compatibility; prefer Highlight neutrality. Only works while saturation, darkening or brightening is changed. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_hcsat">Color strength of the background seen through pop-ups. Higher values make the colors richer; highlights stay as they are. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_hcscrim">Darkens pop-up glass over the dark parts of the background. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_hcscrimmax">Darkens pop-up glass over the bright parts of the background. It is never lower than the dark-area value. Changes apply after userspace restarts.</string>

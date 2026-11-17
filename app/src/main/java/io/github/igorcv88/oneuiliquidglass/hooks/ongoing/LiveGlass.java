@@ -137,6 +137,8 @@ public final class LiveGlass {
     public boolean writing() { return writing; }
     /** The surface's gate now (master switch, its opt-in, failure budget). */
     public boolean allows(LiveSurface surface) { return gate.allows(surface); }
+    /** The heads-up pop-up's outer-contour gain (debug.oulg.popuplinegain), shared by the live card. */
+    static float cardLineGain() { return io.github.igorcv88.oneuiliquidglass.glass.Tuning.get().popupLineGain; }
     public boolean tracked(View v) { return states.containsKey(v); }
     public boolean applied(View v) { State s = states.get(v); return s != null && s.glass != null; }
     public LiveGlassDrawable glassOf(View v) { State s = states.get(v); return s == null ? null : s.glass; }
@@ -271,6 +273,8 @@ public final class LiveGlass {
         }
         s.waiting = false;
         LiveGlassDrawable glass = new LiveGlassDrawable(bg, radii, color, s.surface.spec, v.getResources().getDisplayMetrics().density);
+        // The live card's outer contour at the heads-up pop-up's gain (parity audit 17/11).
+        if (s.surface == LiveSurface.CARD) glass.setEdgeLineGain(cardLineGain());
         glass.setRenderProbe(s.surface.name());
         // Bind only a weak host identity for the optional bounded stackprobe draw timeline.
         // No additional hook, draw operation or visual state is installed.
@@ -466,6 +470,8 @@ public final class LiveGlass {
         }
         LiveGlassDrawable g = s.glass;
         boolean before = g.showsGlass();
+        // popuplinegain is live: a card already shown follows it (a no-op unless it changed).
+        if (s.surface == LiveSurface.CARD) g.setEdgeLineGain(cardLineGain());
         // Both modes need this listener: Samsung changes radius/alpha/bounds during animations
         // without another adapter writer. Never leave a regionless host outside pre-draw sync.
         if (v.isAttachedToWindow() && s.preDraw == null) {

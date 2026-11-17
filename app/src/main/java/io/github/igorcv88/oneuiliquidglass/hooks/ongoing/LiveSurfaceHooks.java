@@ -304,6 +304,10 @@ public final class LiveSurfaceHooks {
         @Override public BackgroundBlurBridge create(View host, LiveSurface surface) throws ReflectiveOperationException {
             BackgroundBlurBridge region = BackgroundBlurBridge.create(host, true);
             region.setOptics(surface == LiveSurface.NOWBAR, true);
+            // The live card carries the heads-up's optical profile (tag 0): it takes the heads-up's
+            // native radius too (semradiuslens), not the lockscreen's kgblurradius (parity audit
+            // 17/11, docs/clear-glass/LIVE_HU_PARITY.md).
+            if (surface == LiveSurface.CARD) region.useLensRadius();
             return region;
         }
         @Override public boolean enabled(View host) {

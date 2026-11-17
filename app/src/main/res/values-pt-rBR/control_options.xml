@@ -1,9 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="control_option_ec6472de3478">10 %</string>
+    <string name="control_option_4d04d593eab2">25 %</string>
     <string name="control_option_3c5d28cf50f3">Acompanha o cartão durante gestos</string>
-    <string name="control_option_8d954776f1cd">Adaptativa</string>
     <string name="control_option_0a0e3b18cbfb">Adaptativa original</string>
+    <string name="control_option_8d954776f1cd">Adaptativa</string>
     <string name="control_option_a33344113b2b">Adaptação Samsung</string>
+    <string name="control_option_d885925b9c29">Alpha da região controlado pelo módulo</string>
     <string name="control_option_d64a750613b8">Alpha e programa codificados sobre o vidro</string>
     <string name="control_option_0c4e291a7b4b">Aparência original</string>
     <string name="control_option_20ec175d596a">Automática</string>
@@ -16,8 +19,10 @@
     <string name="control_option_4e1de10ed349">Contorno</string>
     <string name="control_option_308ef5ac8d40">Cor fixa personalizada</string>
     <string name="control_option_e03b6581feae">Cores independentes para fundo claro e escuro</string>
+    <string name="control_option_12dfa7f3a2bd">Corte atual (shadefadecut)</string>
     <string name="control_option_ed469e5dc765">Definido fora do app</string>
     <string name="control_option_8809a6227cfb">Desativado</string>
+    <string name="control_option_89ae8ea817ed">Desde o início</string>
     <string name="control_option_9c6166ed846c">Desfoque mais largo e cores mais vivas</string>
     <string name="control_option_164bf4ddd36b">Desligada</string>
     <string name="control_option_2bfe9e53781b">Discos de referência, aprovados até a versão 0.30</string>
@@ -31,16 +36,18 @@
     <string name="control_option_286cbcfd1496">Força o tratamento de ícones elegíveis, inclusive os personalizados</string>
     <string name="control_option_7b9330ac47fd">Fosco</string>
     <string name="control_option_783067a8aca7">Física</string>
-    <string name="control_option_2747a88a5074">Gaussiano aninhado</string>
     <string name="control_option_67399b1f29d2">Gaussiano aninhado forte</string>
     <string name="control_option_b28a3abd304b">Gaussiano aninhado suave</string>
+    <string name="control_option_2747a88a5074">Gaussiano aninhado</string>
     <string name="control_option_2212a1a4fd6a">Gestos laterais</string>
     <string name="control_option_9a216516ec5f">Grade de teste</string>
     <string name="control_option_31d64f897e37">Híbrida</string>
     <string name="control_option_7fa186bd9a0b">Identifica os programas reescritos pela lente</string>
     <string name="control_option_e723a958ac2a">Igual ao desfoque geral</string>
     <string name="control_option_3e59ff2f3f00">Igual ao pop-up</string>
+    <string name="control_option_2bb7eef2ddc4">Igual à central</string>
     <string name="control_option_9be0dc635d59">Inclinação limitada, sem dobras</string>
+    <string name="control_option_a7431bcd75a7">Lente durante a maior parte do deslize</string>
     <string name="control_option_c908bfdb54ef">Lente suave</string>
     <string name="control_option_18f5e7ca18f6">Luminância da borda</string>
     <string name="control_option_580a7b605fb0">Mais seguro, some com mais frequência</string>
@@ -55,6 +62,7 @@
     <string name="control_option_bb7b090dd8dc">Menos estrutura de texto e menos espalhamento de brancos</string>
     <string name="control_option_b9ef5b172a58">Mesmo véu em todos os cartões</string>
     <string name="control_option_3b1d364412af">Modelo de Snell com índice de refração</string>
+    <string name="control_option_dbc4a5cb54f2">Na view (Samsung)</string>
     <string name="control_option_fb3c8b03b40e">Na view</string>
     <string name="control_option_fffb17e84d35">Nativo</string>
     <string name="control_option_761716310a91">Nenhuma</string>
@@ -72,15 +80,17 @@
     <string name="control_option_5e752f3cd7ac">Qualquer toque</string>
     <string name="control_option_5a83874989ff">Quatro cantos</string>
     <string name="control_option_808eb0b380d3">Raio único</string>
+    <string name="control_option_0098cc642404">Região do sistema; padrão atual</string>
+    <string name="control_option_326b1b817735">Região inteira já no primeiro quadro</string>
     <string name="control_option_d28c21104d9d">Remove mais estrutura; formas grandes ficam mais suaves</string>
     <string name="control_option_f1b4503c73c7">Renderização normal, sem tinta diagnóstica</string>
     <string name="control_option_929dc216ba9a">Segue o esmaecimento do cartão</string>
     <string name="control_option_b21f94257814">Sem amostragem</string>
     <string name="control_option_787bedf67271">Sem forma</string>
     <string name="control_option_9af72f16deab">Sem proteção</string>
-    <string name="control_option_c004160342cd">Sistema</string>
     <string name="control_option_340a3940c102">Sistema e originais confirmados</string>
     <string name="control_option_04ffe2381fff">Sistema e serviços</string>
+    <string name="control_option_c004160342cd">Sistema</string>
     <string name="control_option_655a7c7b8a0f">Somente o desfoque do sistema</string>
     <string name="control_option_d97225752710">Sonda de composição</string>
     <string name="control_option_4ec6fa29d300">Só movimentos horizontais e dois dedos</string>

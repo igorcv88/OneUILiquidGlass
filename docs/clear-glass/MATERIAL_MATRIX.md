@@ -12,7 +12,7 @@ Gerada por `MaterialMatrixTest` a partir de `Controls` e `GlassMaterial`. Não e
 | Ambiente | Material | Controles principais |
 | --- | --- | --- |
 | Pop-up | frosted (lente) | sflens, semradiuslens, lightglass, popuptone |
-| Pop-up | clear (lente) | sf.hcfold, sf.hcedge, sf.hccore, sf.hcadapt, sf.hcsat, sf.hclift |
+| Pop-up | clear (lente) | sf.hcfold, sf.hcedge, sf.hccore, sf.hcadapt, sf.hcsat, sf.hclift, sf.hchlneutral |
 | Bloqueio | frosted (lente) | kglens, kgblurradius, lightglass, pillglass |
 | Bloqueio | clear (lente) | sf.kcfold, sf.kcedge, sf.kccore, sf.kcsat, sf.kclift |
 
@@ -53,7 +53,8 @@ Gerada por `MaterialMatrixTest` a partir de `Controls` e `GlassMaterial`. Não e
 | `sf.hcscrim` | Escurecimento nas áreas escuras | Pop-up | Cor e contraste · advanced | clear | não | sim |
 | `sf.hcscrimmax` | Escurecimento nas áreas claras | Pop-up | Cor e contraste · advanced | clear | não | sim |
 | `sf.hclift` | Clareamento | Pop-up | Cor e contraste · standard | clear | não | sim |
-| `sf.hcneutral` | Neutralizar brancos | Pop-up | Cor e contraste · advanced | clear | não | sim |
+| `sf.hchlneutral` | Neutralidade dos realces | Pop-up | Cor e contraste · standard | clear | não | sim |
+| `sf.hcneutral` | Neutralização antiga (legado) | Pop-up | Cor e contraste · advanced | clear | não | sim |
 | `sf.kcfold` | Menisco | Bloqueio | Bordas e reflexos · standard | clear | não | sim |
 | `sf.kcband` | Largura da borda curva | Bloqueio | Bordas e reflexos · advanced | clear | não | sim |
 | `sf.kcamp` | Curvatura sem menisco | Bloqueio | Bordas e reflexos · advanced | clear | não | sim |

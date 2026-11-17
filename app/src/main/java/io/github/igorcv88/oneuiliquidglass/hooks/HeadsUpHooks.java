@@ -2454,6 +2454,13 @@ public final class HeadsUpHooks {
             pill = rowClass == null || !rowClass.isInstance(row);
         }
         void invalidate() { View v = background.get(); if (v != null) v.invalidate(); }
+        /**
+         * The unlocked fade cut of this card: shadefadecut, or hufadecut for a heads-up when set
+         * (>= 0). The row is read only when the opt-in is set, so the default path is unchanged.
+         */
+        float fadeCut(Tuning t) {
+            return CardExit.fadeCut(t.shadeFadeCut, t.huFadeCut, t.huFadeCut >= 0f && isHeadsUp());
+        }
         boolean isHeadsUp() {
             View r = row.get();
             return r != null && Boolean.TRUE.equals(Reflect.bool(r, "isHeadsUpState", "mIsHeadsUp"));
@@ -2600,7 +2607,7 @@ public final class HeadsUpHooks {
                     float shown = CardExit.shown(a, leaving, exitAlpha);
                     // In the unlocked shade a partly transparent region turned whiter, not fainter (a
                     // white pill as the card faded): there it is whole or gone (shadefadecut).
-                    float cut = barState != null && barState == Eligibility.BAR_SHADE ? Tuning.get().shadeFadeCut : 0f;
+                    float cut = barState != null && barState == Eligibility.BAR_SHADE ? fadeCut(Tuning.get()) : 0f;
                     float fade = CardExit.drawableFade(shown, cut);
                     // The Samsung region does not take its drawable's alpha: a leaving card's is
                     // whole or gone even where the shade has no cut.
@@ -2758,11 +2765,25 @@ public final class HeadsUpHooks {
             if (t.live) return true;
             if (t.kgBlurPath == 1 && t.sfRefract && barState != null
                     && (barState == Eligibility.BAR_KEYGUARD || barState == Eligibility.BAR_SHADE_LOCKED)) return true;
+            if (huDrawablePath()) return true;
             // Expanded shade, unlocked: the Samsung region ignored the card's fade (a ghost of every
             // card on a pull up); the drawable's region takes it. Heads-up cards keep the Samsung path.
             View r = row.get();
             return t.shadeBlurPath == 1 && barState != null && barState == Eligibility.BAR_SHADE && Boolean.TRUE.equals(shadeExpanded)
                     && r != null && !Boolean.TRUE.equals(Reflect.bool(r, "isHeadsUpState", "mIsHeadsUp"));
+        }
+        /**
+         * Opt-in (debug.oulg.hublurpath=1): an unlocked heads-up with the compositor lens takes its
+         * blur from a BackgroundBlurDrawable drawn with the glass, whose region alpha this module
+         * sets (255 at rest), instead of the Samsung blur installed on the view, whose region does
+         * not follow its drawable's alpha. The tag profile (0) and the radius (semradiuslens) are
+         * those of the Samsung path, so a comparison isolates the route.
+         */
+        boolean huDrawablePath() {
+            Tuning t = Tuning.get();
+            if (t.huBlurPath != 1 || !t.sfRefract || t.live || barState == null || barState != Eligibility.BAR_SHADE) return false;
+            View r = row.get();
+            return r != null && Boolean.TRUE.equals(Reflect.bool(r, "isHeadsUpState", "mIsHeadsUp"));
         }
         /**
          * Rows whose background can be sampled and refracted, never in LSPosed-only mode (so with
@@ -2909,7 +2930,10 @@ public final class HeadsUpHooks {
                 nativePending = false;
                 Backdrop backdrop;
                 if (kind == Backdrop.Kind.COMPOSITOR && drawablePath()) {
-                    try { backdrop = compBridge = BackgroundBlurBridge.create(v, true); }
+                    try {
+                        backdrop = compBridge = BackgroundBlurBridge.create(v, true);
+                        if (huDrawablePath()) compBridge.useLensRadius();
+                    }
                     catch (ReflectiveOperationException | RuntimeException e) {
                         // The drawable path is the default on every surface in LSPosed-only mode and
                         // was never exercised on the pop-up: if it cannot be built, this card keeps

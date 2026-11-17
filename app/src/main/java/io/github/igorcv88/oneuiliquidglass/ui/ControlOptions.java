@@ -8,10 +8,13 @@ final class ControlOptions {
     static int resource(String value) {
         if (value == null || value.isEmpty()) return 0;
         switch (value) {
+            case "10 %": return R.string.control_option_ec6472de3478;
+            case "25 %": return R.string.control_option_4d04d593eab2;
             case "Acompanha o cartão durante gestos": return R.string.control_option_3c5d28cf50f3;
-            case "Adaptativa": return R.string.control_option_8d954776f1cd;
             case "Adaptativa original": return R.string.control_option_0a0e3b18cbfb;
+            case "Adaptativa": return R.string.control_option_8d954776f1cd;
             case "Adaptação Samsung": return R.string.control_option_a33344113b2b;
+            case "Alpha da região controlado pelo módulo": return R.string.control_option_d885925b9c29;
             case "Alpha e programa codificados sobre o vidro": return R.string.control_option_d64a750613b8;
             case "Aparência original": return R.string.control_option_0c4e291a7b4b;
             case "Automática": return R.string.control_option_20ec175d596a;
@@ -24,8 +27,10 @@ final class ControlOptions {
             case "Contorno": return R.string.control_option_4e1de10ed349;
             case "Cor fixa personalizada": return R.string.control_option_308ef5ac8d40;
             case "Cores independentes para fundo claro e escuro": return R.string.control_option_e03b6581feae;
+            case "Corte atual (shadefadecut)": return R.string.control_option_12dfa7f3a2bd;
             case "Definido fora do app": return R.string.control_option_ed469e5dc765;
             case "Desativado": return R.string.control_option_8809a6227cfb;
+            case "Desde o início": return R.string.control_option_89ae8ea817ed;
             case "Desfoque mais largo e cores mais vivas": return R.string.control_option_9c6166ed846c;
             case "Desligada": return R.string.control_option_164bf4ddd36b;
             case "Discos de referência, aprovados até a versão 0.30": return R.string.control_option_2bfe9e53781b;
@@ -39,16 +44,18 @@ final class ControlOptions {
             case "Força o tratamento de ícones elegíveis, inclusive os personalizados": return R.string.control_option_286cbcfd1496;
             case "Fosco": return R.string.control_option_7b9330ac47fd;
             case "Física": return R.string.control_option_783067a8aca7;
-            case "Gaussiano aninhado": return R.string.control_option_2747a88a5074;
             case "Gaussiano aninhado forte": return R.string.control_option_67399b1f29d2;
             case "Gaussiano aninhado suave": return R.string.control_option_b28a3abd304b;
+            case "Gaussiano aninhado": return R.string.control_option_2747a88a5074;
             case "Gestos laterais": return R.string.control_option_2212a1a4fd6a;
             case "Grade de teste": return R.string.control_option_9a216516ec5f;
             case "Híbrida": return R.string.control_option_31d64f897e37;
             case "Identifica os programas reescritos pela lente": return R.string.control_option_7fa186bd9a0b;
             case "Igual ao desfoque geral": return R.string.control_option_e723a958ac2a;
             case "Igual ao pop-up": return R.string.control_option_3e59ff2f3f00;
+            case "Igual à central": return R.string.control_option_2bb7eef2ddc4;
             case "Inclinação limitada, sem dobras": return R.string.control_option_9be0dc635d59;
+            case "Lente durante a maior parte do deslize": return R.string.control_option_a7431bcd75a7;
             case "Lente suave": return R.string.control_option_c908bfdb54ef;
             case "Luminância da borda": return R.string.control_option_18f5e7ca18f6;
             case "Mais seguro, some com mais frequência": return R.string.control_option_580a7b605fb0;
@@ -63,6 +70,7 @@ final class ControlOptions {
             case "Menos estrutura de texto e menos espalhamento de brancos": return R.string.control_option_bb7b090dd8dc;
             case "Mesmo véu em todos os cartões": return R.string.control_option_b9ef5b172a58;
             case "Modelo de Snell com índice de refração": return R.string.control_option_3b1d364412af;
+            case "Na view (Samsung)": return R.string.control_option_dbc4a5cb54f2;
             case "Na view": return R.string.control_option_fb3c8b03b40e;
             case "Nativo": return R.string.control_option_fffb17e84d35;
             case "Nenhuma": return R.string.control_option_761716310a91;
@@ -80,15 +88,17 @@ final class ControlOptions {
             case "Qualquer toque": return R.string.control_option_5e752f3cd7ac;
             case "Quatro cantos": return R.string.control_option_5a83874989ff;
             case "Raio único": return R.string.control_option_808eb0b380d3;
+            case "Região do sistema; padrão atual": return R.string.control_option_0098cc642404;
+            case "Região inteira já no primeiro quadro": return R.string.control_option_326b1b817735;
             case "Remove mais estrutura; formas grandes ficam mais suaves": return R.string.control_option_d28c21104d9d;
             case "Renderização normal, sem tinta diagnóstica": return R.string.control_option_f1b4503c73c7;
             case "Segue o esmaecimento do cartão": return R.string.control_option_929dc216ba9a;
             case "Sem amostragem": return R.string.control_option_b21f94257814;
             case "Sem forma": return R.string.control_option_787bedf67271;
             case "Sem proteção": return R.string.control_option_9af72f16deab;
-            case "Sistema": return R.string.control_option_c004160342cd;
             case "Sistema e originais confirmados": return R.string.control_option_340a3940c102;
             case "Sistema e serviços": return R.string.control_option_04ffe2381fff;
+            case "Sistema": return R.string.control_option_c004160342cd;
             case "Somente o desfoque do sistema": return R.string.control_option_655a7c7b8a0f;
             case "Sonda de composição": return R.string.control_option_d97225752710;
             case "Só movimentos horizontais e dois dedos": return R.string.control_option_4ec6fa29d300;

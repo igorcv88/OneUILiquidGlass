@@ -404,6 +404,7 @@ static void clear_params(struct oulg_clear *c) {
     c->lift[0] = prop_float("debug.oulg.sf.hclift", c->lift[0]);
     c->lift[1] = prop_float("debug.oulg.sf.kclift", c->lift[1]);
     c->neutral = prop_float("debug.oulg.sf.hcneutral", c->neutral);
+    c->hlneutral = prop_float("debug.oulg.sf.hchlneutral", c->hlneutral);
     c->hsat = prop_float("debug.oulg.sf.hcsat", c->hsat);
     c->scrim = prop_float("debug.oulg.sf.hcscrim", c->scrim);
     c->scrimmax = prop_float("debug.oulg.sf.hcscrimmax", c->scrimmax);
@@ -433,7 +434,7 @@ static void announce_clear(const struct oulg_clear *c, const struct oulg_profile
         " hc=band:%.3f,amp:%.4f,body:%.4f,body2:%.4f,edge:%.2f,core:%.2f,blurexp:%.3f,refract:%.3f,blur:%.3f"
         " kc=band:%.3f,amp:%.4f,body:%.4f,body2:%.4f,edge:%.2f,core:%.2f,blurexp:%.3f,refract:%.3f,blur:%.3f"
         " kcmat=veil:%.3f,level:%.3f,dim:%.3f,knee:%.3f,sat:%.3f,cool:%.3f"
-        " hcmat=fold:%.3f,cap:%.4f,sat:%.3f,scrim:%.3f,scrimmax:%.3f,adapt:%.3f,lift:%.3f,neutral:%.3f,kernel:%d"
+        " hcmat=fold:%.3f,cap:%.4f,sat:%.3f,scrim:%.3f,scrimmax:%.3f,adapt:%.3f,lift:%.3f,neutral:%.3f,kernel:%d,hlneutral:%.3f"
         " kcmen=fold:%.3f,cap:%.4f,lift:%.3f",
         OULG_OPTICS_VERSION, c->mode[0], c->mode[1], rc == 0,
         (double) c->band[0], oulg_clear_acap(c, 0, p[0].refract), (double) c->body[0], (double) c->body2[0],
@@ -442,7 +443,7 @@ static void announce_clear(const struct oulg_clear *c, const struct oulg_profile
         (double) c->edge[1], (double) c->core[1], (double) c->blurexp[1], (double) p[1].refract, (double) p[1].blur,
         (double) c->veil, (double) c->level, (double) c->dim, (double) c->knee, (double) c->sat, (double) c->cool,
         (double) c->fold[0], oulg_meniscus_cap(c, 0, p[0].refract), (double) c->hsat, (double) c->scrim, (double) c->scrimmax, (double) c->adapt,
-        (double) c->lift[0], (double) c->neutral, c->kernel, (double) c->fold[1], oulg_meniscus_cap(c, 1, p[1].refract), (double) c->lift[1]);
+        (double) c->lift[0], (double) c->neutral, c->kernel, (double) c->hlneutral, (double) c->fold[1], oulg_meniscus_cap(c, 1, p[1].refract), (double) c->lift[1]);
 }
 
 // Tells the module that this library's optics are live (debug.oulg.sf.optics = OULG_OPTICS_VERSION)
@@ -515,6 +516,18 @@ void glShaderSource(GLuint shader, GLsizei count, const GLchar *const *strings, 
         if (frag) {
             int ok = compiles(shader, frag);
             __android_log_print(ANDROID_LOG_INFO, TAG, "REWRITE fragment shader=%u compiled=%d", shader, ok);
+            // A second image read (RenderEngine's small-radius crossfade) passes the unblurred
+            // backdrop around the lens. Compile time only, at most 8 lines per process.
+            int images = oulg_extra_images(joined);
+            if (images > 0) {
+                static int extra_logged;
+                pthread_mutex_lock(&health_lock);
+                int log_it = extra_logged < 8; if (log_it) extra_logged++;
+                pthread_mutex_unlock(&health_lock);
+                if (log_it) __android_log_print(ANDROID_LOG_WARN, TAG,
+                    "REWRITE_EXTRA_IMAGE shader=%u compiled=%d images=%d scope=unrewritten-image-read (crossfade below 10 px?)",
+                    shader, ok, images);
+            }
             // Composition probe (debug 5): the id each program paints in its odd tiles.
             if (dbg == OULG_DEBUG_PROBE)
                 __android_log_print(ANDROID_LOG_INFO, TAG, "PROBE shader=%u id=%04x compiled=%d paint=%d texalpha=%d",

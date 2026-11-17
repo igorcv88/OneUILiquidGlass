@@ -91,12 +91,26 @@ public final class BackgroundBlurBridge implements Backdrop {
         this.keyguard = keyguard; this.lens = lens;
         if (built) update(lastPx, lastTint, lastRadii);
     }
+    /**
+     * The heads-up comparison route (debug.oulg.hublurpath): the region takes semradiuslens, the
+     * radius the Samsung path gives a lens card, not the lockscreen's kgblurradius.
+     */
+    private boolean lensRadius;
+    public void useLensRadius() throws ReflectiveOperationException {
+        if (lensRadius) return;
+        lensRadius = true;
+        if (built) update(lastPx, lastTint, lastRadii);
+    }
+    /** Region radius of a lens card: kgblurradius when set, unless the heads-up route asks for semradiuslens. */
+    public static int lensPx(int kgBlurRadius, int semRadiusLens, boolean headsUpRoute) {
+        return !headsUpRoute && kgBlurRadius >= 0 ? kgBlurRadius : semRadiusLens;
+    }
     @Override public void update(int px, int tint, float[] radii) throws ReflectiveOperationException {
         lastPx = px; lastTint = tint; System.arraycopy(radii, 0, lastRadii, 0, 8); built = true;
         float tl = radii[0], tr = radii[2], bl = radii[6], br = radii[4];
         if (lensMode) {
             Tuning t = Tuning.get();
-            int lensPx = t.kgBlurRadius >= 0 ? t.kgBlurRadius : t.semRadiusLens;
+            int lensPx = lensPx(t.kgBlurRadius, t.semRadiusLens, lensRadius);
             // LSPosed-only: no lens to leave backdrop detail for, so one full blur everywhere.
             px = t.live ? t.livePx(lens, keyguard) : lens && lensPx >= 0 ? lensPx : t.semRadius >= 0 ? t.semRadius : GlassSpec.SAMSUNG_RADIUS;
             // The same veil as the Samsung path (semalpha over the Samsung tone).
@@ -120,6 +134,7 @@ public final class BackgroundBlurBridge implements Backdrop {
         color.invoke(drawable, tint);
         // API order: top-left, top-right, bottom-left, bottom-right.
         corners.invoke(drawable, tl, tr, bl, br);
+        geometrySent[0] = tl; geometrySent[1] = tr; geometrySent[2] = bl; geometrySent[3] = br;
         if (lensMode && curve != null && (lens || keyguard || curveSent)) applyCurve();
         else if (neutral && !curveApplied) curveApplied = sendNeutralCurve();
     }
@@ -238,7 +253,26 @@ public final class BackgroundBlurBridge implements Backdrop {
         curve.invoke(drawable, v[0], v[1], v[2], v[3], v[4], v[5]);
         curveSent = true;
     }
-    @Override public void draw(Canvas canvas, Rect bounds) { drawable.setBounds(bounds); drawable.draw(canvas); }
+    // Bounded, opt-in geometry attestation. No drawable state changes, no per-frame allocations
+    // when trace is off. Bounds are local; this is not a measurement of SF pixel coverage.
+    private final Rect geometryBounds = new Rect();
+    private final float[] geometrySent = new float[4], geometryLogged = new float[4];
+    private int geometryReports;
+    @Override public void draw(Canvas canvas, Rect bounds) {
+        if (Probe.trace && geometryReports < 8 && (!geometryBounds.equals(bounds)
+                || !java.util.Arrays.equals(geometrySent, geometryLogged) || geometryReports == 0)) {
+            geometryBounds.set(bounds);
+            System.arraycopy(geometrySent, 0, geometryLogged, 0, 4);
+            geometryReports++;
+            Probe.log("BLUR_REGION_GEOMETRY", "drawable=" + Integer.toHexString(System.identityHashCode(drawable))
+                    + " lensMode=" + lensMode + " profile=" + tagSent + " bounds=" + bounds.toShortString()
+                    + " requested=" + java.util.Arrays.toString(lastRadii)
+                    + " sentTLTRBLBR=" + java.util.Arrays.toString(geometrySent)
+                    + " shortHalf=" + Math.min(bounds.width(), bounds.height()) * .5f);
+        }
+        drawable.setBounds(bounds);
+        drawable.draw(canvas);
+    }
     /**
      * The native drawable's alpha is Samsung's translucency (204 on lockscreen cards), not a fade:
      * passed to the region it left it at 80 %, and a partly transparent region mixes the sharp

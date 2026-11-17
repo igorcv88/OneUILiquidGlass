@@ -86,7 +86,7 @@ These are existing keys, already in `SfLive.WRITABLE`, and they keep acting on c
 | Key | Profile | Meaning |
 |---|---|---|
 | `hulight` | HU | light entering from the outline, by the backdrop there |
-| `hubloom` | HU | bright-sample suppression of the disc |
+| `hubloom` | HU | bright-sample suppression of the disc; compiled out by the Clear nested kernels 1-3, disc A only on kernel 0 (`HU_KERNEL.md`) |
 | `kglight`, `kgdepth`, `kgglow` | KG | light from the outline, its reach and glow width |
 | `kgrim`, `kgspec`, `kgline`, `kgtilt`, `kgfixedrim` | KG | Fresnel, specular, contour and light tilt. The clear material copies this block verbatim from the baseline text, and neither `kcfold` nor `kclift` touches it (checked in `clear_check.c`) |
 

@@ -121,6 +121,8 @@ final class QuickSettingsEdgeLight {
     private final class Edge {
         final Spec spec;
         BackgroundBlurBridge bridge;
+        int lastGeometryW = -1, lastGeometryH = -1, geometryReports;
+        float lastGeometryRadius = -1f, lastGeometryTag = -1f;
         Object root;
         float tag = -1f;
         boolean drawn;
@@ -419,6 +421,13 @@ final class QuickSettingsEdgeLight {
             float radius = corner == null ? -1f : (Float) toPx.invoke(corner, scope, outer);
             float[] envelope = QuickSettingsGlass.envelope(ow, oh, e.spec.outer);
             if (e.spec.outer < 1f) radius = Math.min(envelope[2]-envelope[0], envelope[3]-envelope[1])/2f;
+            float requestedRadius = radius;
+            // CornerSize.toPx is not the final Compose RoundRect radius. In landscape a
+            // 225 px request on a 231 px high box loses the fractional tag if Skia clamps it.
+            // Resolve against the *rounded integer bounds actually sent*, not the grid cell.
+            int left = Math.round(-out + envelope[0]), top = Math.round(-out + envelope[1]);
+            int right = Math.round(-out + envelope[2]), bottom = Math.round(-out + envelope[3]);
+            radius = QuickSettingsGlass.opticalRadius(radius, right - left, bottom - top);
             float tag = QuickSettingsGlass.edgeTag(radius);
             if (tag < 0f) {
                 if (diagnostic.count(QuickSettingsEdgeDiagnostics.Event.INVALID_RADIUS_TAG))
@@ -469,8 +478,17 @@ final class QuickSettingsEdgeLight {
             if (e.bridge.drawable.getAlpha() != alpha) e.bridge.drawable.setAlpha(alpha);
             // The inner box grown back to the outer one: the RenderNode reports these bounds whatever
             // the inner clip, and the light band then sits on Samsung's outline.
-            e.bridge.draw((android.graphics.Canvas) raw, new Rect(Math.round(-out+envelope[0]), Math.round(-out+envelope[1]),
-                    Math.round(-out+envelope[2]), Math.round(-out+envelope[3])));
+            e.bridge.draw((android.graphics.Canvas) raw, new Rect(left, top, right, bottom));
+            if (Probe.trace && e.geometryReports < 8 && (e.lastGeometryW != right - left || e.lastGeometryH != bottom - top
+                    || e.lastGeometryRadius != requestedRadius || e.lastGeometryTag != tag)) {
+                e.geometryReports++;
+                e.lastGeometryW = right - left; e.lastGeometryH = bottom - top;
+                e.lastGeometryRadius = requestedRadius; e.lastGeometryTag = tag;
+                Probe.log("QS_EDGE_GEOMETRY", "id=" + e.spec.token.id + " role=" + e.spec.token.role
+                        + " bounds=" + left + "," + top + "," + right + "," + bottom
+                        + " requested=" + requestedRadius + " normalized=" + radius + " sent=" + tag
+                        + " outset=" + out);
+            }
             if (!e.drawn) {
                 e.drawn = true;
                 if (diagnostic.count(QuickSettingsEdgeDiagnostics.Event.REGION_DRAWN))
@@ -668,7 +686,13 @@ final class QuickSettingsEdgeLight {
             int out = QuickSettingsGlass.edgeOutset(e.spec.border, density);
             long outer = ((long) Float.floatToRawIntBits(w + 2 * out) << 32) | (Float.floatToRawIntBits(h + 2 * out) & 0xffffffffL);
             Object corner = topStart.get(e.spec.shape);
-            float radius = corner == null ? Math.min(w, h) / 2f : (Float) toPx.invoke(corner, scope, outer) - out;
+            // Raw inner corner as Compose resolves it (toPx on the outer box, minus the border
+            // inset) is kept for the fail-closed diagnostic; only a valid outer request is
+            // normalized against the outer bounds, so -4 stays -4 instead of a sentinel.
+            float requestedOuter = corner == null ? Float.NaN : (Float) toPx.invoke(corner, scope, outer);
+            float rawRadius = corner == null ? Math.min(w, h) / 2f : requestedOuter - out;
+            float normalizedOuter = QuickSettingsGlass.opticalRadius(requestedOuter, w + 2 * out, h + 2 * out);
+            float radius = corner == null || normalizedOuter < 0f ? rawRadius : normalizedOuter - out;
             float x = 0f, y = 0f;
             if (e.spec.outer < 1f) {
                 // A thinner slider capsule (qs.outer, QsPillShape): the optics follow its envelope,
@@ -676,24 +700,28 @@ final class QuickSettingsEdgeLight {
                 float[] env = QuickSettingsGlass.envelope(w, h, e.spec.outer);
                 x = env[0]; y = env[1]; w = env[2] - env[0]; h = env[3] - env[1];
                 radius = Math.min(w, h) / 2f;
+                rawRadius = radius;
             }
             // A zero/negative corner (observed as -4 px after Samsung's border inset)
             // used to be clamped to zero by QsCapsuleOptics while reporting a successful
             // AGSL draw. That incorrectly let QsLitRims attenuate the native rounded rim,
             // even though the compositor refused the corresponding radius tag.
             // Fail closed: keep the full Compose outline rather than claiming optical light.
-            if (!Float.isFinite(radius) || radius <= 0f) {
+            float effective = QuickSettingsGlass.opticalRadius(radius, w, h);
+            if (!Float.isFinite(effective) || effective <= 0f) {
                 if (!e.invalidCornerReported) {
                     e.invalidCornerReported = true;
                     Probe.log("QS_OPTICS_INVALID_RADIUS", "session=" + coverage.session()
                             + " id=" + e.spec.token.id + " role=" + e.spec.token.role
                             + " w=" + w + " h=" + h + " borderPx=" + out
-                            + " radius=" + radius + " shape=" + e.spec.shape.getClass().getName()
+                            + " radius=" + rawRadius + " effective=" + effective
+                            + " shape=" + e.spec.shape.getClass().getName()
                             + " hasBox=" + (e.spec.token.box != null && e.spec.token.box.get() != null));
                 }
                 result(e.spec.token, false, "invalid-corner-radius");
                 return;
             }
+            radius = effective;
             boolean media = !usesCompositor(e.spec.token.role);
             boolean success = o.draw(node, (android.graphics.Canvas) raw, x, y, w, h, radius,
                     density, lightScene.getAsBoolean(), rimOnlyOverlay, media, sceneGain());
