@@ -13,6 +13,7 @@
     <string name="control_reason_72a5beb4b605">The pop-up refraction applies when using the pop-up material</string>
     <string name="control_reason_37d1bfc3168b">Disable transparent off tile discs</string>
     <string name="control_reason_e061dd5d8ae0">State read from the device</string>
+    <string name="control_reason_a2864f0856d6">Needs adaptive blur on</string>
     <string name="control_reason_17236c820833">Requires blur drawn on the card</string>
     <string name="control_reason_7bc5b40329fd">Needs saturation, darkening or brightening to be changed</string>
     <string name="control_reason_79d513d51655">Retired setting with no visual effect</string>

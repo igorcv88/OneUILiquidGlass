@@ -22,6 +22,7 @@ final class ControlReasons {
             case "Com o material do pop-up, vale a refração do pop-up": return context.getString(R.string.control_reason_72a5beb4b605);
             case "Desative Discos desligados sem fundo": return context.getString(R.string.control_reason_37d1bfc3168b);
             case "Estado lido do aparelho": return context.getString(R.string.control_reason_e061dd5d8ae0);
+            case "Exige o desfoque adaptativo ligado": return context.getString(R.string.control_reason_a2864f0856d6);
             case "Exige o desfoque desenhado no cartão": return context.getString(R.string.control_reason_17236c820833);
             case "Exige saturação, escurecimento ou clareamento": return context.getString(R.string.control_reason_7bc5b40329fd);
             case "Legado sem efeito visual": return context.getString(R.string.control_reason_79d513d51655);

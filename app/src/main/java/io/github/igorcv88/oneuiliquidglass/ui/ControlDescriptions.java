@@ -122,6 +122,7 @@ final class ControlDescriptions {
             case "sf.hccore": return R.string.control_description_sf_hccore;
             case "sf.hcedge": return R.string.control_description_sf_hcedge;
             case "sf.hcfold": return R.string.control_description_sf_hcfold;
+            case "sf.hchlneutral": return R.string.control_description_sf_hchlneutral;
             case "sf.hckernel": return R.string.control_description_sf_hckernel;
             case "sf.hclift": return R.string.control_description_sf_hclift;
             case "sf.hcneutral": return R.string.control_description_sf_hcneutral;

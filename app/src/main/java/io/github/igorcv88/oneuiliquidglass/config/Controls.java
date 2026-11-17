@@ -988,8 +988,13 @@ public final class Controls {
                 .help("Escurece o vidro do pop-up sobre as partes claras do fundo." + restart));
         put(c("sf.hclift", "Clareamento").fmt(Format.PLAIN).in(COLOR, STD).on(HU).step(.05)
                 .help("Clareia o vidro do pop-up sem alterar a refração. Valores altos podem reduzir o contraste do texto." + restart));
-        put(c("sf.hcneutral", "Neutralizar brancos").fmt(Format.PERCENT_1).in(COLOR, ADV).on(HU)
-                .help("Reduz tons azulados ou coloridos nas áreas quase brancas." + restart));
+        put(c("sf.hchlneutral", "Neutralidade dos realces").fmt(Format.PERCENT_1).in(COLOR, STD).on(HU)
+                .help("Leva ao cinza neutro os brancos tingidos pela cor desfocada em volta (texto, relógio),"
+                        + " sem mudar a luminância nem as áreas de cor uniforme. 0 desliga; a força é linear."
+                        + " Exige o desfoque adaptativo." + restart));
+        put(c("sf.hcneutral", "Neutralização antiga (legado)").fmt(Format.PERCENT_1).in(COLOR, ADV).on(HU)
+                .help("Curva anterior: age só em pixels quase brancos de baixa cromaticidade e também"
+                        + " acinzenta áreas pastel uniformes. Mantida por compatibilidade; prefira Neutralidade dos realces." + restart));
         put(c("sf.kcfold", "Menisco").fmt(Format.GAIN).in(EDGES, STD).on(KG).step(.05)
                 .help("Intensidade da borda curva nos cartões da tela de bloqueio." + restart));
         put(c("sf.kcband", "Largura da borda curva").fmt(Format.PERCENT_1).in(EDGES, ADV).on(KG)
@@ -1043,7 +1048,7 @@ public final class Controls {
 
     /** The few controls shown first on a Clear surface: where the look is made. */
     private static final List<String> CLEAR_PRIMARY_HU = Collections.unmodifiableList(Arrays.asList(
-            "sf.hcfold", "sf.hcedge", "sf.hccore", "sf.hcadapt", "sf.hcsat", "sf.hclift"));
+            "sf.hcfold", "sf.hcedge", "sf.hccore", "sf.hcadapt", "sf.hcsat", "sf.hclift", "sf.hchlneutral"));
     private static final List<String> CLEAR_PRIMARY_KG = Collections.unmodifiableList(Arrays.asList(
             "sf.kcfold", "sf.kcedge", "sf.kccore", "sf.kcsat", "sf.kclift"));
 

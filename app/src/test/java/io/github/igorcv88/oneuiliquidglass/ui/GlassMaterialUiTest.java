@@ -276,7 +276,7 @@ public class GlassMaterialUiTest {
         assertTrue(a.model().selectMaterial(GlassMaterial.CLEAR).ok);
         List<String> hu = surfaceTexts(a, Controls.Surface.HEADSUP);
         for (String expected : new String[] {"Meniscus", "Outer edge blur", "Center blur", "Adaptive blur",
-                "Glass saturation", "Brightening", "Neutral whites"})
+                "Glass saturation", "Brightening", "Highlight neutrality", "Legacy neutralization"})
             assertTrue(expected + " in " + hu, hu.contains(expected));
         assertFalse("replaced by the clear field", hu.contains("Inner blur"));
         assertTrue("shared knobs keep acting", hu.contains("Full lens refraction"));
@@ -285,7 +285,8 @@ public class GlassMaterialUiTest {
         assertTrue(kg.contains("Brightening"));
         assertTrue(kg.contains("Leveling veil"));
         assertFalse("the lock screen has no adaptive blur", kg.contains("Adaptive blur"));
-        assertFalse("pop-up only", kg.contains("Neutral whites"));
+        assertFalse("pop-up only", kg.contains("Highlight neutrality"));
+        assertFalse("pop-up only", kg.contains("Legacy neutralization"));
         assertFalse(kg.contains("Uniformity"));
     }
 

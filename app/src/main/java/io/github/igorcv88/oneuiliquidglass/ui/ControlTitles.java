@@ -120,7 +120,8 @@ final class ControlTitles {
             case "Multiplicador físico": return R.string.control_title_6a5669f01728;
             case "Máximo de ícones visíveis": return R.string.control_title_a2faa45a9b05;
             case "Método do desfoque adaptativo": return R.string.control_title_c0667c366b66;
-            case "Neutralizar brancos": return R.string.control_title_52ded0cf52dd;
+            case "Neutralidade dos realces": return R.string.control_title_0810d3675871;
+            case "Neutralização antiga (legado)": return R.string.control_title_3aa9c5d21068;
             case "Nível da uniformidade": return R.string.control_title_203fe4f25f20;
             case "Nível do véu": return R.string.control_title_2848e8a83298;
             case "Ocultar a faixa em": return R.string.control_title_b89e7df74a83;
