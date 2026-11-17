@@ -9,9 +9,10 @@ import io.github.igorcv88.oneuiliquidglass.glass.LiveGlassDrawable;
  * disables another. L1 and L2 share the "live update at the top" switch.
  */
 public enum LiveSurface {
-    // Region colour = native RGB at a fraction of its alpha; rim lit from the upper left.
+    // Region colour = native RGB at a fraction of its alpha; rim lit from the upper left. CARD (the
+    // live notification) also neutralises its colour under the outer line (laudo 17/11, section 5).
     CHIP(ProductFlags.LIVE_ACTIVITY, new LiveGlassDrawable.Spec(0.52f, 60, 0x66ffffff, 0x14ffffff, 0.8f, 0x29ffffff)),
-    CARD(ProductFlags.LIVE_ACTIVITY, new LiveGlassDrawable.Spec(0.42f, 80, 0x59ffffff, 0x12ffffff, 0.95f, 0x29ffffff)),
+    CARD(ProductFlags.LIVE_ACTIVITY, new LiveGlassDrawable.Spec(0.42f, 80, 0x59ffffff, 0x12ffffff, 0.95f, 0x29ffffff, 0.8f)),
     NOWBAR(ProductFlags.NOW_BAR, new LiveGlassDrawable.Spec(0.38f, 80, 0x59ffffff, 0x12ffffff, 0.95f, 0x24ffffff)),
     TOAST(ProductFlags.TOAST, new LiveGlassDrawable.Spec(0.46f, 80, 0x59ffffff, 0x12ffffff, 0.95f, 0x29ffffff));
 
