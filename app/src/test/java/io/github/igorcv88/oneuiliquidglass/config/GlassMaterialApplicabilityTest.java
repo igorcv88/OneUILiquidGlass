@@ -79,6 +79,23 @@ public class GlassMaterialApplicabilityTest {
     }
 
     @Test
+    public void brightSampleContainmentFollowsTheCompiledBodyKernel() {
+        // Frosted and the original kernel read hubloom (oulg_disc0); the Gaussian kernels 1-3
+        // build disc A inline and compile it out (refract.h OULG_FS_HU_BODY_NESTED_FMT).
+        assertKind(Applicability.Kind.NEEDS_RESTART, of(true), "sf.hubloom");
+        assertKind(Applicability.Kind.NEEDS_RESTART, of(true, "sf.hckernel", "1"), "sf.hubloom");
+        assertKind(Applicability.Kind.NEEDS_RESTART, of(true, "sf.huclear", "1", "sf.hckernel", "0"), "sf.hubloom");
+        for (String k : new String[]{"1", "2", "3"}) {
+            Applicability a = of(true, "sf.huclear", "1", "sf.hckernel", k);
+            assertKind(Applicability.Kind.INACTIVE, a, "sf.hubloom");
+            assertEquals(Applicability.NEEDS_KERNEL0, a.rule("sf.hubloom").reason);
+        }
+        // Per card both variants are compiled: the Frosted card still reads it.
+        assertKind(Applicability.Kind.NEEDS_RESTART, of(true, "sf.huclear", "2", "sf.hckernel", "1"), "sf.hubloom");
+        assertKind(Applicability.Kind.INACTIVE, of(false, "sf.huclear", "1", "sf.hckernel", "0"), "sf.hubloom");
+    }
+
+    @Test
     public void whiteNeutralisingNeedsTheMaterialBlock() {
         // Exercise the legacy neutral material explicitly; the new Clear-only defaults
         // activate saturation and lift, so the material is otherwise always present.

@@ -29,6 +29,7 @@ final class ControlReasons {
             case "O vidro está desligado onde este ajuste vale": return context.getString(R.string.control_reason_317c7653bd1b);
             case "Sem efeito na proteção Adaptativa": return context.getString(R.string.control_reason_b7d2e9ae3d5f);
             case "Sem efeito no vidro padrão": return context.getString(R.string.control_reason_65e66e7ee1c0);
+            case "Sem efeito nos kernels gaussianos; use o Original": return context.getString(R.string.control_reason_e5962977c557);
             case "Só funciona com o menisco desligado": return context.getString(R.string.control_reason_9c1dfe250b2b);
             case "Só funciona com o véu acima de 0": return context.getString(R.string.control_reason_a68b50de9042);
             case "Usado com a lente dinâmica": return context.getString(R.string.control_reason_d819d244b0d8);

@@ -228,6 +228,17 @@ public final class Applicability {
                 return "1".equals(v("shadetone"))
                         ? new Result(Kind.NEEDS_RESTART, restartReason())
                         : inactive("Use o mapa de tons da lente na central");
+            case "sf.hubloom": {
+                // refract.h: the bright-sample weight lives in oulg_disc0 only. Kernels 1-3 build
+                // their disc A inline (OULG_FS_HU_BODY_NESTED_FMT) and never read it, so a Clear
+                // pop-up on a Gaussian kernel compiles it out; kernel 0 keeps it on disc A (its
+                // adaptive disc B does not weight it) and Frosted keeps it whole.
+                if (!lens) return inactive(NEEDS_LENS);
+                GlassMaterial hu = GlassMaterial.forSurface(this.value, Controls.Surface.HEADSUP);
+                double kernel = number("sf.hckernel");
+                if (hu == GlassMaterial.CLEAR && kernel >= 1 && kernel <= 3) return inactive(NEEDS_KERNEL0);
+                return restart();
+            }
             case "qs.edgeblur":
                 // The blur of the profile-3 regions: only the dynamic lens draws them. Live.
                 return lens ? ACTIVE : inactive(NEEDS_LENS);
@@ -247,7 +258,8 @@ public final class Applicability {
             NEEDS_FROSTED = "Usado com o vidro Fosco",
             NEEDS_MENISCUS_OFF = "Só funciona com o menisco desligado",
             NEEDS_MATERIAL_BLOCK = "Exige saturação, escurecimento ou clareamento",
-            NEEDS_VEIL = "Só funciona com o véu acima de 0";
+            NEEDS_VEIL = "Só funciona com o véu acima de 0",
+            NEEDS_KERNEL0 = "Sem efeito nos kernels gaussianos; use o Original";
 
     /**
      * The material rules of a compositor key (see {@link GlassMaterial}): a Clear parameter acts
