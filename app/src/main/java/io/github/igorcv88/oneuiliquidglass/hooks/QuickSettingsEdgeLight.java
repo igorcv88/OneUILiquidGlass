@@ -686,9 +686,13 @@ final class QuickSettingsEdgeLight {
             int out = QuickSettingsGlass.edgeOutset(e.spec.border, density);
             long outer = ((long) Float.floatToRawIntBits(w + 2 * out) << 32) | (Float.floatToRawIntBits(h + 2 * out) & 0xffffffffL);
             Object corner = topStart.get(e.spec.shape);
-            float radius = corner == null ? Math.min(w, h) / 2f
-                    : QuickSettingsGlass.opticalRadius((Float) toPx.invoke(corner, scope, outer),
-                            w + 2 * out, h + 2 * out) - out;
+            // Raw inner corner as Compose resolves it (toPx on the outer box, minus the border
+            // inset) is kept for the fail-closed diagnostic; only a valid outer request is
+            // normalized against the outer bounds, so -4 stays -4 instead of a sentinel.
+            float requestedOuter = corner == null ? Float.NaN : (Float) toPx.invoke(corner, scope, outer);
+            float rawRadius = corner == null ? Math.min(w, h) / 2f : requestedOuter - out;
+            float normalizedOuter = QuickSettingsGlass.opticalRadius(requestedOuter, w + 2 * out, h + 2 * out);
+            float radius = corner == null || normalizedOuter < 0f ? rawRadius : normalizedOuter - out;
             float x = 0f, y = 0f;
             if (e.spec.outer < 1f) {
                 // A thinner slider capsule (qs.outer, QsPillShape): the optics follow its envelope,
@@ -696,25 +700,28 @@ final class QuickSettingsEdgeLight {
                 float[] env = QuickSettingsGlass.envelope(w, h, e.spec.outer);
                 x = env[0]; y = env[1]; w = env[2] - env[0]; h = env[3] - env[1];
                 radius = Math.min(w, h) / 2f;
+                rawRadius = radius;
             }
             // A zero/negative corner (observed as -4 px after Samsung's border inset)
             // used to be clamped to zero by QsCapsuleOptics while reporting a successful
             // AGSL draw. That incorrectly let QsLitRims attenuate the native rounded rim,
             // even though the compositor refused the corresponding radius tag.
             // Fail closed: keep the full Compose outline rather than claiming optical light.
-            radius = QuickSettingsGlass.opticalRadius(radius, w, h);
-            if (!Float.isFinite(radius) || radius <= 0f) {
+            float effective = QuickSettingsGlass.opticalRadius(radius, w, h);
+            if (!Float.isFinite(effective) || effective <= 0f) {
                 if (!e.invalidCornerReported) {
                     e.invalidCornerReported = true;
                     Probe.log("QS_OPTICS_INVALID_RADIUS", "session=" + coverage.session()
                             + " id=" + e.spec.token.id + " role=" + e.spec.token.role
                             + " w=" + w + " h=" + h + " borderPx=" + out
-                            + " radius=" + radius + " shape=" + e.spec.shape.getClass().getName()
+                            + " radius=" + rawRadius + " effective=" + effective
+                            + " shape=" + e.spec.shape.getClass().getName()
                             + " hasBox=" + (e.spec.token.box != null && e.spec.token.box.get() != null));
                 }
                 result(e.spec.token, false, "invalid-corner-radius");
                 return;
             }
+            radius = effective;
             boolean media = !usesCompositor(e.spec.token.role);
             boolean success = o.draw(node, (android.graphics.Canvas) raw, x, y, w, h, radius,
                     density, lightScene.getAsBoolean(), rimOnlyOverlay, media, sceneGain());

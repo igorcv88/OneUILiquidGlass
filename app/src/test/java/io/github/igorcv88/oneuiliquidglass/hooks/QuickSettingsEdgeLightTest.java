@@ -347,7 +347,7 @@ public final class QuickSettingsEdgeLightTest {
                         .filter(l -> l.msg.contains("event=QS_OPTICS_INVALID_RADIUS")).count());
         assertTrue(ShadowLog.getLogsForTag("OULG").stream()
                 .anyMatch(l -> l.msg.contains("event=QS_OPTICS_INVALID_RADIUS")
-                        && l.msg.contains("radius=-4.0")));
+                        && l.msg.contains("radius=-4.0") && l.msg.contains("effective=-1.0")));
     }
 
     @Test public void duplicateUpdateOfSameElementDoesNotLoseBinding() throws Exception {
