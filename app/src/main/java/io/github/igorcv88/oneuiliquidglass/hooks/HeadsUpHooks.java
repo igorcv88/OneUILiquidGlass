@@ -768,7 +768,7 @@ public final class HeadsUpHooks {
         State s = registeredState(v);
         if (s == null && rowClass != null && rowClass.isInstance(v)) {
             Object bg = Reflect.read(v, "mBackgroundNormal");
-            s = bg instanceof View ? registeredState(bg) : null;
+            s = bg instanceof View ? registeredState((View) bg) : null;
         }
         return s != null && s.glass != null && (s.glassKind == Backdrop.Kind.SAMSUNG || s.glass.hybrid() || s.compBridge != null) ? s : null;
     }
@@ -1519,7 +1519,7 @@ public final class HeadsUpHooks {
         Object background = Reflect.read(row, "mBackgroundNormal");
         if (!(background instanceof View)) return;
         // A cancel on a row with no state yet has nothing to end.
-        State s = name.startsWith("cancel") ? registeredState(background) : state((View) background, row);
+        State s = name.startsWith("cancel") ? registeredState((View) background) : state((View) background, row);
         if (s == null) return;
         long now = android.os.SystemClock.uptimeMillis();
         if ("onAppearAnimationFinished".equals(name)) { s.exitEnd(now, "finished"); return; }
