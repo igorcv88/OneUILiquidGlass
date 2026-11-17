@@ -12,12 +12,13 @@
 
 usage: python3 -I alpha_precision_check.py <refract_check binary> <dump>
 """
+import math
 import re
+import struct
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
-import numpy as np
 
 
 def fn(text, name):
@@ -42,28 +43,39 @@ def static(body):
     return bad
 
 
-def rtz(x):
-    h = np.float16(np.float32(x))
-    if abs(float(h)) > abs(float(x)): h = np.nextafter(h, np.float16(0))
+# fp16/fp32 rounding without numpy (the CI runner has none): struct's 'e' and 'f' round to nearest.
+def f32(x): return struct.unpack('<f', struct.pack('<f', x))[0]
+def rn16(x): return struct.unpack('<e', struct.pack('<e', x))[0]
+
+
+def rtz16(x):
+    """Round toward zero to fp16: the nearest value, stepped one ulp toward zero if it overshot."""
+    h = rn16(x)
+    if abs(h) > abs(x):
+        bits = struct.unpack('<H', struct.pack('<e', h))[0]
+        h = struct.unpack('<e', struct.pack('<H', bits - 1))[0]
     return h
 
 
 def accumulate(ws, prec, mode):
-    if prec == "highp": return float(np.sum(np.float32(ws)))
-    a = np.float16(0)
-    for w in ws:
-        a = rtz(float(a) + float(rtz(w))) if mode == "rtz" else np.float16(float(a) + float(np.float16(w)))
-    return float(a)
+    if prec == "highp":
+        a = 0.0
+        for w in ws: a = f32(a + f32(w))
+        return a
+    r = rtz16 if mode == "rtz" else rn16
+    a = 0.0
+    for w in ws: a = r(a + r(w))
+    return a
 
 
 def weights(kernel, taps, wide):
     if kernel == 0:
-        a = [np.exp(-2 * (i + .5) / taps) for i in range(taps)]
+        a = [math.exp(-2 * (i + .5) / taps) for i in range(taps)]
         return a, a                                   # disc0 (A) and B with its own taps
     q2 = 1 / wide ** 2
-    a = [np.exp(-2 * (i + .5) / taps) for i in range(taps)]
-    b = [np.exp(-2 * ((i + .5) / taps) / wide ** 2) for i in range(taps)] + \
-        [(wide * wide - 1) * np.exp(-2 * (q2 + (1 - q2) * (j + .5) / taps)) for j in range(taps)]
+    a = [math.exp(-2 * (i + .5) / taps) for i in range(taps)]
+    b = [math.exp(-2 * ((i + .5) / taps) / wide ** 2) for i in range(taps)] + \
+        [(wide * wide - 1) * math.exp(-2 * (q2 + (1 - q2) * (j + .5) / taps)) for j in range(taps)]
     return a, b
 
 
@@ -77,7 +89,7 @@ def numeric(kernel, body, taps, wide):
         else:                                            # kernel 0's A is oulg_disc0: mediump / mediump
             alphas.append(accumulate(a, "mediump", mode) / accumulate(a, "mediump", mode))
         alphas.append(accumulate(b, d[names[1][0]], mode) / accumulate(b, d[names[1][1]], mode))
-        for t in np.linspace(0, 1, 11):                  # any A/B weight
+        for t in [i / 10 for i in range(11)]:            # any A/B weight
             worst = max(worst, abs(1 - ((1 - t) * alphas[0] + t * alphas[1])))
     return worst
 
