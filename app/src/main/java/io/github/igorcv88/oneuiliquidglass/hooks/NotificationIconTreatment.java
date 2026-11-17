@@ -14,6 +14,7 @@ import android.graphics.PorterDuff;
 import android.graphics.PorterDuffColorFilter;
 import android.graphics.drawable.AdaptiveIconDrawable;
 import android.graphics.drawable.Drawable;
+import android.graphics.drawable.Icon;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
@@ -39,8 +40,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.WeakHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 /**
  * One card's notification small-icon lease. Resource lookup and PNG decoding run off the main
@@ -48,7 +50,8 @@ import java.util.concurrent.Executors;
  * Never walks or replaces a conversation avatar, media art or large notification picture.
  */
 final class NotificationIconTreatment {
-    private static final ExecutorService worker = Executors.newSingleThreadExecutor(r -> {
+    private static final ThreadPoolExecutor worker = new ThreadPoolExecutor(1, 1,
+            0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>(), r -> {
         Thread t = new Thread(r, "OULG-notification-icons"); t.setDaemon(true); return t;
     });
     /** Lazy so pure alpha/source tests do not instantiate the Android main looper. */
@@ -221,6 +224,7 @@ final class NotificationIconTreatment {
     private int selectedMode = -1;
     private long configRevision = -1;
     private boolean pending;
+    private Runnable sourceTask;
     private Resolved resolved;
     private volatile long revision;
     private String lastSkip;
@@ -310,7 +314,7 @@ final class NotificationIconTreatment {
             candidatesReported = false;
             row.addOnLayoutChangeListener(layoutObserver);
             findCandidates(row);
-            schedule(row, currentEntry, currentIdentity, sbn, mode);
+            schedule(row, sbn, mode);
         }
         if (resolved == null) { if (!pending) skip("noSource"); return; }
         if (resolved.bitmap == null) { skip("existingMono"); return; }
@@ -508,32 +512,31 @@ final class NotificationIconTreatment {
         }
     }
 
-    private void schedule(View row, Object currentEntry, Object currentIdentity,
-                          StatusBarNotification sbn, int mode) {
+    private void schedule(View row, StatusBarNotification sbn, int mode) {
         final String targetPkg = sbn.getPackageName();
         if (!NotificationIconStore.validPackage(targetPkg)) return;
         pkg = targetPkg;
-        // For mode 2, a pixel-level comparison is performed from a one-off snapshot, never each draw.
+        final Icon smallIcon = sbn.getNotification().getSmallIcon();
+        final String cacheKey = sourceKey(targetPkg, sbn.getNotification(), mode, configRevision);
+        Resolved cached;
+        synchronized (sourceCache) { cached = sourceCache.get(cacheKey); }
+        if (cached != null) {
+            resolved = cached;
+            if (Probe.trace) Probe.log("ICON_TREAT_CACHE", "pkg=" + targetPkg + " source=" + cached.source);
+            return;
+        }
+        // Capture the native icon pixels only on a miss, before the drawable can be rebound.
         int[] shown = null;
         for (WeakReference<ImageView> ref : candidates) {
             ImageView v = ref.get();
             if (v != null && v.getDrawable() != null) { shown = pixels(v.getDrawable(), SAMPLE); break; }
         }
         final int[] snapshot = shown;
-        final Notification notification = sbn.getNotification();
         final Context context = row.getContext().getApplicationContext();
-        final String cacheKey = sourceKey(targetPkg, notification, mode, configRevision);
         final long ticket = ++revision;
         pending = true;
-        Resolved cached;
-        synchronized (sourceCache) { cached = sourceCache.get(cacheKey); }
-        if (cached != null) {
-            pending = false;
-            resolved = cached;
-            if (Probe.trace) Probe.log("ICON_TREAT_CACHE", "pkg=" + targetPkg + " source=" + cached.source);
-            return;
-        }
-        worker.execute(() -> {
+        sourceTask = () -> {
+            if (revision != ticket) return;
             Resolved next = null;
             boolean eligible = false;
             try {
@@ -548,27 +551,30 @@ final class NotificationIconTreatment {
                 Bitmap user = local(context, targetPkg);
                 eligible = user != null || NotificationIconPolicy.eligible(mode, system, match);
                 if (user != null) next = new Resolved(user, "user", match);
-                else if (eligible) next = resolve(context, targetPkg, official, notification, snapshot, match);
+                else if (eligible) next = resolve(context, targetPkg, official, smallIcon, snapshot, match);
             } catch (PackageManager.NameNotFoundException | RuntimeException | LinkageError e) {
                 if (Probe.trace) Probe.log("ICON_TREAT_SOURCE_FAILED", "pkg=" + targetPkg + " error=" + e.getClass().getSimpleName());
             }
             boolean report = eligible && next == null;
-            if (report && revision == ticket) reportMissing(context, targetPkg);
+            if (revision != ticket) return;
+            if (report) reportMissing(context, targetPkg);
             Resolved answer = next;
             if (answer != null && revision == ticket) {
                 synchronized (sourceCache) { sourceCache.put(cacheKey, answer); }
             }
             MainThread.handler.post(() -> {
-                if (revision != ticket || entry != currentEntry
-                        || notificationIdentity != currentIdentity || bound.get() != row) return;
+                if (revision != ticket) return;
+                sourceTask = null;
                 pending = false;
                 resolved = answer;
                 if (Probe.trace) Probe.log("ICON_TREAT_ROUTE", "pkg=" + targetPkg + " mode=" + mode
                         + " source=" + (answer == null ? report ? "missing" : "preserve" : answer.source)
                         + " officialMatch=" + (answer != null && answer.officialMatched));
-                if (answer != null) row.invalidate();
+                View target = bound.get();
+                if (answer != null && target != null) target.invalidate();
             });
-        });
+        };
+        worker.execute(sourceTask);
     }
 
     static String sourceKey(String pkg, Notification notification, int mode, long configRevision) {
@@ -578,11 +584,9 @@ final class NotificationIconTreatment {
 
     /** Shared source policy for Samsung's separate status-bar and collapsed-shelf icon views.
      * Must be called on the icon worker, never in a hook or pre-draw callback. */
-    static Resolved resolveCompact(Context context, StatusBarNotification sbn, int mode,
-                                   int[] nativeArtwork, long configRevision) {
-        String pkg = sbn.getPackageName();
-        if (!NotificationIconStore.validPackage(pkg) || sbn.getNotification() == null) return null;
-        String key = sourceKey(pkg, sbn.getNotification(), mode, configRevision);
+    static Resolved resolveCompact(Context context, String pkg, Icon smallIcon, int mode,
+                                   int[] nativeArtwork, String key) {
+        if (!NotificationIconStore.validPackage(pkg)) return null;
         synchronized (sourceCache) {
             Resolved hit = sourceCache.get(key);
             if (hit != null) return hit;
@@ -597,7 +601,7 @@ final class NotificationIconTreatment {
             Bitmap custom = local(context, pkg);
             Resolved answer = custom != null ? new Resolved(custom, "user", match)
                     : NotificationIconPolicy.eligible(mode, system, match)
-                    ? resolve(context, pkg, official, sbn.getNotification(), nativeArtwork, match) : null;
+                    ? resolve(context, pkg, official, smallIcon, nativeArtwork, match) : null;
             if (answer != null) synchronized (sourceCache) { sourceCache.put(key, answer); }
             return answer;
         } catch (PackageManager.NameNotFoundException | RuntimeException | LinkageError e) {
@@ -616,7 +620,7 @@ final class NotificationIconTreatment {
 
     /** Official mono, small-icon glyph, native transparent glyph, then the bundled library. */
     private static Resolved resolve(Context context, String pkg, Drawable official,
-                                    Notification notification, int[] shown, boolean matched) {
+                                    Icon smallIcon, int[] shown, boolean matched) {
         if (official instanceof AdaptiveIconDrawable) {
             Drawable mono = ((AdaptiveIconDrawable) official).getMonochrome();
             if (mono != null) {
@@ -624,9 +628,9 @@ final class NotificationIconTreatment {
                 if (mask != null) return new Resolved(mask, "officialMono", matched);
             }
         }
-        if (notification.getSmallIcon() != null) {
+        if (smallIcon != null) {
             try {
-                Drawable small = notification.getSmallIcon().loadDrawable(context);
+                Drawable small = smallIcon.loadDrawable(context);
                 Bitmap mask = mask(small, true);
                 if (mask != null) return new Resolved(mask, "smallIcon", matched);
             } catch (RuntimeException | LinkageError e) {
@@ -732,6 +736,8 @@ final class NotificationIconTreatment {
     void restore() {
         if (entry == null && bound.get() == null && active.isEmpty() && dummyBackgrounds.isEmpty() && !pending) return;
         revision++;
+        if (sourceTask != null) worker.remove(sourceTask);
+        sourceTask = null;
         for (Lease lease : active) lease.restore();
         for (DummyBackgroundLease lease : dummyBackgrounds) lease.restore();
         dummyBackgrounds.clear();

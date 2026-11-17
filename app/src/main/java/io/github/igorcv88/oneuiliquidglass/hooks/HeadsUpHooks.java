@@ -53,7 +53,23 @@ public final class HeadsUpHooks {
     private final ClassLoader loader;
     private volatile boolean enabled;
     private boolean configPending;
-    private final WeakHashMap<View, State> states = new WeakHashMap<>();
+    // A background View owns its State through its attach listener. This is just an index:
+    // a strong value could retain the weak key through tracked child Views or the row entry.
+    // Snapshots and lookups must tolerate callbacks arriving from other hook threads.
+    private final WeakIdentityMap<View, WeakReference<State>> states = new WeakIdentityMap<>();
+
+    private State registeredState(View view) {
+        WeakReference<State> ref = states.get(view);
+        return ref == null ? null : ref.get();
+    }
+    private java.util.List<State> stateSnapshot() {
+        java.util.List<State> snapshot = new ArrayList<>();
+        for (WeakReference<State> ref : states.valuesSnapshot()) {
+            State state = ref.get();
+            if (state != null) snapshot.add(state);
+        }
+        return snapshot;
+    }
     /** Draw-time evidence is independent of State so an unmodified Samsung layer is still counted. */
     private final WeakHashMap<View, LayerSample> layerSamples = new WeakHashMap<>();
     private long layerDrawOrder;
@@ -192,7 +208,7 @@ public final class HeadsUpHooks {
         boolean unlocked = barState != null && barState == Eligibility.BAR_SHADE;
         boolean collapsed = !Boolean.TRUE.equals(shadeExpanded);
         if (!compatEnabled || !unlocked || !collapsed) return null;
-        for (State state : new ArrayList<>(states.values())) {
+        for (State state : stateSnapshot()) {
             View v = state.background.get();
             if (P3EdgeSelection.watchPopup(compatEnabled, state.glass != null, state.pill,
                     state.isHeadsUp(), v != null && v.isAttachedToWindow(),
@@ -288,7 +304,7 @@ public final class HeadsUpHooks {
                     boolean collapsed = !Boolean.TRUE.equals(shadeExpanded);
                     boolean unlocked = barState != null && barState == Eligibility.BAR_SHADE;
                     boolean modeChanged = false;
-                    for (State state : new ArrayList<>(states.values())) {
+                    for (State state : stateSnapshot()) {
                         View current = state.background.get();
                         if (P3EdgeSelection.watchPopup(compatEnabled,
                                 state.glass != null, state.pill, state.isHeadsUp(),
@@ -365,7 +381,7 @@ public final class HeadsUpHooks {
             else if (shadeGrid != null && Tuning.get().shadeAdaptive
                     && Boolean.TRUE.equals(shadeExpanded)) adoptGrid(shadeGrid, "config");
             if (compactIcons != null) compactIcons.shadeToneChanged();
-            for (State state : new ArrayList<>(states.values())) {
+            for (State state : stateSnapshot()) {
                 if (!enabled || !state.surfaceEnabled()) state.release();
                 state.invalidate();
             }
@@ -491,7 +507,7 @@ public final class HeadsUpHooks {
             // invalidation alone cannot update Samsung's own radius/colour adjustment.
             main.post(this::refreshPanelBlur);
             int visible = 0;
-            for (State state : new ArrayList<>(states.values())) {
+            for (State state : stateSnapshot()) {
                 View v = state.background.get();
                 if (v == null || !v.isAttachedToWindow() || !v.isShown()) continue;
                 state.invalidate();
@@ -537,7 +553,7 @@ public final class HeadsUpHooks {
         // ffffffff swapped=false, device log 26/10).
         Foreground.ownsTone = child -> {
             boolean shade = Boolean.TRUE.equals(shadeExpanded);
-            for (State st : states.values())
+            for (State st : stateSnapshot())
                 if (st.row.get() == child && st.glass != null && (!shade || st.toneOpen == shadeOpens)) return true;
             return false;
         };
@@ -675,7 +691,7 @@ public final class HeadsUpHooks {
                         View v = (View) p.thisObject;
                         // Remember SystemUI's own blur on notification views so a released material
                         // hands it back instead of clearing it.
-                        if (states.containsKey(v) || (rowClass != null && rowClass.isInstance(v))
+                        if (registeredState(v) != null || (rowClass != null && rowClass.isInstance(v))
                                 || BACKGROUND.equals(v.getClass().getName())) SemBlurBridge.recordNative(v, p.args[0]);
                         if (v.getRootView() == v && p.args[0] != null && barState != null && barState == Eligibility.BAR_KEYGUARD
                                 && (Tuning.get().sfRefract || (enabled && Tuning.get().live)) && !Tuning.get().kgWinBlur && v.getClass().getName().endsWith("NotificationShadeWindowView")
@@ -749,10 +765,10 @@ public final class HeadsUpHooks {
         return p != null && p.getClass().getName().endsWith("NotificationChildrenContainer");
     }
     private State compositorState(View v) {
-        State s = states.get(v);
+        State s = registeredState(v);
         if (s == null && rowClass != null && rowClass.isInstance(v)) {
             Object bg = Reflect.read(v, "mBackgroundNormal");
-            s = bg instanceof View ? states.get(bg) : null;
+            s = bg instanceof View ? registeredState((View) bg) : null;
         }
         return s != null && s.glass != null && (s.glassKind == Backdrop.Kind.SAMSUNG || s.glass.hybrid() || s.compBridge != null) ? s : null;
     }
@@ -912,14 +928,14 @@ public final class HeadsUpHooks {
             if (pv != null) pv.postDelayed(() -> {
                 if (gen != shadeOpens || !Boolean.TRUE.equals(shadeExpanded)) return;
                 for (String d : Foreground.survey(pv.getRootView(), ShadeTone.lightText(), 30)) Probe.log("TEXT_OUTSIDE", d);
-                for (State st : new ArrayList<>(states.values())) {
+                for (State st : stateSnapshot()) {
                     View r = st.row.get();
                     if (r != null && r.isShown()) for (String d : Foreground.rowSurvey(r, ShadeTone.lightText(), 20))
                         Probe.log("TEXT_ROW", "rowId=" + Integer.toHexString(System.identityHashCode(r)) + " pill=" + st.pill + " " + d);
                 }
             }, 700);
         }
-        for (State st : new ArrayList<>(states.values())) st.invalidate();
+        for (State st : stateSnapshot()) st.invalidate();
         headerTone(grid);
         orphanTone();
         View anchor = panelView == null ? null : panelView.get();
@@ -966,7 +982,7 @@ public final class HeadsUpHooks {
             main.removeCallbacks(resample);
             resampleShade();
         }
-        for (State st : new ArrayList<>(states.values())) {
+        for (State st : stateSnapshot()) {
             View v = st.background.get();
             if (v == null || !SURFACE_POPUP.equals(st.toneSurface) || !v.isShown()) continue;
             st.popupMeasureAt = 0;
@@ -1051,7 +1067,7 @@ public final class HeadsUpHooks {
         if (shadeScene == null || !Boolean.TRUE.equals(shadeExpanded)) return;
         boolean swap = shadeConfigEnabled() && Tuning.get().textSwap && shadeSwap();
         int n = 0;
-        for (State st : new ArrayList<>(states.values())) {
+        for (State st : stateSnapshot()) {
             View r = st.row.get();
             if (r == null || st.pill || st.toneOpen == shadeOpens || !r.isShown()) continue;
             st.setForeground(swap);
@@ -1226,7 +1242,7 @@ public final class HeadsUpHooks {
         }
         Object panel = Reflect.read(controller, "mView");
         View anchor = panel instanceof View && ((View) panel).isAttachedToWindow() ? (View) panel : null;
-        for (State state : new ArrayList<>(states.values())) {
+        for (State state : stateSnapshot()) {
             if (anchor != null) break;
             View v = state.background.get(); if (v != null && v.isAttachedToWindow()) anchor = v;
         }
@@ -1319,7 +1335,7 @@ public final class HeadsUpHooks {
     /** Trace-only independent lockscreen capture: never reuse the last shade/popup palette. */
     private void probeLockScene() {
         View anchor = null;
-        for (State state : new ArrayList<>(states.values())) {
+        for (State state : stateSnapshot()) {
             View view = state.background.get();
             if (view != null && view.isAttachedToWindow()) { anchor = view; break; }
         }
@@ -1339,7 +1355,7 @@ public final class HeadsUpHooks {
                         + " priorShade=" + shadeScene);
                 if (grid == null) return;
                 int seen = 0;
-                for (State state : new ArrayList<>(states.values())) {
+                for (State state : stateSnapshot()) {
                     View card = state.background.get();
                     if (card == null || !card.isShown()) continue;
                     int[] position = new int[2];
@@ -1364,13 +1380,13 @@ public final class HeadsUpHooks {
                 barStateAt = android.os.SystemClock.uptimeMillis();
                 Probe.log("BAR_STATE", "state=" + barState);
                 // Every card's optics timeline starts over on a state change (OPTICS lines).
-                for (State s : states.values()) { s.opticsLines = 0; s.finalSeen = false; s.lastOptics = null; }
+                for (State s : stateSnapshot()) { s.opticsLines = 0; s.finalSeen = false; s.lastOptics = null; }
                 if (barState == Eligibility.BAR_KEYGUARD) clampNotificationScrims();
                 if (Probe.trace && (barState == Eligibility.BAR_KEYGUARD
                         || barState == Eligibility.BAR_SHADE_LOCKED)) probeLockScene();
                 if (Probe.trace && barState == Eligibility.BAR_KEYGUARD) {
                     // The overflow pill: every shelf, icon container or footer in the window once settled.
-                    for (State s : states.values()) {
+                    for (State s : stateSnapshot()) {
                         View v = s.background.get();
                         if (v == null || !v.isAttachedToWindow()) continue;
                         View root = v.getRootView();
@@ -1380,7 +1396,7 @@ public final class HeadsUpHooks {
                 }
                 // The blur is a view property: a card SystemUI does not redraw (the shade springing
                 // back to the lockscreen) would keep the expanded-shade blur. Re-decide now.
-                for (State s : new ArrayList<>(states.values())) {
+                for (State s : stateSnapshot()) {
                     if (s.glass != null) {
                         if (barState != Eligibility.BAR_SHADE) s.applyP3Mode(-1, "barState", false);
                         else if (s.isHeadsUp()) { s.sampleP3Mode("barState"); s.scheduleP3Settle(); }
@@ -1392,7 +1408,7 @@ public final class HeadsUpHooks {
                 if (Probe.trace) {
                     // Scrims settle after the state change; snapshot them once the animation is done.
                     int at = barState;
-                    for (State s : states.values()) {
+                    for (State s : stateSnapshot()) {
                         View v = s.background.get();
                         if (v == null || !v.isAttachedToWindow()) continue;
                         View root = v.getRootView();
@@ -1430,7 +1446,7 @@ public final class HeadsUpHooks {
             // next draw. The compositor query is once per transition, never on the draw path.
             View colorAnchor = panelView == null ? null : panelView.get();
             if (colorAnchor == null) {
-                for (State s : states.values()) {
+                for (State s : stateSnapshot()) {
                     View v = s.background.get();
                     if (v != null && v.isAttachedToWindow()) { colorAnchor = v; break; }
                 }
@@ -1442,7 +1458,7 @@ public final class HeadsUpHooks {
             boolean edgeCompat = P3EdgeSelection.eligible(barState != null
                     && barState == Eligibility.BAR_SHADE, p3Enabled,
                     shadeActiveColorMode);
-            for (State s : new ArrayList<>(states.values())) {
+            for (State s : stateSnapshot()) {
                 if (s.glass != null) s.applyP3Mode(shadeActiveColorMode,
                         next ? "shadeOpen" : "shadeClose", p3Enabled);
             }
@@ -1452,7 +1468,7 @@ public final class HeadsUpHooks {
             else endShadeTone();
             if (Probe.trace && next) {
                 // Every blur in the shade window once it has settled: finds blurs no hook knows about.
-                for (State s : states.values()) {
+                for (State s : stateSnapshot()) {
                     View v = s.background.get();
                     if (v == null || !v.isAttachedToWindow()) continue;
                     View root = v.getRootView();
@@ -1460,7 +1476,7 @@ public final class HeadsUpHooks {
                     break;
                 }
             }
-            for (State state : new ArrayList<>(states.values())) {
+            for (State state : stateSnapshot()) {
                 // Opening the shade is when cards were seen without their blur: apply it again.
                 if (state.glass != null) state.glass.reassertBackdrop();
                 state.refreshLens();
@@ -1470,7 +1486,7 @@ public final class HeadsUpHooks {
             // The panel controller's own view works with an empty shade; a row is only the fallback.
             Object panel = Reflect.read(controller, "mView");
             View sample = panel instanceof View && ((View) panel).isAttachedToWindow() ? (View) panel : null;
-            for (State state : new ArrayList<>(states.values())) {
+            for (State state : stateSnapshot()) {
                 if (sample != null) break;
                 View v = state.background.get(); if (v != null && v.isAttachedToWindow()) sample = v;
             }
@@ -1503,7 +1519,7 @@ public final class HeadsUpHooks {
         Object background = Reflect.read(row, "mBackgroundNormal");
         if (!(background instanceof View)) return;
         // A cancel on a row with no state yet has nothing to end.
-        State s = name.startsWith("cancel") ? states.get(background) : state((View) background, row);
+        State s = name.startsWith("cancel") ? registeredState((View) background) : state((View) background, row);
         if (s == null) return;
         long now = android.os.SystemClock.uptimeMillis();
         if ("onAppearAnimationFinished".equals(name)) { s.exitEnd(now, "finished"); return; }
@@ -1557,7 +1573,7 @@ public final class HeadsUpHooks {
         sample.draws++;
         long order = ++layerDrawOrder;
         long now = android.os.SystemClock.uptimeMillis();
-        State state = states.get(bg);
+        State state = registeredState(bg);
         String signature = "render=" + render + " failed=" + failed
                 + " rowAlpha=" + Math.round(row.getAlpha() * 20f)
                 + " bgAlpha=" + Math.round(bg.getAlpha() * 20f)
@@ -1609,15 +1625,18 @@ public final class HeadsUpHooks {
         for (int i = 0; i < g.getChildCount(); i++) {
             View c = g.getChildAt(i);
             if (c.getVisibility() != View.VISIBLE) continue;
-            State s = states.get(c);
+            State s = registeredState(c);
             if (s != null && s.glass != null && !s.failed && s.lastFallback == null) return true;
         }
         return false;
     }
     private State state(View bg, View row) {
-        State existing = states.get(bg);
+        State existing = registeredState(bg);
         if (existing != null) return existing;
-        State s = new State(bg, row); states.put(bg, s); bg.addOnAttachStateChangeListener(s);
+        State s = new State(bg, row);
+        // Install the owning listener before exposing the non-owning registry entry.
+        bg.addOnAttachStateChangeListener(s);
+        states.put(bg, new WeakReference<>(s));
         if (bg.isAttachedToWindow()) s.onViewAttachedToWindow(bg);
         return s;
     }
@@ -3194,7 +3213,7 @@ public final class HeadsUpHooks {
             if (!enabled) {
                 // Glass off: no host walk or state for a card that never had glass; a card that has
                 // glass or owes its native blur still goes through material(), which restores it.
-                State known = states.get(v);
+                State known = registeredState(v);
                 if (known == null || known.minimal()) return;
             }
             long started = Perf.start(Perf.DRAW_BEFORE);
@@ -3212,7 +3231,7 @@ public final class HeadsUpHooks {
                 p.setObjectExtra("oulgGlass", glass);
                 p.args[0] = scratch;
             } catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
-                State s = states.get(v); if (s != null) { s.failed = true; s.release(); }
+                State s = registeredState(v); if (s != null) { s.failed = true; s.release(); }
                 Probe.error("DRAW_SWAP_FAILED", e);
             } finally { Perf.end(Perf.DRAW_BEFORE, started); }
         }
@@ -3225,7 +3244,7 @@ public final class HeadsUpHooks {
             }
             if (!replaced && p.thisObject instanceof View) {
                 View v = (View) p.thisObject;
-                State s = states.get(v);
+                State s = registeredState(v);
                 if (s != null && s.renderControl.changed("NATIVE"))
                     Probe.log("LIVE_RENDER_CONTROL", "mode=NATIVE " + LiveRenderProbe.view(v));
             }
@@ -3239,7 +3258,7 @@ public final class HeadsUpHooks {
         }
         private void composeGlass(MethodHookParam p, Canvas real) {
             View v = (View) p.thisObject;
-            State s = states.get(v);
+            State s = registeredState(v);
             if (s != null && s.scratch != null) { s.scratch.endRecording(); s.scratch.discardDisplayList(); }
             p.args[0] = real;
             Canvas canvas = real;

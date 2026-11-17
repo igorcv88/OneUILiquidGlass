@@ -7,6 +7,7 @@ import android.graphics.ColorFilter;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffColorFilter;
 import android.graphics.drawable.Drawable;
+import android.graphics.drawable.Icon;
 import android.os.Handler;
 import android.os.Looper;
 import android.service.notification.StatusBarNotification;
@@ -22,8 +23,9 @@ import java.lang.reflect.Method;
 import java.util.Collections;
 import java.util.Set;
 import java.util.WeakHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
@@ -42,7 +44,8 @@ import io.github.igorcv88.oneuiliquidglass.glass.Tuning;
  */
 final class NotificationCompactIconHooks {
     private static final String ICON_VIEW = "com.android.systemui.statusbar.StatusBarIconView";
-    private static final ExecutorService worker = Executors.newSingleThreadExecutor(r -> {
+    private static final ThreadPoolExecutor worker = new ThreadPoolExecutor(1, 1,
+            0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>(), r -> {
         Thread t = new Thread(r, "OULG-compact-icons");
         t.setDaemon(true);
         return t;
@@ -257,11 +260,26 @@ final class NotificationCompactIconHooks {
             for (java.lang.reflect.Constructor<?> ctor : viewModel.getDeclaredConstructors()) {
                 try {
                     XposedBridge.hookMethod(ctor, new XC_MethodHook() {
+                        private int reported;
                         @Override protected void afterHookedMethod(MethodHookParam p) {
-                            if (!enabled.getAsBoolean() || Tuning.get().statusMaxIcons <= 0) return;
+                            boolean moduleEnabled = enabled.getAsBoolean();
+                            // Resolve the same effective tuning used by the drawing hooks.
+                            int requested = moduleEnabled ? Tuning.get().statusMaxIcons : 0;
                             try {
-                                maxIcons.setInt(p.thisObject, Integer.MAX_VALUE);
-                                if (Probe.trace) Probe.log("ICON_TREAT_STATUS_LIMIT", "route=viewModelMaxIcons unlimited=true");
+                                int before = maxIcons.getInt(p.thisObject);
+                                if (moduleEnabled && requested > 0)
+                                    maxIcons.setInt(p.thisObject, Integer.MAX_VALUE);
+                                int after = maxIcons.getInt(p.thisObject);
+                                // Record both skipped and applied startup paths, even before trace
+                                // or provider config is available. Bound to four per constructor.
+                                if (reported < 4) {
+                                    reported++;
+                                    Probe.log("ICON_TREAT_STATUS_LIMIT", "route=viewModelMaxIcons"
+                                            + " enabled=" + moduleEnabled + " requested=" + requested
+                                            + " before=" + before + " after=" + after
+                                            + " revision=" + ConfigClient.revision()
+                                            + " tuningGeneration=" + Tuning.generation);
+                                }
                             } catch (IllegalAccessException | RuntimeException e) {
                                 Probe.log("ICON_TREAT_STATUS_LIMIT", "route=viewModelMaxIcons error=" + e.getClass().getSimpleName());
                             }
@@ -430,7 +448,8 @@ final class NotificationCompactIconHooks {
         Notification sourceNotification;
         long sourceRevision = Long.MIN_VALUE;
         int mode = -1;
-        long ticket;
+        volatile long ticket;
+        Runnable sourceTask;
         NotificationIconTreatment.Resolved ready;
         Drawable installed, nativeDrawable, nativeBackground;
         int backgroundAlpha = 255;
@@ -512,23 +531,31 @@ final class NotificationCompactIconHooks {
                 pkg = sbn.getPackageName();
                 ready = null;
                 long task = ++ticket;
+                if (sourceTask != null) worker.remove(sourceTask);
                 final String requestedKey = nextKey;
+                final String requestedPackage = pkg;
+                final Icon smallIcon = n.getSmallIcon();
                 Context context = v.getContext().getApplicationContext();
                 // Snapshot before the worker, and only if this was still the framework drawable.
                 final int[] nativeSnapshot = v.getDrawable() == null ? null : pixels(v.getDrawable());
-                worker.execute(() -> {
+                sourceTask = () -> {
+                    if (ticket != task) return;
                     NotificationIconTreatment.Resolved result = NotificationIconTreatment.resolveCompact(
-                            context, sbn, currentMode, nativeSnapshot, config);
+                            context, requestedPackage, smallIcon, currentMode, nativeSnapshot, requestedKey);
+                    if (ticket != task) return;
                     main.post(() -> {
                         ImageView image = ref.get();
-                        if (image == null || ticket != task || !requestedKey.equals(key)) return;
+                        if (ticket != task) return;
+                        sourceTask = null;
+                        if (image == null || !requestedKey.equals(key)) return;
                         ready = result;
                         if (Probe.trace) Probe.log("ICON_TREAT_COMPACT_ROUTE", "pkg=" + pkg
                                 + " source=" + (result == null ? "preserve" : result.source)
                                 + " parent=" + ancestors(image));
                         if (result != null && result.bitmap != null) image.invalidate();
                     });
-                });
+                };
+                worker.execute(sourceTask);
             }
             // The shelf needs its dark/light glyph even when source resolution intentionally
             // preserves Samsung's native monochrome drawable (bitmap=null). That path used to
@@ -723,6 +750,8 @@ final class NotificationCompactIconHooks {
 
         private void clear() {
             ticket++;
+            if (sourceTask != null) worker.remove(sourceTask);
+            sourceTask = null;
             restore();
             key = null;
             sourceSbn = null;
