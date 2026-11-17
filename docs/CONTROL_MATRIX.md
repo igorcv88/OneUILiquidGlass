@@ -46,6 +46,7 @@ Gerada por `ControlMatrixTest` a partir de `SettingsRegistry`, `Controls`, `Appl
 | `kgblurpath` | Desfoque do bloqueio com a lente | Bloqueio | Técnico · technical | int · 0–1 · 1 | hooks/HeadsUpHooks | ao vivo | inativo: Usado com a lente dinâmica | ativo | inativo: Usado com a lente dinâmica |  | none | CM, SC |
 | `shadeblurpath` | Desfoque da central | Central | Técnico · technical | int · 0–1 · 1 | hooks/HeadsUpHooks | ao vivo | inativo: Sem efeito no vidro padrão | ativo | ativo |  | none | CM, SC |
 | `shadefadecut` | Corte do desfoque ao sumir | Central | Comportamento · advanced | float · 0–1 · 0.5 | hooks/HeadsUpHooks | ao vivo | ativo | ativo | ativo |  | behavior | CM, SC |
+| `hufadecut` | Lente do pop-up na entrada | Pop-up | Comportamento · advanced | float · -1–1 · -1 | hooks/HeadsUpHooks | ao vivo | ativo | ativo | ativo |  | none | CM, SC |
 | `kgwinblur` | Desfoque da janela no bloqueio parado | Bloqueio | Comportamento · advanced | boolean · 0 | hooks/HeadsUpHooks | ao vivo | ativo | ativo | inativo: Usado no vidro padrão ou com a lente dinâmica |  | behavior | CM |
 | `kgblurradius` | Desfoque | Bloqueio | Vidro e desfoque · standard | int · -1–400 · 12 | glass/BackgroundBlurBridge | ao vivo | ativo | ativo | inativo: Usado no vidro padrão ou com a lente dinâmica |  | faithful · blur | CM, SC, PT |
 | `pillglass` | Vidro no resumo de ícones | Bloqueio | Vidro e desfoque · standard | boolean · 1 | hooks/HeadsUpHooks | ao vivo | ativo | ativo | inativo: Usado no vidro padrão ou com a lente dinâmica |  | faithful · pill | CM, PT |

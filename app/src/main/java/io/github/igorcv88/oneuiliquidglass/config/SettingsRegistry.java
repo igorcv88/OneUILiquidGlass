@@ -40,6 +40,7 @@ public final class SettingsRegistry {
         add(new SettingSpec("kgblurpath","Blur e material","keyguard","Caminho de blur do bloqueio","Lockscreen: blur desenhado no drawable vs instalado na View",SettingSpec.Type.INT,"1",0,1,1,"","","",true,"DIAGRAM"));
         add(new SettingSpec("shadeblurpath","Blur e material","shade","Caminho de blur da central","Shade: blur no drawable vs instalado na View",SettingSpec.Type.INT,"1",0,1,1,"","","",true,"DIAGRAM"));
         add(new SettingSpec("shadefadecut","Blur e material","shade","Corte de blur no fade","Limite para remover a região de blur ao desaparecer",SettingSpec.Type.FLOAT,"0.5",0.0,1.0,.01,"","","",false,"DIAGRAM"));
+        add(new SettingSpec("hufadecut","Blur e material","headsup","Lente do pop-up na entrada","Pop-up: limite da região de blur ao aparecer/sumir; −1 segue shadefadecut",SettingSpec.Type.FLOAT,"-1",-1.0,1.0,.01,"","","",false,"DIAGRAM"));
         add(new SettingSpec("kgwinblur","Blur e material","keyguard","Blur da janela no bloqueio","Permite rampas do blur da janela no keyguard ocioso",SettingSpec.Type.BOOLEAN,"0",0,1,.01,"","","",true,"DIAGRAM"));
         add(new SettingSpec("kgblurradius","Blur e material","keyguard","Blur do bloqueio","Override do blur da lockscreen; -1 segue `semradiuslens`",SettingSpec.Type.INT,"12",-1.0,400.0,1,"px","","",false,"MATERIAL"));
         add(new SettingSpec("pillglass","Blur e material","keyguard","Vidro no overflow","Vidro na pill de overflow da lockscreen",SettingSpec.Type.BOOLEAN,"1",0,1,.01,"","","",false,"DIAGRAM"));

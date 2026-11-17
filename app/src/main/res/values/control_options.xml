@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="control_option_ec6472de3478">10 %</string>
+    <string name="control_option_4d04d593eab2">25 %</string>
     <string name="control_option_3c5d28cf50f3">Follows the card during gestures</string>
     <string name="control_option_8d954776f1cd">Adaptive</string>
     <string name="control_option_0a0e3b18cbfb">Original adaptive color</string>
@@ -15,8 +17,10 @@
     <string name="control_option_4e1de10ed349">Outline</string>
     <string name="control_option_308ef5ac8d40">Custom fixed color</string>
     <string name="control_option_e03b6581feae">Separate colors for light and dark backgrounds</string>
+    <string name="control_option_12dfa7f3a2bd">Current cut (shadefadecut)</string>
     <string name="control_option_ed469e5dc765">Set outside the app</string>
     <string name="control_option_8809a6227cfb">Off</string>
+    <string name="control_option_89ae8ea817ed">From the start</string>
     <string name="control_option_9c6166ed846c">Broader blur and more vivid colors</string>
     <string name="control_option_164bf4ddd36b">Off</string>
     <string name="control_option_2bfe9e53781b">Reference discs, approved up to version 0.30</string>
@@ -39,7 +43,9 @@
     <string name="control_option_7fa186bd9a0b">Identifies lens-rewritten shaders</string>
     <string name="control_option_e723a958ac2a">Same as overall blur</string>
     <string name="control_option_3e59ff2f3f00">Same as pop-up</string>
+    <string name="control_option_2bb7eef2ddc4">Same as the shade</string>
     <string name="control_option_9be0dc635d59">Limited slope, without folds</string>
+    <string name="control_option_a7431bcd75a7">Lens during most of the slide</string>
     <string name="control_option_c908bfdb54ef">Smooth lens</string>
     <string name="control_option_18f5e7ca18f6">Edge luminance</string>
     <string name="control_option_580a7b605fb0">Safer, but hides more often</string>
@@ -71,6 +77,7 @@
     <string name="control_option_5e752f3cd7ac">Any touch</string>
     <string name="control_option_5a83874989ff">Four corners</string>
     <string name="control_option_808eb0b380d3">Single radius</string>
+    <string name="control_option_326b1b817735">Whole region from the first frame</string>
     <string name="control_option_d28c21104d9d">Removes more structure; large shapes get softer</string>
     <string name="control_option_f1b4503c73c7">Normal rendering without diagnostic tint</string>
     <string name="control_option_929dc216ba9a">Follows the card fade</string>

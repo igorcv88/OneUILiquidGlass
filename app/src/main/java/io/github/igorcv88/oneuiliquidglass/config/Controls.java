@@ -574,6 +574,14 @@ public final class Controls {
                 .help("Abaixo desta opacidade o desfoque do cartão é removido de uma vez,"
                         + " evitando uma mancha branca ao fechar a central.")
                 .show(BEHAV, Channel.NONE));
+        put(c("hufadecut", "Lente do pop-up na entrada").fmt(Format.CHOICE)
+                .in(BEHAVIOR, ADV).on(HU)
+                .choice("-1", "Igual à central", "Corte atual (shadefadecut)")
+                .choice("0.25", "25 %", "Lente durante a maior parte do deslize")
+                .choice("0.1", "10 %", "Lente durante a maior parte do deslize")
+                .choice("0", "Desde o início", "Região inteira já no primeiro quadro")
+                .help("Opacidade do pop-up a partir da qual a lente e o desfoque aparecem ao"
+                        + " entrar e somem ao sair. Vale para o pop-up sobre apps."));
         put(c("kgwinblur", "Desfoque da janela no bloqueio parado").fmt(Format.TOGGLE)
                 .in(BEHAVIOR, ADV).on(KG)
                 .help("Permite as pequenas rampas de desfoque que um toque inicia no bloqueio"

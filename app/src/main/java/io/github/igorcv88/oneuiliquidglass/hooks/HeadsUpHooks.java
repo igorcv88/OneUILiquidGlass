@@ -2454,6 +2454,13 @@ public final class HeadsUpHooks {
             pill = rowClass == null || !rowClass.isInstance(row);
         }
         void invalidate() { View v = background.get(); if (v != null) v.invalidate(); }
+        /**
+         * The unlocked fade cut of this card: shadefadecut, or hufadecut for a heads-up when set
+         * (>= 0). The row is read only when the opt-in is set, so the default path is unchanged.
+         */
+        float fadeCut(Tuning t) {
+            return CardExit.fadeCut(t.shadeFadeCut, t.huFadeCut, t.huFadeCut >= 0f && isHeadsUp());
+        }
         boolean isHeadsUp() {
             View r = row.get();
             return r != null && Boolean.TRUE.equals(Reflect.bool(r, "isHeadsUpState", "mIsHeadsUp"));
@@ -2600,7 +2607,7 @@ public final class HeadsUpHooks {
                     float shown = CardExit.shown(a, leaving, exitAlpha);
                     // In the unlocked shade a partly transparent region turned whiter, not fainter (a
                     // white pill as the card faded): there it is whole or gone (shadefadecut).
-                    float cut = barState != null && barState == Eligibility.BAR_SHADE ? Tuning.get().shadeFadeCut : 0f;
+                    float cut = barState != null && barState == Eligibility.BAR_SHADE ? fadeCut(Tuning.get()) : 0f;
                     float fade = CardExit.drawableFade(shown, cut);
                     // The Samsung region does not take its drawable's alpha: a leaving card's is
                     // whole or gone even where the shade has no cut.

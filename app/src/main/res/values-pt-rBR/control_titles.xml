@@ -92,6 +92,7 @@
     <string name="control_title_ebe06a05f094">Largura da transição óptica</string>
     <string name="control_title_97edb54dcb0f">Largura do brilho do aro</string>
     <string name="control_title_5aaf82f5a308">Lente dinâmica</string>
+    <string name="control_title_b43bb6ef2255">Lente do pop-up na entrada</string>
     <string name="control_title_404a512dbeda">Limite da uniformidade</string>
     <string name="control_title_b060e343d3f2">Limite para texto claro</string>
     <string name="control_title_ef3825b141ca">Limite para texto claro (lente)</string>

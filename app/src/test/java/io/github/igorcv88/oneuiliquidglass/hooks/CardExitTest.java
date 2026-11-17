@@ -187,4 +187,19 @@ public final class CardExitTest {
         assertTrue(e.deferredRelease(false));
         assertFalse(e.attach(true));
     }
+
+    @Test public void headsUpFadeCutIsOptIn() {
+        // Default (-1): every unlocked card, the heads-up included, keeps shadefadecut.
+        assertEquals(0.5f, CardExit.fadeCut(0.5f, -1f, true), 0f);
+        assertEquals(0.5f, CardExit.fadeCut(0.5f, -1f, false), 0f);
+        // Set: only a heads-up takes it; shade cards keep shadefadecut.
+        assertEquals(0.1f, CardExit.fadeCut(0.5f, 0.1f, true), 0f);
+        assertEquals(0.5f, CardExit.fadeCut(0.5f, 0.1f, false), 0f);
+        assertEquals(0f, CardExit.fadeCut(0.5f, 0f, true), 0f);
+        // With the cut at 0.1 the region (Samsung path: whole or gone) appears at 10 % alpha, at
+        // 0.5 only from half: the 17/11 trace's slide (alpha 0.10 at rowTy 120, 0.53 at 150 of 152).
+        assertTrue(0.10f >= CardExit.fadeCut(0.5f, 0.1f, true));
+        assertFalse(0.43f >= CardExit.fadeCut(0.5f, -1f, true));
+        assertEquals(1f, CardExit.drawableFade(0.10f, CardExit.fadeCut(0.5f, 0.1f, true)), 0f);
+    }
 }

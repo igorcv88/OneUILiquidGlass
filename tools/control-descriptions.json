@@ -226,6 +226,10 @@
     "Sets the opacity below which card blur is removed while the shade closes.",
     "Define a opacidade abaixo da qual o desfoque do cartão é removido ao fechar a central."
   ],
+  "hufadecut": [
+    "Sets the pop-up opacity from which its lens and blur appear while it slides in.",
+    "Define a opacidade do pop-up a partir da qual a lente e o desfoque aparecem durante a entrada."
+  ],
   "kgwinblur": [
     "Allows touch-triggered window blur ramps on the stationary lock screen.",
     "Permite rampas de desfoque da janela iniciadas por toque na tela de bloqueio parada."

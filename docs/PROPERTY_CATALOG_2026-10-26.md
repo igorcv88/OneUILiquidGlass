@@ -57,6 +57,7 @@ Dependências: `liveblur=1` só ativa `live` se `sfrefract=0` e `backdrop=auto`.
 | `kgblurpath` | 1 | inteiro 0/1 | Lockscreen: blur desenhado no drawable vs instalado na View |
 | `shadeblurpath` | 1 | inteiro 0/1 | Shade: blur no drawable vs instalado na View |
 | `shadefadecut` | 0.5 | 0–1 | Limite para remover a região de blur ao desaparecer |
+| `hufadecut` | -1 | -1–1 | Pop-up: limite da região de blur ao aparecer/sumir; −1 segue shadefadecut |
 | `kgwinblur` | 0 | booleano | Permite rampas do blur da janela no keyguard ocioso |
 | `kgblurradius` | 12 | inteiro -1–400 px | Override do blur da lockscreen; -1 segue `semradiuslens` |
 | `pillglass` | 1 | booleano | Vidro na pill de overflow da lockscreen |

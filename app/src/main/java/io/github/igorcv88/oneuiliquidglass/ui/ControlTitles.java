@@ -100,6 +100,7 @@ final class ControlTitles {
             case "Largura da transição óptica": return R.string.control_title_ebe06a05f094;
             case "Largura do brilho do aro": return R.string.control_title_97edb54dcb0f;
             case "Lente dinâmica": return R.string.control_title_5aaf82f5a308;
+            case "Lente do pop-up na entrada": return R.string.control_title_b43bb6ef2255;
             case "Limite da uniformidade": return R.string.control_title_404a512dbeda;
             case "Limite para texto claro": return R.string.control_title_b060e343d3f2;
             case "Limite para texto claro (lente)": return R.string.control_title_ef3825b141ca;

@@ -92,6 +92,7 @@
     <string name="control_title_ebe06a05f094">Optical transition width</string>
     <string name="control_title_97edb54dcb0f">Rim glow width</string>
     <string name="control_title_5aaf82f5a308">Dynamic lens</string>
+    <string name="control_title_b43bb6ef2255">Pop-up lens while entering</string>
     <string name="control_title_404a512dbeda">Uniformity limit</string>
     <string name="control_title_b060e343d3f2">Light text threshold</string>
     <string name="control_title_ef3825b141ca">Light text limit (lens)</string>
