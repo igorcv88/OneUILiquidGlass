@@ -44,6 +44,20 @@ Nada muda em blur, kernel, lift, cores semânticas, barra de progresso, ações 
 - **Contorno duplo SF + Java.** É comum às duas rotas e foi aprovado no pop-up. Um segundo contorno **exterior** às superfícies é outra questão: geometria do #202, região × cartão e rota Samsung no `HU_RESIDUAL.md`. Para atribuí-lo é preciso o trace geométrico do #202 (`QS_EDGE_GEOMETRY`, `BLUR_REGION_GEOMETRY`, `SEM_REGION_GEOMETRY`).
 - **42 % do CARD e o #198.** Não chegam à tela com `semalpha=0`. Alterá-los não muda nada nesta configuração.
 
+## Segundo contorno exterior: medida nas capturas de 17/11 (D) e hipótese (H)
+
+Perfis de luma perpendiculares às bordas, nas capturas originais 1440 × 3120 (média de 100 colunas ou 40 linhas):
+
+| Superfície | Borda | Perfil (de fora para dentro) |
+|---|---|---|
+| pop-up convencional | superior | fundo 35 → **faixa de ~4 px a 94–122** → linha 156 → corpo |
+| pop-up convencional | inferior | corpo 134 → **linha 176** → 157 → **segunda linha 166, ~5 px depois** → fundo 83 |
+| Gradus | superior | fundo 41 → faixa de ~4 px a 97–115 → linha 139 (mais fraca: ganho 1,0) |
+| Gradus | inferior | corpo 146 → linha 177 → **patamar de ~5 px a 95** → fundo 82 |
+| ambos | esquerda | uma linha só |
+
+(H) Nas duas rotas, há duas bordas a ~4–5 px uma da outra no topo e na base: a linha de contorno AGSL, desenhada para dentro do retângulo do Java, e o limite da região ou a luz do perfil 0 do compositor no contorno da região. A diferença só nos lados curtos é compatível com uma região de altura diferente da do cartão desenhado (a região Samsung usa o tamanho da view; o cartão é recortado pela altura real). Não corrijo às cegas: o #202 já registra as entradas necessárias (`SEM_REGION_GEOMETRY`, `BLUR_REGION_GEOMETRY`), e uma janela de trace de 90 s (`COLETA_GEOMETRIA.sh`) com o pop-up aberto dá os limites da região e os do cartão no mesmo quadro. Se o desvio de 4–5 px se confirmar, a correção é alinhar a região ao contorno (#202), não reduzir luz.
+
 ## Teste e reversão
 
 1. Instale o APK e reinicie o SystemUI; nenhuma mudança nativa.
