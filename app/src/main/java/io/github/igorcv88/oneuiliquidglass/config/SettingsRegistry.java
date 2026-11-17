@@ -39,6 +39,7 @@ public final class SettingsRegistry {
         add(new SettingSpec("shadeblur","Blur e material","shade","Blur por cartão","Blur próprio em cada card expandido",SettingSpec.Type.BOOLEAN,"1",0,1,.01,"","","",false,"DIAGRAM"));
         add(new SettingSpec("kgblurpath","Blur e material","keyguard","Caminho de blur do bloqueio","Lockscreen: blur desenhado no drawable vs instalado na View",SettingSpec.Type.INT,"1",0,1,1,"","","",true,"DIAGRAM"));
         add(new SettingSpec("shadeblurpath","Blur e material","shade","Caminho de blur da central","Shade: blur no drawable vs instalado na View",SettingSpec.Type.INT,"1",0,1,1,"","","",true,"DIAGRAM"));
+        add(new SettingSpec("hublurpath","Blur e material","headsup","Caminho de blur do pop-up","Pop-up com lente: blur no drawable vs instalado na View (Samsung)",SettingSpec.Type.INT,"0",0,1,1,"","","",true,"DIAGRAM"));
         add(new SettingSpec("shadefadecut","Blur e material","shade","Corte de blur no fade","Limite para remover a região de blur ao desaparecer",SettingSpec.Type.FLOAT,"0.5",0.0,1.0,.01,"","","",false,"DIAGRAM"));
         add(new SettingSpec("kgwinblur","Blur e material","keyguard","Blur da janela no bloqueio","Permite rampas do blur da janela no keyguard ocioso",SettingSpec.Type.BOOLEAN,"0",0,1,.01,"","","",true,"DIAGRAM"));
         add(new SettingSpec("kgblurradius","Blur e material","keyguard","Blur do bloqueio","Override do blur da lockscreen; -1 segue `semradiuslens`",SettingSpec.Type.INT,"12",-1.0,400.0,1,"px","","",false,"MATERIAL"));

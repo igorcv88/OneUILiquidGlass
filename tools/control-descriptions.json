@@ -602,6 +602,10 @@
     "Selects where shade card blur is drawn.",
     "Seleciona onde o desfoque dos cartões da central é desenhado."
   ],
+  "hublurpath": [
+    "Selects where pop-up blur is drawn with the dynamic lens; for comparing the residual backdrop.",
+    "Seleciona onde o desfoque do pop-up é desenhado com a lente dinâmica; para comparar o fundo residual."
+  ],
   "perf": [
     "Logs hook timing for diagnostics; measuring has a performance cost.",
     "Registra o tempo dos hooks para diagnóstico; a medição tem custo de desempenho."

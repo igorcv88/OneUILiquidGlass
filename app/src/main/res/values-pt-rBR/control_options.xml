@@ -4,6 +4,7 @@
     <string name="control_option_8d954776f1cd">Adaptativa</string>
     <string name="control_option_0a0e3b18cbfb">Adaptativa original</string>
     <string name="control_option_a33344113b2b">Adaptação Samsung</string>
+    <string name="control_option_d885925b9c29">Alpha da região controlado pelo módulo</string>
     <string name="control_option_0c4e291a7b4b">Aparência original</string>
     <string name="control_option_20ec175d596a">Automática</string>
     <string name="control_option_c9c992be184b">Automático</string>
@@ -55,6 +56,7 @@
     <string name="control_option_b9ef5b172a58">Mesmo véu em todos os cartões</string>
     <string name="control_option_3b1d364412af">Modelo de Snell com índice de refração</string>
     <string name="control_option_fb3c8b03b40e">Na view</string>
+    <string name="control_option_dbc4a5cb54f2">Na view (Samsung)</string>
     <string name="control_option_fffb17e84d35">Nativo</string>
     <string name="control_option_761716310a91">Nenhuma</string>
     <string name="control_option_f78db5410a48">Neutra sob a lente, herdada nos demais</string>
@@ -71,6 +73,7 @@
     <string name="control_option_5e752f3cd7ac">Qualquer toque</string>
     <string name="control_option_5a83874989ff">Quatro cantos</string>
     <string name="control_option_808eb0b380d3">Raio único</string>
+    <string name="control_option_0098cc642404">Região do sistema; padrão atual</string>
     <string name="control_option_d28c21104d9d">Remove mais estrutura; formas grandes ficam mais suaves</string>
     <string name="control_option_f1b4503c73c7">Renderização normal, sem tinta diagnóstica</string>
     <string name="control_option_929dc216ba9a">Segue o esmaecimento do cartão</string>

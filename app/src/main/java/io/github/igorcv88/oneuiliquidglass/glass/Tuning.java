@@ -133,6 +133,15 @@ public final class Tuning {
      */
     public final int shadeBlurPath;
     /**
+     * Heads-up blur source with the compositor lens, unlocked (debug.oulg.hublurpath): 0 (default)
+     * keeps the Samsung blur installed on the view, whose region ignores the drawable's alpha (the
+     * region the module cannot attest); 1 draws a BackgroundBlurDrawable inside the glass, as
+     * kgblurpath does on the lockscreen, with the region's alpha owned by the module (255 at rest).
+     * A comparison route for the residual sharp backdrop under the pop-up
+     * (docs/clear-glass/HU_RESIDUAL.md); applies to pop-ups created after the change.
+     */
+    public final int huBlurPath;
+    /**
      * Expanded-shade cards: below this accumulated alpha the blur region is removed, above it it
      * stays whole (debug.oulg.shadefadecut, default 0.5, live; 0 fades the region alpha instead).
      * A partly transparent region in the shade turned whiter, not fainter: a white pill was left as
@@ -403,6 +412,7 @@ public final class Tuning {
         lensGate = prop("lensgate", "directional").equals("conservative") ? "conservative" : "directional";
         kgBlurPath = Math.round(clamp(number("kgblurpath", 1f), 0f, 1f));
         shadeBlurPath = Math.round(clamp(number("shadeblurpath", 1f), 0f, 1f));
+        huBlurPath = Math.round(clamp(number("hublurpath", 0f), 0f, 1f));
         shadeFadeCut = clamp(number("shadefadecut", 0.5f), 0f, 1f);
         kgWinBlur = number("kgwinblur", 0f) >= 1f;
         kgBlurRadius = Math.round(clamp(number("kgblurradius", 12f), -1f, 400f));
@@ -568,7 +578,7 @@ public final class Tuning {
         return "backdrop=" + backdrop + " profile=" + profile + " lens=" + lens + " rimhz=" + rimHz + " rimblur=" + rimBlur
                 + " refract=" + refract + " ior=" + ior + " blur=" + blur + " sat=" + saturation
                 + " disp=" + dispersion + " hz=" + hz + " hzkg=" + keyguardHz + " tint=" + tintAlpha
-                + " semradius=" + semRadius + " semradiuslens=" + semRadiusLens + " sflens=" + sfLens + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " live=" + live + " liveradius=" + liveRadius + " liveshaderadius=" + liveShadeRadius + " liveoptics=" + liveOptics + " livesheen=" + liveSheen + " liveglint=" + liveGlint + " shadeglint=" + shadeGlint + " livelens=" + liveLens + " lensmaxage=" + lensMaxAge + " lenssettle=" + lensSettle + " lensgate=" + lensGate + " lenstransition=" + lensTransition + " kgblurpath=" + kgBlurPath + " shadeblurpath=" + shadeBlurPath + " shadefadecut=" + shadeFadeCut + " kgblurradius=" + kgBlurRadius + " pillglass=" + pillGlass + " pillblur=" + pillBlur + " kgoptics=" + kgOptics + " huoptics=" + huOptics + " kglens=" + kgLens + " shadetone=" + shadeTone + " shadeveil=" + shadeVeil + " shadeadaptive=" + shadeAdaptive + " shadecap=" + shadeCap + " shadelift=" + shadeLift + " veilmax=" + veilMax + " stylelo=" + styleLo + " stylehi=" + styleHi + " lightglass=" + lightGlass + " lighttone=" + Integer.toHexString(lightTone) + " lightedge=" + lightEdge + " lightoutline=" + lightOutline + " shadelightglass=" + shadeLightGlass + " shadedarkglass=" + shadeDarkGlass + " livedarkalpha=" + liveDarkAlpha + " livedarkfill=" + liveDarkFill + " liverim=" + liveRim + " kgdarkalpha=" + kgDarkAlpha + " kgdarkfill=" + kgDarkFill + " kgrim=" + kgRim + " kgglint=" + kgGlint + " textswap=" + textSwap + " headertone=" + headerTone + " icontone=" + iconTone + " popuptone=" + popupTone + " popuplock=" + popupLock + " orphandraw=" + orphanDraw + " shadescaleveil=" + shadeScaleVeil + " shadelocal=" + shadeLocal + " paneldim=" + panelDim + " panelblurcap=" + panelBlurCap + " panelnativegray=" + panelNativeGray + " panelcolor=" + Integer.toHexString(panelColor) + " sfoptics=" + sfOptics + " kgwinblur=" + kgWinBlur + " headergap=" + headerGap + " perf=" + perf + " trace=" + trace + " mediaart=" + mediaArt + " qsmediaart=" + qsMediaArt + " edgepremul=" + edgePremulMode
+                + " semradius=" + semRadius + " semradiuslens=" + semRadiusLens + " sflens=" + sfLens + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " live=" + live + " liveradius=" + liveRadius + " liveshaderadius=" + liveShadeRadius + " liveoptics=" + liveOptics + " livesheen=" + liveSheen + " liveglint=" + liveGlint + " shadeglint=" + shadeGlint + " livelens=" + liveLens + " lensmaxage=" + lensMaxAge + " lenssettle=" + lensSettle + " lensgate=" + lensGate + " lenstransition=" + lensTransition + " kgblurpath=" + kgBlurPath + " shadeblurpath=" + shadeBlurPath + " hublurpath=" + huBlurPath + " shadefadecut=" + shadeFadeCut + " kgblurradius=" + kgBlurRadius + " pillglass=" + pillGlass + " pillblur=" + pillBlur + " kgoptics=" + kgOptics + " huoptics=" + huOptics + " kglens=" + kgLens + " shadetone=" + shadeTone + " shadeveil=" + shadeVeil + " shadeadaptive=" + shadeAdaptive + " shadecap=" + shadeCap + " shadelift=" + shadeLift + " veilmax=" + veilMax + " stylelo=" + styleLo + " stylehi=" + styleHi + " lightglass=" + lightGlass + " lighttone=" + Integer.toHexString(lightTone) + " lightedge=" + lightEdge + " lightoutline=" + lightOutline + " shadelightglass=" + shadeLightGlass + " shadedarkglass=" + shadeDarkGlass + " livedarkalpha=" + liveDarkAlpha + " livedarkfill=" + liveDarkFill + " liverim=" + liveRim + " kgdarkalpha=" + kgDarkAlpha + " kgdarkfill=" + kgDarkFill + " kgrim=" + kgRim + " kgglint=" + kgGlint + " textswap=" + textSwap + " headertone=" + headerTone + " icontone=" + iconTone + " popuptone=" + popupTone + " popuplock=" + popupLock + " orphandraw=" + orphanDraw + " shadescaleveil=" + shadeScaleVeil + " shadelocal=" + shadeLocal + " paneldim=" + panelDim + " panelblurcap=" + panelBlurCap + " panelnativegray=" + panelNativeGray + " panelcolor=" + Integer.toHexString(panelColor) + " sfoptics=" + sfOptics + " kgwinblur=" + kgWinBlur + " headergap=" + headerGap + " perf=" + perf + " trace=" + trace + " mediaart=" + mediaArt + " qsmediaart=" + qsMediaArt + " edgepremul=" + edgePremulMode
                 + " iconmode=" + iconMode + " iconcardsize=" + notificationIconScale
                 + " statusiconsize=" + statusIconScale + " statusmaxicons=" + statusMaxIcons
                 + " iconinkmode=" + notificationIconInkMode + " statusinkmode=" + statusIconInkMode

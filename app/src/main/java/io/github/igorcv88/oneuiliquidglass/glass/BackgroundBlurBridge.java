@@ -91,12 +91,26 @@ public final class BackgroundBlurBridge implements Backdrop {
         this.keyguard = keyguard; this.lens = lens;
         if (built) update(lastPx, lastTint, lastRadii);
     }
+    /**
+     * The heads-up comparison route (debug.oulg.hublurpath): the region takes semradiuslens, the
+     * radius the Samsung path gives a lens card, not the lockscreen's kgblurradius.
+     */
+    private boolean lensRadius;
+    public void useLensRadius() throws ReflectiveOperationException {
+        if (lensRadius) return;
+        lensRadius = true;
+        if (built) update(lastPx, lastTint, lastRadii);
+    }
+    /** Region radius of a lens card: kgblurradius when set, unless the heads-up route asks for semradiuslens. */
+    public static int lensPx(int kgBlurRadius, int semRadiusLens, boolean headsUpRoute) {
+        return !headsUpRoute && kgBlurRadius >= 0 ? kgBlurRadius : semRadiusLens;
+    }
     @Override public void update(int px, int tint, float[] radii) throws ReflectiveOperationException {
         lastPx = px; lastTint = tint; System.arraycopy(radii, 0, lastRadii, 0, 8); built = true;
         float tl = radii[0], tr = radii[2], bl = radii[6], br = radii[4];
         if (lensMode) {
             Tuning t = Tuning.get();
-            int lensPx = t.kgBlurRadius >= 0 ? t.kgBlurRadius : t.semRadiusLens;
+            int lensPx = lensPx(t.kgBlurRadius, t.semRadiusLens, lensRadius);
             // LSPosed-only: no lens to leave backdrop detail for, so one full blur everywhere.
             px = t.live ? t.livePx(lens, keyguard) : lens && lensPx >= 0 ? lensPx : t.semRadius >= 0 ? t.semRadius : GlassSpec.SAMSUNG_RADIUS;
             // The same veil as the Samsung path (semalpha over the Samsung tone).

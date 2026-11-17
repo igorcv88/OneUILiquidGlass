@@ -60,6 +60,7 @@ final class ControlTitles {
             case "Desfoque do bloqueio com a lente": return R.string.control_title_3f0437688241;
             case "Desfoque do centro": return R.string.control_title_ddc008a84d95;
             case "Desfoque do fundo da central": return R.string.control_title_f27ba480c2b4;
+            case "Desfoque do pop-up com a lente": return R.string.control_title_e533dec3633d;
             case "Desfoque do resumo": return R.string.control_title_bbd07c14d31f;
             case "Desfoque geral": return R.string.control_title_6125817372a1;
             case "Desfoque interno": return R.string.control_title_b3f0fd5c9935;

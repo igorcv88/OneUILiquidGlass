@@ -14,6 +14,7 @@ final class ControlDescriptions {
             case "edgepremul": return R.string.control_description_edgepremul;
             case "headergap": return R.string.control_description_headergap;
             case "headertone": return R.string.control_description_headertone;
+            case "hublurpath": return R.string.control_description_hublurpath;
             case "huoptics": return R.string.control_description_huoptics;
             case "hz": return R.string.control_description_hz;
             case "hzkg": return R.string.control_description_hzkg;

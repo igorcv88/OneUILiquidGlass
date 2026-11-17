@@ -12,6 +12,7 @@ final class ControlOptions {
             case "Adaptativa": return R.string.control_option_8d954776f1cd;
             case "Adaptativa original": return R.string.control_option_0a0e3b18cbfb;
             case "Adaptação Samsung": return R.string.control_option_a33344113b2b;
+            case "Alpha da região controlado pelo módulo": return R.string.control_option_d885925b9c29;
             case "Aparência original": return R.string.control_option_0c4e291a7b4b;
             case "Automática": return R.string.control_option_20ec175d596a;
             case "Automático": return R.string.control_option_c9c992be184b;
@@ -63,6 +64,7 @@ final class ControlOptions {
             case "Mesmo véu em todos os cartões": return R.string.control_option_b9ef5b172a58;
             case "Modelo de Snell com índice de refração": return R.string.control_option_3b1d364412af;
             case "Na view": return R.string.control_option_fb3c8b03b40e;
+            case "Na view (Samsung)": return R.string.control_option_dbc4a5cb54f2;
             case "Nativo": return R.string.control_option_fffb17e84d35;
             case "Nenhuma": return R.string.control_option_761716310a91;
             case "Neutra sob a lente, herdada nos demais": return R.string.control_option_f78db5410a48;
@@ -79,6 +81,7 @@ final class ControlOptions {
             case "Qualquer toque": return R.string.control_option_5e752f3cd7ac;
             case "Quatro cantos": return R.string.control_option_5a83874989ff;
             case "Raio único": return R.string.control_option_808eb0b380d3;
+            case "Região do sistema; padrão atual": return R.string.control_option_0098cc642404;
             case "Remove mais estrutura; formas grandes ficam mais suaves": return R.string.control_option_d28c21104d9d;
             case "Renderização normal, sem tinta diagnóstica": return R.string.control_option_f1b4503c73c7;
             case "Segue o esmaecimento do cartão": return R.string.control_option_929dc216ba9a;

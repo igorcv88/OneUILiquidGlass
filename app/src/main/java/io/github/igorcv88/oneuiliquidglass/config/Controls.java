@@ -921,6 +921,11 @@ public final class Controls {
                 .choice("1", "No cartão", "Segue o esmaecimento do cartão")
                 .choice("0", "Na view", "Caminho antigo; pode deixar rastro")
                 .help("Onde o desfoque dos cartões da central é desenhado."));
+        put(c("hublurpath", "Desfoque do pop-up com a lente").fmt(Format.CHOICE).in(TECH, TEC).on(HU)
+                .choice("0", "Na view (Samsung)", "Região do sistema; padrão atual")
+                .choice("1", "No cartão", "Alpha da região controlado pelo módulo")
+                .help("Onde o desfoque do pop-up é desenhado com a lente dinâmica. Comparação do"
+                        + " fundo residual; vale para pop-ups novos."));
         put(c("perf", "Medir tempo dos ganchos").fmt(Format.TOGGLE).in(TECH, TEC).all()
                 .help("Registra no log o tempo gasto pelo módulo. Tem custo; use só para"
                         + " diagnóstico."));

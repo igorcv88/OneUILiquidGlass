@@ -179,6 +179,7 @@ public final class Applicability {
             case "kgsharedoptics":
             case "huoptics":
             case "kgblurpath":
+            case "hublurpath":
                 return lens ? ACTIVE : inactive(NEEDS_LENS);
             case "kglens":
                 if (!lens) return inactive(NEEDS_LENS);
