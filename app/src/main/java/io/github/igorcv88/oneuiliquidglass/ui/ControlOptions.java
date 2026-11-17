@@ -27,6 +27,7 @@ final class ControlOptions {
             case "Desativado": return R.string.control_option_8809a6227cfb;
             case "Desfoque mais largo e cores mais vivas": return R.string.control_option_9c6166ed846c;
             case "Desligada": return R.string.control_option_164bf4ddd36b;
+            case "Discos de referência, aprovados até a versão 0.30": return R.string.control_option_2bfe9e53781b;
             case "Duas cores personalizadas": return R.string.control_option_ed7c90e94c1f;
             case "Escolhe uma cor para fundo claro e outra para colorido": return R.string.control_option_408f8a407d99;
             case "Escurecida": return R.string.control_option_bc7b88d5097a;
@@ -37,6 +38,9 @@ final class ControlOptions {
             case "Força o tratamento de ícones elegíveis, inclusive os personalizados": return R.string.control_option_286cbcfd1496;
             case "Fosco": return R.string.control_option_7b9330ac47fd;
             case "Física": return R.string.control_option_783067a8aca7;
+            case "Gaussiano aninhado": return R.string.control_option_2747a88a5074;
+            case "Gaussiano aninhado forte": return R.string.control_option_67399b1f29d2;
+            case "Gaussiano aninhado suave": return R.string.control_option_b28a3abd304b;
             case "Gestos laterais": return R.string.control_option_2212a1a4fd6a;
             case "Grade de teste": return R.string.control_option_9a216516ec5f;
             case "Híbrida": return R.string.control_option_31d64f897e37;
@@ -55,6 +59,7 @@ final class ControlOptions {
             case "Material do bloqueio": return R.string.control_option_ce65364887ca;
             case "Material do pop-up": return R.string.control_option_b5ac2d86fb77;
             case "Mede o fundo ao abrir a central": return R.string.control_option_966831833a8c;
+            case "Menos estrutura de texto e menos espalhamento de brancos": return R.string.control_option_bb7b090dd8dc;
             case "Mesmo véu em todos os cartões": return R.string.control_option_b9ef5b172a58;
             case "Modelo de Snell com índice de refração": return R.string.control_option_3b1d364412af;
             case "Na view": return R.string.control_option_fb3c8b03b40e;
@@ -63,15 +68,18 @@ final class ControlOptions {
             case "Neutra sob a lente, herdada nos demais": return R.string.control_option_f78db5410a48;
             case "No cartão": return R.string.control_option_9935aac96730;
             case "O mesmo material dos pop-ups": return R.string.control_option_31310ebb3669;
+            case "Original": return R.string.control_option_c0a8060f3b11;
             case "Padrão": return R.string.control_option_d8e00743b1a4;
             case "Padrão: preserva os aplicativos do usuário e seus packs": return R.string.control_option_bc563cb30bb5;
             case "Para comparar no aparelho": return R.string.control_option_efd3e6962023;
             case "Pode atrasar atrás do movimento": return R.string.control_option_cb302177b476;
             case "Por cartão (avançado)": return R.string.control_option_e663156ae3c4;
+            case "Preserva mais formas grandes do fundo": return R.string.control_option_001157941c07;
             case "Preto ou branco conforme o fundo, como atualmente": return R.string.control_option_797f1acc98bc;
             case "Qualquer toque": return R.string.control_option_5e752f3cd7ac;
             case "Quatro cantos": return R.string.control_option_5a83874989ff;
             case "Raio único": return R.string.control_option_808eb0b380d3;
+            case "Remove mais estrutura; formas grandes ficam mais suaves": return R.string.control_option_d28c21104d9d;
             case "Renderização normal, sem tinta diagnóstica": return R.string.control_option_f1b4503c73c7;
             case "Segue o esmaecimento do cartão": return R.string.control_option_929dc216ba9a;
             case "Sem amostragem": return R.string.control_option_b21f94257814;

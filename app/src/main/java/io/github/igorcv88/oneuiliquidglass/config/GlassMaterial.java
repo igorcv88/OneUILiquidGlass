@@ -101,7 +101,7 @@ public enum GlassMaterial {
     /** Clear Glass parameters (docs/clear-glass/UI_HANDOFF.md sections 3 to 5), per profile. */
     private static final List<String> HU_CLEAR = Arrays.asList(
             "hcband", "hcfold", "hcamp", "hcbody", "hcbody2", "hcedge", "hccore", "hcblurexp",
-            "hcadapt", "hcsat", "hcscrim", "hcscrimmax", "hclift", "hcneutral");
+            "hcadapt", "hcsat", "hcscrim", "hcscrimmax", "hclift", "hcneutral", "hckernel");
     private static final List<String> KG_CLEAR = Arrays.asList(
             "kcband", "kcfold", "kcamp", "kcbody", "kcbody2", "kcedge", "kccore", "kcblurexp",
             "kcsat", "kcveil", "kclevel", "kcdim", "kcknee", "kccool", "kclift");

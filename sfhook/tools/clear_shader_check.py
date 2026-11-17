@@ -14,7 +14,9 @@ usage: clear_shader_check.py <refract_check binary> <dump> <work dir>
  - I2: with the meniscus and the heads-up material off (not set, or their neutral values), the clear
    output is byte for byte that of optics 12 at 25acdc7 (hashes in testdata/optics12_golden);
  - the meniscus (hcfold > 0) and the heads-up material compile and link in every heads-up mode, appear
-   only in heads-up clear programs, and leave main() unchanged.
+   only in heads-up clear programs, and leave main() unchanged;
+ - heads-up body kernels 1-3 (hckernel) change oulg_body_hu only, read the texture as often as kernel 0
+   (2 x taps), compile and link; hckernel=0 is byte-identical to the property unset.
 """
 import hashlib
 import itertools
@@ -215,6 +217,50 @@ for hu, kg in itertools.product((0, 1, 2), repeat=2):
             meniscus += 1
 print(f"meniscus: {meniscus} fragment rewrites (9 mode pairs x debug 0-4, fold 2, sat 1.5, scrim 0.12-0.50, adapt 1) compile and link; "
       "main() unchanged; field, material and adaptive body only where the heads-up is clear")
+# Heads-up body kernels (hckernel): 0 is the adaptive body above; 1-3 replace oulg_body_hu only,
+# with the same number of texture reads (disc A + disc B = 2 x taps), compile and link.
+def body_fn(text):
+    i = text.find("mediump vec4 oulg_body_hu(")
+    return text[i:text.index("\n}\n", i) + 3] if i >= 0 else ""
+def reads(fn):
+    # textureLod calls weighted by their loop's trip count.
+    n = 0
+    for loop in re.finditer(r"for \(int \w+ = 0; \w+ < (\d+); \w+\+\+\) \{(.*?)\n  \}", fn, re.S):
+        n += int(loop.group(1)) * loop.group(2).count("textureLod(")
+    return n
+kernels = 0
+base_args = "huclear=1,kgclear=1,hcband=0.42,hcfold=2,hcedge=30,hccore=30,hcsat=1.05,hcadapt=1,hclift=0.3"
+for debug in (0, 3):
+    k0 = gen(f"kern0_d{debug}", debug, base_args + ",hckernel=0")
+    plain = gen(f"kernx_d{debug}", debug, base_args)
+    for frag in sorted(k0.glob("mod_*.frag")):
+        if frag.read_text() != (plain / frag.name).read_text():
+            fails.append(f"hckernel=0 differs from unset: debug {debug} {frag.name}")
+    for k in (1, 2, 3):
+        out = gen(f"kern{k}_d{debug}", debug, base_args + f",hckernel={k}")
+        for frag in sorted(out.glob("mod_*.frag")):
+            text, ref0 = frag.read_text(), (k0 / frag.name).read_text()
+            f0, f1 = body_fn(ref0), body_fn(text)
+            if text.replace(f1, "") != ref0.replace(f0, ""):
+                fails.append(f"hckernel {k} changed text outside oulg_body_hu: debug {debug} {frag.name}")
+            if f0 and (not f1 or f1 == f0):
+                fails.append(f"hckernel {k} did not replace oulg_body_hu: debug {debug} {frag.name}")
+            if f0:
+                disc = body_fn(ref0.replace("mediump vec4 oulg_disc0(", "mediump vec4 oulg_body_hu(", 1))
+                want = reads(f0) + reads(disc)
+                if reads(f1) != want or want != 96:
+                    fails.append(f"hckernel {k}: {reads(f1)} texture reads, kernel 0 {want}: debug {debug} {frag.name}")
+            r = subprocess.run(["glslangValidator", "-S", "frag", str(frag)], capture_output=True, text=True)
+            if r.returncode:
+                fails.append(f"compile {frag}: {r.stdout[-400:]}")
+            if "voulg_tag" in text:
+                for vert in ("mod_001.vert", "min_001.vert"):
+                    r = subprocess.run(["glslangValidator", "-l", str(out / vert), str(frag)], capture_output=True, text=True)
+                    if r.returncode:
+                        fails.append(f"link {vert} + {frag}: {r.stdout[-400:]}")
+            kernels += 1
+print(f"hu kernel: {kernels} fragment rewrites (kernels 1-3 x debug 0 and 3) compile and link; only oulg_body_hu changes; "
+      "96 texture reads per body sample, as kernel 0 (48 + 48); hckernel=0 is byte-identical to unset")
 for d in (0, 1):
     for frag in ref[d].glob("mod_*.frag"):
         text = frag.read_text()

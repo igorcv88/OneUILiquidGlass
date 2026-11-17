@@ -53,6 +53,7 @@ public class ClearGlassRegistryTest {
         spec("sf.hclift", "FLOAT", "0.30", "0", "2");
         spec("sf.kclift", "FLOAT", "0", "0", "2");
         spec("sf.hcneutral", "FLOAT", "0.75", "0", "1");
+        spec("sf.hckernel", "INT", "0", "0", "3");
         spec("sf.kcveil", "FLOAT", "0.04", "0", "0.2");
         spec("sf.kclevel", "FLOAT", "0.85", "0.1", "0.85");
         spec("sf.kcdim", "FLOAT", "0", "0", "0.3");
@@ -74,7 +75,7 @@ public class ClearGlassRegistryTest {
 
     @Test
     public void everyClearPropertyIsRegisteredWithTheContractDomain() {
-        assertEquals(31, WRITABLE_SPECS.size());
+        assertEquals(32, WRITABLE_SPECS.size());
         for (Map.Entry<String, String[]> e : WRITABLE_SPECS.entrySet()) {
             SettingSpec s = SettingsRegistry.get(e.getKey());
             String[] want = e.getValue();

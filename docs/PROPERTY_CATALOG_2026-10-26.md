@@ -198,6 +198,7 @@ Observar que as propriedades `lightglass` e `shadelightglass` se aplicam a super
 | `sf.hclift` | 0.30 | Clear Glass heads-up: clareamento do corpo, 1 − (1 − c)^(1 + lift) (0–2; 0 desliga) |
 | `sf.kclift` | 0 | Clear Glass lockscreen: clareamento do corpo, 1 − (1 − c)^(1 + lift) (0–2; 0 desliga) |
 | `sf.hcneutral` | 0.75 | Clear Glass heads-up: neutralização dos quase-brancos do material (0–1; só age com o material ativo) |
+| `sf.hckernel` | 0 | Clear Glass heads-up: kernel do blur adaptativo (0 = discos atuais; 1–3 = Gaussiano aninhado, limiares 0,035–0,14 / 0,04–0,16 / 0,03–0,12; só age com o blur adaptativo ligado) |
 | `sf.hcscrimmax` | 0 | Clear Glass heads-up: escurecimento sobre fundo branco (0–0.8; limitado a scrim + (1 − scrim)/2) |
 | `sf.kcband` | 0.42 | Clear Glass bloqueio: largura da banda de refração (fração do raio do canto, 0.42–1) |
 | `sf.kcamp` | 0.40 | Clear Glass bloqueio: teto da amplitude da refração na borda (0–0.5; o compositor ainda limita por σ ≥ 0.25) |

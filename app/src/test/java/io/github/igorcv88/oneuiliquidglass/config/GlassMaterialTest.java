@@ -92,7 +92,7 @@ public class GlassMaterialTest {
     @Test
     public void everyClearParameterIsClearOnlyAndBelongsToOneProfile() {
         List<String> clear = GlassMaterial.clearKeys();
-        assertEquals(29, clear.size());
+        assertEquals(30, clear.size());
         assertEquals(clear.size(), new HashSet<>(clear).size());
         for (String key : clear) {
             assertEquals(key, GlassMaterial.Scope.CLEAR_ONLY, GlassMaterial.scope(key));

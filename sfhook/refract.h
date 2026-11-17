@@ -735,6 +735,26 @@ static void oulg_fix_params(struct oulg_profile p[OULG_PROFILES]) {
 #define OULG_ADAPT_WIDE 2.5
 #define OULG_ADAPT_LO 0.06
 #define OULG_ADAPT_HI 0.22
+// Heads-up body kernel (kernel, 0 = the adaptive body above, its text byte for byte; nothing else
+// reads it). Kernels 1-3 keep disc A exactly (same taps, order and weights) and replace disc B:
+//  - nested sampling: B reuses A's taps for its inner disc and spends its own taps on the annulus
+//    [R, WIDE2 R] only, so the texture reads stay 2 x taps (A's plus B's, as kernel 0) while B is
+//    sampled twice as densely. Kernel 0's B spreads the same taps over WIDE^2 = 6.25 times A's area:
+//    at R = 30 px on the quarter-resolution input that is ~23 texels per tap, and its stochastic
+//    error grows with the local contrast, which is exactly where the mix selects B;
+//  - quadrature weights: each tap is weighted by its Gaussian value times the area it stands for
+//    (inner taps pi R^2 / taps, annulus taps pi R^2 (WIDE2^2 - 1) / taps), so B is one Gaussian
+//    (sigma = WIDE2 R / 2, cut at 2 sigma, as every disc here) whatever the tap density;
+//  - WIDE2 = 2.0 instead of 2.5: B's reach, and with it how far a highlight next to structure
+//    spreads, is 60 px instead of 75 px at R = 30;
+//  - the mix statistic is B's luma deviation over all 2 x taps (the same smooth, wide-scale gate as
+//    kernel 0: a gate on A's own deviation was measured and rejected, it switches between A and B
+//    within a few px at A's reach and draws a step there), with lower thresholds per kernel:
+//    1 = 0.035-0.14, 2 = 0.04-0.16 (closer to kernel 0 on photographic backdrops), 3 = 0.03-0.12.
+// Host twin and measurements: sfhook/tools/hu_kernel_report.py (docs/clear-glass/HU_KERNEL.md).
+#define OULG_NEST_WIDE 2.0
+#define OULG_NEST_LO(k) ((k) == 2 ? 0.04 : (k) == 3 ? 0.03 : 0.035)
+#define OULG_NEST_HI(k) ((k) == 2 ? 0.16 : (k) == 3 ? 0.12 : 0.14)
 // Lockscreen meniscus (fold[1], 0 = slab): the same field text as the heads-up, with the lockscreen's
 // own band, dome, blur curve and global scale. Only the shift changes: the lighting coordinates of the
 // Fresnel, contour and specular block still come from oulg_shift_base, as with the slab.
@@ -755,6 +775,7 @@ struct oulg_clear {
     float adapt;                                    // profile 0: share of the wide disc where structure survives
     float lift[2];                                  // positive tone map of the body (0 = none)
     float neutral;                                  // profile 0: near-white neutralisation strength
+    int kernel;                                     // profile 0: adaptive body kernel (0 = optics 12)
 };
 // The approved visual defaults apply ONLY when each Clear selector opts in. Mode selectors
 // remain off by default (Frosted unchanged). Valid debug.oulg.sf.* overrides take precedence.
@@ -765,7 +786,7 @@ static const struct oulg_clear OULG_CLEAR_DEFAULT = {
     {24.0f, 24.0f}, {24.0f, 24.0f}, {2.0f, 2.0f},
     0.04f, 0.85f, 0.0f, 0.0f, 1.0f, 0.5f,
     {2.0f, 2.0f}, 1.05f, 0.0f, 0.0f,
-    1.0f, {0.30f, 0.0f}, 0.75f};
+    1.0f, {0.30f, 0.0f}, 0.75f, 0};
 
 static float oulg_in(float v, float lo, float hi, float fallback) { return v >= lo && v <= hi ? v : fallback; }
 
@@ -801,6 +822,7 @@ static void oulg_fix_clear(struct oulg_clear *c) {
     if (c->scrimmax > top) c->scrimmax = top;
     c->adapt = oulg_in(c->adapt, 0.0f, 1.0f, d->adapt);
     c->neutral = oulg_in(c->neutral, 0.0f, 1.0f, d->neutral);
+    if (c->kernel < 0 || c->kernel > 3) c->kernel = d->kernel;
 }
 
 // The meniscus amplitude cap as a share of min(hs): with it the deepest sample (the outline's, at
@@ -959,6 +981,48 @@ static int oulg_replace_once(char *buf, size_t cap, const char *from, const char
     "  highp float yb = dot(b.rgb, w709);\n" \
     "  highp float sd = sqrt(max(m2 / wsum - yb * yb, 0.0));\n" \
     "  return mix(a, b, %.3f * smoothstep(%.2f, %.2f, sd));\n" \
+    "}\n"
+// The nested heads-up body (kernels 1-3; taps, taps, wide, adapt... see the arguments below): disc A
+// verbatim, then the annulus of B, then the mix on B's luma deviation.
+#define OULG_FS_HU_BODY_NESTED_FMT \
+    "mediump vec4 oulg_body_hu(sampler2D s, highp vec2 uv) {\n" \
+    "  const mediump vec3 w709 = vec3(0.2126, 0.7152, 0.0722);\n" \
+    "  highp float a0 = 6.2831853 * fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));\n" \
+    "  highp vec2 dir = vec2(cos(a0), sin(a0));\n" \
+    "  const highp mat2 rot = mat2(-0.7373688, 0.6754903, -0.6754903, -0.7373688);\n" \
+    "  mediump vec4 acc = vec4(0.0), accb = vec4(0.0);\n" \
+    "  mediump float wsum = 0.0;\n" \
+    "  highp float wb = 0.0, m2 = 0.0;\n" \
+    "  for (int i = 0; i < %d; i++) {\n" \
+    "    highp float rr = sqrt((float(i) + 0.5) / %d.0);\n" \
+    "    highp vec2 o = dir * (rr * oulg_br);\n" \
+    "    mediump vec4 tap = textureLod(s, uv + oulg_jx * o.x + oulg_jy * o.y, 0.0);\n" \
+    "    mediump float w = exp(-2.0 * rr * rr);\n" \
+    "    acc += w * tap;\n" \
+    "    wsum += w;\n" \
+    "    highp float v = exp(%.6f * rr * rr);\n" \
+    "    highp float y = dot(tap.rgb, w709);\n" \
+    "    accb += v * tap;\n" \
+    "    m2 += v * y * y;\n" \
+    "    wb += v;\n" \
+    "    dir = rot * dir;\n" \
+    "  }\n" \
+    "  mediump vec4 a = acc / wsum;\n" \
+    "  for (int j = 0; j < %d; j++) {\n" \
+    "    highp float rb = sqrt(%.6f + %.6f * (float(j) + 0.5));\n" \
+    "    highp vec2 o = dir * (rb * oulg_br * %.2f);\n" \
+    "    mediump vec4 tap = textureLod(s, uv + oulg_jx * o.x + oulg_jy * o.y, 0.0);\n" \
+    "    highp float v = %.6f * exp(-2.0 * rb * rb);\n" \
+    "    highp float y = dot(tap.rgb, w709);\n" \
+    "    accb += v * tap;\n" \
+    "    m2 += v * y * y;\n" \
+    "    wb += v;\n" \
+    "    dir = rot * dir;\n" \
+    "  }\n" \
+    "  mediump vec4 b = accb / wb;\n" \
+    "  highp float yb = dot(b.rgb, w709);\n" \
+    "  highp float sd = sqrt(max(m2 / wb - yb * yb, 0.0));\n" \
+    "  return mix(a, b, %.3f * smoothstep(%.3f, %.3f, sd));\n" \
     "}\n"
 #define OULG_HU_BODY_AT "oulg_pf > 0.5 ? oulg_disc1(s, uv) : oulg_disc0(s, uv); }\n"
 #define OULG_HU_BODY_TO "oulg_pf > 0.5 ? oulg_disc1(s, uv) : oulg_cl > 0.5 ? oulg_body_hu(s, uv) : oulg_disc0(s, uv); }\n"
@@ -1120,8 +1184,20 @@ static int oulg_lib_into(char *out, size_t cap, int external, int debug, const s
             if (!oulg_replace_once(tmp, OULG_TEXT_CAP, OULG_HU_MATERIAL_AT, OULG_HU_MATERIAL_TO)) return 0;
         }
         if (oulg_hu_adapt_on(cl)) {
-            if (!oulg_append(out, cap, &at, OULG_FS_HU_BODY_FMT, p[0].taps, p[0].taps, OULG_ADAPT_WIDE, (double) cl->adapt,
-                             OULG_ADAPT_LO, OULG_ADAPT_HI)) return 0;
+            int ok;
+            if (cl->kernel == 0) {
+                ok = oulg_append(out, cap, &at, OULG_FS_HU_BODY_FMT, p[0].taps, p[0].taps, OULG_ADAPT_WIDE, (double) cl->adapt,
+                                 OULG_ADAPT_LO, OULG_ADAPT_HI);
+            } else {
+                // Inner tap i at rr R weighs exp(-2 (rr / W)^2) in B (sigma = W R / 2); annulus tap j at
+                // rb W R, rb^2 uniform in [1 / W^2, 1], weighs exp(-2 rb^2) times its area relative to an
+                // inner tap's, W^2 - 1 (equal tap counts).
+                double w2 = OULG_NEST_WIDE * OULG_NEST_WIDE, q2 = 1.0 / w2;
+                ok = oulg_append(out, cap, &at, OULG_FS_HU_BODY_NESTED_FMT, p[0].taps, p[0].taps, -2.0 / w2,
+                                 p[0].taps, q2, (1.0 - q2) / p[0].taps, OULG_NEST_WIDE, w2 - 1.0,
+                                 (double) cl->adapt, OULG_NEST_LO(cl->kernel), OULG_NEST_HI(cl->kernel));
+            }
+            if (!ok) return 0;
             if (!oulg_replace_once(tmp, OULG_TEXT_CAP, OULG_HU_BODY_AT, OULG_HU_BODY_TO)) return 0;
         }
         if (oulg_clear_on(cl, 1)) { if (!oulg_clear_lens(out, cap, &at, tmp, OULG_TEXT_CAP, cl)) return 0; }

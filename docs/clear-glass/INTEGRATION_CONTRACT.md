@@ -110,7 +110,7 @@ Rules for the module:
 - Treat a written `huclear`/`kgclear` as **pending** until `debug.oulg.sf.clear` (or the `CLEAR_OPTICS` line) reports it. Before that, the device renders the previous modes.
 - A reported mode is what a program was compiled with, not proof that a card was drawn clear. Per-card confirmation needs the debug maps (section 7) or a screenshot.
 
-The live helper (`sfhook/live/oulg-live.sh`) accepts `huclear kgclear hcband hcamp hcbody hcbody2 hcedge hccore hcblurexp kcband kcamp kcbody kcbody2 kcedge kccore kcblurexp kcveil kclevel kcdim kcknee kcsat kccool hcfold hcsat hcscrim hcscrimmax hcadapt kcfold hclift kclift hcneutral` in `setprops`. It refuses the bare key `clear` (the reported state is not writable).
+The live helper (`sfhook/live/oulg-live.sh`) accepts `huclear kgclear hcband hcamp hcbody hcbody2 hcedge hccore hcblurexp kcband kcamp kcbody kcbody2 kcedge kccore kcblurexp kcveil kclevel kcdim kcknee kcsat kccool hcfold hcsat hcscrim hcscrimmax hcadapt kcfold hclift kclift hcneutral hckernel` in `setprops`. It refuses the bare key `clear` (the reported state is not writable).
 
 ## 6. Changes expected on the Android side (not done here)
 
@@ -247,3 +247,13 @@ The heads-up of `acff51b` was approved on the device (`hcfold 2`, `hcband 0.42`,
 - Bundle: `sfhook/live/version.prop` goes to v0.29.0 / 30. It had stayed at v0.28.0 / 29 through the Clear Glass commits, which change the library.
 - Controls for the UI agent: `docs/clear-glass/UI_HANDOFF.md`.
 - Not validated on the device: the lockscreen meniscus, both lifts and any `hcneutral` other than 0.75.
+
+## 15. Heads-up body kernel (`hckernel`)
+
+| Property | Default | Domain | Effect |
+|---|---|---|---|
+| `debug.oulg.sf.hckernel` | 0 | 0–3 (int; others fall back to 0) | 0: the body of §13, its GLSL byte for byte. 1–3: nested Gaussian disc B (refract.h), thresholds 0.035–0.14 / 0.04–0.16 / 0.03–0.12. Acts only while `hcadapt > 0` and the heads-up is clear |
+
+- Compile-time, like every `hc*`: it needs a shader recompilation (a userspace restart through the dynamic lens). `CLEAR_OPTICS ... hcmat=...,kernel:<n>` records what was compiled.
+- Disc A is unchanged (same taps, order and weights). Texture reads per body sample stay 2 × taps (96 at the default 48).
+- Measurements, trade-offs and the device A/B protocol: `docs/clear-glass/HU_KERNEL.md`.
