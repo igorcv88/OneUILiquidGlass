@@ -1233,6 +1233,31 @@ static char *oulg_route_sample(char *src, size_t sampleAt, size_t coordsLen, int
     return u;
 }
 
+// Image reads a fragment program makes besides the sample the rewrite routes through oulg_sample()
+// (texture(uTextureSampler_0_S1, ...)). RenderEngine draws a blur region whose radius is below
+// 10 px as mix(original, blurred, radius / 10): a second image child, the unblurred input. The
+// FillRRect match counts only the sampler-0 read, so in such a program the blurred child would get
+// the lens and the original would still reach the screen at weight 1 - radius / 10, whatever the
+// lens blur (docs/clear-glass/HU_RESIDUAL.md). Dither tables, read at sk_FragCoord through a matrix,
+// are not images of the backdrop and are not counted. Compile-time only: oulg_sf.c reports a
+// rewritten program that has any, so a device log can attest or exclude this composition.
+static inline int oulg_extra_images(const char *src) {
+    static const char at[] = "texture(uTextureSampler_";
+    int n = 0;
+    for (const char *p = strstr(src, at); p; p = strstr(p + 1, at)) {
+        const char *q = p + strlen(at);
+        if (!strncmp(q, "0_S1, ", 6)) continue;
+        const char *comma = strchr(q, ',');
+        if (!comma) continue;
+        const char *c = comma + 1;
+        while (*c == ' ') c++;
+        const char *fc = strstr(c, "sk_FragCoord"), *end = strchr(c, ';');
+        if (!strncmp(c, "mat3x2(umatrix_", 15) && fc && end && fc < end) continue;
+        n++;
+    }
+    return n;
+}
+
 static char *oulg_rewrite_fragment_cl(const char *src, int debug, const struct oulg_profile *profiles, const struct oulg_clear *clear) {
     if (!strstr(src, "sk_FragColor") || strstr(src, "oulg_")) return NULL;
     if (oulg_count(src, OULG_FS_DECL_AT) != 1 || oulg_count(src, OULG_FS_SAMPLE) != 1 || oulg_count(src, OULG_FS_FINAL) != 1) return NULL;

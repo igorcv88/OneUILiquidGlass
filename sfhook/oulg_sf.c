@@ -515,6 +515,18 @@ void glShaderSource(GLuint shader, GLsizei count, const GLchar *const *strings, 
         if (frag) {
             int ok = compiles(shader, frag);
             __android_log_print(ANDROID_LOG_INFO, TAG, "REWRITE fragment shader=%u compiled=%d", shader, ok);
+            // A second image read (RenderEngine's small-radius crossfade) passes the unblurred
+            // backdrop around the lens. Compile time only, at most 8 lines per process.
+            int images = oulg_extra_images(joined);
+            if (images > 0) {
+                static int extra_logged;
+                pthread_mutex_lock(&health_lock);
+                int log_it = extra_logged < 8; if (log_it) extra_logged++;
+                pthread_mutex_unlock(&health_lock);
+                if (log_it) __android_log_print(ANDROID_LOG_WARN, TAG,
+                    "REWRITE_EXTRA_IMAGE shader=%u compiled=%d images=%d scope=unrewritten-image-read (crossfade below 10 px?)",
+                    shader, ok, images);
+            }
             dump_text(ok ? "REWRITE_OK fragment" : "REWRITE_FAILED fragment", shader, frag);
             // Shader-source interception proves capability compilation, not runtime uniforms or draws.
             // Profile 3 is selected by a radius tag at draw time, which this hook cannot observe.
