@@ -957,6 +957,12 @@ static int oulg_replace_once(char *buf, size_t cap, const char *from, const char
     "}\n"
 // The heads-up adaptive body (taps, taps, wide factor, adapt, lo, hi): disc A, then disc B with the
 // luma variance of its taps, and the mix.
+// Precision (R4, 17/11): a normalised kernel must return alpha 1 from opaque taps whatever their RGB
+// and the A/B weight. Disc B's sum and its normaliser were of different precisions (mediump acc,
+// highp wsum): on fp16 hardware that rounds toward zero the sum lost ~1.2 % (nested kernels: ~2.0 %,
+// their weights sum to 83), b.a fell to ~0.98, and the region, drawn source-over, let that share of
+// the sharp backdrop through wherever the mix chose B. The device probe read 1.985 % (debug 5,
+// docs/clear-glass/HU_ALPHA_PROBE.md). Every sum divided by a highp weight is highp now.
 #define OULG_FS_HU_BODY_FMT \
     "mediump vec4 oulg_body_hu(sampler2D s, highp vec2 uv) {\n" \
     "  const mediump vec3 w709 = vec3(0.2126, 0.7152, 0.0722);\n" \
@@ -964,7 +970,7 @@ static int oulg_replace_once(char *buf, size_t cap, const char *from, const char
     "  highp float a0 = 6.2831853 * fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));\n" \
     "  highp vec2 dir = vec2(cos(a0), sin(a0));\n" \
     "  const highp mat2 rot = mat2(-0.7373688, 0.6754903, -0.6754903, -0.7373688);\n" \
-    "  mediump vec4 acc = vec4(0.0);\n" \
+    "  highp vec4 acc = vec4(0.0);\n" \
     "  highp float wsum = 0.0, m2 = 0.0;\n" \
     "  for (int i = 0; i < %d; i++) {\n" \
     "    highp float rr = sqrt((float(i) + 0.5) / %d.0);\n" \
@@ -990,7 +996,8 @@ static int oulg_replace_once(char *buf, size_t cap, const char *from, const char
     "  highp float a0 = 6.2831853 * fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));\n" \
     "  highp vec2 dir = vec2(cos(a0), sin(a0));\n" \
     "  const highp mat2 rot = mat2(-0.7373688, 0.6754903, -0.6754903, -0.7373688);\n" \
-    "  mediump vec4 acc = vec4(0.0), accb = vec4(0.0);\n" \
+    "  mediump vec4 acc = vec4(0.0);\n" \
+    "  highp vec4 accb = vec4(0.0);\n" \
     "  mediump float wsum = 0.0;\n" \
     "  highp float wb = 0.0, m2 = 0.0;\n" \
     "  for (int i = 0; i < %d; i++) {\n" \

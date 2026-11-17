@@ -74,4 +74,6 @@ done
 cc -std=c99 -Wall -Wextra -Werror -Wno-unused-function -O2 -I.. -o "$OUT/cc" clear_check.c -lm
 "$OUT/cc" || fail=1
 python3 clear_shader_check.py "$OUT/rc" "$DUMP" "$OUT/clear" || fail=1
+# Opaque taps must give alpha 1 through every body kernel (sum and normaliser at one precision).
+python3 alpha_precision_check.py "$OUT/rc" "$DUMP" || fail=1
 exit $fail

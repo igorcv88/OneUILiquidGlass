@@ -83,3 +83,37 @@ Não forçar alpha 1 globalmente: isso quebraria fades, antialiasing e máscaras
 - Uma transformação de cor da tela pode deslocar os códigos em 1–2 níveis. Compare zero contra não zero; as magnitudes valem com cerca de ±0,1 %.
 - O alpha de blending do framebuffer e os valores dos uniforms Kawase não são lidos diretamente. Os uniforms só são observáveis pelo alpha da textura. O estado de blend do RenderEngine para a região é source-over por padrão (alpha < 1 transmite o destino); um modo src-copy apareceria como ladrilhos opacos sem transmissão física, e a comparação com a sonda desligada desfaz a dúvida.
 - A sonda mostra só o último programa com tag em cada pixel.
+
+## Leitura no aparelho (R4, 19:08) e causa
+
+Configuração da leitura: `sf.debug=5`, kernel 1, raios 30/32 px, `hublur` 1,15, `hurefract` 1,09, neutral 1,00, lift 0,42, saturação 1,03. SF PID 13825, saúde 1/1. O log `PROBE` veio vazio. As capturas originais estão em 1440 × 3120.
+
+- (D) Os ladrilhos de id foram lidos como (156, 36, 245) em vez de (·, ·, 255): há uma transformação de cor de ganho ≈ 0,961 depois do código. O decodificador agora separa os ladrilhos pela geometria e corrige pelo ganho.
+- (D) ROI 450–950 × 400–432:
+
+  | Cena | Final | Pintura | Textura central |
+  |---|---:|---:|---:|
+  | preview | 1,907 % (corrigido 1,985 %) | 0 | 0 |
+  | Home | 1,907 % (corrigido 1,985 %) | 0 | 0 |
+  | Gmail | 0 | 0 | 0 |
+
+- (D) Em toda a área do pop-up, o déficit final varia **continuamente** de 0 a um teto (R ≈ 62, ou seja 1,98 %). É o produto do peso adaptativo do disco B por um erro constante. O Gmail tem mais pixels em 0: com menos estrutura de fundo, a mistura fica mais no disco A.
+
+**Causa (D/N).** Em `oulg_body_hu`, a soma do disco B era `mediump` (fp16 no aparelho) e o seu normalizador era `highp`:
+- kernels 1–3: `mediump vec4 accb` ÷ `highp float wb`;
+- kernel 0: `mediump vec4 acc` ÷ `highp float wsum`.
+
+Com amostras opacas, `b.a = Σv(fp16) / Σv(fp32)`. Somando os pesos que o shader emite com fp16 truncado em direção a zero, `b.a` = 0,98035 nos kernels 1–3 (pesos somam 83,0; déficit de **1,965 %**, contra 1,985 % medido) e 0,98793 no kernel 0 (pesos somam 20,75; 1,21 %). A região é desenhada em source-over, então essa parcela do backdrop nítido aparece na tela. Isso explica o piso plano de ≈1,7–1,9 % medido em `HU_RESIDUAL.md`. Também explica por que o defeito independe de `hublur` e da rota (Samsung ou drawable), e por que o render WebGL (mediump = fp32 no SwiftShader) não o reproduzia. O disco A e os discos simples dividem mediump por mediump: para amostras opacas, as duas somas são a mesma sequência de operações e o alpha sai exatamente 1.
+
+**Correção.** As somas do disco B passaram a ser `highp`, na mesma precisão do peso:
+- kernels 1–3: `highp vec4 accb`;
+- kernel 0: `highp vec4 acc`.
+
+Mesmas 96 leituras de textura, mesmos pesos e mesma mistura; o custo é ALU highp em 48 acumulações. O texto gerado muda só nessa declaração (diff verificado). Frosted, KG, os perfis 2/3 e o Clear desligado continuam idênticos byte a byte (I1, I2, I4); a golden I3 foi atualizada só por essa linha. `alpha_precision_check.py` (no `check.sh`) passa a exigir, para todo kernel, a mesma precisão entre soma e normalizador e alpha 1 ± 1e-3 com fp16 ao mais próximo e truncado, para qualquer peso A/B. As declarações antigas servem de controle positivo e falham com 1,21 % e 1,96 %.
+
+**Validação no aparelho.** Este build mantém a sonda.
+1. Aplique-o com `sf.debug=5` e capture as mesmas três cenas. Esperado: final 0 em todo o pop-up, exceto o antialiasing do contorno.
+2. Volte a sonda para 0 e compare o preview com e sem pop-up usando `hu_composite_report.py --pair`. Esperado: piso de 1,5–6 px ≈ 0 em vez de 1,6–1,9 %.
+3. Revise o Gmail (cor aprovada), o relógio e o menisco.
+
+Reversão: o APK anterior (bundle v0.33.0).
