@@ -121,7 +121,7 @@ final class QuickSettingsEdgeLight {
     private final class Edge {
         final Spec spec;
         BackgroundBlurBridge bridge;
-        int lastGeometryW = -1, lastGeometryH = -1;
+        int lastGeometryW = -1, lastGeometryH = -1, geometryReports;
         float lastGeometryRadius = -1f, lastGeometryTag = -1f;
         Object root;
         float tag = -1f;
@@ -479,8 +479,9 @@ final class QuickSettingsEdgeLight {
             // The inner box grown back to the outer one: the RenderNode reports these bounds whatever
             // the inner clip, and the light band then sits on Samsung's outline.
             e.bridge.draw((android.graphics.Canvas) raw, new Rect(left, top, right, bottom));
-            if (Probe.trace && (e.lastGeometryW != right - left || e.lastGeometryH != bottom - top
+            if (Probe.trace && e.geometryReports < 8 && (e.lastGeometryW != right - left || e.lastGeometryH != bottom - top
                     || e.lastGeometryRadius != requestedRadius || e.lastGeometryTag != tag)) {
+                e.geometryReports++;
                 e.lastGeometryW = right - left; e.lastGeometryH = bottom - top;
                 e.lastGeometryRadius = requestedRadius; e.lastGeometryTag = tag;
                 Probe.log("QS_EDGE_GEOMETRY", "id=" + e.spec.token.id + " role=" + e.spec.token.role
