@@ -46,7 +46,9 @@ final class Foreground {
     private static int intercepted;
     static int interceptions() { int n = intercepted; intercepted = 0; return n; }
     /** Whether any view carries a swapped tone (the hooks' fast path). */
-    static boolean tracking() { return !swapped.isEmpty() || UberRemoteViewsTone.tracking(); }
+    static boolean tracking() {
+        return !swapped.isEmpty() || UberRemoteViewsTone.tracking() || NotificationProgressTone.tracking();
+    }
     /**
      * TextView.setTextColor / ImageView.setImageTintList on a view this class swapped, from SystemUI
      * (a rebind, a heads-up-to-shade transformation, an animated group title). Without this the
@@ -659,6 +661,10 @@ final class Foreground {
                 if (UberRemoteViewsTone.drift(v)) return "uber-rebind";
                 continue;
             }
+            if (NotificationProgressTone.owns(v)) {
+                if (NotificationProgressTone.drift(v)) return "progress-rebind";
+                continue;
+            }
             Rec r = swapped.get(v);
             // Read in place (no Ink wrapper): this runs for every swapped view on every pre-draw.
             if (r == null) return "rebind";
@@ -689,6 +695,8 @@ final class Foreground {
 
     private static int walk(View v, boolean swap, boolean lightText, java.util.List<View> tracked) {
         int changed = UberRemoteViewsTone.apply(v, swap, lightText) ? 1 : 0;
+        // The template's ProgressBar (android:id/progress): its tint lists follow the text tone.
+        changed += NotificationProgressTone.apply(v, swap, lightText) ? 1 : 0;
         if (v instanceof TextView) {
             boolean eligible = textEligible(v);
             if (io.github.igorcv88.oneuiliquidglass.diagnostics.Probe.trace && !standard(v, false)
@@ -720,7 +728,7 @@ final class Foreground {
             else if (standard(v, true)) changed += ink(new Icon(i), swap, lightText, swapped, animating) ? 1 : 0;
         }
         if (tracked != null && swap && (swapped.containsKey(v) || chevrons.containsKey(v)
-                || UberRemoteViewsTone.owns(v))) tracked.add(v);
+                || UberRemoteViewsTone.owns(v) || NotificationProgressTone.owns(v))) tracked.add(v);
         if (v instanceof ViewGroup) {
             ViewGroup g = (ViewGroup) v;
             for (int i = 0; i < g.getChildCount(); i++) {
