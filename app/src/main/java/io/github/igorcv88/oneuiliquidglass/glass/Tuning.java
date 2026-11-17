@@ -569,7 +569,16 @@ public final class Tuning {
                 + " refract=" + refract + " ior=" + ior + " blur=" + blur + " sat=" + saturation
                 + " disp=" + dispersion + " hz=" + hz + " hzkg=" + keyguardHz + " tint=" + tintAlpha
                 + " semradius=" + semRadius + " semradiuslens=" + semRadiusLens + " sflens=" + sfLens + " semcurve=" + semCurve + " semalpha=" + semAlpha + " semshape=" + semShape + " shadeblur=" + shadeBlur + " sfrefract=" + sfRefract + " live=" + live + " liveradius=" + liveRadius + " liveshaderadius=" + liveShadeRadius + " liveoptics=" + liveOptics + " livesheen=" + liveSheen + " liveglint=" + liveGlint + " shadeglint=" + shadeGlint + " livelens=" + liveLens + " lensmaxage=" + lensMaxAge + " lenssettle=" + lensSettle + " lensgate=" + lensGate + " lenstransition=" + lensTransition + " kgblurpath=" + kgBlurPath + " shadeblurpath=" + shadeBlurPath + " shadefadecut=" + shadeFadeCut + " kgblurradius=" + kgBlurRadius + " pillglass=" + pillGlass + " pillblur=" + pillBlur + " kgoptics=" + kgOptics + " huoptics=" + huOptics + " kglens=" + kgLens + " shadetone=" + shadeTone + " shadeveil=" + shadeVeil + " shadeadaptive=" + shadeAdaptive + " shadecap=" + shadeCap + " shadelift=" + shadeLift + " veilmax=" + veilMax + " stylelo=" + styleLo + " stylehi=" + styleHi + " lightglass=" + lightGlass + " lighttone=" + Integer.toHexString(lightTone) + " lightedge=" + lightEdge + " lightoutline=" + lightOutline + " shadelightglass=" + shadeLightGlass + " shadedarkglass=" + shadeDarkGlass + " livedarkalpha=" + liveDarkAlpha + " livedarkfill=" + liveDarkFill + " liverim=" + liveRim + " kgdarkalpha=" + kgDarkAlpha + " kgdarkfill=" + kgDarkFill + " kgrim=" + kgRim + " kgglint=" + kgGlint + " textswap=" + textSwap + " headertone=" + headerTone + " icontone=" + iconTone + " popuptone=" + popupTone + " popuplock=" + popupLock + " orphandraw=" + orphanDraw + " shadescaleveil=" + shadeScaleVeil + " shadelocal=" + shadeLocal + " paneldim=" + panelDim + " panelblurcap=" + panelBlurCap + " panelnativegray=" + panelNativeGray + " panelcolor=" + Integer.toHexString(panelColor) + " sfoptics=" + sfOptics + " kgwinblur=" + kgWinBlur + " headergap=" + headerGap + " perf=" + perf + " trace=" + trace + " mediaart=" + mediaArt + " qsmediaart=" + qsMediaArt + " edgepremul=" + edgePremulMode
-                + " iconmode=" + iconMode + " kgsharedoptics=" + kgSharedOptics + " popuplinegain=" + popupLineGain
+                + " iconmode=" + iconMode + " iconcardsize=" + notificationIconScale
+                + " statusiconsize=" + statusIconScale + " statusmaxicons=" + statusMaxIcons
+                + " iconinkmode=" + notificationIconInkMode + " statusinkmode=" + statusIconInkMode
+                + " iconfixedink=" + Integer.toHexString(notificationIconFixedInk)
+                + " iconlightink=" + Integer.toHexString(notificationIconLightInk)
+                + " icondarkink=" + Integer.toHexString(notificationIconDarkInk)
+                + " statusfixedink=" + Integer.toHexString(statusIconFixedInk)
+                + " statuslightink=" + Integer.toHexString(statusIconLightInk)
+                + " statusdarkink=" + Integer.toHexString(statusIconDarkInk)
+                + " kgsharedoptics=" + kgSharedOptics + " popuplinegain=" + popupLineGain
                 + " kglinegain=" + lockscreenLineGain + " shadelinegain=" + shadeLineGain;
     }
 
