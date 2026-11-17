@@ -56,6 +56,16 @@ final class WeakIdentityMap<K,V> {
         }
         return result;
     }
+    /** Stable snapshot: never expose a live iterator while another hook can write the map.
+     * Weak keys that have already cleared are not represented in the snapshot. */
+    synchronized java.util.List<V> valuesSnapshot() {
+        prune();
+        java.util.List<V> result = new java.util.ArrayList<>(entries.size());
+        for (Map.Entry<Key<K>,V> entry : entries.entrySet()) {
+            if (entry.getKey().get() != null) result.add(entry.getValue());
+        }
+        return result;
+    }
     synchronized int size() {prune();return entries.size();}
     synchronized void clear() {entries.clear();while(collected.poll()!=null){} }
 }
