@@ -450,7 +450,7 @@ static void m1(void) {
 // M2/M3/M4 on the straight top edge (qx = 0), where the map is one-dimensional in depth.
 static void m2_m3_m4(void) {
     static const double folds[] = {0.5, 1, 2, 3};
-    double worstC1 = 0, worstFold = 0, worstRim = 0, worstC0 = 0;
+    double worstC1 = 0, worstFold = 0, worstRim = 0, worstC0 = 0, worstHidden = 0;
     for (int si = 0; si < NSHAPES; si++) for (int fi = 0; fi < 4; fi++) for (int bi = 0; bi < 2; bi++) {
         struct mcfg c = {bi ? 0.85 : 0.42, folds[fi], mcap_of(0, 0, 1), 0, 0, 1, 24, 24, 1};
         double hx = SHAPES[si][0] / 2, hy = SHAPES[si][1] / 2, r = fmin(SHAPES[si][2], hy);
@@ -479,6 +479,12 @@ static void m2_m3_m4(void) {
         CHECK(fabs(at - want) < 0.03, "M3 fold at depth %.3f, expected %.3f (shape %d fold %.1f band %.1f a %.1f)", at, want, si, c.fold, band, a);
         CHECK(turns == 0, "M3 source depth turns %d more times after the fold (shape %d fold %.1f)", turns, si, c.fold);
         worstFold = fmax(worstFold, fabs(at - want));
+        // M5 (laudo 17/11 section 4): the band never shows backdrop shallower than the fold's source
+        // depth, band (1 + f - sqrt(1 + f^2)) with f = a / band: that outer strip is replaced by the
+        // mirrored interior. It is the optics, not a clip: every sample stays inside (M1, M4).
+        double f = a / band, hidden = band * (1 + f - sqrt(1 + f * f));
+        CHECK(fabs(best - hidden) < 0.02, "M5 hidden strip %.3f px, expected %.3f (shape %d fold %.1f)", best, hidden, si, c.fold);
+        worstHidden = fmax(worstHidden, fabs(best - hidden));
     }
     CHECK(worstC0 < 1e-5, "M2 shift at depth = band %.2e px", worstC0);
     CHECK(worstC1 < 2e-3, "M2 slope at depth = band %.2e", worstC1);
@@ -492,7 +498,17 @@ static void m2_m3_m4(void) {
                shown[i][0], shown[i][1], r, band, a, f, band - f);
     }
     printf("M2 C1 at depth = band: |shift| <= %.1e px, |slope| <= %.1e; M3 fold depth within %.3f px of band (1 - 1/sqrt(1 + (a/band)^2)), "
-           "one minimum; M4 outline shift = a within %.1e px\n", worstC0, worstC1, worstFold, worstRim);
+           "one minimum; M4 outline shift = a within %.1e px; M5 hidden strip within %.3f px of band (1 + f - sqrt(1 + f^2))\n",
+           worstC0, worstC1, worstFold, worstRim, worstHidden);
+    // The heads-up card of the device captures, per fold: the outer strip of backdrop the rim never
+    // shows, the mirrored rim, and the interior depths the rim repeats (also shown in place).
+    for (int i = 0; i < 2; i++) for (int fi = 0; fi < 4; fi++) {
+        static const double fs[4] = {2.0, 1.75, 1.5, 1.0};
+        double hy = shown[i][1] / 2, r = fmin(shown[i][2], hy), band = clampd(0.42 * r, clampd(r * 0.42, 16, 56), r);
+        double a = fmin(fs[fi] * band, mcap_of(0, 0, 1) * hy), f = a / band;
+        printf("M5 card %.0fx%.0f fold %.2f: hidden outer strip %.1f px, mirrored rim %.1f px, repeated interior %.1f-%.1f px, outline samples %.1f px inside\n",
+               shown[i][0], shown[i][1], fs[fi], band * (1 + f - sqrt(1 + f * f)), band * (1 - 1 / sqrt(1 + f * f)), band, a, a);
+    }
 }
 
 // The heads-up clear material: ranges, the monotone bound and the luma it outputs.
