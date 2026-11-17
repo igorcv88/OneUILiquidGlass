@@ -70,6 +70,15 @@ final class NotificationIconTreatment {
                 }
             };
     private static final long SOURCE_RECHECK_MS = 250;
+    /**
+     * Cards waiting for a source key (main thread only). The status-bar icon of the same
+     * notification resolves the same key on the compact worker, and it is bound when the entry is
+     * created, before the heads-up row inflates: a card whose own lookup is still queued adopts
+     * that result as soon as it is published, instead of showing the original icon until its own
+     * task finishes. Weak: an abandoned card never stays reachable through this index.
+     */
+    private static final java.util.HashMap<String, List<WeakReference<NotificationIconTreatment>>> waiting = new java.util.HashMap<>();
+    static int waitingKeysForTest() { return waiting.size(); }
     private static final String[] ENTRY_FIELDS = {"mEntry", "mNotificationEntry", "notificationEntry", "entry"};
     private static final String[] ENTRY_METHODS = {"getEntry", "getNotificationEntry"};
     private static final String[] SBN_METHODS = {"getSbn", "getStatusBarNotification"};
@@ -225,6 +234,8 @@ final class NotificationIconTreatment {
     private long configRevision = -1;
     private boolean pending;
     private Runnable sourceTask;
+    /** The key this card's pending lookup resolves (null when not pending). */
+    private String pendingKey;
     private Resolved resolved;
     private volatile long revision;
     private String lastSkip;
@@ -315,6 +326,12 @@ final class NotificationIconTreatment {
             row.addOnLayoutChangeListener(layoutObserver);
             findCandidates(row);
             schedule(row, sbn, mode);
+        }
+        if (resolved == null && pending && pendingKey != null) {
+            // Another worker (the status-bar icon of this notification) may have published it.
+            Resolved shared;
+            synchronized (sourceCache) { shared = sourceCache.get(pendingKey); }
+            if (shared != null) adopt(shared, "cache", false);
         }
         if (resolved == null) { if (!pending) skip("noSource"); return; }
         if (resolved.bitmap == null) { skip("existingMono"); return; }
@@ -535,10 +552,15 @@ final class NotificationIconTreatment {
         final Context context = row.getContext().getApplicationContext();
         final long ticket = ++revision;
         pending = true;
+        pendingKey = cacheKey;
+        awaitKey(cacheKey);
         sourceTask = () -> {
             if (revision != ticket) return;
             Resolved next = null;
             boolean eligible = false;
+            Resolved early;
+            synchronized (sourceCache) { early = sourceCache.get(cacheKey); }
+            if (early != null) { MainThread.handler.post(() -> { if (revision == ticket) adopt(early, "cache", true); }); return; }
             try {
                 PackageManager pm = context.getPackageManager();
                 ApplicationInfo info = pm.getApplicationInfo(targetPkg, 0);
@@ -559,13 +581,12 @@ final class NotificationIconTreatment {
             if (revision != ticket) return;
             if (report) reportMissing(context, targetPkg);
             Resolved answer = next;
-            if (answer != null && revision == ticket) {
-                synchronized (sourceCache) { sourceCache.put(cacheKey, answer); }
-            }
+            if (answer != null && revision == ticket) publish(cacheKey, answer);
             MainThread.handler.post(() -> {
                 if (revision != ticket) return;
                 sourceTask = null;
                 pending = false;
+                unwait();
                 resolved = answer;
                 if (Probe.trace) Probe.log("ICON_TREAT_ROUTE", "pkg=" + targetPkg + " mode=" + mode
                         + " source=" + (answer == null ? report ? "missing" : "preserve" : answer.source)
@@ -602,7 +623,7 @@ final class NotificationIconTreatment {
             Resolved answer = custom != null ? new Resolved(custom, "user", match)
                     : NotificationIconPolicy.eligible(mode, system, match)
                     ? resolve(context, pkg, official, smallIcon, nativeArtwork, match) : null;
-            if (answer != null) synchronized (sourceCache) { sourceCache.put(key, answer); }
+            if (answer != null) publish(key, answer);
             return answer;
         } catch (PackageManager.NameNotFoundException | RuntimeException | LinkageError e) {
             if (Probe.trace) Probe.log("ICON_TREAT_COMPACT_SOURCE_FAILED", "pkg=" + pkg
@@ -733,11 +754,59 @@ final class NotificationIconTreatment {
         return difference <= shown.length * 4L * 5L;
     }
 
+    /** Worker side: cache the answer and hand it to every card waiting for the key. */
+    static void publish(String key, Resolved answer) {
+        synchronized (sourceCache) { sourceCache.put(key, answer); }
+        try { MainThread.handler.post(() -> deliver(key, answer)); }
+        catch (RuntimeException | LinkageError ignored) { /* no main looper (host tests) */ }
+    }
+    /** Main thread: every card still waiting for the key takes the answer and redraws once. */
+    static void deliver(String key, Resolved answer) {
+        List<WeakReference<NotificationIconTreatment>> list = waiting.remove(key);
+        if (list == null) return;
+        for (WeakReference<NotificationIconTreatment> ref : list) {
+            NotificationIconTreatment t = ref.get();
+            if (t != null && t.pending && key.equals(t.pendingKey)) t.adopt(answer, "published", true);
+        }
+    }
+    private void awaitKey(String key) {
+        List<WeakReference<NotificationIconTreatment>> list = waiting.get(key);
+        if (list == null) waiting.put(key, list = new java.util.ArrayList<>(2));
+        list.removeIf(r -> r.get() == null || r.get() == this);
+        list.add(new WeakReference<>(this));
+    }
+    private void unwait() {
+        String key = pendingKey;
+        pendingKey = null;
+        if (key == null) return;
+        List<WeakReference<NotificationIconTreatment>> list = waiting.get(key);
+        if (list == null) return;
+        list.removeIf(r -> r.get() == null || r.get() == this);
+        if (list.isEmpty()) waiting.remove(key);
+    }
+    /** Tests: this card waits for {@code key} as schedule() leaves it on a cache miss. */
+    void pendForTest(String key) { revision++; pending = true; pendingKey = key; awaitKey(key); }
+    boolean pendingForTest() { return pending; }
+    Resolved resolvedForTest() { return resolved; }
+    /** A source another lookup produced: this card's own queued lookup is dropped. */
+    private void adopt(Resolved answer, String how, boolean redraw) {
+        revision++;
+        if (sourceTask != null) worker.remove(sourceTask);
+        sourceTask = null;
+        pending = false;
+        unwait();
+        resolved = answer;
+        if (Probe.trace) Probe.log("ICON_TREAT_ADOPTED", "pkg=" + pkg + " source=" + answer.source + " via=" + how);
+        View target = redraw ? bound.get() : null;
+        if (target != null) target.invalidate();
+    }
+
     void restore() {
         if (entry == null && bound.get() == null && active.isEmpty() && dummyBackgrounds.isEmpty() && !pending) return;
         revision++;
         if (sourceTask != null) worker.remove(sourceTask);
         sourceTask = null;
+        unwait();
         for (Lease lease : active) lease.restore();
         for (DummyBackgroundLease lease : dummyBackgrounds) lease.restore();
         dummyBackgrounds.clear();
