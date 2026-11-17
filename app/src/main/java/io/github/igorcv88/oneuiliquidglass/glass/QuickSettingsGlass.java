@@ -286,6 +286,17 @@ public final class QuickSettingsGlass {
     public static final int EDGE_BLUR_PX = 8;
 
     /**
+     * A uniform rounded rectangle cannot have a circular corner larger than half its
+     * short side. Resolve before tagging (Skia would otherwise clamp away the fraction),
+     * and before insetting the matching Compose outline for AGSL. Invalid input stays invalid.
+     */
+    public static float opticalRadius(float requested, float width, float height) {
+        if (!Float.isFinite(requested) || !Float.isFinite(width) || !Float.isFinite(height)
+                || requested <= 0f || width <= 0f || height <= 0f) return -1f;
+        return Math.min(requested, Math.min(width, height) * .5f);
+    }
+
+    /**
      * Corner radius carrying the compositor's Quick Settings edge-light tag (sfhook profile 3):
      * floor(r) - 1 + 0.875, below r so Skia never clamps it on a pill; -1 where no tag can be read
      * (the vertex shader needs more than 40 px, and an fp16 radius + 0.5 holds .375 only below 256).
