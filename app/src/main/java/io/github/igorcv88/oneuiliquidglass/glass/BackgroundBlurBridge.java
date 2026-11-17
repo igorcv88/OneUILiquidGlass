@@ -120,6 +120,7 @@ public final class BackgroundBlurBridge implements Backdrop {
         color.invoke(drawable, tint);
         // API order: top-left, top-right, bottom-left, bottom-right.
         corners.invoke(drawable, tl, tr, bl, br);
+        geometrySent[0] = tl; geometrySent[1] = tr; geometrySent[2] = bl; geometrySent[3] = br;
         if (lensMode && curve != null && (lens || keyguard || curveSent)) applyCurve();
         else if (neutral && !curveApplied) curveApplied = sendNeutralCurve();
     }
@@ -238,7 +239,26 @@ public final class BackgroundBlurBridge implements Backdrop {
         curve.invoke(drawable, v[0], v[1], v[2], v[3], v[4], v[5]);
         curveSent = true;
     }
-    @Override public void draw(Canvas canvas, Rect bounds) { drawable.setBounds(bounds); drawable.draw(canvas); }
+    // Bounded, opt-in geometry attestation. No drawable state changes, no per-frame allocations
+    // when trace is off. Bounds are local; this is not a measurement of SF pixel coverage.
+    private final Rect geometryBounds = new Rect();
+    private final float[] geometrySent = new float[4], geometryLogged = new float[4];
+    private int geometryReports;
+    @Override public void draw(Canvas canvas, Rect bounds) {
+        if (Probe.trace && geometryReports < 8 && (!geometryBounds.equals(bounds)
+                || !java.util.Arrays.equals(geometrySent, geometryLogged) || geometryReports == 0)) {
+            geometryBounds.set(bounds);
+            System.arraycopy(geometrySent, 0, geometryLogged, 0, 4);
+            geometryReports++;
+            Probe.log("BLUR_REGION_GEOMETRY", "drawable=" + Integer.toHexString(System.identityHashCode(drawable))
+                    + " lensMode=" + lensMode + " profile=" + tagSent + " bounds=" + bounds.toShortString()
+                    + " requested=" + java.util.Arrays.toString(lastRadii)
+                    + " sentTLTRBLBR=" + java.util.Arrays.toString(geometrySent)
+                    + " shortHalf=" + Math.min(bounds.width(), bounds.height()) * .5f);
+        }
+        drawable.setBounds(bounds);
+        drawable.draw(canvas);
+    }
     /**
      * The native drawable's alpha is Samsung's translucency (204 on lockscreen cards), not a fade:
      * passed to the region it left it at 80 %, and a partly transparent region mixes the sharp
