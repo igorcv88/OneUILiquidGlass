@@ -48,9 +48,18 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
         public final float rimDp;
         /** Region colour when no native colour is known; a light frost, never a grey veil. */
         public final int neutral;
+        /**
+         * Share of the region colour turned to its own grey (same luma) under the outer line, 0-1;
+         * 0 draws nothing extra (drawRimNeutral).
+         */
+        public final float rimNeutral;
         public Spec(float tintAlpha, int blurPx, int rimHi, int rimLo, float rimDp, int neutral) {
+            this(tintAlpha, blurPx, rimHi, rimLo, rimDp, neutral, 0f);
+        }
+        public Spec(float tintAlpha, int blurPx, int rimHi, int rimLo, float rimDp, int neutral, float rimNeutral) {
             this.tintAlpha = tintAlpha; this.blurPx = blurPx; this.rimHi = rimHi; this.rimLo = rimLo;
             this.rimDp = rimDp; this.neutral = neutral;
+            this.rimNeutral = Math.max(0f, Math.min(1f, rimNeutral));
         }
     }
 
@@ -78,6 +87,15 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
      */
     private boolean drawnHidden;
     private final Paint rim = new Paint(Paint.ANTI_ALIAS_FLAG);
+    /** The two SRC_ATOP strokes of drawRimNeutral, and their paths (rebuilt only on a new shape). */
+    private final Paint neutralPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Path neutralCore = new Path(), neutralSoft = new Path();
+    private final Rect lastNeutralBounds = new Rect();
+    private final float[] lastNeutralRadii = new float[8];
+    private final float[] neutralInner = new float[8];
+    private final RectF neutralRect = new RectF();
+    /** The edge contour's sigma in liveEdge(): max(0.75 x hairline, 1.1 px). */
+    private final float neutralSigma;
     private final Path rimPath = new Path();
     private final RectF rimRect = new RectF();
     private final Rect lastRimBounds = new Rect();
@@ -107,6 +125,9 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
         this.spec = spec;
         this.density = density > 0 ? density : 1f;
         rim.setStyle(Paint.Style.STROKE);
+        neutralSigma = Math.max(GlassSpec.hairPx(new GlassSpec().hairDp, this.density) * 0.75f, 1.1f);
+        neutralPaint.setStyle(Paint.Style.STROKE);
+        neutralPaint.setBlendMode(android.graphics.BlendMode.SRC_ATOP);
     }
 
     // ---- owner API -------------------------------------------------------------------------
@@ -253,6 +274,7 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
         clampRadii(radii, b.width(), b.height(), clamped);
         if (regionless) {
             drawTranslucentNative(canvas, b);
+            drawRimNeutral(canvas, b, currentTint());
             drawRim(canvas, b);
             drawReport("REGIONLESS", canvas, b, "nativeBlurAncestor");
             return;
@@ -282,6 +304,7 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
             if (nativeDrawable != null) { nativeDrawable.setBounds(b); nativeDrawable.draw(canvas); }
             return;
         }
+        drawRimNeutral(canvas, b, tint);
         // The same shader/optical model as the approved notification material; no extra fill.
         if (optics == null) optics = new GlassDrawable(blur, density, new GlassSpec());
         if (!optics.drawOptics(canvas, b, clamped, alpha)) drawRim(canvas, b);
@@ -322,6 +345,61 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
             d.setAlpha(before);
             d.setCallback(cb);
         }
+    }
+    /**
+     * Neutral outer line over a saturated body (laudo 17/11 section 5). Under the line, this window
+     * holds only the region colour (the app's colour at a fraction of its alpha, a uniform fill;
+     * SurfaceFlinger puts the blurred backdrop, and with sfrefract its own rim light, beneath it).
+     * Every light term of the edge is added on top of that colour, and added light keeps the
+     * difference between channels: over red the line was a lighter red, never white. Here the colour
+     * is mixed toward its own grey (Rec. 709 luma of the same sRGB values) with SRC_ATOP, which keeps
+     * the window's alpha: over a uniform fill this is a luma-preserving desaturation, nothing is added
+     * or darkened, and the light drawn afterwards (angle, glint, Fresnel, thickness) is unchanged.
+     * Weight: {@code rimNeutral} over the line's core (outline to 2 sigma of the edge contour), half of
+     * it to 4 sigma; the body inside keeps its colour. Paths are rebuilt only on a new shape; no
+     * allocation per frame.
+     */
+    private void drawRimNeutral(Canvas canvas, Rect b, int tint) {
+        float k = spec.rimNeutral;
+        if (k <= 0f || (tint >>> 24) == 0) return;
+        float core = 2f * neutralSigma, soft = 4f * neutralSigma;
+        if (!b.equals(lastNeutralBounds) || !java.util.Arrays.equals(clamped, lastNeutralRadii)) {
+            lastNeutralBounds.set(b);
+            System.arraycopy(clamped, 0, lastNeutralRadii, 0, 8);
+            ringPath(neutralCore, b, core);
+            ringPath(neutralSoft, b, soft);
+        }
+        neutralPaint.setColor(neutralGrey(tint));
+        neutralPaint.setStrokeWidth(soft);
+        neutralPaint.setAlpha(Math.round(255f * k * 0.5f * alpha / 255f));
+        canvas.drawPath(neutralSoft, neutralPaint);
+        neutralPaint.setStrokeWidth(core);
+        neutralPaint.setAlpha(Math.round(255f * k * alpha / 255f));
+        canvas.drawPath(neutralCore, neutralPaint);
+    }
+    /** A stroke of width w whose outer edge is the outline (centre inset w / 2). */
+    private void ringPath(Path out, Rect b, float w) {
+        neutralRect.set(b.left + w / 2f, b.top + w / 2f, b.right - w / 2f, b.bottom - w / 2f);
+        for (int i = 0; i < 8; i++) neutralInner[i] = Math.max(0f, clamped[i] - w / 2f);
+        out.reset();
+        out.addRoundRect(neutralRect, neutralInner, Path.Direction.CW);
+    }
+    /** The opaque grey of a colour's Rec. 709 luma (sRGB values, alpha dropped). Pure, for tests. */
+    public static int neutralGrey(int color) {
+        int r = (color >> 16) & 0xff, g = (color >> 8) & 0xff, bl = color & 0xff;
+        int y = Math.round(0.2126f * r + 0.7152f * g + 0.0722f * bl);
+        return 0xff000000 | (y << 16) | (y << 8) | y;
+    }
+    /**
+     * What SRC_ATOP leaves over a uniform premultiplied fill {@code dst} (straight ARGB) for one weight:
+     * the fill's alpha, its colour mixed toward its grey by {@code k}. Pure model of the two strokes.
+     */
+    public static int neutralised(int dst, float k) {
+        int a = dst >>> 24, grey = neutralGrey(dst) & 0xff;
+        int r = Math.round(((dst >> 16) & 0xff) * (1 - k) + grey * k);
+        int g = Math.round(((dst >> 8) & 0xff) * (1 - k) + grey * k);
+        int bl = Math.round((dst & 0xff) * (1 - k) + grey * k);
+        return (a << 24) | (r << 16) | (g << 8) | bl;
     }
     private void drawRim(Canvas canvas, Rect b) {
         float w = GlassSpec.hairPx(spec.rimDp, density);
