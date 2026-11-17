@@ -860,8 +860,11 @@ public final class Controls {
                 .choice("0", "Desligada", "Renderização normal, sem tinta diagnóstica")
                 .choice("1", "Marcação magenta/ciano", "Identifica os programas reescritos pela lente")
                 .choice("2", "Luminância da borda", "Mapa verde da luz local na borda do bloqueio")
+                .choice("5", "Sonda de composição", "Alpha e programa codificados sobre o vidro")
                 .help("0: desliga a tinta. 1: magenta/ciano para identificar os programas reescritos."
                         + " 2: mapa verde da luminância amostrada no contorno das notificações do bloqueio."
+                        + " 5: o vidro mostra, em ladrilhos de 8 px, quanto do fundo cada desenho deixa passar"
+                        + " e qual programa o desenha (docs/clear-glass/HU_ALPHA_PROBE.md)."
                         + " Só para diagnóstico." + restart));
 
         // Técnico

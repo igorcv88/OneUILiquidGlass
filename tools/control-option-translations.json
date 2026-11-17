@@ -42,6 +42,8 @@
   "Marcação magenta/ciano": "Magenta/cyan markers",
   "Identifica os programas reescritos pela lente": "Identifies lens-rewritten shaders",
   "Luminância da borda": "Edge luminance",
+  "Sonda de composição": "Composition probe",
+  "Alpha e programa codificados sobre o vidro": "Alpha and program encoded over the glass",
   "Mapa verde da luz local na borda do bloqueio": "Green map of local light along the lock screen edge",
   "Escurecida": "Darkened",
   "Espacial": "Spatial",

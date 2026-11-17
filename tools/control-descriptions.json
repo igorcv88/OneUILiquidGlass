@@ -423,8 +423,8 @@
     "Ajusta o alcance da luz de um fundo claro para dentro das cápsulas da central de controle."
   ],
   "sf.debug": [
-    "Diagnostic mode: 0 off, 1 magenta/cyan for rewritten shaders, 2 green map of local edge luminance on lock screen notifications.",
-    "Modo de diagnóstico: 0 desligado, 1 magenta/ciano nos shaders reescritos, 2 mapa verde da luminância local nas bordas das notificações do bloqueio."
+    "Diagnostic mode: 0 off, 1 magenta/cyan for rewritten shaders, 2 green map of local edge luminance on lock screen notifications, 5 composition probe (alpha and program code over the glass).",
+    "Modo de diagnóstico: 0 desligado, 1 magenta/ciano nos shaders reescritos, 2 mapa verde da luminância local nas bordas das notificações do bloqueio, 5 sonda de composição (alpha e código do programa sobre o vidro)."
   ],
   "qs.lightfill": [
     "Adjusts capsule tint over light backgrounds.",

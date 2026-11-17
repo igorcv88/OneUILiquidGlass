@@ -4,6 +4,7 @@
     <string name="control_option_8d954776f1cd">Adaptativa</string>
     <string name="control_option_0a0e3b18cbfb">Adaptativa original</string>
     <string name="control_option_a33344113b2b">Adaptação Samsung</string>
+    <string name="control_option_d64a750613b8">Alpha e programa codificados sobre o vidro</string>
     <string name="control_option_0c4e291a7b4b">Aparência original</string>
     <string name="control_option_20ec175d596a">Automática</string>
     <string name="control_option_c9c992be184b">Automático</string>
@@ -81,6 +82,7 @@
     <string name="control_option_340a3940c102">Sistema e originais confirmados</string>
     <string name="control_option_04ffe2381fff">Sistema e serviços</string>
     <string name="control_option_655a7c7b8a0f">Somente o desfoque do sistema</string>
+    <string name="control_option_d97225752710">Sonda de composição</string>
     <string name="control_option_4ec6fa29d300">Só movimentos horizontais e dois dedos</string>
     <string name="control_option_0706bd786e3a">Textura sintética numerada</string>
     <string name="control_option_a4114a83f4c6">Todos</string>

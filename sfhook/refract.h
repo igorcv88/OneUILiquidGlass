@@ -1222,6 +1222,37 @@ static size_t oulg_lib_cap(int debug, const struct oulg_clear *cl) {
     return oulg_clear_on(cl, 0) || oulg_clear_on(cl, 1) || debug >= 3 ? 32768 : 16384;
 }
 
+// Diagnostic mode 5, the composition probe (docs/clear-glass/HU_ALPHA_PROBE.md). The optics are
+// compiled as in production (the library is generated as for mode 0); only the program's final
+// colour is replaced, on tagged fragments, by an opaque code a screenshot can read back:
+//  - tiles where (floor(x/8) + floor(y/8)) is even: R = (1 - final alpha) x 12.75, G = (1 - paint
+//    alpha, outputColor_S0.w) x 12.75, B = (1 - alpha of the region's blurred texture at the
+//    sample) x 12.75; 0 means opaque, 1/255 is 0.03 % of transmission, 255 is 7.8 % or more;
+//  - odd tiles: the program's 16-bit id (R high byte, G low byte, B = 1), logged by oulg_sf.c as
+//    PROBE shader=... id=..., so the drawing program is known.
+// The final alpha is what a source-over draw leaves of the backdrop (1 - a): with every term at 0
+// this draw transmits nothing; any value names which factor does. Coverage (antialiasing) still
+// applies at the outline. Untagged fragments and every other mode are untouched.
+#define OULG_DEBUG_PROBE 5
+static unsigned oulg_probe_id(const char *src) {
+    unsigned h = 2166136261u;
+    for (const unsigned char *c = (const unsigned char *) src; *c; c++) { h ^= *c; h *= 16777619u; }
+    return (h ^ (h >> 16)) & 0xffffu;
+}
+static int oulg_probe_line(char *out, size_t cap, const char *src) {
+    const char *paint = strstr(src, "outputColor_S0") ? "outputColor_S0.w" : "1.0";
+    unsigned id = oulg_probe_id(src);
+    int n = snprintf(out, cap,
+        "if (oulg_on > 0.0) {\n"
+        "  highp vec2 oulg_pt = floor(gl_FragCoord.xy / 8.0);\n"
+        "  output_S1 = mod(oulg_pt.x + oulg_pt.y, 2.0) < 0.5\n"
+        "    ? vec4(clamp((1.0 - output_S1.a) * 12.75, 0.0, 1.0), clamp((1.0 - %s) * 12.75, 0.0, 1.0),\n"
+        "           clamp((1.0 - texture(uTextureSampler_0_S1, oulg_tc).a) * 12.75, 0.0, 1.0), 1.0)\n"
+        "    : vec4(%u.0 / 255.0, %u.0 / 255.0, 1.0, 1.0);\n"
+        "}\n", paint, id >> 8, id & 0xffu);
+    return n > 0 && (size_t) n < cap;
+}
+
 // Replaces the sample's coordinates (at sampleAt in src) with oulg_tc and, unless the texture is
 // external, its texture() call with oulg_sample(). Frees src.
 static char *oulg_route_sample(char *src, size_t sampleAt, size_t coordsLen, int external) {
@@ -1278,15 +1309,19 @@ static char *oulg_rewrite_fragment_cl(const char *src, int debug, const struct o
 
     // Splice from the end backwards so earlier offsets stay valid.
     // Debug mode paints tagged cards magenta: proof that the tag reached this program.
-    char *s = oulg_splice(src, (size_t) (final - src), 0, "output_S1.rgb = mix(output_S1.rgb, vec3(output_S1.a, 0.0, output_S1.a), oulg_dbg * 0.6);\n");
+    char probe[640];
+    if (debug == OULG_DEBUG_PROBE && !oulg_probe_line(probe, sizeof probe, src)) return NULL;
+    char *s = oulg_splice(src, (size_t) (final - src), 0, debug == OULG_DEBUG_PROBE ? probe
+        : "output_S1.rgb = mix(output_S1.rgb, vec3(output_S1.a, 0.0, output_S1.a), oulg_dbg * 0.6);\n");
     if (!s) return NULL;
     int external = strstr(src, "samplerExternalOES uTextureSampler_0_S1") != NULL;
     char *u = oulg_route_sample(s, (size_t) (call - src) + strlen("texture(uTextureSampler_0_S1, "), strlen(coords), external);
     if (!u) return NULL;
     u = oulg_insert_after(u, 1, "void main() {\n", block);
-    size_t libCap = oulg_lib_cap(debug, &cl);
+    int libDebug = debug == OULG_DEBUG_PROBE ? 0 : debug;
+    size_t libCap = oulg_lib_cap(libDebug, &cl);
     char *lib = malloc(libCap);
-    if (!lib || !oulg_lib(lib, libCap, external, debug, p, &cl)) { free(lib); free(u); return NULL; }
+    if (!lib || !oulg_lib(lib, libCap, external, libDebug, p, &cl)) { free(lib); free(u); return NULL; }
     char *v = oulg_insert_after(u, 1, OULG_FS_DECL_AT, OULG_FS_DECL);
     char *out = oulg_insert_after(v, 1, OULG_FS_DECL, lib);
     free(lib);
@@ -1349,7 +1384,10 @@ static char *oulg_rewrite_clip_cl(const char *src, int debug, const struct oulg_
         coords, coords, coords, rph, rect, rect, debug == 1 ? "1.0" : "0.0", rect, rect,
         flip ? "  oulg_off.y *= u_skRTFlip.y;\n  oulg_e.y *= u_skRTFlip.y;\n" : "");
     if (n <= 0 || (size_t) n >= sizeof block) return NULL;
-    char *s = oulg_splice(src, (size_t) (final - src), 0, "output_S1.rgb = mix(output_S1.rgb, vec3(0.0, output_S1.a, output_S1.a), oulg_dbg * 0.6);\n");
+    char probe[640];
+    if (debug == OULG_DEBUG_PROBE && !oulg_probe_line(probe, sizeof probe, src)) return NULL;
+    char *s = oulg_splice(src, (size_t) (final - src), 0, debug == OULG_DEBUG_PROBE ? probe
+        : "output_S1.rgb = mix(output_S1.rgb, vec3(0.0, output_S1.a, output_S1.a), oulg_dbg * 0.6);\n");
     if (!s) return NULL;
     int external = strstr(src, "samplerExternalOES uTextureSampler_0_S1") != NULL;
     char *t = oulg_route_sample(s, (size_t) (call - src) + strlen("texture(uTextureSampler_0_S1, "), strlen(coords), external);
@@ -1360,9 +1398,10 @@ static char *oulg_rewrite_clip_cl(const char *src, int debug, const struct oulg_
     char *u = fe2 ? oulg_splice(t, (size_t) (fe2 - t) + 1, 0, block) : NULL;
     free(t);
     if (!u) return NULL;
-    size_t libCap = oulg_lib_cap(debug, &cl);
+    int libDebug = debug == OULG_DEBUG_PROBE ? 0 : debug;
+    size_t libCap = oulg_lib_cap(libDebug, &cl);
     char *lib = malloc(libCap);
-    if (!lib || !oulg_lib(lib, libCap, external, debug, p, &cl)) { free(lib); free(u); return NULL; }
+    if (!lib || !oulg_lib(lib, libCap, external, libDebug, p, &cl)) { free(lib); free(u); return NULL; }
     char *out = oulg_insert_before(u, 1, "void main() {\n", lib);
     free(lib);
     return out;

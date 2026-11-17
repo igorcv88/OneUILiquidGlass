@@ -103,7 +103,7 @@
     <string name="control_description_semshape">Seleciona a geometria da região de desfoque do sistema.</string>
     <string name="control_description_sf_clear">Mostra os modos Clear Glass do último programa compilado pelo compositor. Ausente significa desconhecido; não confirma que um cartão foi desenhado com Clear Glass.</string>
     <string name="control_description_sf_core">Ajusta o desfoque no centro dos pop-ups. As mudanças são aplicadas após reiniciar o userspace.</string>
-    <string name="control_description_sf_debug">Modo de diagnóstico: 0 desligado, 1 magenta/ciano nos shaders reescritos, 2 mapa verde da luminância local nas bordas das notificações do bloqueio. As mudanças são aplicadas após reiniciar o userspace.</string>
+    <string name="control_description_sf_debug">Modo de diagnóstico: 0 desligado, 1 magenta/ciano nos shaders reescritos, 2 mapa verde da luminância local nas bordas das notificações do bloqueio, 5 sonda de composição (alpha e código do programa sobre o vidro). As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_edgeblur">Ajusta o desfoque da borda do pop-up e sua transição até o centro. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_hcadapt">Aumenta o desfoque de formas grandes atrás dos pop-ups; usa mais GPU. As mudanças são aplicadas após reiniciar o userspace.</string>
     <string name="control_description_sf_hcamp">Curvatura da borda dos pop-ups com o menisco desligado. Só funciona com o menisco desligado. As mudanças são aplicadas após reiniciar o userspace.</string>

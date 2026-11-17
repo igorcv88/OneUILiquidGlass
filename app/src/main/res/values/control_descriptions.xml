@@ -103,7 +103,7 @@
     <string name="control_description_semshape">Selects the geometry of the system blur region.</string>
     <string name="control_description_sf_clear">Reports the Clear Glass modes of the last compiled compositor program. Absent means unknown; it does not confirm that a card was drawn with Clear Glass.</string>
     <string name="control_description_sf_core">Adjusts blur at the center of pop-ups. Changes apply after userspace restarts.</string>
-    <string name="control_description_sf_debug">Diagnostic mode: 0 off, 1 magenta/cyan for rewritten shaders, 2 green map of local edge luminance on lock screen notifications. Changes apply after userspace restarts.</string>
+    <string name="control_description_sf_debug">Diagnostic mode: 0 off, 1 magenta/cyan for rewritten shaders, 2 green map of local edge luminance on lock screen notifications, 5 composition probe (alpha and program code over the glass). Changes apply after userspace restarts.</string>
     <string name="control_description_sf_edgeblur">Adjusts pop-up edge blur and its transition toward the center. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_hcadapt">Increases blur around large shapes behind pop-ups; uses more GPU. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_hcamp">Edge bending of pop-ups when Meniscus is off. Only used when Meniscus is off. Changes apply after userspace restarts.</string>

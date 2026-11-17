@@ -278,7 +278,7 @@ static int vertex_broken;
 static int debug_tint(void) {
     char v[PROP_VALUE_MAX] = {0};
     if (__system_property_get("debug.oulg.sf.debug", v) <= 0) return 0;
-    return v[1] || v[0] < '1' || v[0] > '4' ? 0 : v[0] - '0';
+    return v[1] || v[0] < '1' || v[0] > '5' ? 0 : v[0] - '0';
 }
 
 static float prop_float(const char *name, float fallback) {
@@ -515,6 +515,11 @@ void glShaderSource(GLuint shader, GLsizei count, const GLchar *const *strings, 
         if (frag) {
             int ok = compiles(shader, frag);
             __android_log_print(ANDROID_LOG_INFO, TAG, "REWRITE fragment shader=%u compiled=%d", shader, ok);
+            // Composition probe (debug 5): the id each program paints in its odd tiles.
+            if (dbg == OULG_DEBUG_PROBE)
+                __android_log_print(ANDROID_LOG_INFO, TAG, "PROBE shader=%u id=%04x compiled=%d paint=%d texalpha=%d",
+                    shader, oulg_probe_id(joined), ok, strstr(joined, "outputColor_S0.w") != NULL,
+                    strstr(joined, "vec4(texture(uTextureSampler_0_S1") == NULL);
             dump_text(ok ? "REWRITE_OK fragment" : "REWRITE_FAILED fragment", shader, frag);
             // Shader-source interception proves capability compilation, not runtime uniforms or draws.
             // Profile 3 is selected by a radius tag at draw time, which this hook cannot observe.

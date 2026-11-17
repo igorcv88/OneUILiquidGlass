@@ -12,6 +12,7 @@ final class ControlOptions {
             case "Adaptativa": return R.string.control_option_8d954776f1cd;
             case "Adaptativa original": return R.string.control_option_0a0e3b18cbfb;
             case "Adaptação Samsung": return R.string.control_option_a33344113b2b;
+            case "Alpha e programa codificados sobre o vidro": return R.string.control_option_d64a750613b8;
             case "Aparência original": return R.string.control_option_0c4e291a7b4b;
             case "Automática": return R.string.control_option_20ec175d596a;
             case "Automático": return R.string.control_option_c9c992be184b;
@@ -89,6 +90,7 @@ final class ControlOptions {
             case "Sistema e originais confirmados": return R.string.control_option_340a3940c102;
             case "Sistema e serviços": return R.string.control_option_04ffe2381fff;
             case "Somente o desfoque do sistema": return R.string.control_option_655a7c7b8a0f;
+            case "Sonda de composição": return R.string.control_option_d97225752710;
             case "Só movimentos horizontais e dois dedos": return R.string.control_option_4ec6fa29d300;
             case "Textura sintética numerada": return R.string.control_option_0706bd786e3a;
             case "Todos": return R.string.control_option_a4114a83f4c6;

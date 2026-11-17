@@ -4,6 +4,7 @@
     <string name="control_option_8d954776f1cd">Adaptive</string>
     <string name="control_option_0a0e3b18cbfb">Original adaptive color</string>
     <string name="control_option_a33344113b2b">Samsung adaptive color</string>
+    <string name="control_option_d64a750613b8">Alpha and program encoded over the glass</string>
     <string name="control_option_0c4e291a7b4b">The original look</string>
     <string name="control_option_20ec175d596a">Automatic</string>
     <string name="control_option_c9c992be184b">Automatic</string>
@@ -81,6 +82,7 @@
     <string name="control_option_340a3940c102">System and verified originals</string>
     <string name="control_option_04ffe2381fff">System and services</string>
     <string name="control_option_655a7c7b8a0f">System blur only</string>
+    <string name="control_option_d97225752710">Composition probe</string>
     <string name="control_option_4ec6fa29d300">Only horizontal movements and two fingers</string>
     <string name="control_option_0706bd786e3a">Numbered synthetic texture</string>
     <string name="control_option_a4114a83f4c6">All</string>
