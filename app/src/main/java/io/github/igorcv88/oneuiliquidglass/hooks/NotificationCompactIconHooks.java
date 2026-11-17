@@ -260,11 +260,26 @@ final class NotificationCompactIconHooks {
             for (java.lang.reflect.Constructor<?> ctor : viewModel.getDeclaredConstructors()) {
                 try {
                     XposedBridge.hookMethod(ctor, new XC_MethodHook() {
+                        private int reported;
                         @Override protected void afterHookedMethod(MethodHookParam p) {
-                            if (!enabled.getAsBoolean() || Tuning.get().statusMaxIcons <= 0) return;
+                            boolean moduleEnabled = enabled.getAsBoolean();
+                            // Resolve the same effective tuning used by the drawing hooks.
+                            int requested = moduleEnabled ? Tuning.get().statusMaxIcons : 0;
                             try {
-                                maxIcons.setInt(p.thisObject, Integer.MAX_VALUE);
-                                if (Probe.trace) Probe.log("ICON_TREAT_STATUS_LIMIT", "route=viewModelMaxIcons unlimited=true");
+                                int before = maxIcons.getInt(p.thisObject);
+                                if (moduleEnabled && requested > 0)
+                                    maxIcons.setInt(p.thisObject, Integer.MAX_VALUE);
+                                int after = maxIcons.getInt(p.thisObject);
+                                // Record both skipped and applied startup paths, even before trace
+                                // or provider config is available. Bound to four per constructor.
+                                if (reported < 4) {
+                                    reported++;
+                                    Probe.log("ICON_TREAT_STATUS_LIMIT", "route=viewModelMaxIcons"
+                                            + " enabled=" + moduleEnabled + " requested=" + requested
+                                            + " before=" + before + " after=" + after
+                                            + " revision=" + ConfigClient.revision()
+                                            + " tuningGeneration=" + Tuning.generation);
+                                }
                             } catch (IllegalAccessException | RuntimeException e) {
                                 Probe.log("ICON_TREAT_STATUS_LIMIT", "route=viewModelMaxIcons error=" + e.getClass().getSimpleName());
                             }
