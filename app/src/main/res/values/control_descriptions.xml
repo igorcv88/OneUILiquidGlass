@@ -114,6 +114,7 @@
     <string name="control_description_sf_hccore">Blur across the center of pop-ups. Equal edge and center values give one uniform blur. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_hcedge">Blur at the outer edge of pop-ups. If higher than the center blur, it is lowered to match. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_hcfold">Strength of the curved, compressed glass rim on pop-ups. Changes apply after userspace restarts.</string>
+    <string name="control_description_sf_hckernel">Compares the pop-up blur method without changing its radius. 1 to 3 use a nested Gaussian that removes more background text structure and spreads highlights less. Only acts with adaptive blur on. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_hclift">Brightens the pop-up glass without changing its refraction. High values can reduce text contrast. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_hcneutral">Reduces blue or colored tint in the almost-white highlights of pop-ups. Only works while saturation, darkening or brightening is changed. Changes apply after userspace restarts.</string>
     <string name="control_description_sf_hcsat">Color strength of the background seen through pop-ups. Higher values make the colors richer; highlights stay as they are. Changes apply after userspace restarts.</string>

@@ -13,7 +13,7 @@ for line in text.splitlines():
  if key=='sf.clear': default=''; domain='readonly'; desc='Modos Clear Glass do último programa compilado (hu:<modo>,kg:<modo>); ausente = desconhecido, não confirma ativação.'
  rows[key]=(default,domain,desc or domain)
 READONLY=('sf.optics','sf.clear','sf.qslight')
-assert len(rows)==204,len(rows)
+assert len(rows)==205,len(rows)
 # Literal bounds follow Tuning; native limits are deliberately conservative UI limits, not C clamps.
 bools=set('livelens shadeblur sfrefract liveblur kgwinblur kgsharedoptics pillglass textswap headertone icontone popuptone popuplock orphandraw shadelocal panelnativegray perf trace sf.norewrite sf.kgfixedrim qs.tilelight qs.tiledark qs.hideoffdiscs'.split())
 ints=set('qs.edgeblur rimhz hz hzkg tint lensmaxage lenssettle lenstransition liveradius liveshaderadius semradius semradiuslens semalpha kgblurpath shadeblurpath kgblurradius pillblur kgoptics huoptics livedarkalpha livedarkfill kgdarkalpha kgdarkfill shadescaleveil panelblurcap sf.taps sf.kgtaps edgepremul'.split())
@@ -22,7 +22,7 @@ enums={'qs.lightstyle':'obsidian,light','backdrop':'auto,hybrid,capture,grid,off
 native={'core':(0,128),'taps':(1,64),'ramp':(.1,4),'hubloom':(0,2),'edgeblur':(0,48),'hublur':(0,2),'hubodylens':(0,.15),'hurefract':(0,1.2),'kgcore':(0,128),'kgtaps':(1,64),'kgramp':(.1,4),'kgsat':(0,2.5),'kgtone':(0,1),'kgrim':(0,2),'kgspec':(0,1),'kgflat':(0,1),'kglevel':(0,1),'kgcool':(0,1),'kgtilt':(0,3.141593),'kgline':(0,2),'kgcorecap':(0,128),'kgflatcap':(0,1),'kgcoredim':(0,1),'kgglow':(0,2),'kggradient':(0,1),'kgband':(0,1),'kgbodylens':(0,.15),'kgblurexp':(1,4),'kgedgeblur':(0,48),'kgblur':(0,2),'kgrefract':(0,1.2),'shadecap':(.2,1),'shadelift':(0,.8),'hulight':(0,1),'kglight':(0,1),'kgdepth':(1.5,48),'shadelight':(0,1),'qslens':(0,.5),'qsbody':(0,1),'qsdepth':(1.5,48),'qslight':(0,2)}
 native['kgfixedrim']=(0,1)
 # Clear Glass: the same domains oulg_fix_clear (sfhook/refract.h) accepts; modes are integers 0-2.
-ints.update(('sf.huclear','sf.kgclear'))
+ints.update(('sf.huclear','sf.kgclear','sf.hckernel'))
 native.update({'huclear':(0,2),'kgclear':(0,2),'kcveil':(0,.2),'kclevel':(.1,.85),'kcdim':(0,.3),'kcknee':(0,.6),'kcsat':(.9,1.3),'kccool':(0,2)})
 for p in ('hc','kc'):
  native.update({p+'band':(.42,1),p+'amp':(0,.5),p+'body':(0,.15),p+'body2':(0,.05),p+'edge':(0,48),p+'core':(0,48),p+'blurexp':(1,4)})
@@ -35,8 +35,8 @@ titles.update({'sf.huclear':'Clear Glass no pop-up','sf.kgclear':'Clear Glass no
                'sf.kcdim':'Escurecimento do Clear Glass','sf.kcknee':'Compressão de realces do Clear Glass',
                'sf.kcsat':'Saturação do Clear Glass','sf.kccool':'Matiz fria do Clear Glass'})
 # Heads-up meniscus and clear material (oulg_fix_clear).
-native.update({'hcfold':(0,3),'hcsat':(.9,2),'hcscrim':(0,.6),'hcscrimmax':(0,.8),'hcadapt':(0,1),'kcfold':(0,3),'hclift':(0,2),'kclift':(0,2),'hcneutral':(0,1)})
-titles.update({'sf.hcfold':'Menisco do Clear Glass (pop-up)','sf.hcsat':'Saturação do Clear Glass (pop-up)','sf.hcscrim':'Escurecimento mínimo do Clear Glass (pop-up)','sf.hcscrimmax':'Escurecimento máximo do Clear Glass (pop-up)','sf.hcadapt':'Blur adaptativo do Clear Glass (pop-up)','sf.kcfold':'Menisco do Clear Glass (bloqueio)','sf.hclift':'Clareamento do Clear Glass (pop-up)','sf.kclift':'Clareamento do Clear Glass (bloqueio)','sf.hcneutral':'Neutralidade dos brancos do Clear Glass (pop-up)'})
+native.update({'hcfold':(0,3),'hcsat':(.9,2),'hcscrim':(0,.6),'hcscrimmax':(0,.8),'hcadapt':(0,1),'kcfold':(0,3),'hclift':(0,2),'kclift':(0,2),'hcneutral':(0,1),'hckernel':(0,3)})
+titles.update({'sf.hcfold':'Menisco do Clear Glass (pop-up)','sf.hcsat':'Saturação do Clear Glass (pop-up)','sf.hcscrim':'Escurecimento mínimo do Clear Glass (pop-up)','sf.hcscrimmax':'Escurecimento máximo do Clear Glass (pop-up)','sf.hcadapt':'Blur adaptativo do Clear Glass (pop-up)','sf.kcfold':'Menisco do Clear Glass (bloqueio)','sf.hclift':'Clareamento do Clear Glass (pop-up)','sf.kclift':'Clareamento do Clear Glass (bloqueio)','sf.hcneutral':'Neutralidade dos brancos do Clear Glass (pop-up)','sf.hckernel':'Kernel do blur do Clear Glass (pop-up)'})
 for p,s in (('sf.hc','pop-up'),('sf.kc','bloqueio')):
  titles.update({p+'band':f'Banda de refração do Clear Glass ({s})',p+'amp':f'Refração da borda do Clear Glass ({s})',
                 p+'body':f'Refração do corpo do Clear Glass ({s})',p+'body2':f'Domo cúbico do Clear Glass ({s})',

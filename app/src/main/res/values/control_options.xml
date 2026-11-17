@@ -19,6 +19,7 @@
     <string name="control_option_8809a6227cfb">Off</string>
     <string name="control_option_9c6166ed846c">Broader blur and more vivid colors</string>
     <string name="control_option_164bf4ddd36b">Off</string>
+    <string name="control_option_2bfe9e53781b">Reference discs, approved up to version 0.30</string>
     <string name="control_option_ed7c90e94c1f">Custom two-color palette</string>
     <string name="control_option_408f8a407d99">Choose one color for light backgrounds and another for colored ones</string>
     <string name="control_option_bc7b88d5097a">Darkened</string>
@@ -29,6 +30,9 @@
     <string name="control_option_286cbcfd1496">Forces treatment of eligible icons, including custom icons</string>
     <string name="control_option_7b9330ac47fd">Frosted</string>
     <string name="control_option_783067a8aca7">Physical</string>
+    <string name="control_option_2747a88a5074">Nested Gaussian</string>
+    <string name="control_option_67399b1f29d2">Strong nested Gaussian</string>
+    <string name="control_option_b28a3abd304b">Gentle nested Gaussian</string>
     <string name="control_option_2212a1a4fd6a">Horizontal gestures</string>
     <string name="control_option_9a216516ec5f">Test grid</string>
     <string name="control_option_31d64f897e37">Hybrid</string>
@@ -47,6 +51,7 @@
     <string name="control_option_ce65364887ca">Lock screen material</string>
     <string name="control_option_b5ac2d86fb77">Pop-up material</string>
     <string name="control_option_966831833a8c">Measures the background when opening the shade</string>
+    <string name="control_option_bb7b090dd8dc">Less text structure and less spreading of whites</string>
     <string name="control_option_b9ef5b172a58">Same veil on every card</string>
     <string name="control_option_3b1d364412af">Snell model with refractive index</string>
     <string name="control_option_fb3c8b03b40e">On the view</string>
@@ -55,15 +60,18 @@
     <string name="control_option_f78db5410a48">Neutral under the lens; inherited elsewhere</string>
     <string name="control_option_9935aac96730">On the card</string>
     <string name="control_option_31310ebb3669">Same material as pop-ups</string>
+    <string name="control_option_c0a8060f3b11">Original</string>
     <string name="control_option_d8e00743b1a4">Default</string>
     <string name="control_option_bc563cb30bb5">Default: preserves user apps and their icon packs</string>
     <string name="control_option_efd3e6962023">For comparison on device</string>
     <string name="control_option_cb302177b476">May lag behind movement</string>
     <string name="control_option_e663156ae3c4">Per card (advanced)</string>
+    <string name="control_option_001157941c07">Keeps more of the large background shapes</string>
     <string name="control_option_797f1acc98bc">Black or white depending on the background, as before</string>
     <string name="control_option_5e752f3cd7ac">Any touch</string>
     <string name="control_option_5a83874989ff">Four corners</string>
     <string name="control_option_808eb0b380d3">Single radius</string>
+    <string name="control_option_d28c21104d9d">Removes more structure; large shapes get softer</string>
     <string name="control_option_f1b4503c73c7">Normal rendering without diagnostic tint</string>
     <string name="control_option_929dc216ba9a">Follows the card fade</string>
     <string name="control_option_b21f94257814">No sampling</string>

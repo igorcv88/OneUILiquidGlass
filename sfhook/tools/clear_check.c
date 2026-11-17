@@ -571,18 +571,21 @@ static double span(const double *y) { double lo = 1e9, hi = -1e9; for (int x = 1
 struct amodel { double a[AN], now[AN], old[AN]; };
 // src through an optional Gaussian pre-blur (the region blur), then the body: A, B, the shader's mix
 // (now) and the first version's |yA - yB| mix (old).
-static void amodel_run(const double *src, double pre, double R, struct amodel *m) {
+static void amodel_run_k(const double *src, double pre, double R, double wide, double lo, double hi, struct amodel *m) {
     static double s[AN], s2[AN], b[AN], q[AN], k[1024];
     if (pre > 0) aconv(src, k, gauss_kernel(pre, k), s); else memcpy(s, src, sizeof s);
     aconv(s, k, disc_kernel(R, k), m->a);
-    int h = disc_kernel(R * OULG_ADAPT_WIDE, k);
+    int h = disc_kernel(R * wide, k);
     for (int x = 0; x < AN; x++) s2[x] = s[x] * s[x];
     aconv(s, k, h, b); aconv(s2, k, h, q);
     for (int x = 0; x < AN; x++) {
         double sd = sqrt(fmax(q[x] - b[x] * b[x], 0));
-        m->now[x] = m->a[x] + sstep(OULG_ADAPT_LO, OULG_ADAPT_HI, sd) * (b[x] - m->a[x]);
+        m->now[x] = m->a[x] + sstep(lo, hi, sd) * (b[x] - m->a[x]);
         m->old[x] = m->a[x] + sstep(0.06, 0.30, fabs(m->a[x] - b[x])) * (b[x] - m->a[x]);
     }
+}
+static void amodel_run(const double *src, double pre, double R, struct amodel *m) {
+    amodel_run_k(src, pre, R, OULG_ADAPT_WIDE, OULG_ADAPT_LO, OULG_ADAPT_HI, m);
 }
 static double pat_at(int kind, int x) {
     switch (kind) {
@@ -629,6 +632,64 @@ static void hu_adapt(void) {
            "a pair of strokes and a step keep the plain disc's count of extrema (the |yA - yB| weight gave %d across one 40 px stroke instead of 1); "
            "residual of a 40 px stroke %.2f and of an 80 px one %.2f of the plain disc's; 8 px stripes, and a 6 px line behind the region blur, within %.3f of the plain disc (the line on an unblurred source: %.3f)\n",
            OULG_ADAPT_WIDE, oldx, keep40, keep80, fine, bare);
+}
+
+// The nested heads-up kernels (hckernel 1-3). In expectation their disc B is the same truncated
+// Gaussian family as kernel 0's, at OULG_NEST_WIDE: the quadrature weights (Gaussian x the area each
+// tap stands for) make the nested sampling an unbiased estimate of it, which this checks on the
+// emitted constants. What nesting changes is the variance (twice the tap density in B), which this
+// deterministic model cannot show: sfhook/tools/hu_kernel_report.py measures it. Here, at the
+// operating radius 30 and at 24, with and without the region blur: no extremum beyond the plain
+// disc's on strokes, pairs and steps, fine detail as the plain disc renders it. An isolated 40 px
+// stroke, where both kernels already select B in full, keeps ~1.2x kernel 0's residual: B reaches
+// 2.0 R instead of 2.5 R. That is the accepted cost of the shorter highlight spread; the bound below
+// keeps it from growing unnoticed. Dense text, where kernel 0's mix stays partial, is where the lower
+// thresholds act (measured by the report tool, not here).
+static void hu_kernel(void) {
+    struct oulg_clear c = OULG_CLEAR_DEFAULT; c.mode[0] = 1; oulg_fix_clear(&c);
+    CHECK(OULG_CLEAR_DEFAULT.kernel == 0 && c.kernel == 0, "hu kernel: default must be the optics-12 kernel 0");
+    c.kernel = 4; oulg_fix_clear(&c); CHECK(c.kernel == 0, "hu kernel: 4 did not fall back to 0");
+    c.kernel = -1; oulg_fix_clear(&c); CHECK(c.kernel == 0, "hu kernel: -1 did not fall back to 0");
+    for (int k = 1; k <= 3; k++) { c.kernel = k; oulg_fix_clear(&c); CHECK(c.kernel == k, "hu kernel: %d rejected", k); }
+    // Quadrature: the annulus of radii^2 in [1/W^2, 1] and inner area 1 / taps per tap give each
+    // annulus tap W^2 - 1 times an inner tap's area; the sum of areas is W^2 (pi R^2 = 1).
+    for (int taps = 4; taps <= 48; taps += 44) {
+        double w2 = OULG_NEST_WIDE * OULG_NEST_WIDE, area = taps * (1.0 / taps) + taps * ((w2 - 1.0) / taps);
+        CHECK(fabs(area - w2) < 1e-12, "hu kernel: tap areas sum to %.6f, not W^2", area);
+        // Monte Carlo of the annulus placement against the exact Gaussian moment of the cut disc.
+        double num = 0, den = 0, exact_num = 0, exact_den = 0;
+        for (int i = 0; i < taps; i++) { double rr = sqrt((i + 0.5) / taps), r = rr / OULG_NEST_WIDE, v = exp(-2 * r * r);
+            num += v * r * r / taps; den += v / taps; }
+        for (int j = 0; j < taps; j++) { double rb2 = 1.0 / w2 + (1.0 - 1.0 / w2) * (j + 0.5) / taps, v = exp(-2 * rb2) * (w2 - 1.0);
+            num += v * rb2 / taps; den += v / taps; }
+        for (int i = 0; i < 20000; i++) { double r2 = (i + 0.5) / 20000.0, v = exp(-2 * r2); exact_num += v * r2; exact_den += v; }
+        double got = num / den, want = exact_num / exact_den;
+        CHECK(fabs(got - want) < (taps == 4 ? 0.05 : 0.004), "hu kernel: taps %d second moment %.4f, Gaussian %.4f", taps, got, want);
+    }
+    static struct amodel m0, m;
+    static double src[AN];
+    double worst40 = 0, fine = 0;
+    for (int k = 1; k <= 3; k++) for (int ri = 0; ri < 2; ri++) for (int pre = 0; pre < 2; pre++) for (int kind = 0; kind < 6; kind++) {
+        double R = ri ? 24.0 : 30.0;
+        for (int x = 0; x < AN; x++) src[x] = pat_at(kind, x - 400);
+        amodel_run_k(src, pre ? 7.5 : 0.0, R, OULG_NEST_WIDE, OULG_NEST_LO(k), OULG_NEST_HI(k), &m);
+        amodel_run(src, pre ? 7.5 : 0.0, R, &m0);
+        if (kind < 4 || kind == 5) CHECK(extrema(m.now) == extrema(m.a), "hu kernel %d: pattern %d R %.0f pre %d has %d extrema, the plain disc %d",
+                                         k, kind, R, pre, extrema(m.now), extrema(m.a));
+        for (int x = 150; x < 651 && kind == 4; x++) fine = fmax(fine, fabs(m.now[x] - m.a[x]));
+        if (pre && kind == 0) {
+            double ratio = span(m.now) / span(m0.now);
+            CHECK(ratio <= 1.25, "hu kernel %d: a 40 px stroke keeps %.3f of kernel 0's residual (R %.0f)", k, ratio, R);
+            worst40 = fmax(worst40, ratio);
+        }
+    }
+    CHECK(fine < 0.02, "hu kernel: 8 px stripes differ from the plain disc by %.3f", fine);
+    // The emitted text: kernel 0 keeps OULG_FS_HU_BODY_FMT, kernels 1-3 read 2 x taps like it.
+    CHECK(strstr(OULG_FS_HU_BODY_NESTED_FMT, "exp(-2.0 * rr * rr);") && strstr(OULG_FS_HU_BODY_NESTED_FMT, "* exp(-2.0 * rb * rb);"),
+          "hu kernel: the shader weights are not the ones checked here");
+    printf("hu kernel: 0 default, 1-3 accepted, others fall back; quadrature areas sum to W^2 = %.2f and the nested taps' Gaussian moment matches the cut disc; "
+           "kernels 1-3 at R 30 and 24, with and without the region blur: no extremum beyond the plain disc's, stripes within %.3f, "
+           "isolated 40 px stroke residual %.2f of kernel 0's (B reaches 2.0 R, not 2.5 R)\n", OULG_NEST_WIDE * OULG_NEST_WIDE, fine, worst40);
 }
 
 // The text of one function of the library, from its signature to the closing brace at column 0.
@@ -728,7 +789,7 @@ static void meniscus_text(void) {
 
 int main(void) {
     u1_u2(); u3_u4(); u5(); u6(); u7(); u8(); fix_ranges(); sizes(); text_invariance();
-    m1(); m2_m3_m4(); hu_material(); hu_adapt(); kg_meniscus_and_lift(); meniscus_text();
+    m1(); m2_m3_m4(); hu_material(); hu_adapt(); hu_kernel(); kg_meniscus_and_lift(); meniscus_text();
     if (fails) { printf("clear_check: %d FAILURES\n", fails); return 1; }
     printf("clear_check: all checks passed\n");
     return 0;

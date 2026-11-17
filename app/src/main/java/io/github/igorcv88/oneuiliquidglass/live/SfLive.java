@@ -147,7 +147,7 @@ public final class SfLive {
             // parameters each profile reads while its selector is above 0.
             "huclear", "kgclear",
             "hcband", "hcamp", "hcbody", "hcbody2", "hcedge", "hccore", "hcblurexp",
-            "hcfold", "hcsat", "hcscrim", "hcscrimmax", "hcadapt", "hclift", "hcneutral",
+            "hcfold", "hcsat", "hcscrim", "hcscrimmax", "hcadapt", "hclift", "hcneutral", "hckernel",
             "kcband", "kcamp", "kcbody", "kcbody2", "kcedge", "kccore", "kcblurexp",
             "kcfold", "kcveil", "kclevel", "kcdim", "kcknee", "kcsat", "kccool", "kclift"));
 

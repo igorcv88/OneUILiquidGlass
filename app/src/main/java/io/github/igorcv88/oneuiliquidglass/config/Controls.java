@@ -974,6 +974,12 @@ public final class Controls {
                 .help("Com que rapidez o desfoque do pop-up sobe do contorno ao centro." + restart));
         put(c("sf.hcadapt", "Desfoque adaptativo").fmt(Format.PERCENT_1).in(GLASS, STD).on(HU).step(.05)
                 .help("Aumenta o desfoque de formas grandes atrás dos pop-ups; usa mais GPU." + restart));
+        put(c("sf.hckernel", "Método do desfoque adaptativo").fmt(Format.CHOICE).in(GLASS, ADV).on(HU)
+                .choice("0", "Original", "Discos de referência, aprovados até a versão 0.30")
+                .choice("1", "Gaussiano aninhado", "Menos estrutura de texto e menos espalhamento de brancos")
+                .choice("2", "Gaussiano aninhado suave", "Preserva mais formas grandes do fundo")
+                .choice("3", "Gaussiano aninhado forte", "Remove mais estrutura; formas grandes ficam mais suaves")
+                .help("Compara o método de desfoque dos pop-ups sem mudar o raio. Só age com o desfoque adaptativo ligado." + restart));
         put(c("sf.hcsat", "Saturação do vidro").fmt(Format.PERCENT_1).in(COLOR, STD).on(HU)
                 .help("Intensidade das cores do fundo visto através dos pop-ups." + restart));
         put(c("sf.hcscrim", "Escurecimento nas áreas escuras").fmt(Format.PERCENT_1).in(COLOR, ADV).on(HU)

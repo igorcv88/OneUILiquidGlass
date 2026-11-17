@@ -256,7 +256,7 @@ public final class CompositorValuesTest {
             "huclear", "kgclear",
             "hcband", "hcamp", "hcbody", "hcbody2", "hcedge", "hccore", "hcblurexp",
             "hcfold", "hcsat", "hcscrim", "hcscrimmax", "hcadapt",
-            "kcfold", "hclift", "kclift", "hcneutral",
+            "kcfold", "hclift", "kclift", "hcneutral", "hckernel",
             "kcband", "kcamp", "kcbody", "kcbody2", "kcedge", "kccore", "kcblurexp",
             "kcveil", "kclevel", "kcdim", "kcknee", "kcsat", "kccool"));
 
@@ -269,7 +269,7 @@ public final class CompositorValuesTest {
         read.remove("norewrite");
         read.remove("clear"); // compiled-mode marker written by the library
         read.remove("qslight"); // developer-only; Termux helper accepts this, the app cannot set it
-        assertEquals(31, CLEAR_GLASS.size());
+        assertEquals(32, CLEAR_GLASS.size());
         assertTrue(read.containsAll(CLEAR_GLASS));
         assertTrue(SfLive.WRITABLE.containsAll(CLEAR_GLASS));
         assertEquals(read, new TreeSet<>(SfLive.WRITABLE));

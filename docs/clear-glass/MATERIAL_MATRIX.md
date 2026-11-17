@@ -48,6 +48,7 @@ Gerada por `MaterialMatrixTest` a partir de `Controls` e `GlassMaterial`. Não e
 | `sf.hccore` | Desfoque do centro | Pop-up | Vidro e desfoque · standard | clear | não | sim |
 | `sf.hcblurexp` | Transição do desfoque | Pop-up | Vidro e desfoque · advanced | clear | não | sim |
 | `sf.hcadapt` | Desfoque adaptativo | Pop-up | Vidro e desfoque · standard | clear | não | sim |
+| `sf.hckernel` | Método do desfoque adaptativo | Pop-up | Vidro e desfoque · advanced | clear | não | sim |
 | `sf.hcsat` | Saturação do vidro | Pop-up | Cor e contraste · standard | clear | não | sim |
 | `sf.hcscrim` | Escurecimento nas áreas escuras | Pop-up | Cor e contraste · advanced | clear | não | sim |
 | `sf.hcscrimmax` | Escurecimento nas áreas claras | Pop-up | Cor e contraste · advanced | clear | não | sim |
