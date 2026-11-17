@@ -52,14 +52,16 @@ int main(int argc, char **argv) {
         if (!f) { perror(argv[1]); return 1; }
         static char buf[1 << 20]; size_t n = fread(buf, 1, sizeof buf - 1, f); buf[n] = 0; fclose(f);
         int accepted = 0, extra = 0;
+        // Device dumps interleave REWRITE_OK blocks: a source ends at the next header of any kind.
         for (char *s = strstr(buf, "===== SRC "); s; ) {
             char *body = strchr(s, '\n'); if (!body) break; body++;
-            char *next = strstr(body, "\n===== SRC ");
-            if (next) *next = 0;
+            char *next = strstr(body, "\n===== ");
+            char save = 0;
+            if (next) { save = *next; *next = 0; }
             char *w = oulg_rewrite_fragment_cl(body, 0, p, &cl);
             if (!w) w = oulg_rewrite_clip_cl(body, 0, p, &cl);
             if (w) { accepted++; extra += oulg_extra_images(body) > 0; free(w); }
-            s = next ? next + 1 : NULL;
+            if (next) { *next = save; s = strstr(next, "===== SRC "); } else s = NULL;
         }
         printf("%s: %d rewritten fragment programs\n", argv[1], accepted);
         expect("device dump: rewritten programs with extra image reads", extra, 0);
