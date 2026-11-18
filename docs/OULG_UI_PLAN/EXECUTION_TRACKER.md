@@ -98,3 +98,11 @@ PR: — · CI: — · APK: — · SHA-256: —
 - T20: PR draft #212 aberto após B2 (`gh pr create --draft`), um push por fase. CI `Controls panel checks` verde em 30f7785, 9c0af0d e d7484a0 (android-and-contracts + Sign temporary PR APK). APK assinado de 1 dia: artefato do run do último commit.
 - Revisão Opus (parcial, durante a execução): `PublicationPlan` (contexto NEXT, writes RESTORE/CHANGE, drift só com evidência CURRENT, lostExternal informativo, BLOCKED), `CompiledEvidence` (geração == `sf_generation` e lente carregada), revalidação do fingerprint no RESTART, `EnergyGovernor` (receiver único não exportado, tupla sem mudança ignorada, só máscara) e remoção do gate do Saver em `LiveSurfaceHooks` (mantidos `disable_window_blurs`/doze). Nenhum defeito bloqueante. `git diff origin/main` sem C/H nativos; catálogo só com +6 linhas de energia.
 - Pendente: validação física (`VALIDATION_MATRIX.md` §4 primeiro, depois §3).
+
+## Correção pós-revisão independente (head 7db5b66)
+
+- Defeito confirmado: remoção em `ImportPlan` (Substituir, estilo, Desfazer) prometia "volta ao padrão" mas omitia a chave; `PublicationPlan.writesFor` só percorre chaves salvas → `sf.hcsat` 1.30 publicado ficava em vigor e virava `external`; parâmetros Java caíam na propriedade `debug.oulg.*`. Reproduzido por `ImportRemovalRestoresDefaultTest` (6 falhas antes da correção; `droppingTheOverrideReleasesTheKeyInsteadOfRestoringIt` documenta o efeito de apenas apagar).
+- Correção: `ImportPlan.restoreDefaults` grava o default explícito das chaves removidas (registro e flags; nunca helper-owned/somente leitura); valor removido já no default vai para "Mantidos". Liberar para o Terminal continua só em `releaseToExternal` (ação explícita). Sem mudança em shader, nativo, defaults ou domínios.
+- `ImportPlanTest`: 2 expectativas antigas (que codificavam a remoção sem default) atualizadas.
+- Matriz energética corrigida: limite implementado 5–50 % (era "90 %" na matriz e em `ENERGY_POLICY.md §8`).
+- `./gradlew testDebugUnitTest lintDebug assembleDebug`: verde, 1154 testes, 0 falhas.

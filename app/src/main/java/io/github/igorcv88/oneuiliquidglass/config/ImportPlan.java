@@ -34,7 +34,10 @@ public final class ImportPlan {
     public final List<Change> changed;
     /** Not saved now, saved after. */
     public final List<Change> added;
-    /** Saved now, not after: the control goes back to its default ({@code to} is that default). */
+    /**
+     * Saved now and absent from the file: the control goes back to its default ({@code to}), which
+     * {@link #result} saves explicitly so the next Apply publishes it (never released to the Terminal).
+     */
     public final List<Change> removed;
     /** Saved on both sides with the same value. */
     public final List<String> kept;
@@ -51,8 +54,8 @@ public final class ImportPlan {
     public final boolean diagnosticPresent;
     public final Mode mode;
 
-    private ImportPlan(Mode mode, Map<String, String> result, boolean enabled, ConfirmedSnapshot current,
-            PresetCodec.Parsed parsed, boolean hasBackupDefaults, boolean needsLens) {
+    private ImportPlan(Mode mode, Map<String, String> result, Set<String> restored, boolean enabled,
+            ConfirmedSnapshot current, PresetCodec.Parsed parsed, boolean hasBackupDefaults, boolean needsLens) {
         this.mode = mode;
         this.result = Collections.unmodifiableMap(new LinkedHashMap<>(result));
         this.enabled = enabled;
@@ -61,7 +64,11 @@ public final class ImportPlan {
         List<String> kept = new ArrayList<>();
         for (Map.Entry<String, String> e : new TreeMap<>(result).entrySet()) {
             String before = current.saved.get(e.getKey());
-            if (before == null) added.add(new Change(e.getKey(), null, e.getValue()));
+            if (restored.contains(e.getKey())) {
+                // Removed by the file: saved explicitly at its default, so the next Apply publishes it.
+                if (sameValue(e.getKey(), before, e.getValue())) kept.add(e.getKey());
+                else removed.add(new Change(e.getKey(), before, e.getValue()));
+            } else if (before == null) added.add(new Change(e.getKey(), null, e.getValue()));
             else if (sameValue(e.getKey(), before, e.getValue())) kept.add(e.getKey());
             else changed.add(new Change(e.getKey(), before, e.getValue()));
         }
@@ -105,8 +112,10 @@ public final class ImportPlan {
         if (adoptTerminal)
             for (Map.Entry<String, String> e : parsed.terminal.entrySet())
                 if (!parsed.values.containsKey(e.getKey())) result.put(e.getKey(), e.getValue());
+        Set<String> restored = restoreDefaults(current, result);
         ConfirmedSnapshot after = current.withSaved(result, parsed.enabled);
-        return new ImportPlan(mode, result, parsed.enabled, current, parsed, differing, publishChanges(current, after));
+        return new ImportPlan(mode, result, restored, parsed.enabled, current, parsed, differing,
+                publishChanges(current, after));
     }
 
     /** Undo as a review: the snapshot replaces what is saved, like a style in REPLACE mode. */
@@ -136,6 +145,29 @@ public final class ImportPlan {
             if (rule.kind == Applicability.Kind.INACTIVE) out.add(key);
         }
         return out;
+    }
+
+    /**
+     * A key saved now that the result drops goes back to its default, as the review says. Dropping
+     * the override would not do that: a property the app published (or a Terminal value) would stay
+     * in force and read as external. So the default is saved explicitly and the next Apply publishes
+     * it. Handing a key to the Terminal is another, explicit action
+     * ({@link ConfigRepository#releaseToExternal}); an import, a style or Undo never does it.
+     *
+     * @return the keys added to {@code result} at their default
+     */
+    private static Set<String> restoreDefaults(ConfirmedSnapshot current, Map<String, String> result) {
+        Set<String> restored = new TreeSet<>();
+        for (String key : new TreeSet<>(current.saved.keySet())) {
+            if (result.containsKey(key)) continue;
+            SettingSpec spec = SettingsRegistry.get(key);
+            if (spec != null && (spec.helperOwned() || spec.type == SettingSpec.Type.READONLY)) continue;
+            String def = defaultOf(key);
+            if (def == null) continue;
+            result.put(key, def);
+            restored.add(key);
+        }
+        return restored;
     }
 
     private static String defaultOf(String key) {

@@ -37,7 +37,9 @@ public class ImportPlanTest {
         ConfirmedSnapshot now = current(map("sf.hcsat", "1.2", "sf.hclift", "0.4"));
         PresetCodec.Parsed parsed = file(map("sf.hcsat", "1.3"));
         ImportPlan replace = ImportPlan.of(now, parsed, ImportPlan.Mode.REPLACE, false, false);
-        assertEquals(map("sf.hcsat", "1.3"), replace.result);
+        // A removed key is saved at its default so the next Apply publishes it (never released).
+        assertEquals(map("sf.hcsat", "1.3", "sf.hclift", SettingsRegistry.get("sf.hclift").defaultValue),
+                replace.result);
         assertEquals(Collections.singleton("sf.hcsat"), keys(replace.changed));
         assertEquals(Collections.singleton("sf.hclift"), keys(replace.removed));
 
@@ -116,7 +118,8 @@ public class ImportPlanTest {
     public void undoAsAPlanIsAReplaceOfTheSnapshot() {
         ConfirmedSnapshot now = current(map("sf.hcsat", "1.5", "sf.hclift", "0.4"));
         ImportPlan plan = ImportPlan.ofSnapshot(now, map("sf.hcsat", "1.2"), true);
-        assertEquals(map("sf.hcsat", "1.2"), plan.result);
+        assertEquals(map("sf.hcsat", "1.2", "sf.hclift", SettingsRegistry.get("sf.hclift").defaultValue),
+                plan.result);
         assertEquals(Collections.singleton("sf.hclift"), keys(plan.removed));
         assertEquals(ImportPlan.Mode.REPLACE, plan.mode);
     }

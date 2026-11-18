@@ -15,6 +15,8 @@
 
 Ao abrir o app atualizado nada é publicado nem reiniciado. A primeira publicação só acontece por Apply explícito, e a lista mostrada é exatamente `writes ∪ drift` do plano (R6 B2: `drift` só existe com baseline da geração atual).
 
+Importar/estilo em Substituir e Desfazer gravam o **default explícito** das chaves que removem (publicado no próximo Aplicar); só "Usar o valor do Terminal" remove a override e deixa a propriedade valendo (`ACTIVATION_AND_BACKUP_CONTRACT.md §6.3.1`).
+
 Undo (B2): o snapshot passa a guardar `undo`, `undo.enabled`, `undo.label` e `undo.at`; snapshots antigos sem rótulo continuam válidos. Proveniência por chave: `src.<key>`/`srcAt.<key>`, ausentes = sem registro; nada é apagado na atualização. A pref `lens.intent` (`sf_live_ui`) registra a intenção de usar a lente; sem ela, deriva-se do histórico de compilação.
 
 ## 2. Comportamento que muda para quem não mexe em nada

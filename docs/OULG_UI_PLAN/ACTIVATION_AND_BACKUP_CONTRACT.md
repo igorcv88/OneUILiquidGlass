@@ -117,6 +117,21 @@ Estilos (`preset.custom`): salvar = encoder schema 2 (sem diagnostic); usar = `I
 - "Restaurar padrões" (Estilos) e "Restaurar grupo"/linha: mantêm valores default **explícitos** (necessário para republicar `sf.*` que estavam publicados), com proveniência RESET; revisão lista o que muda.
 - Desfazer: o snapshot passa a guardar `{label, at, overrides, enabled}`; tocar em Desfazer abre revisão (`ImportPlan` REPLACE do snapshot) antes de aplicar. Nenhuma mudança silenciosa.
 
+### 6.3.1 Remover × restaurar × liberar (correção da revisão independente de 7db5b66)
+
+Defeito: `ImportPlan.removed` prometia "volta ao padrão", mas `result` apenas omitia a chave; `replaceAll(clear)` apagava a override e `PublicationPlan.writesFor` só percorre chaves salvas. Uma `sf.*` publicada (ex.: `hcsat` salvo/observado/compilado 1.30) continuava 1.30 e passava a `external`; um parâmetro Java (LIVE) passava a ler `debug.oulg.<key>` (Tuning cai na propriedade quando não há override). Afetava importar em Substituir, estilo e Desfazer.
+
+Regra:
+
+| Ação | O que é salvo | Próximo Aplicar | Rótulo |
+|---|---|---|---|
+| Restaurar padrão (linha, grupo, Estilos › Restaurar padrões) | default **explícito** | publica o default se a propriedade difere | "Restaurar padrão" |
+| Importar/estilo em Substituir, Desfazer: chave salva agora e ausente no arquivo/snapshot | default **explícito** (`ImportPlan.restoreDefaults`), listado em "Voltam ao padrão" com `de → padrão` | publica o default | "Voltam ao padrão (N)" |
+| Mesclar | nada removido | — | — |
+| Usar o valor do Terminal (`AppModel.useExternal` → `ConfigRepository.releaseToExternal`) | override **removida** | a propriedade atual fica; a chave passa a "Alterado fora do app" | ação explícita, só no aviso de conflito |
+
+Importar, estilo e Desfazer **nunca** liberam uma chave para o Terminal. Consequência aceita: desfazer uma edição de uma chave que antes não tinha override salva o default explícito (o valor anterior do Terminal não é recuperável do snapshot); para devolver a chave ao Terminal use a ação explícita. Valor removido já igual ao default vai para "Mantidos". Flags de superfície removidas também gravam o default. Chaves helper-owned/somente leitura nunca entram. A revisão e a confirmação usam o mesmo `result`. Testes: `ImportRemovalRestoresDefaultTest` (8).
+
 ### 6.4 Proveniência por chave
 
 `ConfigRepository` grava `src.<key>` = `EDIT|RESET|UNDO|IMPORT|STYLE|MATERIAL|ADOPT` + `srcAt.<key>` (ms) em toda escrita de override; uma entrada por chave (não é log). `ControlSheet` mostra "Última alteração: Desfazer, 18/11 14:02". Export não inclui proveniência.
