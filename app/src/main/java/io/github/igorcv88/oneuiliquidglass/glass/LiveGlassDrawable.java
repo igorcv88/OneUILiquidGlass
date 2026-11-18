@@ -127,6 +127,21 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
         invalidateSelf();
     }
     public float edgeLineGainForTest() { return edgeLineGain; }
+    /**
+     * The P3 edge compatibility of the shared edge material (GlassDrawable): the live card follows
+     * the same selection as the heads-up pop-up (P3EdgeSelection). Applied to the optics when they
+     * are built and on change. This drawable is the host's background, so invalidateSelf()
+     * reaches the host. Returns whether it changed. REGIONLESS draws its own rim (unchanged).
+     */
+    private boolean p3EdgeCompatibility;
+    public boolean setP3EdgeCompatibility(boolean on) {
+        if (p3EdgeCompatibility == on) return false;
+        p3EdgeCompatibility = on;
+        if (optics != null) optics.setP3EdgeCompatibility(on);
+        invalidateSelf();
+        return true;
+    }
+    public boolean p3EdgeCompatibility() { return p3EdgeCompatibility; }
     /** Temporary telemetry attached by the controller; no change to how the drawable renders. */
     public void setRenderProbe(String surface) { renderSurface = surface; renderProbe = new LiveRenderProbe(); }
     private final float[] lastRadii = new float[8];
@@ -322,6 +337,7 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
         if (optics == null) {
             optics = new GlassDrawable(blur, density, new GlassSpec());
             optics.setNotificationLineGain(edgeLineGain);
+            optics.setP3EdgeCompatibility(p3EdgeCompatibility);
         }
         if (!optics.drawOptics(canvas, b, clamped, alpha)) drawRim(canvas, b);
         drawReport("OWN_REGION", canvas, b, "blurDrawReturned");

@@ -16,6 +16,10 @@ import io.github.igorcv88.oneuiliquidglass.diagnostics.LiveRenderProbe;
 import io.github.igorcv88.oneuiliquidglass.glass.BackgroundBlurBridge;
 import io.github.igorcv88.oneuiliquidglass.glass.LiveGlassDrawable;
 import io.github.igorcv88.oneuiliquidglass.glass.SemBlurBridge;
+import io.github.igorcv88.oneuiliquidglass.glass.P3EdgeSelection;
+import io.github.igorcv88.oneuiliquidglass.glass.P3ModeBus;
+import io.github.igorcv88.oneuiliquidglass.diagnostics.P3DisplayProbe;
+import io.github.igorcv88.oneuiliquidglass.hooks.Reflect;
 
 /**
  * Lifecycle of the glass on the hosts the ongoing hooks classified. Main thread only.
@@ -116,6 +120,9 @@ public final class LiveGlass {
         /** Per-host state-change telemetry; never holds the host or its notification data. */
         final LiveRenderProbe render = new LiveRenderProbe();
         View.OnAttachStateChangeListener attach;
+        /** CARD only: shared display-mode watcher client and last route, for change-only logs. */
+        P3ModeBus.Client p3;
+        int p3LastMode = Integer.MIN_VALUE;
         ViewTreeObserver.OnPreDrawListener preDraw;
         ViewTreeObserver observer;
         State(LiveSurface surface, View host) { this.surface = surface; this.host = new WeakReference<>(host); }
@@ -298,6 +305,7 @@ public final class LiveGlass {
         });
         listen(s, v);
         if (v.isAttachedToWindow() || regionless(s, v)) sync(s);
+        if (s.surface == LiveSurface.CARD) p3Sample(s, v, "cardCreate");
         logOnce(s.surface, "LIVE_GLASS_APPLY", "surface=" + s.surface + " host=" + v.getClass().getName()
                 + " native=" + (bg == null ? "none" : NativeShape.unwrap(bg).getClass().getSimpleName()) + " sem=" + (sem != null)
                 + " radius=" + radii[0] + " attached=" + v.isAttachedToWindow());
@@ -419,6 +427,7 @@ public final class LiveGlass {
                 cancelPendingCardRestore(s);
                 s.backgroundRepairs = 0;
                 sync(s);
+                if (s.surface == LiveSurface.CARD) p3Sample(s, view, "attach");
             }
             @Override public void onViewDetachedFromWindow(View view) {
                 if (s.glass != null) {
@@ -440,6 +449,7 @@ public final class LiveGlass {
     }
     private void removeListeners(State s) {
         cancelPendingCardRestore(s);
+        if (s.p3 != null) { P3ModeBus.remove(s.p3); s.p3 = null; }
         View v = s.host.get();
         removePreDraw(s);
         if (v != null && s.attach != null) v.removeOnAttachStateChangeListener(s.attach);
@@ -449,6 +459,60 @@ public final class LiveGlass {
         if (s.observer != null && s.preDraw != null && s.observer.isAlive()) s.observer.removeOnPreDrawListener(s.preDraw);
         s.observer = null;
         s.preDraw = null;
+    }
+
+    // ---- P3 edge compatibility (R5 6.2) -------------------------------------------------------
+
+    /**
+     * One display-mode read on a lifecycle event (creation, attach), never per frame; while the
+     * card is a visible pop-up it then follows the heads-up's shared watcher (P3ModeBus), with the
+     * same cadence and lifecycle guard, so no second poller exists. The selection is the
+     * pop-up's (P3EdgeSelection.eligible, compat only in DISPLAY_P3, unknown fails closed) without
+     * the heads-up's unlocked-shade guard: the card is also drawn in the lock screen editor, and
+     * the sample is of the display mode at that moment.
+     */
+    private void p3Sample(State s, View v, String phase) {
+        if (s.glass == null || v == null) return;
+        if (s.p3 == null) {
+            s.p3 = new P3ModeBus.Client() {
+                @Override public View watchAnchor() {
+                    View h = s.host.get();
+                    return h != null && s.glass != null && s.glass.showsGlass() && h.isAttachedToWindow()
+                            && h.isShown() && headsUpRow(h) ? h : null;
+                }
+                @Override public void onMode(int mode) { p3Apply(s, mode, "popupWatch"); }
+            };
+            P3ModeBus.add(s.p3);
+        }
+        boolean enabled = P3DisplayProbe.edgeCompatEnabled();
+        p3Apply(s, enabled ? P3DisplayProbe.activeColorMode(v.getContext()) : -1, phase);
+        if (s.p3.watchAnchor() != null) P3ModeBus.requestWatch();
+    }
+
+    private void p3Apply(State s, int mode, String phase) {
+        LiveGlassDrawable g = s.glass;
+        if (g == null) return;
+        boolean enabled = P3DisplayProbe.edgeCompatEnabled();
+        boolean compat = P3EdgeSelection.eligible(true, enabled, mode);
+        boolean changed = g.setP3EdgeCompatibility(compat);
+        if (changed || mode != s.p3LastMode) {
+            View v = s.host.get();
+            Probe.log("P3_EDGE_ROUTE", "surface=CARD phase=" + phase + " viewId="
+                    + (v == null ? "null" : Integer.toHexString(System.identityHashCode(v)))
+                    + " mode=" + mode + " compat=" + compat + " applied=" + g.p3EdgeCompatibility()
+                    + " invalidated=" + changed + " enabled=" + enabled
+                    + " route=" + (g.showsGlass() ? (g.blur() != null ? "OWN_REGION" : "REGIONLESS") : "NATIVE"));
+        }
+        s.p3LastMode = mode;
+    }
+
+    /** Whether the host sits in a notification row that is a heads-up now (bounded walk). */
+    static boolean headsUpRow(View v) {
+        android.view.ViewParent p = v.getParent();
+        for (int i = 0; i < 16 && p != null; i++, p = p.getParent())
+            if (p.getClass().getName().endsWith("ExpandableNotificationRow"))
+                return Boolean.TRUE.equals(Reflect.bool(p, "isHeadsUpState", "mIsHeadsUp"));
+        return false;
     }
 
     /** Builds or drops the region for the current blur capability and surface policy. */

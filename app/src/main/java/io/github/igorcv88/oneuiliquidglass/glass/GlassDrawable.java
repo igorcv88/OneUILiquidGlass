@@ -132,16 +132,25 @@ public final class GlassDrawable extends Drawable {
     }
     /** Cached once on card creation / shade-state change. No SurfaceFlinger query in draw(). */
     private boolean p3EdgeCompatibility;
-    private boolean p3DrawStateReported;
-    public void setP3EdgeCompatibility(boolean enabled) {
-        if (p3EdgeCompatibility != enabled) {
-            p3EdgeCompatibility = enabled;
-            // A reused pop-up drawable needs a fresh GLASS_EDGE_DRAWN trace for the new mode.
-            reportedEdgeDraw = false;
-            p3DrawStateReported = false;
-            invalidateSelf();
-        }
+    /** True until the selection changes: one draw-state line per change, none per frame. */
+    private boolean p3DrawStateReported = true;
+    /**
+     * Returns whether the selection changed. invalidateSelf() alone is not enough for an owner
+     * that draws this drawable by hand (the heads-up's composeGlass): its View is the callback but
+     * not a verified drawable host, so View.invalidateDrawable drops the request. Such owners
+     * invalidate their own View when this returns true.
+     */
+    public boolean setP3EdgeCompatibility(boolean enabled) {
+        if (p3EdgeCompatibility == enabled) return false;
+        p3EdgeCompatibility = enabled;
+        // A reused pop-up drawable needs a fresh GLASS_EDGE_DRAWN trace for the new mode, and
+        // one P3_EDGE_DRAW_STATE per change (either direction) confirms the draw that applied it.
+        reportedEdgeDraw = false;
+        p3DrawStateReported = false;
+        invalidateSelf();
+        return true;
     }
+    public boolean p3EdgeCompatibility() { return p3EdgeCompatibility; }
     public void setGlint(float g) { if (glint != g) { glint = g; invalidateSelf(); } }
     /** Gain of the outer contour line in the LSPosed-only edge model (1: unchanged). */
     private float rimGain = 1f;
@@ -225,14 +234,7 @@ public final class GlassDrawable extends Drawable {
     }
     private void drawGlass(Canvas canvas) {
         if (failed) { if (nativeDrawable != null) { nativeDrawable.setBounds(getBounds()); nativeDrawable.draw(canvas); } return; }
-        if (p3EdgeCompatibility && !p3DrawStateReported) {
-            p3DrawStateReported = true;
-            Probe.log("P3_EDGE_DRAW_STATE", "source=" + backdrop.name()
-                    + " edgeMode=" + P3EdgeSelection.effectiveMode(Tuning.get().edgePremulMode, p3EdgeCompatibility)
-                    + " shader=" + (shader != null) + " compositorLit=" + compositorLit
-                    + " sampled=" + (backdrop instanceof SampledBackdrop)
-                    + " hardware=" + canvas.isHardwareAccelerated());
-        }
+        reportP3Draw(canvas, "glass");
         int save = canvas.save();
         try {
             Rect bounds = getBounds(); rect.set(bounds);
@@ -293,8 +295,19 @@ public final class GlassDrawable extends Drawable {
             nativeDrawable.setBounds(getBounds()); nativeDrawable.draw(canvas);
         }
     }
+    private void reportP3Draw(Canvas canvas, String path) {
+        if (p3DrawStateReported) return;
+        p3DrawStateReported = true;
+        Probe.log("P3_EDGE_DRAW_STATE", "path=" + path + " p3Compat=" + p3EdgeCompatibility + " source=" + backdrop.name()
+                + " edgeMode=" + P3EdgeSelection.effectiveMode(Tuning.get().edgePremulMode, p3EdgeCompatibility)
+                + " shader=" + (shader != null) + " compositorLit=" + compositorLit
+                + " sampled=" + (backdrop instanceof SampledBackdrop)
+                + " hardware=" + canvas.isHardwareAccelerated());
+    }
+
     /** Shared edge material for a live surface which owns and draws its blur separately. */
     public boolean drawOptics(Canvas canvas, Rect bounds, float[] shape, int opacity) {
+        reportP3Draw(canvas, "optics");
         if (shader == null) return false;
         System.arraycopy(shape, 0, radii, 0, 8);
         paint.setAlpha(opacity);
