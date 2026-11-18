@@ -68,6 +68,19 @@ final class QuickSettingsEdgeLight {
     private Object adapter;
     private Method getSize, getDensity, drawContext, contextCanvas, toPx, flowValue;
     private Field nativeCanvas, topStart, expansionField;
+    /** topEnd, bottomEnd, bottomStart: read only for the bounded geometry trace (asymmetry check). */
+    private Field[] otherCorners;
+
+    /** The four corners in px (topStart, topEnd, bottomEnd, bottomStart), for the trace only. */
+    private String corners(Object shape, Object scope, long outer) {
+        if (otherCorners == null) return "na";
+        StringBuilder b = new StringBuilder();
+        try {
+            b.append(toPx.invoke(topStart.get(shape), scope, outer));
+            for (Field f : otherCorners) b.append('/').append(toPx.invoke(f.get(shape), scope, outer));
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError e) { return "na"; }
+        return b.toString();
+    }
     private ViewTreeObserver.OnPreDrawListener preDraw;
     private ViewTreeObserver observed;
     private int alpha = 255;
@@ -116,6 +129,56 @@ final class QuickSettingsEdgeLight {
             this.token = token;
             this.element = new WeakReference<>(element); this.shape = shape; this.border = border; this.outer = outer;
         }
+    }
+
+    /**
+     * The shape each box (BoxWithOutline restart scope) was last composed with. The inner box is
+     * clip(shape).background(colour) over RectangleShape, so BackgroundElement does not carry the
+     * shape: when Samsung changes only the shape (QS opening: 70 -> 144.807 px on a 652x282
+     * capsule, R5 trace), Compose keeps the BackgroundNode and its element and never calls update.
+     * The spec registered at the first composition then kept the old corner for the compositor
+     * region and the AGSL optics, while Samsung's border and clip moved to the new one: two
+     * contours (R5 physical validation). The border element is rebuilt on every composition with
+     * the current shape, so it publishes the shape here and the box's node draws again.
+     */
+    private final Map<Object, Object> liveShapes = new WeakHashMap<>();
+    private int shapeRefreshLogs;
+
+    /** Composition (main thread): the shape {@code box} is drawn with now. */
+    void shape(Object box, Object shape) {
+        if (box == null || shape == null) return;
+        List<Object> redraw = null;
+        synchronized (this) {
+            Object previous = liveShapes.put(box, shape);
+            if (previous == null || previous == shape) return;
+            for (Map.Entry<Object, Edge> en : nodes.entrySet()) {
+                Edge e = en.getValue();
+                java.lang.ref.WeakReference<Object> ref = e.spec.token.box;
+                if (ref == null || ref.get() != box || en.getKey() == null) continue;
+                if (redraw == null) redraw = new ArrayList<>();
+                redraw.add(en.getKey());
+                e.geometryReports = 0;
+                if (shapeRefreshLogs < 32) {
+                    shapeRefreshLogs++;
+                    Probe.log("QS_SHAPE_REFRESH", "session=" + coverage.session() + " id=" + e.spec.token.id
+                            + " role=" + e.spec.token.role + " registered=" + identity(e.spec.shape)
+                            + " previous=" + identity(previous) + " current=" + identity(shape));
+                }
+            }
+        }
+        if (redraw == null || invalidateDraw == null) return;
+        for (Object node : redraw) {
+            try { invalidateDraw.invoke(null, node); }
+            catch (ReflectiveOperationException | RuntimeException | LinkageError ex) { Probe.error("QS_SHAPE_REFRESH_FAILED", ex); return; }
+        }
+    }
+
+    /** The shape this edge's box is drawn with now; the registered one until the box reports. */
+    private synchronized Object shapeOf(Edge e) {
+        java.lang.ref.WeakReference<Object> ref = e.spec.token.box;
+        Object box = ref == null ? null : ref.get();
+        Object live = box == null ? null : liveShapes.get(box);
+        return live != null ? live : e.spec.shape;
     }
 
     private final class Edge {
@@ -169,6 +232,11 @@ final class QuickSettingsEdgeLight {
             member = "CornerBasedShape.topStart";
             topStart = cornerShape.getDeclaredField("topStart");
             topStart.setAccessible(true);
+            try {
+                otherCorners = new Field[] {cornerShape.getDeclaredField("topEnd"),
+                        cornerShape.getDeclaredField("bottomEnd"), cornerShape.getDeclaredField("bottomStart")};
+                for (Field f : otherCorners) f.setAccessible(true);
+            } catch (ReflectiveOperationException | RuntimeException | LinkageError ignored) { otherCorners = null; }
             member = "AndroidCanvas.internalCanvas";
             nativeCanvas = Class.forName("androidx.compose.ui.graphics.AndroidCanvas", false, loader)
                     .getDeclaredField("internalCanvas");
@@ -417,7 +485,8 @@ final class QuickSettingsEdgeLight {
             int out = QuickSettingsGlass.edgeOutset(e.spec.border, (Float) getDensity.invoke(scope));
             int ow = w + 2 * out, oh = h + 2 * out;
             long outer = ((long) Float.floatToRawIntBits(ow) << 32) | (Float.floatToRawIntBits(oh) & 0xffffffffL);
-            Object corner = topStart.get(e.spec.shape);
+            Object shape = shapeOf(e);
+            Object corner = topStart.get(shape);
             float radius = corner == null ? -1f : (Float) toPx.invoke(corner, scope, outer);
             float[] envelope = QuickSettingsGlass.envelope(ow, oh, e.spec.outer);
             if (e.spec.outer < 1f) radius = Math.min(envelope[2]-envelope[0], envelope[3]-envelope[1])/2f;
@@ -429,7 +498,9 @@ final class QuickSettingsEdgeLight {
             int right = Math.round(-out + envelope[2]), bottom = Math.round(-out + envelope[3]);
             radius = QuickSettingsGlass.opticalRadius(radius, right - left, bottom - top);
             float tag = QuickSettingsGlass.edgeTag(radius);
-            if (tag >= 0f && isolation.off(e.spec.token.id, QsLayerIsolation.SF_PROFILE3, android.os.SystemClock.uptimeMillis())) {
+            long isoNow = android.os.SystemClock.uptimeMillis();
+            if (isolation.matches(e.spec.token.id, e.spec.token.role, w, h, isoNow)) learnIsolated(e);
+            if (tag >= 0f && isolation.off(e.spec.token.id, e.spec.token.role, w, h, QsLayerIsolation.SF_PROFILE3, isoNow)) {
                 // Diagnostic: same region and blur, integer radius, so profile 3 is not selected.
                 tag = (float) Math.floor(radius);
                 if (isolation.firstHit(QsLayerIsolation.SF_PROFILE3))
@@ -495,7 +566,8 @@ final class QuickSettingsEdgeLight {
                 Probe.log("QS_EDGE_GEOMETRY", "id=" + e.spec.token.id + " role=" + e.spec.token.role
                         + " bounds=" + left + "," + top + "," + right + "," + bottom
                         + " requested=" + requestedRadius + " normalized=" + radius + " sent=" + tag
-                        + " outset=" + out);
+                        + " outset=" + out + " corners=" + corners(shape, scope, outer)
+                        + " shape=" + identity(shape) + " registered=" + (shape == e.spec.shape));
             }
             if (!e.drawn) {
                 e.drawn = true;
@@ -557,6 +629,7 @@ final class QuickSettingsEdgeLight {
         if (!visible) {
             visible = true;
             coverage.begin();
+            shapeRefreshLogs = 0;
             armIsolation();
             for (Edge e : nodes.values()) {
                 e.spec.token.attempted = false; e.spec.token.drawn = false;
@@ -635,6 +708,8 @@ final class QuickSettingsEdgeLight {
     /** Told when an isolation window ends, so outlines recompose with their normal brush. */
     private volatile Runnable isolationEnded = () -> {};
     void onIsolationEnded(Runnable r) { isolationEnded = r == null ? () -> {} : r; }
+    private volatile java.util.function.Consumer<Object> isolatedBox = b -> {};
+    void onIsolatedBox(java.util.function.Consumer<Object> c) { isolatedBox = c == null ? b -> {} : c; }
     static boolean usesCompositor(String role) { return role == null || !role.startsWith("media"); }
     private BooleanSupplier lightScene = () -> false;
     private DoubleSupplier lightGain = () -> 1d;
@@ -684,12 +759,6 @@ final class QuickSettingsEdgeLight {
         // compositor regions (suppress) instead of relying on the layer alpha alone. The dragged
         // slider's container keeps its optics. Not a failure: the outline state is left as it is.
         if (dragging && !e.spec.token.role.equals("slider")) return;
-        if (isolation.off(e.spec.token.id, QsLayerIsolation.AGSL, android.os.SystemClock.uptimeMillis())) {
-            // Diagnostic: this box's AGSL optics are not drawn; its outline state is left as it is.
-            if (isolation.firstHit(QsLayerIsolation.AGSL))
-                Probe.log("QS_LAYER_ISOLATION", "state=applied layer=agsl id=" + e.spec.token.id + " role=" + e.spec.token.role);
-            return;
-        }
         if (o == null || !QsCapsuleOptics.available() || !enabled.getAsBoolean()) {
             coverage.stage(e.spec.token, "fallback", "disabled-or-shader"); return;
         }
@@ -698,6 +767,17 @@ final class QuickSettingsEdgeLight {
             long size = (Long) getSize.invoke(scope);
             float w = Float.intBitsToFloat((int) (size >>> 32)), h = Float.intBitsToFloat((int) size);
             float density = (Float) getDensity.invoke(scope);
+            long isoNow = android.os.SystemClock.uptimeMillis();
+            if (isolation.matches(e.spec.token.id, e.spec.token.role, w, h, isoNow)) {
+                learnIsolated(e);
+                if (isolation.off(e.spec.token.id, e.spec.token.role, w, h, QsLayerIsolation.AGSL, isoNow)) {
+                    // Diagnostic: this box's AGSL optics are not drawn; its outline state is left as it is.
+                    if (isolation.firstHit(QsLayerIsolation.AGSL))
+                        Probe.log("QS_LAYER_ISOLATION", "state=applied layer=agsl id=" + e.spec.token.id
+                                + " role=" + e.spec.token.role + " w=" + w + " h=" + h);
+                    return;
+                }
+            }
             Object canvas = contextCanvas.invoke(drawContext.invoke(scope));
             Object raw = nativeCanvas.getDeclaringClass().isInstance(canvas) ? nativeCanvas.get(canvas) : null;
             if (!(raw instanceof android.graphics.Canvas) || !((android.graphics.Canvas) raw).isHardwareAccelerated()) {
@@ -705,7 +785,8 @@ final class QuickSettingsEdgeLight {
             }
             int out = QuickSettingsGlass.edgeOutset(e.spec.border, density);
             long outer = ((long) Float.floatToRawIntBits(w + 2 * out) << 32) | (Float.floatToRawIntBits(h + 2 * out) & 0xffffffffL);
-            Object corner = topStart.get(e.spec.shape);
+            Object shape = shapeOf(e);
+            Object corner = topStart.get(shape);
             // Raw inner corner as Compose resolves it (toPx on the outer box, minus the border
             // inset) is kept for the fail-closed diagnostic; only a valid outer request is
             // normalized against the outer bounds, so -4 stays -4 instead of a sentinel.
@@ -735,7 +816,7 @@ final class QuickSettingsEdgeLight {
                             + " id=" + e.spec.token.id + " role=" + e.spec.token.role
                             + " w=" + w + " h=" + h + " borderPx=" + out
                             + " radius=" + rawRadius + " effective=" + effective
-                            + " shape=" + e.spec.shape.getClass().getName()
+                            + " shape=" + shape.getClass().getName()
                             + " hasBox=" + (e.spec.token.box != null && e.spec.token.box.get() != null));
                 }
                 result(e.spec.token, false, "invalid-corner-radius");
@@ -811,15 +892,27 @@ final class QuickSettingsEdgeLight {
         long now = android.os.SystemClock.uptimeMillis();
         boolean was = isolation.active(now);
         String line = isolation.arm(QsLayerIsolation.read(), now);
-        isolation.resetHits();
         if (line == null) { if (was) restoreIsolation(); return; }
         Probe.log("QS_LAYER_ISOLATION", "state=armed " + line);
         View v = host.get();
         if (v != null) v.postDelayed(() -> {
             if (isolation.active(android.os.SystemClock.uptimeMillis())) return; // re-armed later
-            Probe.log("QS_LAYER_ISOLATION", "state=ended target=" + isolation.target());
+            Probe.log("QS_LAYER_ISOLATION", "state=ended selector=" + isolation.selector());
             restoreIsolation();
         }, QsLayerIsolation.WINDOW_MS + 50);
+    }
+
+    /** A box matched the selector: remember its scope so its outline can be removed too. */
+    private void learnIsolated(Edge e) {
+        java.lang.ref.WeakReference<Object> ref = e.spec.token.box;
+        Object box = ref == null ? null : ref.get();
+        if (isolation.learn(box)) {
+            try { isolatedBox.accept(box); }
+            catch (RuntimeException | LinkageError ex) { Probe.error("QS_LAYER_ISOLATION_RECOMPOSE_FAILED", ex); }
+        }
+        if (isolation.firstHit(1 << 8))
+            Probe.log("QS_LAYER_ISOLATION", "state=matched id=" + e.spec.token.id + " role=" + e.spec.token.role
+                    + " box=" + (box != null));
     }
 
     private void restoreIsolation() {

@@ -136,3 +136,70 @@ Nenhum hook do módulo altera medida, span, slots ou ordem de tiles da QS. Os ho
 ## Reversão
 
 Reinstale o APK anterior do #211 (`ace226c`) e reinicie o SystemUI. Nada nativo nem persistente foi alterado. Para o diagnóstico da QS, basta `setprop debug.oulg.qslayers ""`.
+
+## R5.2. Geometria da QS: forma desatualizada por caixa (validação física de 17/11)
+
+Resultado do aparelho (U):
+- **Aprovados:** sliders e P3 das Live Updates.
+- **Reprovada:** a geometria da QS. Aparecem dois contornos distintos em Wi-Fi, Bluetooth, painel coletivo, player, Quick Share e Home.
+- **Diagnóstico de camadas:** nenhum `state=applied`.
+
+### Medida nas capturas (D)
+
+Ampliando os cantos (1440 × 3120), há dois arcos circulares:
+- o **externo**, com r ≈ 70 px;
+- o **interno**, com r ≈ 140–145 px. Em Wi-Fi/Bluetooth (290 px de altura externa) isso é meia altura, ou seja, a cápsula.
+
+### Trace R5 (D)
+
+- Na abertura, todos os contêineres verticais registram `requested=70`: cápsulas 652×282, player 652×595 e painel 1336×909. AGSL 66, tag 69,875.
+- Mais tarde, caixas **de mesmas dimensões** registradas de novo aparecem com `requested=144.807`. Os ids 588 (652×282) e 600/626/649 (652×595) surgem quando a cena muda e o elemento de fundo é reconstruído.
+- O painel 1336×909 (id 450) nunca foi registrado de novo e manteve 70 durante toda a expansão.
+
+### Causa no código (D)
+
+1. O `BoxWithOutline` monta `border(largura, cor, forma).clip(forma)` na caixa externa e `padding(largura).clip(forma).background(cor)` na interna.
+2. O `BackgroundElement` é o mesmo véu sobre `RectangleShape`: **não contém a forma**.
+3. Quando a Samsung troca só a forma (abertura da QS: 70 → 144,807 px), a borda e o clip mudam, mas o Compose mantém o `BackgroundNode` sem chamar `update`.
+4. O `Edge.Spec` guardava a forma da primeira composição. A região do SF e a óptica AGSL ficavam em r=70 enquanto o contorno e o clip nativos iam para 144,807.
+5. Resultado: dois contornos.
+
+Isso também explica por que as caixas re-registradas (mudança de cena) saem corretas. O `QsCapsuleOptics` replica um único raio; a forma é `RoundedCornerShape`, e os quatro cantos agora aparecem no trace para verificação, sem presumir simetria.
+
+### Correção (Java; nativo inalterado, bundle v0.36.0 / 37)
+
+- A cada composição, o elemento de borda (reconstruído sempre, com a forma atual) publica a forma da caixa: `QuickSettingsEdgeLight.shape(box, forma)`, com a mesma chave `BoxWithOutline` que o `QsLitRims` usa.
+- A região do SF e a AGSL leem a forma atual da caixa (`shapeOf`). Quando ela muda, o nó de fundo daquela caixa é redesenhado (`invalidateDraw`), sem recompor nem recriar a região.
+- O registro `QS_SHAPE_REFRESH` sai no máximo 32 vezes por sessão.
+- **Geometria resultante:** a borda Compose (raio r na caixa externa, traço de 4 px para dentro), a AGSL (r − 4 na caixa interna, concêntrica) e a região do SF (r na caixa externa, tag `.875`) passam a usar o mesmo r.
+  - Cápsulas: clamp em meia altura, extremidades semicirculares.
+  - Cartões: raio nativo de cada um.
+  - A normalização do #202 não mudou, e nenhuma luz, refração ou opacidade foi reduzida.
+- O trace de geometria agora inclui `corners=` (os quatro cantos em px), `shape=` e `registered=`. Quando aparece `registered=false`, a forma veio do refresh.
+
+### Seletor do diagnóstico (D)
+
+O primeiro teste armou `710:*`, que era o painel em paisagem de uma sessão anterior; em retrato não havia esse id. O seletor agora aceita:
+- dimensões da caixa interna, como `1336x909` (±3 px);
+- papel, como `container` ou `slider`;
+- papel e dimensões juntos, como `container@652x282`;
+- ou um id.
+
+Todas as caixas que casam são afetadas. Cada armação registra `state=matched` uma vez e cada camada aplicada registra `state=applied`.
+
+### Pendente (V)
+
+- Confirmar no aparelho um único contorno em todas as superfícies, em retrato e paisagem, abertura e expansão, e cena clara e escura.
+- Aparecer `QS_SHAPE_REFRESH` na abertura, com `registered=false` e `requested≈144.8` no painel 1336×909.
+- **(H)** `boxes=16` com 8 nós desenhados no trace: as 8 caixas extras devem ser tiles compostos de outra página do pager. Isso não está provado.
+
+### Protocolo
+
+1. Instale o APK e reinicie o SystemUI.
+2. Abra a QS em retrato e capture.
+3. Rode `su -c 'logcat -d -s OULG | grep -E "QS_SHAPE_REFRESH|QS_EDGE_GEOMETRY" | tail -40'`.
+4. Se ainda houver dois contornos:
+   - `setprop debug.oulg.qslayers 1336x909:1`, reabra e capture;
+   - repita com `:2` e `:4`;
+   - para as cápsulas, use `container@652x282:<máscara>`;
+   - volte com `setprop debug.oulg.qslayers ""`.
