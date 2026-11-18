@@ -115,4 +115,5 @@
     <string name="provenance_style">style</string>
     <string name="provenance_material">material change</string>
     <string name="provenance_adopt">adopted from Terminal</string>
+    <string name="energy_surfaces_min">At least one surface must stay selected.</string>
 </resources>

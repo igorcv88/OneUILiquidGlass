@@ -25,7 +25,8 @@ final class SearchIndex {
     /** Whether a control may be listed at all. */
     static boolean listed(Controls.Control c, boolean showTechnical) {
         ProductLayout.Destination d = ProductLayout.destination(c.key);
-        if (d == ProductLayout.Destination.LEGACY) return false;
+        // Energy lives only in Settings > Energia; never in Search, not even in the technical list.
+        if (d == ProductLayout.Destination.LEGACY || d == ProductLayout.Destination.ENERGY) return false;
         if (c.tier == Controls.Tier.INTERNAL) return showTechnical;
         if (d == ProductLayout.Destination.TECHNICAL || d == ProductLayout.Destination.DIAGNOSTIC
                 || d == ProductLayout.Destination.MATERIAL) return showTechnical;

@@ -13,11 +13,13 @@ for line in text.splitlines():
  if key=='sf.clear': default=''; domain='readonly'; desc='Modos Clear Glass do último programa compilado (hu:<modo>,kg:<modo>); ausente = desconhecido, não confirma ativação.'
  rows[key]=(default,domain,desc or domain)
 READONLY=('sf.optics','sf.clear','sf.qslight')
-assert len(rows)==208,len(rows)
+assert len(rows)==214,len(rows)
 # Literal bounds follow Tuning; native limits are deliberately conservative UI limits, not C clamps.
 bools=set('livelens shadeblur sfrefract liveblur kgwinblur kgsharedoptics pillglass textswap headertone icontone popuptone popuplock orphandraw shadelocal panelnativegray perf trace sf.norewrite sf.kgfixedrim qs.tilelight qs.tiledark qs.hideoffdiscs'.split())
 ints=set('qs.edgeblur rimhz hz hzkg tint lensmaxage lenssettle lenstransition liveradius liveshaderadius semradius semradiuslens semalpha kgblurpath shadeblurpath hublurpath kgblurradius pillblur kgoptics huoptics livedarkalpha livedarkfill kgdarkalpha kgdarkfill shadescaleveil panelblurcap sf.taps sf.kgtaps edgepremul'.split())
 ints.update(('iconmode','statusmaxicons','iconinkmode','statusinkmode'))
+ints.update(('energymode','energythreshold','energyhysteresis','energysurfaces'))
+bools.update(('energycharging','energysaver'))
 enums={'qs.lightstyle':'obsidian,light','backdrop':'auto,hybrid,capture,grid,off','profile':'lens,snell','lensgate':'directional,conservative','semcurve':'auto,spatial,dim,ultra,none','semshape':'auto,single,path,four,none','shadetone':'0,1,2,3','sf.debug':'0,1,2,5'}
 native={'core':(0,128),'taps':(1,64),'ramp':(.1,4),'hubloom':(0,2),'edgeblur':(0,48),'hublur':(0,2),'hubodylens':(0,.15),'hurefract':(0,1.2),'kgcore':(0,128),'kgtaps':(1,64),'kgramp':(.1,4),'kgsat':(0,2.5),'kgtone':(0,1),'kgrim':(0,2),'kgspec':(0,1),'kgflat':(0,1),'kglevel':(0,1),'kgcool':(0,1),'kgtilt':(0,3.141593),'kgline':(0,2),'kgcorecap':(0,128),'kgflatcap':(0,1),'kgcoredim':(0,1),'kgglow':(0,2),'kggradient':(0,1),'kgband':(0,1),'kgbodylens':(0,.15),'kgblurexp':(1,4),'kgedgeblur':(0,48),'kgblur':(0,2),'kgrefract':(0,1.2),'shadecap':(.2,1),'shadelift':(0,.8),'hulight':(0,1),'kglight':(0,1),'kgdepth':(1.5,48),'shadelight':(0,1),'qslens':(0,.5),'qsbody':(0,1),'qsdepth':(1.5,48),'qslight':(0,2)}
 native['kgfixedrim']=(0,1)
@@ -53,6 +55,7 @@ titles.update({'panelblurcap':'Limite de desfoque do fundo','panelnativegray':'V
                'qs.lightglassopacity':'Opacidade das cápsulas sobre fundo claro',
                'qs.lightglasscolor':'Cor do vidro das cápsulas claras',
                'qs.lightoptics':'Iluminação da lente sobre fundo claro'})
+titles.update({'energymode':'Suspender o vidro com bateria baixa','energythreshold':'Limite de bateria','energyhysteresis':'Retomar acima do limite em','energycharging':'Manter o vidro carregando','energysurfaces':'Superfícies afetadas','energysaver':'Seguir a Economia de bateria'})
 titles['iconmode']='Ícones de notificações'
 titles.update({'iconcardsize':'Tamanho dos ícones das notificações','statusiconsize':'Tamanho dos ícones da barra de status',
                'statusmaxicons':'Máximo de ícones visíveis','iconinkmode':'Cor dos ícones nas notificações',
@@ -87,6 +90,7 @@ for key,(default,domain,desc) in rows.items():
  if key=='shadedarkglass': group='Cor e contraste'
  if key=='sf.qslight': group='Compositor'
  if key=='iconmode' or key.startswith(('icon','statusicon','statusmax','statusfixed','statuslight','statusdark')): group='Ícones'
+ if key.startswith('energy'): group='Energia'; scope='all'
  if key=='mediaart': scope='shade'
  if key=='hufadecut': scope='headsup'
  if key.startswith('sf.hc'): scope='headsup'

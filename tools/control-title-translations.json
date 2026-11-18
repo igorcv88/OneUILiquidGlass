@@ -175,5 +175,11 @@
   "Nível do véu": "Veil level",
   "Escurecimento do vidro": "Glass dimming",
   "Compressão de realces": "Highlight compression",
-  "Tom frio do vidro": "Glass cool tint"
+  "Tom frio do vidro": "Glass cool tint",
+  "Suspender o vidro com bateria baixa": "Pause the glass on low battery",
+  "Limite de bateria": "Battery limit",
+  "Retomar acima do limite em": "Resume above the limit by",
+  "Manter o vidro carregando": "Keep the glass while charging",
+  "Superfícies afetadas": "Affected surfaces",
+  "Seguir a Economia de bateria": "Follow Battery saver"
 }

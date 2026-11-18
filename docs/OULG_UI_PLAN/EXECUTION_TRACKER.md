@@ -29,10 +29,10 @@ Atualizado pelo executor a cada tarefa. Status: TODO / DOING / DONE / BLOCKED.
 | T13 | DONE | (commit C) | Favoritos filtrados por `SurfacesPlan.favorites`; aviso único `favorites_migrated` (pref `favorites.migrated.r6`), sem apagar `favorite.*`; chave técnica não pode ser favoritada. `FavoritesFilterTest` 4. | O aviso é emitido no primeiro `bind` de qualquer página (todas ligam ao iniciar). |
 | T14 | DONE | (commit C) | `TechnicalSheet` (grupos técnicos, estado do sistema, legado, seletor de material com "Por cartão", Todos os parâmetros, Copiar relatório) aberta por linha em Configurações entre Diagnóstico e Recuperação; `AppModel.selectPerCard`/`perCardSelected`. `TechnicalLayoutTest` 4. `GlassMaterialUiTest` ajustado ao novo layout (5 asserções). | "Por cartão" só existe em Técnico; o `MaterialSheet` não oferece essa opção (nenhuma mudança de comportamento do seletor Fosco/Claro). |
 | T14b | DONE | (commit C) | `InfoSheets` reinjeta pela rota do plano: `AppModel.reinjectPlan()` (START/BLOCKED/CONTRADICTION, escritas imutáveis, fingerprint) e `lens.restartConfirmed(writes, fingerprint, m::planFingerprint)`. `AppModelReinjectTest` 4. | Fecha o desvio B2 (2). |
-| T15 | TODO | | | |
-| T16 | TODO | | | |
-| T17 | TODO | | | |
-| T18 | TODO | | | |
+| T15 | DONE | (commit da fase D) | 6 chaves LIVE no catálogo; `generate-settings.py` com `assert len(rows)==214`; `Tuning` com 6 campos (`number("energy…")` com clamp); `Controls.Section.ENERGY` (STANDARD, `.all()`); traduções (título, descrição, choices); todos os geradores rodados (`PYTHONUTF8=1`), `docs/CONTROL_MATRIX.md` regenerado por `OULG_UPDATE_MATRIX=1`; `build_inventory.py --check` => 214 chaves. `SettingsRegistryTest`, `ControlModelTest`, `ControlMatrixTest`, `LocalizationParityTest` verdes. `EnergyPlacementTest` 3/3: as 6 chaves não aparecem em Superfícies/favoritos, Busca (nem a lista técnica) nem Técnico. | `SearchIndex.listed` e o contador de alterados da `HomePage` excluem `Section.ENERGY`; `UiLabels.section` ganhou `ENERGY`. `ProductLayoutTest` agora exige `registry == keys` (as chaves de energia já estão no registro) e destino ENERGY. `Tuning.toString` inclui as chaves de energia para que a mudança seja publicada. Nenhum assert fixava 208 fora de `generate-settings.py`/`build_inventory.py` (que já aceitava 214). |
+| T16 | DONE | (commit da fase D) | `glass/EnergyPolicy` (puro; `Config`, `Input`, `Decision`, `Reason`). `EnergyPolicyTest` 12/12 (tabela §4, `surfaces==0`, máscara exata, mudança de config); `EnergyPolicyConfigTest` 2/2 (Robolectric: `Config.from(Tuning, master)`, mestre desligado, padrões nunca suspendem). | Acrescentado `Config.fromSnapshot(Function, master)`: o governor lê o snapshot do provider direto (o `Tuning` é assíncrono/cacheado), com os mesmos clamps. `Config.from(Tuning, master)` segue como especificado. |
+| T17 | DONE | (commit da fase D) | `config/EnergyGovernor` (Publisher injetável; `onState`, `reevaluate`, `parse`, `bitOf/suspended`, `start` com um único receiver `RECEIVER_NOT_EXPORTED` na thread `oulg-config`, sem polling/alarme/wakelock). `ConfigClient.energyMask` + máscara em `flag()`; governor criado em `start`, iniciado após a primeira leitura, `reevaluate()` a cada snapshot alterado (antes do dispatch). `LiveSurfaceHooks`: `allowed(String)`, receiver e `isPowerSaveMode` removidos; `disable_window_blurs`, listener de blur, `glassAllowed` (doze/AOD) mantidos. `EnergyGovernorTest` 14/14; `LiveSurfaceHooksTest.allowedIgnoresSaver` (10/10 na classe). | Um só receiver cobre bateria e Saver. `docs/live-toast-dzif.md` atualizado (Saver deixou de ser critério). `R5_FIXES.md` fica como histórico. |
+| T18 | DONE | (commit da fase D) | `ENERGY_STATE` enviado pelo governor (explícito, extras §6) e validado em `ConfigReadReceiver` via `EnergyReport.fromIntent` (reason, 0<=mask<=127, -1<=level<=100, boolean, at>0; inválido descarta o relato inteiro) gravando `engine_status energy.*`. `ui/EnergySection` em Configurações (entre Vidro e Backup), `Host.showEnergy()`, aviso na `HomePage`. `ConfigReadReceiverEnergyTest` 6/6; `EnergySectionTextTest` 10/10 (textos por estado, desconhecido com `at==0` ou `NOT_DETECTED`, máscara nunca 0, aviso Home). | Linha nova `energy_surfaces_min` em `COPY_PT_EN.csv` (motivo do último toggle) e `product_copy.xml` regenerado pelo gerador. Histerese e limite exibidos em `%`. O aviso da Home abre Configurações rolada até Energia. |
 | T19 | TODO | | | |
 | T20 | TODO | | | |
 
@@ -78,6 +78,15 @@ Desvios: (1) o contrato lista `kgflat`/`kglevel` entre as escritas da fixture; a
 ### Fase C: sem bloqueio arquitetural
 
 Desvios: (1) cobertura do layout por categoria. (2) `GlassMaterialUiTest` reescrito para o novo layout (títulos de produto, grupos). (3) "Por cartão" só em Técnico. (4) O aviso de favoritos aparece ao iniciar, não ao abrir Superfícies.
+
+## Fase D: validação
+
+`OULG_UPDATE_MATRIX=1 ./gradlew testDebugUnitTest` => 1146 testes, 0 falhas (47 novos: EnergyPolicyTest 12, EnergyPolicyConfigTest 2, EnergyGovernorTest 14, EnergyPlacementTest 3, ConfigReadReceiverEnergyTest 6, EnergySectionTextTest 10). `./gradlew lintDebug assembleDebug` => BUILD SUCCESSFUL. Geradores idempotentes (conteúdo; no Windows regravam CRLF, normalizado para LF). `python tools/test-distribution.py` => 6 OK. `build_inventory.py --check` => 214 chaves em dia. WSL (`Ubuntu-26.04`, `MSYS_NO_PATHCONV=1`): `sh sfhook/tools/live_check.sh` e `sh sfhook/tools/check.sh` => exit 0 (`live helper: all checks passed`; `check.sh` termina em `alpha precision: opaque taps give alpha 1 within 1e-3 ...`).
+
+### Fase D: sem bloqueio arquitetural
+
+Desvios: (1) `Config.fromSnapshot` além do `from(Tuning, master)`. (2) O governor reavalia em todo snapshot alterado (inclui a chave mestre), não só nas chaves `energy*`; a avaliação é pura e sai cedo sem mudança de decisão. (3) Fisicamente nada foi testado no S25 (matriz de `ENERGY_POLICY.md §8` pendente).
+
 
 ## Artefatos
 

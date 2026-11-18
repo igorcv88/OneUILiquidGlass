@@ -12,6 +12,12 @@ final class ControlDescriptions {
             case "blur": return R.string.control_description_blur;
             case "disp": return R.string.control_description_disp;
             case "edgepremul": return R.string.control_description_edgepremul;
+            case "energycharging": return R.string.control_description_energycharging;
+            case "energyhysteresis": return R.string.control_description_energyhysteresis;
+            case "energymode": return R.string.control_description_energymode;
+            case "energysaver": return R.string.control_description_energysaver;
+            case "energysurfaces": return R.string.control_description_energysurfaces;
+            case "energythreshold": return R.string.control_description_energythreshold;
             case "headergap": return R.string.control_description_headergap;
             case "headertone": return R.string.control_description_headertone;
             case "hublurpath": return R.string.control_description_hublurpath;

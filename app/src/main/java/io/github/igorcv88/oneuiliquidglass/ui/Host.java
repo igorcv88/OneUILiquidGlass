@@ -35,6 +35,9 @@ public interface Host {
 
     void openSync();
 
+    /** Opens Settings scrolled to the Energia section. */
+    void showEnergy();
+
     void openConflicts();
 
     void requestTest(int count, int delayMs);

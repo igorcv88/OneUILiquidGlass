@@ -4,6 +4,12 @@
     <string name="control_description_blur">Controla o desfoque aplicado ao fundo capturado por inteiro.</string>
     <string name="control_description_disp">Ajusta a diferença de deslocamento entre vermelho e azul na imagem capturada.</string>
     <string name="control_description_edgepremul">O padrão 0 mantém a borda original fora de Display P3. Notificações em Display P3 usam automaticamente o modo aditivo 3 com luz RGB 1,5x; desative com debug.oulg.p3edgecompat=0. Modos manuais de diagnóstico: 1 usa mistura normal premultiplicada; 2 soma a 1x; 3 a 1,5x; 4 a 1,4x. Valores salvos são preservados.</string>
+    <string name="control_description_energycharging">Enquanto o aparelho carrega, o vidro continua ativo mesmo com bateria baixa.</string>
+    <string name="control_description_energyhysteresis">O vidro só volta quando a bateria passa do limite por esta margem, para não alternar sem parar.</string>
+    <string name="control_description_energymode">Nunca: o vidro não muda com a bateria. Abaixo do limite: nas superfícies escolhidas, o visual nativo da Samsung volta enquanto a bateria estiver baixa.</string>
+    <string name="control_description_energysaver">Desligado por padrão: o vidro continua igual com a Economia de bateria. Ligue para suspender o vidro enquanto ela estiver ativa.</string>
+    <string name="control_description_energysurfaces">Quais superfícies voltam ao visual nativo quando a política suspende o vidro.</string>
+    <string name="control_description_energythreshold">O vidro é suspenso quando a bateria chega a esse nível ou fica abaixo dele.</string>
     <string name="control_description_headergap">Ajusta o espaço entre o cabeçalho e o título das notificações expandidas.</string>
     <string name="control_description_headertone">Adapta o relógio, a data e a operadora da central ao fundo.</string>
     <string name="control_description_hublurpath">Seleciona onde o desfoque do pop-up é desenhado com a lente dinâmica; para comparar o fundo residual.</string>

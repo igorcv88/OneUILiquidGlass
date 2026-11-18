@@ -169,12 +169,15 @@ public class LiveSurfaceHooksTest {
         assertTrue(((com.android.systemui.statusbar.phone.ongoingactivity.CardStackview.CardItemView) media).fill().getBackground() instanceof LiveGlassDrawable);
     }
 
-    /** DZIF reports no cross-window blur; the glass follows the system only on Battery Saver or the developer switch. */
-    @Test public void blurPolicyIgnoresCrossWindowFlagAndHonoursSaver() {
-        assertTrue(LiveSurfaceHooks.allowed(false, null));
-        assertTrue(LiveSurfaceHooks.allowed(false, "0"));
-        assertFalse(LiveSurfaceHooks.allowed(true, null));
-        assertFalse(LiveSurfaceHooks.allowed(false, "1"));
+    /**
+     * DZIF reports no cross-window blur and keeps blurring under Battery Saver: the glass follows the
+     * system only on the explicit "disable window blurs" developer switch. Saver is the energy
+     * policy's business (EnergyGovernor), opt-in.
+     */
+    @Test public void allowedIgnoresSaver() {
+        assertTrue(LiveSurfaceHooks.allowed(null));
+        assertTrue(LiveSurfaceHooks.allowed("0"));
+        assertFalse(LiveSurfaceHooks.allowed("1"));
     }
 
     @Test public void defaultsKeepEveryNewSurfaceOff() {

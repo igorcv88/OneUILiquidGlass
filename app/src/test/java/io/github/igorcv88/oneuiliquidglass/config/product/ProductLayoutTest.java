@@ -13,7 +13,6 @@ import org.junit.Test;
 
 /** The generated layout covers every key once and keeps technical keys out of the everyday lists. */
 public class ProductLayoutTest {
-    private static final int ENERGY_KEYS = 6;
     private static final Set<Destination> EVERYDAY = EnumSet.of(Destination.MAIN, Destination.DETAIL,
             Destination.BEHAVIOR, Destination.QS_MAIN, Destination.QS_DETAIL);
 
@@ -22,7 +21,9 @@ public class ProductLayoutTest {
         int registry = SettingsRegistry.all().size();
         for (SettingSpec s : SettingsRegistry.all())
             assertNotNull(s.key + " has no destination", ProductLayout.destination(s.key));
-        assertEquals("registry keys plus the energy keys of phase D", registry + ENERGY_KEYS, ProductLayout.keys().size());
+        assertEquals("the energy keys are registry keys since phase D", registry, ProductLayout.keys().size());
+        assertEquals(6, ProductLayout.energy().size());
+        for (String key : ProductLayout.energy()) assertEquals(key, Destination.ENERGY, ProductLayout.destination(key));
     }
 
     @Test

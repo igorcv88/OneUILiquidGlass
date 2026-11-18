@@ -134,7 +134,7 @@ classloader dele. No AOD/doze a Now Bar continua nativa por política.
   invalidação) e o contorno. Reavaliado em cada writer e sync: se o blur
   Samsung aparecer depois, a região própria é descartada (sem blur duplo).
 - **nativo**: desenha exatamente o drawable original. É o que aparece sem
-  `ViewRootImpl` (antes do attach), com Battery Saver ou `disable_window_blurs`,
+  `ViewRootImpl` (antes do attach), com `disable_window_blurs` ou com a política de energia do usuário suspendendo a superfície (a Economia de bateria sozinha não é um critério),
   se a API faltar, e na Now Bar em doze/AOD/tela apagada.
 
 Geometria preservada: padding, tamanhos mínimo/intrínseco e estado delegados
@@ -179,7 +179,7 @@ cartão elegível com a superfície ligada: cobre o frame inteiro do CardView
 que `getChildAt(0)` continua sendo a View da Samsung), não recebe toque nem
 acessibilidade e só desenha o fundo. Enquanto o vidro aparece, cor e elevação
 do CardView ficam transparentes pelos setters dele e o gradiente fica oculto;
-sem vidro (doze, Battery Saver, falha), voltam no mesmo passo. Desligar ou
+sem vidro (doze, política de energia, falha), voltam no mesmo passo. Desligar ou
 cartão inelegível remove a camada.
 
 L3: o plugin é aceito só com `getPackageName()==com.samsung.android.app.aodservice`,

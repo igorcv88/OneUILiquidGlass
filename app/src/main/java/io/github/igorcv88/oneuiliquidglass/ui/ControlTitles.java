@@ -103,6 +103,7 @@ final class ControlTitles {
             case "Lente dinâmica": return R.string.control_title_5aaf82f5a308;
             case "Lente do pop-up na entrada": return R.string.control_title_b43bb6ef2255;
             case "Limite da uniformidade": return R.string.control_title_404a512dbeda;
+            case "Limite de bateria": return R.string.control_title_22006d89dbe8;
             case "Limite para texto claro": return R.string.control_title_b060e343d3f2;
             case "Limite para texto claro (lente)": return R.string.control_title_ef3825b141ca;
             case "Limite para texto escuro": return R.string.control_title_7c47b0e7e366;
@@ -110,6 +111,7 @@ final class ControlTitles {
             case "Luz da linha externa": return R.string.control_title_5a234be298cb;
             case "Luz pela borda": return R.string.control_title_e5aac2df4c8e;
             case "Luz pela borda (lente)": return R.string.control_title_256e11955fd8;
+            case "Manter o vidro carregando": return R.string.control_title_55329dc58a03;
             case "Material da lente no bloqueio": return R.string.control_title_924efb059063;
             case "Material da lente no pop-up": return R.string.control_title_c60839297a14;
             case "Material do vidro": return R.string.control_title_0222fce643b7;
@@ -150,10 +152,14 @@ final class ControlTitles {
             case "Refração de toda a lente": return R.string.control_title_aecfbcfc899f;
             case "Refração difusa do miolo": return R.string.control_title_2b4b1681d963;
             case "Registro detalhado de janelas": return R.string.control_title_28658f422c8a;
+            case "Retomar acima do limite em": return R.string.control_title_371a620e4d49;
             case "Saturação": return R.string.control_title_23907232c21c;
             case "Saturação da captura": return R.string.control_title_76f1a4366eb4;
             case "Saturação do vidro": return R.string.control_title_e5c959aaabfb;
+            case "Seguir a Economia de bateria": return R.string.control_title_1bc37966ed28;
             case "Sombra da borda no vidro claro": return R.string.control_title_5df7b3c6b57c;
+            case "Superfícies afetadas": return R.string.control_title_0f4c2427bf8c;
+            case "Suspender o vidro com bateria baixa": return R.string.control_title_07e1a1d2614e;
             case "Tamanho dos ícones da barra de status": return R.string.control_title_d6218cd33215;
             case "Tamanho dos ícones das notificações": return R.string.control_title_6fb27e5b7855;
             case "Teto do desfoque interno": return R.string.control_title_936eb873bedb;

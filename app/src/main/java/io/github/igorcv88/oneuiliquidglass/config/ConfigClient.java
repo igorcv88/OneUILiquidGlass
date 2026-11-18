@@ -7,6 +7,7 @@ import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Looper;
 import io.github.igorcv88.oneuiliquidglass.diagnostics.Probe;
+import io.github.igorcv88.oneuiliquidglass.glass.EnergyPolicy;
 
 import java.util.*;
 
@@ -16,12 +17,17 @@ public final class ConfigClient {
     private static volatile long revision;
     private static Handler worker;
     private static int failedReads;
+    /** Surfaces the energy policy currently suspends (EnergyPolicy bits); only the governor writes it. */
+    static volatile int energyMask;
+    private static EnergyGovernor governor;
 
     public static String override(String key) {
         return current.get(key);
     }
 
     public static boolean flag(String key) {
+        // The governor suspends a surface by masking its flag, never by writing the saved value.
+        if (EnergyGovernor.suspended(energyMask, key)) return false;
         String value = current.get(key);
         return value == null ? ProductFlags.defaultEnabled(key) : !"0".equals(value);
     }
@@ -38,6 +44,7 @@ public final class ConfigClient {
         thread.start();
         worker = new Handler(thread.getLooper());
         Handler main = new Handler(Looper.getMainLooper());
+        governor = new EnergyGovernor(ConfigClient::override, new EnergyPublisher(app, main, onEnabled));
         boolean[] observerTriggered = {false}; // Accessed only by the worker handler.
         Runnable refresh =
                 new Runnable() {
@@ -69,6 +76,9 @@ public final class ConfigClient {
                                 boolean changed = !next.equals(current);
                                 if (changed) {
                                     current = Collections.unmodifiableMap(next);
+                                    // The policy may follow this change (mode, limit, master switch):
+                                    // evaluate before the dispatch so one refresh sees the new mask.
+                                    governor.reevaluate();
                                     revision++;
                                     final long published = revision;
                                     final boolean on = "1".equals(next.get("enabled"));
@@ -135,7 +145,60 @@ public final class ConfigClient {
                         // 10s polling remains.
                     }
                     refresh.run();
+                    // After the first read, so the policy starts from the user's saved settings.
+                    governor.start(app, worker);
                 });
+    }
+
+    /** Publishes the mask like a config change and reports the state to the app. */
+    private static final class EnergyPublisher implements EnergyGovernor.Publisher {
+        private final Context app;
+        private final Handler main;
+        private final java.util.function.Consumer<Boolean> onEnabled;
+
+        EnergyPublisher(Context app, Handler main, java.util.function.Consumer<Boolean> onEnabled) {
+            this.app = app;
+            this.main = main;
+            this.onEnabled = onEnabled;
+        }
+
+        @Override
+        public void maskChanged(int mask) {
+            energyMask = mask;
+            revision++;
+            final boolean on = "1".equals(current.get("enabled"));
+            // Same path as a config change: pop-up state released, QS and live surfaces refreshed.
+            main.post(
+                    () -> {
+                        try {
+                            onEnabled.accept(on);
+                        } catch (RuntimeException | LinkageError e) {
+                            Probe.error("ENERGY_DISPATCH_FAILED", e);
+                        }
+                    });
+        }
+
+        @Override
+        public void report(EnergyPolicy.Decision decision, EnergyPolicy.Input input) {
+            Probe.log("ENERGY_STATE", "reason=" + decision.reason + " mask=" + decision.suspendedMask
+                    + " level=" + input.level + " charging=" + input.charging);
+            try {
+                app.sendBroadcast(
+                        new android.content.Intent(EnergyGovernor.ACTION_ENERGY_STATE)
+                                .setComponent(
+                                        new android.content.ComponentName(
+                                                io.github.igorcv88.oneuiliquidglass.Config.PACKAGE,
+                                                io.github.igorcv88.oneuiliquidglass.Config.PACKAGE
+                                                        + ".ConfigReadReceiver"))
+                                .putExtra("reason", decision.reason.name())
+                                .putExtra("mask", decision.suspendedMask)
+                                .putExtra("level", input.level)
+                                .putExtra("charging", input.charging)
+                                .putExtra("at", System.currentTimeMillis()));
+            } catch (RuntimeException e) {
+                Probe.error("ENERGY_REPORT_FAILED", e);
+            }
+        }
     }
 
     private ConfigClient() {}

@@ -113,3 +113,4 @@ provenance_import,label,importação,import,B2
 provenance_style,label,estilo,style,B2
 provenance_material,label,troca de material,material change,B2
 provenance_adopt,label,adotado do Terminal,adopted from Terminal,B2
+energy_surfaces_min,help,"Pelo menos uma superfície precisa continuar selecionada.","At least one surface must stay selected.",D

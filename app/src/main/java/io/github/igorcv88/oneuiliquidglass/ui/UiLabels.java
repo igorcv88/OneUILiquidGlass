@@ -17,6 +17,7 @@ final class UiLabels {
             case MOTION: return c.getString(R.string.section_motion);
             case LENS_TUNING: return c.getString(R.string.section_lens);
             case QUICK_SETTINGS: return c.getString(R.string.section_qs);
+            case ENERGY: return c.getString(R.string.settings_energy);
             default: return c.getString(R.string.section_technical);
         }
     }

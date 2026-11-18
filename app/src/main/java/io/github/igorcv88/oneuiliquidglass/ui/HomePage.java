@@ -256,7 +256,7 @@ public final class HomePage implements Page {
             Ui.enable(tg, st.enabled);
             int changed = 0;
             for (Controls.Control c : Controls.all())
-                if (c.on(s) && Controls.editable(c.key) && c.tier != Controls.Tier.TECHNICAL && GlassMaterial.visible(c.key, s, st::shown) && st.saved.containsKey(c.key) && st.changed(c.key)) changed++;
+                if (c.on(s) && c.section != Controls.Section.ENERGY && Controls.editable(c.key) && c.tier != Controls.Tier.TECHNICAL && GlassMaterial.visible(c.key, s, st::shown) && st.saved.containsKey(c.key) && st.changed(c.key)) changed++;
             String sub = !st.enabled ? host.activity().getString(R.string.home_glass_off) : !on ? host.activity().getString(R.string.home_off) : changed == 0 ? host.activity().getString(R.string.home_default) : changed == 1 ? host.activity().getString(R.string.home_custom_one) : host.activity().getString(R.string.home_custom_many, changed);
             Ui.setSubtitle(rows.get(s), sub);
         }
@@ -317,10 +317,14 @@ public final class HomePage implements Page {
             key = "conflict" + conflicts.size();
             n = Ui.notice(a, t, Ui.Tone.INFO, conflicts.size() == 1 ? a.getString(R.string.home_conflict_one) : a.getString(R.string.home_conflict_many, conflicts.size()), a.getString(R.string.home_review), host::openConflicts);
         } else key = "";
-        String combinedKey = key + ":icons:" + pendingIcons;
+        EnergyReport energy = EnergySection.report(a);
+        boolean energyNotice = EnergySection.homeNotice(energy, sync);
+        String combinedKey = key + ":icons:" + pendingIcons + ":energy:" + (energyNotice ? energy.reason : "");
         if (combinedKey.equals(noticeKey)) return;
         noticeKey = combinedKey;
         noticeSlot.removeAllViews();
+        if (energyNotice) noticeSlot.addView(Ui.notice(a, t, Ui.Tone.WARN, a.getString(R.string.energy_home_notice),
+                a.getString(R.string.home_review), host::showEnergy), Ui.match());
         if (pendingIcons != 0) noticeSlot.addView(Ui.notice(a, t, Ui.Tone.INFO,
                 a.getResources().getQuantityString(R.plurals.icons_pending, pendingIcons, pendingIcons),
                 a.getString(R.string.home_apply), () -> InfoSheets.applyIcons(host)), Ui.match());

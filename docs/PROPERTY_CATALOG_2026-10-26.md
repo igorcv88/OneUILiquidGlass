@@ -280,3 +280,16 @@ Controles `qs.*` são lidos pelo snapshot `QsStyle` em callbacks de configuraç�
 | `qs.fill` | .85 | 0.10–1 | Espessura do preenchimento branco dentro da cápsula; a mesma margem vale nas pontas |
 | `qs.lightstyle` | light | enum obsidian/light | Legado sem efeito visual; ambos usam vidro translúcido e tinta adaptativa |
 | `sf.qslight` | 0.90 | Quick Settings: iluminação do compositor na borda; padrão ligado em Frosted e Clear. Somente leitura no aplicativo. Ajuste avançado pelo Termux/su (setprops qslight=0–2), aplicado após recompilação. |
+
+## Energia — R6
+
+Política voluntária de energia lida pelo `EnergyGovernor` no SystemUI. Padrão: nenhuma redução automática; o vidro só é suspenso por escolha do usuário (docs/OULG_UI_PLAN/ENERGY_POLICY.md). Nada é gravado nas preferências de superfície; a suspensão é uma máscara em memória.
+
+| Chave | Padrão | Domínio | Descrição |
+| --- | --- | --- | --- |
+| `energymode` | 0 | 0–1 | 0 nunca suspende o vidro; 1 suspende nas superfícies escolhidas quando a bateria está abaixo do limite |
+| `energythreshold` | 20 | inteiro 5–50 % | Nível de bateria em que o vidro é suspenso (nível menor ou igual ao limite) |
+| `energyhysteresis` | 5 | inteiro 2–15 pontos | Pontos acima do limite em que o vidro volta |
+| `energycharging` | 1 | booleano | Mantém o vidro enquanto o aparelho carrega |
+| `energysurfaces` | 127 | inteiro 1–127 | Máscara das superfícies afetadas: 1 pop-up, 2 bloqueio, 4 central, 8 Central de controle, 16 Live Updates, 32 Now Bar, 64 toasts |
+| `energysaver` | 0 | booleano | Também suspende o vidro enquanto a Economia de bateria do sistema estiver ligada (comportamento antigo) |

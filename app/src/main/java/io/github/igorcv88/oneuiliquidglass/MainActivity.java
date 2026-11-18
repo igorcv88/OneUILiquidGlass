@@ -343,6 +343,13 @@ public final class MainActivity extends Activity implements Host {
     }
 
     @Override
+    public void showEnergy() {
+        nav.select(3, true);
+        go(3);
+        settings.revealEnergy();
+    }
+
+    @Override
     public void testNotification() {
         requestTest(1, 0);
     }

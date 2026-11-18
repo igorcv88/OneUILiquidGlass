@@ -22,6 +22,7 @@ public final class SettingsPage implements Page {
     private final LinearLayout themeRow, lensRow, syncRow, conflictsRow;
     private final View conflictsDivider;
     private final Toggle motion;
+    private final EnergySection energy;
 
     public SettingsPage(Host host) {
         this.host = host;
@@ -66,6 +67,9 @@ public final class SettingsPage implements Page {
         styles.setOnClickListener(v -> new PresetsSheet(host).show());
         glass.addView(styles);
         content.addView(glass, Ui.match());
+
+        energy = new EnergySection(host);
+        content.addView(energy.view(), Ui.match());
 
         content.addView(Ui.section(a, t, host.activity().getString(R.string.backup)));
         LinearLayout backup = Ui.card(a, t);
@@ -172,6 +176,11 @@ public final class SettingsPage implements Page {
         return r.toString();
     }
 
+    /** Scrolls to Settings > Energia (the Home notice opens it). */
+    public void revealEnergy() {
+        scroll.post(() -> scroll.smoothScrollTo(0, Math.max(0, energy.view().getTop() - t.dp(8))));
+    }
+
     @Override
     public View view() {
         return scroll;
@@ -193,6 +202,7 @@ public final class SettingsPage implements Page {
         String theme = m.ui.getString("theme", "system");
         Ui.setSubtitle(themeRow, theme.equals("light") ? host.activity().getString(R.string.light_theme) : theme.equals("dark") ? host.activity().getString(R.string.dark_theme) : host.activity().getString(R.string.follow_system));
         motion.set(m.ui.getBoolean("reduceMotion", false), false);
+        energy.bind();
         Mode mode = m.mode();
         SfLive.State lens = SfLive.state(m.lens.model().status);
         String lensText = mode == Mode.DYNAMIC_LENS ? host.activity().getString(R.string.active_feminine) : !m.lens.model().bundled ? host.activity().getString(R.string.unavailable_in_build)

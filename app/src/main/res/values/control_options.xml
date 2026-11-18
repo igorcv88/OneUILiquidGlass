@@ -2,6 +2,7 @@
 <resources>
     <string name="control_option_ec6472de3478">10 %</string>
     <string name="control_option_4d04d593eab2">25 %</string>
+    <string name="control_option_20d73871dda7">Below the limit</string>
     <string name="control_option_3c5d28cf50f3">Follows the card during gestures</string>
     <string name="control_option_8d954776f1cd">Adaptive</string>
     <string name="control_option_0a0e3b18cbfb">Original adaptive color</string>
@@ -68,7 +69,9 @@
     <string name="control_option_761716310a91">None</string>
     <string name="control_option_f78db5410a48">Neutral under the lens; inherited elsewhere</string>
     <string name="control_option_9935aac96730">On the card</string>
+    <string name="control_option_f951a9952b5c">Never</string>
     <string name="control_option_31310ebb3669">Same material as pop-ups</string>
+    <string name="control_option_cca95c2218a9">The glass is never paused by the battery</string>
     <string name="control_option_c0a8060f3b11">Original</string>
     <string name="control_option_d8e00743b1a4">Default</string>
     <string name="control_option_bc563cb30bb5">Default: preserves user apps and their icon packs</string>
@@ -93,6 +96,7 @@
     <string name="control_option_04ffe2381fff">System and services</string>
     <string name="control_option_655a7c7b8a0f">System blur only</string>
     <string name="control_option_d97225752710">Composition probe</string>
+    <string name="control_option_d3a6e02d6bec">Pauses the glass on the chosen surfaces when the battery is low</string>
     <string name="control_option_4ec6fa29d300">Only horizontal movements and two fingers</string>
     <string name="control_option_0706bd786e3a">Numbered synthetic texture</string>
     <string name="control_option_a4114a83f4c6">All</string>

@@ -259,16 +259,6 @@ public final class LiveSurfaceHooks {
             });
         } catch (RuntimeException | LinkageError e) { Probe.error("LIVE_BLUR_LISTENER_FAILED", e); }
         try {
-            // Battery Saver drops the glass (opaque native) and brings it back, without polling.
-            c.registerReceiver(new android.content.BroadcastReceiver() {
-                @Override public void onReceive(Context context, android.content.Intent intent) {
-                    Probe.log("LIVE_BLUR_CAPABILITY", "powerSaveChanged=true");
-                    glass.syncAll();
-                }
-            }, new android.content.IntentFilter(android.os.PowerManager.ACTION_POWER_SAVE_MODE_CHANGED), null, main,
-                    Context.RECEIVER_NOT_EXPORTED);
-        } catch (RuntimeException | LinkageError e) { Probe.error("LIVE_POWER_LISTENER_FAILED", e); }
-        try {
             DisplayManager dm = c.getSystemService(DisplayManager.class);
             if (dm != null) dm.registerDisplayListener(new DisplayManager.DisplayListener() {
                 @Override public void onDisplayAdded(int id) { }
@@ -293,9 +283,11 @@ public final class LiveSurfaceHooks {
      * CardStackView installs. DZIF reports isCrossWindowBlurEnabled()=false
      * (ro.surface_flinger.supports_background_blur is empty: every approved card logs
      * crossBlur=false) while Samsung's compositor still renders these regions, so that flag is not
-     * the capability. The glass stands down only where the system itself drops window blurs:
-     * Battery Saver and the "disable window blurs" setting. Then the host draws its opaque native
-     * background, never a translucent pane without blur.
+     * the capability. The glass stands down where the system itself drops window blurs (the
+     * "disable window blurs" setting) and where the user's energy policy suspends the surface
+     * (EnergyGovernor masks the product flag). Battery Saver is no gate: Samsung's blur keeps
+     * working under it. Then the host draws its opaque native background, never a translucent pane
+     * without blur.
      */
     static final class CompositorBlur implements LiveGlass.Blur {
         @Override public BackgroundBlurBridge create(View host) throws ReflectiveOperationException {
@@ -312,20 +304,15 @@ public final class LiveSurfaceHooks {
         }
         @Override public boolean enabled(View host) {
             Context c = host.getContext();
-            boolean saver = false;
-            try {
-                android.os.PowerManager pm = c.getSystemService(android.os.PowerManager.class);
-                saver = pm != null && pm.isPowerSaveMode();
-            } catch (RuntimeException ignored) { }
             String disabled = null;
             try { disabled = android.provider.Settings.Global.getString(c.getContentResolver(), "disable_window_blurs"); }
             catch (RuntimeException ignored) { }
-            return allowed(saver, disabled);
+            return allowed(disabled);
         }
     }
     /** Pure policy of {@link CompositorBlur#enabled}, for tests. */
-    static boolean allowed(boolean powerSave, String disableWindowBlurs) {
-        return !powerSave && !"1".equals(disableWindowBlurs);
+    static boolean allowed(String disableWindowBlurs) {
+        return !"1".equals(disableWindowBlurs);
     }
 }
 
