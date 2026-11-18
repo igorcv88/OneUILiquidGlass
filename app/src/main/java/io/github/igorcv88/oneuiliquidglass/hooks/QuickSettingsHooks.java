@@ -141,6 +141,9 @@ public final class QuickSettingsHooks {
         // Optics gone (shader or geometry failure): full-strength rims again, recomposed now.
         capsuleOptics.onFailure(() -> { litRims.clear(); clearRims(); invalidateAll("optics-failed"); });
         edge.onOptics(this::opticsResult);
+        edge.onIsolationEnded(() -> invalidateAll("layer-isolation-ended"));
+        // A box newly matched by debug.oulg.qslayers with the outline bit: rebuild its border.
+        edge.onIsolatedBox(this::recompose);
         edge.optics(capsuleOptics, () -> QuickSettingsHooks.this.backdrop != null
                         // On a cold/expired first frame UNKNOWN must not mean full-strength
                         // white optics. Hold the safe light-scene gain until classification.
@@ -215,12 +218,25 @@ public final class QuickSettingsHooks {
                     q.rimDone = true; // The outer box's border is the first one BoxWithOutline builds.
                     Object box = capture(q.composer);
                     if (q.sliderShape != null) p.args[2] = q.sliderShape;
+                    if (q.edgeShape != null && box != null) {
+                        // The box's current shape, for its compositor region and optics: the
+                        // background element does not carry it (see QuickSettingsEdgeLight.shape).
+                        if (q.token != null && q.token.box == null) q.token.box = new java.lang.ref.WeakReference<>(box);
+                        edge.shape(box, q.edgeShape);
+                    }
                     if (q.rim != null && p.args[0] instanceof Float && (Float) p.args[0] > 0f) {
                         // Attenuated only for a box whose own optics already drew; otherwise full.
                         boolean lit = litRims.lit(box) && QsCapsuleOptics.available();
                         Object brush = q.rim;
                         if (lit) try { brush = rim(q.dark, true); }
                         catch (ReflectiveOperationException | RuntimeException e) { lit = false; Probe.error("QS_RIM_FAILED", e); }
+                        if (edge.isolation.rimOff(box, android.os.SystemClock.uptimeMillis())) try {
+                            // Diagnostic (debug.oulg.qslayers bit 4): this box only, transparent outline.
+                            brush = solidColor.newInstance(QuickSettingsGlass.color(0));
+                            if (edge.isolation.firstHit(QsLayerIsolation.COMPOSE_RIM))
+                                Probe.log("QS_LAYER_ISOLATION", "state=applied layer=composeRim selector=" + edge.isolation.selector()
+                                        + " lit=" + lit);
+                        } catch (ReflectiveOperationException | RuntimeException e) { Probe.error("QS_RIM_FAILED", e); }
                         p.args[1] = brush;
                         if (q.token != null) {
                             q.token.box = box == null ? null : new java.lang.ref.WeakReference<>(box);
@@ -695,7 +711,12 @@ public final class QuickSettingsHooks {
         if (!litRims.report(box, drawn, session)) return;
         if (Probe.trace) Probe.log("QS_RIM_OWNER", "session=" + session + " id=" + token.id + " role=" + token.role
                 + " rim=" + (drawn ? "attenuated" : "full"));
-        if (invalidate == null) return;
+        recompose(box);
+    }
+
+    /** Recomposes one box on the main thread (its border element is rebuilt). */
+    private void recompose(Object box) {
+        if (invalidate == null || box == null) return;
         java.lang.ref.WeakReference<Object> weak = new java.lang.ref.WeakReference<>(box);
         try {
             new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {

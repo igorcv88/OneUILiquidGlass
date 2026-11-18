@@ -52,6 +52,7 @@
     <string name="control_title_3f0437688241">Desfoque do bloqueio com a lente</string>
     <string name="control_title_ddc008a84d95">Desfoque do centro</string>
     <string name="control_title_f27ba480c2b4">Desfoque do fundo da central</string>
+    <string name="control_title_e533dec3633d">Desfoque do pop-up com a lente</string>
     <string name="control_title_bbd07c14d31f">Desfoque do resumo</string>
     <string name="control_title_6125817372a1">Desfoque geral</string>
     <string name="control_title_b3f0fd5c9935">Desfoque interno</string>
@@ -92,6 +93,7 @@
     <string name="control_title_ebe06a05f094">Largura da transição óptica</string>
     <string name="control_title_97edb54dcb0f">Largura do brilho do aro</string>
     <string name="control_title_5aaf82f5a308">Lente dinâmica</string>
+    <string name="control_title_b43bb6ef2255">Lente do pop-up na entrada</string>
     <string name="control_title_404a512dbeda">Limite da uniformidade</string>
     <string name="control_title_b060e343d3f2">Limite para texto claro</string>
     <string name="control_title_ef3825b141ca">Limite para texto claro (lente)</string>
@@ -112,7 +114,8 @@
     <string name="control_title_6a5669f01728">Multiplicador físico</string>
     <string name="control_title_a2faa45a9b05">Máximo de ícones visíveis</string>
     <string name="control_title_c0667c366b66">Método do desfoque adaptativo</string>
-    <string name="control_title_52ded0cf52dd">Neutralizar brancos</string>
+    <string name="control_title_0810d3675871">Neutralidade dos realces</string>
+    <string name="control_title_3aa9c5d21068">Neutralização antiga (legado)</string>
     <string name="control_title_203fe4f25f20">Nível da uniformidade</string>
     <string name="control_title_2848e8a83298">Nível do véu</string>
     <string name="control_title_b89e7df74a83">Ocultar a faixa em</string>

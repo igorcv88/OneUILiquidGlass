@@ -124,6 +124,8 @@ print("I2: explicit historical defaults preserve byte identity with optics 12 (2
 
 # I3: the heads-up approved on the device (acff51b: meniscus, material, adaptive body) is unchanged
 # while the lockscreen meniscus, the lifts and the neutral strength are unset, neutral or invalid.
+# Golden updated on 17/11 (R4) for one declaration only: kernel 0's disc-B sum is highp, as its
+# weight (alpha_precision_check.py); everything else in those programs is the acff51b text.
 APPROVED = {"a": "hcband=0.42,hcfold=2,hcedge=24,hccore=24,hcbody=0,hcsat=1.05,hcscrim=0,hcscrimmax=0,hcadapt=1",
             "b": "hcband=0.42,hcfold=2,hcedge=24,hccore=24,hcbody=0.06,hcsat=1.5,hcscrim=0.12,hcscrimmax=0.5,hcadapt=1"}
 golden_hu = golden.parent / "hu_approved_golden"

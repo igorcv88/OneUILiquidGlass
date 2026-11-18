@@ -220,6 +220,18 @@ public final class SemBlurBridge implements Backdrop {
         if (t.sfRefract && lens && t.semRadiusLens >= 0) blur = t.semRadiusLens;
         radius.invoke(b, blur);
         String shape = applyShape(b, t.semShape, radii);
+        if (Probe.trace && geometryReports < 8 && (geometryReports == 0
+                || !shape.equals(lastShape) || !java.util.Arrays.equals(radii, lastRadii))) {
+            geometryReports++;
+            Probe.log("SEM_REGION_GEOMETRY", "view=" + Integer.toHexString(System.identityHashCode(host))
+                    + " class=" + host.getClass().getSimpleName()
+                    + " host=" + host.getWidth() + "x" + host.getHeight()
+                    + " shape=" + shape + " requested=" + java.util.Arrays.toString(radii)
+                    + " profile=" + tagSent
+                    + " singleCorner=" + (shape.equals("single") ? Float.toString(geometrySingleCorner) : "n/a")
+                    + " scale=" + host.getScaleX() + "," + host.getScaleY()
+                    + " elevation=" + host.getElevation());
+        }
         lastPx = px; lastTint = tint; System.arraycopy(radii, 0, lastRadii, 0, 8); built = true;
         if (!shape.equals(lastShape)) { lastShape = shape; Probe.log("SEM_BLUR_SHAPE", "mode=" + shape + " radius=" + radii[0] + " size=" + host.getWidth() + "x" + host.getHeight()); }
         int veil = shadeVeil(lens, keyguard, scaled, toneVeil);
@@ -233,6 +245,7 @@ public final class SemBlurBridge implements Backdrop {
         // Updates arrive from the hooked onDraw; apply after the current traversal, not mid-draw.
         if (!posted) { posted = true; host.post(apply); }
     }
+    private int geometryReports;
     private String lastShape;
     /** Saturation, curve, x and y ranges that leave colors as they are (found on device). */
     static final String NEUTRAL_CURVE = "0,0,0,255,0,255";
@@ -242,6 +255,7 @@ public final class SemBlurBridge implements Backdrop {
      * to the exact rounded rect, "four" is the old behaviour, "none" leaves the region rectangular
      * (debug.oulg.semshape).
      */
+    private float geometrySingleCorner;
     private String applyShape(Object b, String mode, float[] radii) throws ReflectiveOperationException {
         boolean uniform = radii[0] == radii[2] && radii[2] == radii[4] && radii[4] == radii[6];
         if (mode.equals("auto")) mode = uniform && corner != null ? "single" : clipPath != null ? "path" : "four";
@@ -250,7 +264,8 @@ public final class SemBlurBridge implements Backdrop {
             case "single":
                 if (corner == null) break;
                 tagSent = scaled && !lens ? -1 : tagProfile(lens, keyguard);
-                corner.invoke(b, cornerTag(radii[0], tagSent));
+                geometrySingleCorner = cornerTag(radii[0], tagSent);
+                corner.invoke(b, geometrySingleCorner);
                 return mode;
             case "path":
                 if (clipPath == null || host.getWidth() <= 0 || host.getHeight() <= 0) break;
@@ -263,7 +278,7 @@ public final class SemBlurBridge implements Backdrop {
         // Four-radius setter assumed top-first (TL, TR, BL, BR as in AOSP); callers pass only shapes
         // with equal top and bottom pairs, so the bottom-pair order cannot matter.
         if (corners != null) { corners.invoke(b, radii[0], radii[2], radii[6], radii[4]); return "four"; }
-        if (corner != null) { corner.invoke(b, radii[0]); return "single"; }
+        if (corner != null) { geometrySingleCorner = radii[0]; corner.invoke(b, geometrySingleCorner); return "single"; }
         return "none";
     }
     /**

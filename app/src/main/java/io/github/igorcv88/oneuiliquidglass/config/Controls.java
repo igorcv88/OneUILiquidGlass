@@ -80,6 +80,11 @@ public final class Controls {
         DIDACTIC,
         /** Timing, gating or measurement: no picture can show it; test on the phone. */
         BEHAVIOR,
+        /**
+         * An optical effect only the compositor or SystemUI draws (edge light, lens material,
+         * highlight weights): visual, but the in-app sample does not reproduce it.
+         */
+        ON_DEVICE,
         /** Diagnostics, sampling plumbing or state. */
         NONE
     }
@@ -254,7 +259,8 @@ public final class Controls {
     private static final Tier STD = Tier.STANDARD, ADV = Tier.ADVANCED, TEC = Tier.TECHNICAL;
     private static final Preview FAITH = Preview.FAITHFUL,
             DIDACTIC = Preview.DIDACTIC,
-            BEHAV = Preview.BEHAVIOR;
+            BEHAV = Preview.BEHAVIOR,
+            DEVICE = Preview.ON_DEVICE;
 
     private static Builder c(String key, String title) {
         return new Builder(key, title);
@@ -377,15 +383,15 @@ public final class Controls {
         put(c("popuplinegain", "Luz da linha externa").fmt(Format.GAIN).in(EDGES, ADV).on(HU)
                 .feature("edge").hint("Ajuste fino da linha, sem aumentar a largura")
                 .help("Multiplica somente a luz da linha externa Java do pop-up. Não muda Fresnel, reflexos internos, blur ou Now Bar.")
-                .show(BEHAV, Channel.NONE));
+                .show(DEVICE, Channel.NONE));
         put(c("kglinegain", "Luz da linha externa").fmt(Format.GAIN).in(EDGES, ADV).on(KG)
                 .feature("edge").hint("Ajuste fino da linha no bloqueio")
                 .help("Multiplica somente a linha externa Java das notificações; a linha nativa da lente e a Now Bar continuam intactas.")
-                .show(BEHAV, Channel.NONE));
+                .show(DEVICE, Channel.NONE));
         put(c("shadelinegain", "Luz da linha externa").fmt(Format.GAIN).in(EDGES, ADV).on(SH)
                 .feature("edge").hint("Ajuste fino da linha dos cartões da central")
                 .help("Multiplica somente a linha externa Java da central. Não muda brilho interno, preenchimento ou Now Bar.")
-                .show(BEHAV, Channel.NONE));
+                .show(DEVICE, Channel.NONE));
         put(c("liveglint", "Reflexo").fmt(Format.PERCENT_1).in(EDGES, STD).on(HU)
                 .feature("glint")
                 .hint("Brilho curto no canto iluminado")
@@ -424,19 +430,19 @@ public final class Controls {
                 .choice("0", "Material do pop-up", "O mesmo material dos pop-ups")
                 .help("Qual material a lente dinâmica usa nos cartões do bloqueio. Muda sem"
                         + " reiniciar.")
-                .show(BEHAV, Channel.NONE));
+                .show(DEVICE, Channel.NONE));
         put(c("kgsharedoptics", "Óptica da Now Bar (comparação)").fmt(Format.TOGGLE).in(EDGES, ADV)
                 .on(KG).feature("edge")
                 .help("Desenha na notificação compacta a mesma óptica Java da Now Bar."
                         + " Manter o contorno estrutural nativo ligado preserva a profundidade;"
                         + " desligá-lo achatou o vidro nos testes do DZIF. Não altera o corpo nem o blur.")
-                .show(BEHAV, Channel.NONE));
+                .show(DEVICE, Channel.NONE));
         put(c("huoptics", "Material da lente no pop-up").fmt(Format.CHOICE).in(EDGES, ADV)
                 .on(HU)
                 .choice("0", "Material do pop-up", "Padrão")
                 .choice("1", "Material do bloqueio", "Para comparar no aparelho")
                 .help("Permite testar o material do bloqueio nos pop-ups.")
-                .show(BEHAV, Channel.NONE));
+                .show(DEVICE, Channel.NONE));
 
         // Cor e contraste
         put(c("veilmax", "Proteção de contraste").fmt(Format.PERCENT_1).in(COLOR, Tier.STANDARD)
@@ -574,6 +580,14 @@ public final class Controls {
                 .help("Abaixo desta opacidade o desfoque do cartão é removido de uma vez,"
                         + " evitando uma mancha branca ao fechar a central.")
                 .show(BEHAV, Channel.NONE));
+        put(c("hufadecut", "Lente do pop-up na entrada").fmt(Format.CHOICE)
+                .in(BEHAVIOR, ADV).on(HU)
+                .choice("-1", "Igual à central", "Corte atual (shadefadecut)")
+                .choice("0.25", "25 %", "Lente durante a maior parte do deslize")
+                .choice("0.1", "10 %", "Lente durante a maior parte do deslize")
+                .choice("0", "Desde o início", "Região inteira já no primeiro quadro")
+                .help("Opacidade do pop-up a partir da qual a lente e o desfoque aparecem ao"
+                        + " entrar e somem ao sair. Vale para o pop-up sobre apps."));
         put(c("kgwinblur", "Desfoque da janela no bloqueio parado").fmt(Format.TOGGLE)
                 .in(BEHAVIOR, ADV).on(KG)
                 .help("Permite as pequenas rampas de desfoque que um toque inicia no bloqueio"
@@ -626,7 +640,7 @@ public final class Controls {
         put(c("sf.hubloom", "Contenção de brilho").fmt(Format.PLAIN).in(LENS, ADV).on(HU)
                 .help("Reduz pontos muito claros no miolo do pop-up; 0 mantém o disco simples."
                         + restart)
-                .show(BEHAV, Channel.NONE));
+                .show(DEVICE, Channel.NONE));
         put(c("sf.edgeblur", "Desfoque no contorno").fmt(Format.PX).in(LENS, ADV).on(HU)
                 .help("Desfoque do pop-up já no contorno, numa curva única até o miolo, sem a faixa"
                         + " nítida perto da borda; 0 usa a curva anterior." + restart));
@@ -726,19 +740,19 @@ public final class Controls {
                 + " fundo. 0 desliga e volta ao desenho anterior." + restart;
         put(c("sf.hulight", "Luz pela borda").fmt(Format.PERCENT_1).in(LENS, ADV).on(HU)
                 .help("Luz que entra pelo contorno do pop-up." + light)
-                .show(BEHAV, Channel.NONE));
+                .show(DEVICE, Channel.NONE));
         put(c("sf.kglight", "Luz pela borda").fmt(Format.PERCENT_1).in(LENS, ADV).on(KG)
                 .help("Luz que entra pelo contorno dos cartões do bloqueio." + light)
-                .show(BEHAV, Channel.NONE));
+                .show(DEVICE, Channel.NONE));
         put(c("sf.kgdepth", "Alcance da luz dinâmica").fmt(Format.PX).in(LENS, ADV).on(KG)
                 .help("Alcance máximo, em pixels, do véu fraco que entra pelo vidro do bloqueio."
                         + " A borda luminosa é concentrada em poucos pixels e mantém sua resposta"
                         + " dinâmica independentemente deste alcance. Em cada trecho, o brilho vem"
                         + " do fundo: áreas escuras continuam apagadas. Padrão: 16 px." + restart)
-                .show(BEHAV, Channel.NONE));
+                .show(DEVICE, Channel.NONE));
         put(c("sf.shadelight", "Luz pela borda (lente)").fmt(Format.PERCENT_1).in(LENS, ADV).on(SH)
                 .help("Luz que entra pelo contorno dos cartões da central." + light)
-                .show(BEHAV, Channel.NONE));
+                .show(DEVICE, Channel.NONE));
         // Central de controle: opt-in próprio e grupos por cena em SurfacesPage.
         // As chaves qs.* valem na hora; as sf.qs* ao reiniciar o userspace, como a lente dinâmica.
         // Retired: white films over dark backdrops and legacy disc/global alpha keys. Dedicated
@@ -768,7 +782,7 @@ public final class Controls {
                 .show(BEHAV, Channel.NONE));
         put(c("qs.lightoptics", "Iluminação da lente · fundo claro").fmt(Format.GAIN).in(QS, STD).on(SH)
                 .help("Atenua separadamente a luz que entra pelas cápsulas sobre apps claros. Não muda o contorno branco nem a iluminação aprovada em fundos coloridos. O controle também afeta a região refratada pelo compositor.")
-                .show(BEHAV, Channel.NONE));
+                .show(DEVICE, Channel.NONE));
         put(c("qs.tilelight", "Discos adaptativos no fundo claro").fmt(Format.TOGGLE).in(QS, STD).on(SH)
                 .help("Personaliza o contraste das bolinhas dos controles sobre apps claros, sem tocar nas cápsulas e nos ícones sem disco.")
                 .show(BEHAV, Channel.NONE));
@@ -815,7 +829,7 @@ public final class Controls {
                 .show(BEHAV, Channel.NONE));
         put(c("qs.glint", "Reflexo extra das cápsulas").fmt(Format.PERCENT_1).in(QS, ADV).on(SH)
                 .help("Reflexo especular secundário no canto superior esquerdo. Padrão 0: elimina a luz duplicada e mantém o contorno principal.")
-                .show(BEHAV, Channel.NONE));
+                .show(DEVICE, Channel.NONE));
         put(c("qs.sliderlightcolor", "Preenchimento · brilho e volume · claro").fmt(Format.COLOR).in(QS, STD).on(SH)
                 .help("Escolha cor e transparência do progresso dos sliders sobre fundos claros.")
                 .show(BEHAV, Channel.NONE));
@@ -832,36 +846,40 @@ public final class Controls {
         put(c("qs.fill", "Espessura do preenchimento").fmt(Format.PERCENT_1).in(QS, STD).on(SH)
                 .hint("Parte que se move ao arrastar")
                 .help("Largura da parte branca que acompanha o dedo, dentro da cápsula de vidro; a"
-                        + " mesma margem vale nas pontas e no mínimo ela fica um círculo. O valor do"
-                        + " brilho ou do volume não muda.")
+                        + " mesma margem vale nas pontas. Perto do zero ela mantém essa espessura,"
+                        + " arredondada na ponta de origem, e some em 0 %. O valor do brilho ou do"
+                        + " volume não muda.")
                 .show(BEHAV, Channel.NONE));
         put(c("sf.qslight", "Luz pela borda").fmt(Format.READONLY).in(QS, ADV).on(SH)
                 .help("Luz do compositor nas bordas dos controles rápidos. Padrão 0,90 em Frosted"
                         + " e Clear. Somente leitura no aplicativo; ajuste de desenvolvedor via"
                         + " su/Termux (qslight=0–2) e recompilação do shader.")
-                .show(BEHAV, Channel.NONE));
+                .show(DEVICE, Channel.NONE));
         put(c("sf.qslens", "Refração da borda").fmt(Format.PERCENT_1).in(QS, ADV).on(SH)
                 .help("Refração do fundo junto ao contorno das cápsulas, mais forte na borda e"
                         + " sumindo para dentro; 0 desliga." + restart)
-                .show(BEHAV, Channel.NONE));
+                .show(DEVICE, Channel.NONE));
         put(c("sf.qsbody", "Fundo refratado").fmt(Format.PERCENT_1).in(QS, ADV).on(SH)
                 .help("Quanto do fundo refratado aparece no contorno. Alto pode formar um anel mais"
                         + " claro ou mais escuro que a cápsula." + restart)
-                .show(BEHAV, Channel.NONE));
+                .show(DEVICE, Channel.NONE));
         put(c("sf.qsdepth", "Alcance da luz").fmt(Format.PX).in(QS, ADV).on(SH)
                 .help("Quanto a luz de um fundo branco entra pelo contorno. Fundos mais escuros"
                         + " entram menos." + restart)
-                .show(BEHAV, Channel.NONE));
+                .show(DEVICE, Channel.NONE));
         put(c("qs.edgeblur", "Desfoque da borda").fmt(Format.PX).in(QS, ADV).on(SH)
                 .help("Desfoque do fundo que a lente dinâmica lê no contorno. Mais suaviza a luz e"
                         + " a refração; menos deixa a borda mais nítida.")
-                .show(BEHAV, Channel.NONE));
+                .show(DEVICE, Channel.NONE));
         put(c("sf.debug", "Tinta de diagnóstico").fmt(Format.CHOICE).in(TECH, TEC).all()
                 .choice("0", "Desligada", "Renderização normal, sem tinta diagnóstica")
                 .choice("1", "Marcação magenta/ciano", "Identifica os programas reescritos pela lente")
                 .choice("2", "Luminância da borda", "Mapa verde da luz local na borda do bloqueio")
+                .choice("5", "Sonda de composição", "Alpha e programa codificados sobre o vidro")
                 .help("0: desliga a tinta. 1: magenta/ciano para identificar os programas reescritos."
                         + " 2: mapa verde da luminância amostrada no contorno das notificações do bloqueio."
+                        + " 5: o vidro mostra, em ladrilhos de 8 px, quanto do fundo cada desenho deixa passar"
+                        + " e qual programa o desenha (docs/clear-glass/HU_ALPHA_PROBE.md)."
                         + " Só para diagnóstico." + restart));
 
         // Técnico
@@ -921,6 +939,11 @@ public final class Controls {
                 .choice("1", "No cartão", "Segue o esmaecimento do cartão")
                 .choice("0", "Na view", "Caminho antigo; pode deixar rastro")
                 .help("Onde o desfoque dos cartões da central é desenhado."));
+        put(c("hublurpath", "Desfoque do pop-up com a lente").fmt(Format.CHOICE).in(TECH, TEC).on(HU)
+                .choice("0", "Na view (Samsung)", "Região do sistema; padrão atual")
+                .choice("1", "No cartão", "Alpha da região controlado pelo módulo")
+                .help("Onde o desfoque do pop-up é desenhado com a lente dinâmica. Comparação do"
+                        + " fundo residual; vale para pop-ups novos."));
         put(c("perf", "Medir tempo dos ganchos").fmt(Format.TOGGLE).in(TECH, TEC).all()
                 .help("Registra no log o tempo gasto pelo módulo. Tem custo; use só para"
                         + " diagnóstico."));
@@ -988,8 +1011,13 @@ public final class Controls {
                 .help("Escurece o vidro do pop-up sobre as partes claras do fundo." + restart));
         put(c("sf.hclift", "Clareamento").fmt(Format.PLAIN).in(COLOR, STD).on(HU).step(.05)
                 .help("Clareia o vidro do pop-up sem alterar a refração. Valores altos podem reduzir o contraste do texto." + restart));
-        put(c("sf.hcneutral", "Neutralizar brancos").fmt(Format.PERCENT_1).in(COLOR, ADV).on(HU)
-                .help("Reduz tons azulados ou coloridos nas áreas quase brancas." + restart));
+        put(c("sf.hchlneutral", "Neutralidade dos realces").fmt(Format.PERCENT_1).in(COLOR, STD).on(HU)
+                .help("Leva ao cinza neutro os brancos tingidos pela cor desfocada em volta (texto, relógio),"
+                        + " sem mudar a luminância nem as áreas de cor uniforme. 0 desliga; a força é linear."
+                        + " Exige o desfoque adaptativo." + restart));
+        put(c("sf.hcneutral", "Neutralização antiga (legado)").fmt(Format.PERCENT_1).in(COLOR, ADV).on(HU)
+                .help("Curva anterior: age só em pixels quase brancos de baixa cromaticidade e também"
+                        + " acinzenta áreas pastel uniformes. Mantida por compatibilidade; prefira Neutralidade dos realces." + restart));
         put(c("sf.kcfold", "Menisco").fmt(Format.GAIN).in(EDGES, STD).on(KG).step(.05)
                 .help("Intensidade da borda curva nos cartões da tela de bloqueio." + restart));
         put(c("sf.kcband", "Largura da borda curva").fmt(Format.PERCENT_1).in(EDGES, ADV).on(KG)
@@ -1043,7 +1071,7 @@ public final class Controls {
 
     /** The few controls shown first on a Clear surface: where the look is made. */
     private static final List<String> CLEAR_PRIMARY_HU = Collections.unmodifiableList(Arrays.asList(
-            "sf.hcfold", "sf.hcedge", "sf.hccore", "sf.hcadapt", "sf.hcsat", "sf.hclift"));
+            "sf.hcfold", "sf.hcedge", "sf.hccore", "sf.hcadapt", "sf.hcsat", "sf.hclift", "sf.hchlneutral"));
     private static final List<String> CLEAR_PRIMARY_KG = Collections.unmodifiableList(Arrays.asList(
             "sf.kcfold", "sf.kcedge", "sf.kccore", "sf.kcsat", "sf.kclift"));
 

@@ -60,6 +60,7 @@ final class ControlTitles {
             case "Desfoque do bloqueio com a lente": return R.string.control_title_3f0437688241;
             case "Desfoque do centro": return R.string.control_title_ddc008a84d95;
             case "Desfoque do fundo da central": return R.string.control_title_f27ba480c2b4;
+            case "Desfoque do pop-up com a lente": return R.string.control_title_e533dec3633d;
             case "Desfoque do resumo": return R.string.control_title_bbd07c14d31f;
             case "Desfoque geral": return R.string.control_title_6125817372a1;
             case "Desfoque interno": return R.string.control_title_b3f0fd5c9935;
@@ -100,6 +101,7 @@ final class ControlTitles {
             case "Largura da transição óptica": return R.string.control_title_ebe06a05f094;
             case "Largura do brilho do aro": return R.string.control_title_97edb54dcb0f;
             case "Lente dinâmica": return R.string.control_title_5aaf82f5a308;
+            case "Lente do pop-up na entrada": return R.string.control_title_b43bb6ef2255;
             case "Limite da uniformidade": return R.string.control_title_404a512dbeda;
             case "Limite para texto claro": return R.string.control_title_b060e343d3f2;
             case "Limite para texto claro (lente)": return R.string.control_title_ef3825b141ca;
@@ -120,7 +122,8 @@ final class ControlTitles {
             case "Multiplicador físico": return R.string.control_title_6a5669f01728;
             case "Máximo de ícones visíveis": return R.string.control_title_a2faa45a9b05;
             case "Método do desfoque adaptativo": return R.string.control_title_c0667c366b66;
-            case "Neutralizar brancos": return R.string.control_title_52ded0cf52dd;
+            case "Neutralidade dos realces": return R.string.control_title_0810d3675871;
+            case "Neutralização antiga (legado)": return R.string.control_title_3aa9c5d21068;
             case "Nível da uniformidade": return R.string.control_title_203fe4f25f20;
             case "Nível do véu": return R.string.control_title_2848e8a83298;
             case "Ocultar a faixa em": return R.string.control_title_b89e7df74a83;

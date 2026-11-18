@@ -44,6 +44,7 @@ import io.github.igorcv88.oneuiliquidglass.glass.Material;
 import io.github.igorcv88.oneuiliquidglass.glass.GlassDrawable;
 import io.github.igorcv88.oneuiliquidglass.glass.GlassSpec;
 import io.github.igorcv88.oneuiliquidglass.glass.P3EdgeSelection;
+import io.github.igorcv88.oneuiliquidglass.glass.P3ModeBus;
 import io.github.igorcv88.oneuiliquidglass.glass.NotificationEdgeLineGain;
 import io.github.igorcv88.oneuiliquidglass.glass.CornerGeometry;
 
@@ -216,6 +217,20 @@ public final class HeadsUpHooks {
         }
         return null;
     }
+    /**
+     * The view the shared watcher samples the display through: a visible glass heads-up, else a
+     * live card shown as a pop-up (P3ModeBus), under the same lifecycle guard (shade collapsed,
+     * unlocked, compatibility enabled). Null stops the watcher.
+     */
+    private View p3WatchAnchor() {
+        State popup = visibleP3Popup();
+        View v = popup == null ? null : popup.background.get();
+        if (v != null) return v;
+        boolean compatEnabled = enabled && P3DisplayProbe.edgeCompatEnabled();
+        boolean unlocked = barState != null && barState == Eligibility.BAR_SHADE;
+        boolean collapsed = !Boolean.TRUE.equals(shadeExpanded);
+        return compatEnabled && unlocked && collapsed ? P3ModeBus.watchAnchor() : null;
+    }
     private long p3PopupInterval(long now) {
         if (p3PopupDiagnosticActive(now)) return P3EdgeSelection.diagnosticWatchInterval(p3PopupDiagnosticHz);
         return P3EdgeSelection.POPUP_WATCH_INTERVAL_MS;
@@ -224,7 +239,7 @@ public final class HeadsUpHooks {
         return P3EdgeSelection.diagnosticWatchActive(now, p3PopupStartedAt, p3PopupDiagnosticHz);
     }
     private void startP3PopupWatch() {
-        if (p3PopupWatching || visibleP3Popup() == null) return;
+        if (p3PopupWatching || p3WatchAnchor() == null) return;
         p3PopupWatching = true;
         p3PopupStartedAt = android.os.SystemClock.uptimeMillis();
         p3PopupDiagnosticHz = P3DisplayProbe.popupWatchDiagnosticHz();
@@ -265,8 +280,7 @@ public final class HeadsUpHooks {
     }
     private void sampleP3PopupAsync() {
         if (!p3PopupWatching || p3PopupQueryInFlight) return;
-        State anchor = visibleP3Popup();
-        View v = anchor == null ? null : anchor.background.get();
+        View v = p3WatchAnchor();
         if (v == null) { stopP3PopupWatch(); return; }
         Context context = v.getContext();
         int generation = p3PopupWatchGeneration;
@@ -315,6 +329,8 @@ public final class HeadsUpHooks {
                             state.applyP3Mode(mode, "popupWatch", true);
                         }
                     }
+                    // The same sample for live cards shown as pop-ups (no second poller).
+                    P3ModeBus.publish(compatEnabled ? mode : -1);
                     if (modeChanged) {
                         long now = android.os.SystemClock.uptimeMillis();
                         Probe.log("P3_POPUP_TIMING", "mode=" + mode + " queryUs=" + queryUs
@@ -328,7 +344,7 @@ public final class HeadsUpHooks {
                     stopP3PopupWatch();
                     return;
                 }
-                State nextPopup = visibleP3Popup();
+                View nextPopup = p3WatchAnchor();
                 long mainCpuEnded = android.os.Debug.threadCpuTimeNanos();
                 if (mainCpuStarted >= 0 && mainCpuEnded >= mainCpuStarted) {
                     long mainCpuUs = (mainCpuEnded - mainCpuStarted) / 1000;
@@ -362,6 +378,8 @@ public final class HeadsUpHooks {
     /** enabled == null: preferences unreadable, resolve through the module's ConfigProvider. */
     public HeadsUpHooks(ClassLoader loader, Boolean enabled) {
         this.loader = loader; this.enabled = Boolean.TRUE.equals(enabled); this.configPending = enabled == null;
+        // Live cards shown as pop-ups share this watcher (same cadence and lifecycle guard).
+        P3ModeBus.setWatchStarter(this::startP3PopupWatch);
         ShadeTone.listen(snapshot -> {
             if(!Boolean.TRUE.equals(shadeExpanded)||!shadeConfigEnabled()||!Tuning.get().shadeAdaptive
                     || barState==null||barState!=Eligibility.BAR_SHADE
@@ -2454,6 +2472,13 @@ public final class HeadsUpHooks {
             pill = rowClass == null || !rowClass.isInstance(row);
         }
         void invalidate() { View v = background.get(); if (v != null) v.invalidate(); }
+        /**
+         * The unlocked fade cut of this card: shadefadecut, or hufadecut for a heads-up when set
+         * (>= 0). The row is read only when the opt-in is set, so the default path is unchanged.
+         */
+        float fadeCut(Tuning t) {
+            return CardExit.fadeCut(t.shadeFadeCut, t.huFadeCut, t.huFadeCut >= 0f && isHeadsUp());
+        }
         boolean isHeadsUp() {
             View r = row.get();
             return r != null && Boolean.TRUE.equals(Reflect.bool(r, "isHeadsUpState", "mIsHeadsUp"));
@@ -2471,13 +2496,18 @@ public final class HeadsUpHooks {
             if (glass == null) return;
             boolean surface = !pill && barState != null && barState == Eligibility.BAR_SHADE;
             boolean compat = P3EdgeSelection.eligible(surface, p3Enabled, mode);
-            glass.setP3EdgeCompatibility(compat);
+            // composeGlass draws this drawable by hand: the background View is its callback but
+            // not a verified host, so invalidateSelf() is dropped. Re-record the owner in place
+            // (R5 6.1: the edge of a visible pop-up never followed a 7 -> 9 switch).
+            boolean changed = glass.setP3EdgeCompatibility(compat);
+            if (changed) invalidate();
             if ("headsUpSettled".equals(phase) || p3LastMode != mode
                     || p3LastCompat == null || p3LastCompat != compat) {
                 View v = background.get();
-                Probe.log("P3_EDGE_ROUTE", "phase=" + phase + " viewId="
+                Probe.log("P3_EDGE_ROUTE", "surface=HU phase=" + phase + " viewId="
                         + (v == null ? "null" : Integer.toHexString(System.identityHashCode(v)))
-                        + " mode=" + mode + " compat=" + compat + " enabled=" + p3Enabled
+                        + " mode=" + mode + " compat=" + compat + " applied=" + glass.p3EdgeCompatibility()
+                        + " invalidated=" + changed + " enabled=" + p3Enabled
                         + " headsUp=" + isHeadsUp() + " barState=" + barState);
             }
             p3LastMode = mode;
@@ -2600,7 +2630,7 @@ public final class HeadsUpHooks {
                     float shown = CardExit.shown(a, leaving, exitAlpha);
                     // In the unlocked shade a partly transparent region turned whiter, not fainter (a
                     // white pill as the card faded): there it is whole or gone (shadefadecut).
-                    float cut = barState != null && barState == Eligibility.BAR_SHADE ? Tuning.get().shadeFadeCut : 0f;
+                    float cut = barState != null && barState == Eligibility.BAR_SHADE ? fadeCut(Tuning.get()) : 0f;
                     float fade = CardExit.drawableFade(shown, cut);
                     // The Samsung region does not take its drawable's alpha: a leaving card's is
                     // whole or gone even where the shade has no cut.
@@ -2758,11 +2788,25 @@ public final class HeadsUpHooks {
             if (t.live) return true;
             if (t.kgBlurPath == 1 && t.sfRefract && barState != null
                     && (barState == Eligibility.BAR_KEYGUARD || barState == Eligibility.BAR_SHADE_LOCKED)) return true;
+            if (huDrawablePath()) return true;
             // Expanded shade, unlocked: the Samsung region ignored the card's fade (a ghost of every
             // card on a pull up); the drawable's region takes it. Heads-up cards keep the Samsung path.
             View r = row.get();
             return t.shadeBlurPath == 1 && barState != null && barState == Eligibility.BAR_SHADE && Boolean.TRUE.equals(shadeExpanded)
                     && r != null && !Boolean.TRUE.equals(Reflect.bool(r, "isHeadsUpState", "mIsHeadsUp"));
+        }
+        /**
+         * Opt-in (debug.oulg.hublurpath=1): an unlocked heads-up with the compositor lens takes its
+         * blur from a BackgroundBlurDrawable drawn with the glass, whose region alpha this module
+         * sets (255 at rest), instead of the Samsung blur installed on the view, whose region does
+         * not follow its drawable's alpha. The tag profile (0) and the radius (semradiuslens) are
+         * those of the Samsung path, so a comparison isolates the route.
+         */
+        boolean huDrawablePath() {
+            Tuning t = Tuning.get();
+            if (t.huBlurPath != 1 || !t.sfRefract || t.live || barState == null || barState != Eligibility.BAR_SHADE) return false;
+            View r = row.get();
+            return r != null && Boolean.TRUE.equals(Reflect.bool(r, "isHeadsUpState", "mIsHeadsUp"));
         }
         /**
          * Rows whose background can be sampled and refracted, never in LSPosed-only mode (so with
@@ -2909,7 +2953,10 @@ public final class HeadsUpHooks {
                 nativePending = false;
                 Backdrop backdrop;
                 if (kind == Backdrop.Kind.COMPOSITOR && drawablePath()) {
-                    try { backdrop = compBridge = BackgroundBlurBridge.create(v, true); }
+                    try {
+                        backdrop = compBridge = BackgroundBlurBridge.create(v, true);
+                        if (huDrawablePath()) compBridge.useLensRadius();
+                    }
                     catch (ReflectiveOperationException | RuntimeException e) {
                         // The drawable path is the default on every surface in LSPosed-only mode and
                         // was never exercised on the pop-up: if it cannot be built, this card keeps

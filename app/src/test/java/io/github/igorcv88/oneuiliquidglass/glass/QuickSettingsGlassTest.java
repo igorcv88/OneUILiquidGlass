@@ -97,6 +97,28 @@ public final class QuickSettingsGlassTest {
         assertEquals(-1f, QuickSettingsGlass.edgeTag(Float.NaN), 0f);
     }
 
+    @Test public void oversizedLandscapeCornersAreNormalizedBeforeTagging() {
+        // DZIF trace 17/11: group 1912x223, outer region 1920x231, raw radius 225.503.
+        float outer = QuickSettingsGlass.opticalRadius(225.50302f, 1920, 231);
+        assertEquals(115.5f, outer, 0f);
+        assertEquals(114.875f, QuickSettingsGlass.edgeTag(outer), 0f);
+        assertEquals(111.5f, QuickSettingsGlass.opticalRadius(outer - 4, 1912, 223), 0f);
+        assertEquals(111.5f, QuickSettingsGlass.opticalRadius(221.50302f, 454, 223), 0f);
+        assertEquals(111.5f, QuickSettingsGlass.opticalRadius(140.807f, 454, 223), 0f);
+        assertEquals(115.5f, QuickSettingsGlass.opticalRadius(225.50302f, 231, 1920), 0f);
+    }
+
+    @Test public void validOpticalCornersAndInvalidGeometryKeepTheirPolicy() {
+        assertEquals(144.807f, QuickSettingsGlass.opticalRadius(144.807f, 660, 290), 0f);
+        assertEquals(221.50302f, QuickSettingsGlass.opticalRadius(221.50302f, 940, 478), 0f);
+        assertEquals(99.5f, QuickSettingsGlass.opticalRadius(99.5f, 697, 199), 0f);
+        assertEquals(-1f, QuickSettingsGlass.opticalRadius(Float.NaN, 100, 100), 0f);
+        assertEquals(-1f, QuickSettingsGlass.opticalRadius(-4, 100, 100), 0f);
+        assertEquals(-1f, QuickSettingsGlass.opticalRadius(100, 0, 100), 0f);
+        // Rounded submitted region can be a pixel smaller than the unrounded envelope.
+        assertTrue(QuickSettingsGlass.edgeTag(QuickSettingsGlass.opticalRadius(100, 697, 199)) <= 99.5f);
+    }
+
     @Test public void edgeFadeFollowsTheExpansionAndTheAncestors() {
         assertEquals(1f, QuickSettingsGlass.edgeFade(1f, 1f), 1e-6f);
         assertEquals(1f, QuickSettingsGlass.edgeFade(1f, 0.95f), 1e-6f);

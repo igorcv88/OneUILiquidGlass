@@ -73,6 +73,31 @@ public final class QuickSettingsEdgeLightTest {
         assertTrue(nodes(edge).isEmpty());
     }
 
+    /**
+     * R5 physical validation: the inner box is clip(shape).background(colour) over RectangleShape,
+     * so a shape-only change (QS opening, 70 -> 144.807 px) never updates the BackgroundNode. The
+     * region and optics must follow the box's current shape, not the one registered first.
+     */
+    @Test public void regionAndOpticsFollowTheBoxShapeAfterAShapeOnlyRecomposition() throws Exception {
+        QuickSettingsEdgeLight edge = edge(true, true, true);
+        Object element = new Object(), node = new Object(), box = new Object(), other = new Object();
+        Object registered = new Object(), opening = new Object(), expanded = new Object();
+        QsOpticsCoverage.Token token = edge.selected("container");
+        token.box = new WeakReference<>(box);
+        edge.element(element, registered, 1f, 1f, token);
+        call(edge, "bind", new Class<?>[]{Object.class, Object.class}, element, node);
+        Object e = nodes(edge).get(node);
+        Method shapeOf = QuickSettingsEdgeLight.class.getDeclaredMethod("shapeOf", e.getClass());
+        shapeOf.setAccessible(true);
+        assertSame("until the box reports, the registered shape", registered, shapeOf.invoke(edge, e));
+        edge.shape(box, opening);
+        assertSame(opening, shapeOf.invoke(edge, e));
+        edge.shape(other, expanded);
+        assertSame("another box does not move it", opening, shapeOf.invoke(edge, e));
+        edge.shape(box, expanded);
+        assertSame("the shape the border and clip use now", expanded, shapeOf.invoke(edge, e));
+    }
+
     /** A slider drag removes every region from the compositor (not 1/255), and the lift rebuilds them. */
     @Test public void dragReleasesEveryRegionAndLiftRedrawsTheNodes() throws Exception {
         QuickSettingsEdgeLight edge = edge(true, true, true);
@@ -347,7 +372,7 @@ public final class QuickSettingsEdgeLightTest {
                         .filter(l -> l.msg.contains("event=QS_OPTICS_INVALID_RADIUS")).count());
         assertTrue(ShadowLog.getLogsForTag("OULG").stream()
                 .anyMatch(l -> l.msg.contains("event=QS_OPTICS_INVALID_RADIUS")
-                        && l.msg.contains("radius=-4.0")));
+                        && l.msg.contains("radius=-4.0") && l.msg.contains("effective=-1.0")));
     }
 
     @Test public void duplicateUpdateOfSameElementDoesNotLoseBinding() throws Exception {

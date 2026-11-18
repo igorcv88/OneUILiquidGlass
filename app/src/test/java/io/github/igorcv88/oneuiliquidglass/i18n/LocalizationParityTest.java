@@ -92,7 +92,7 @@ public class LocalizationParityTest {
             assertTrue("unique " + s.key, seen.add(en.get(name)));
             assertNotEquals(s.key, en.get(name), pt.get(name));
         }
-        assertEquals(32, seen.size());
+        assertEquals(33, seen.size());
     }
 
     @Test

@@ -1,9 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="control_option_ec6472de3478">10 %</string>
+    <string name="control_option_4d04d593eab2">25 %</string>
     <string name="control_option_3c5d28cf50f3">Follows the card during gestures</string>
     <string name="control_option_8d954776f1cd">Adaptive</string>
     <string name="control_option_0a0e3b18cbfb">Original adaptive color</string>
     <string name="control_option_a33344113b2b">Samsung adaptive color</string>
+    <string name="control_option_d885925b9c29">Region alpha owned by the module</string>
+    <string name="control_option_d64a750613b8">Alpha and program encoded over the glass</string>
     <string name="control_option_0c4e291a7b4b">The original look</string>
     <string name="control_option_20ec175d596a">Automatic</string>
     <string name="control_option_c9c992be184b">Automatic</string>
@@ -15,8 +19,10 @@
     <string name="control_option_4e1de10ed349">Outline</string>
     <string name="control_option_308ef5ac8d40">Custom fixed color</string>
     <string name="control_option_e03b6581feae">Separate colors for light and dark backgrounds</string>
+    <string name="control_option_12dfa7f3a2bd">Current cut (shadefadecut)</string>
     <string name="control_option_ed469e5dc765">Set outside the app</string>
     <string name="control_option_8809a6227cfb">Off</string>
+    <string name="control_option_89ae8ea817ed">From the start</string>
     <string name="control_option_9c6166ed846c">Broader blur and more vivid colors</string>
     <string name="control_option_164bf4ddd36b">Off</string>
     <string name="control_option_2bfe9e53781b">Reference discs, approved up to version 0.30</string>
@@ -39,7 +45,9 @@
     <string name="control_option_7fa186bd9a0b">Identifies lens-rewritten shaders</string>
     <string name="control_option_e723a958ac2a">Same as overall blur</string>
     <string name="control_option_3e59ff2f3f00">Same as pop-up</string>
+    <string name="control_option_2bb7eef2ddc4">Same as the shade</string>
     <string name="control_option_9be0dc635d59">Limited slope, without folds</string>
+    <string name="control_option_a7431bcd75a7">Lens during most of the slide</string>
     <string name="control_option_c908bfdb54ef">Smooth lens</string>
     <string name="control_option_18f5e7ca18f6">Edge luminance</string>
     <string name="control_option_580a7b605fb0">Safer, but hides more often</string>
@@ -55,6 +63,7 @@
     <string name="control_option_b9ef5b172a58">Same veil on every card</string>
     <string name="control_option_3b1d364412af">Snell model with refractive index</string>
     <string name="control_option_fb3c8b03b40e">On the view</string>
+    <string name="control_option_dbc4a5cb54f2">On the view (Samsung)</string>
     <string name="control_option_fffb17e84d35">Native</string>
     <string name="control_option_761716310a91">None</string>
     <string name="control_option_f78db5410a48">Neutral under the lens; inherited elsewhere</string>
@@ -71,6 +80,8 @@
     <string name="control_option_5e752f3cd7ac">Any touch</string>
     <string name="control_option_5a83874989ff">Four corners</string>
     <string name="control_option_808eb0b380d3">Single radius</string>
+    <string name="control_option_0098cc642404">System region; current default</string>
+    <string name="control_option_326b1b817735">Whole region from the first frame</string>
     <string name="control_option_d28c21104d9d">Removes more structure; large shapes get softer</string>
     <string name="control_option_f1b4503c73c7">Normal rendering without diagnostic tint</string>
     <string name="control_option_929dc216ba9a">Follows the card fade</string>
@@ -81,6 +92,7 @@
     <string name="control_option_340a3940c102">System and verified originals</string>
     <string name="control_option_04ffe2381fff">System and services</string>
     <string name="control_option_655a7c7b8a0f">System blur only</string>
+    <string name="control_option_d97225752710">Composition probe</string>
     <string name="control_option_4ec6fa29d300">Only horizontal movements and two fingers</string>
     <string name="control_option_0706bd786e3a">Numbered synthetic texture</string>
     <string name="control_option_a4114a83f4c6">All</string>

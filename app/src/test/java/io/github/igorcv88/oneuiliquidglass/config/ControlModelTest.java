@@ -51,14 +51,15 @@ public class ControlModelTest {
     }
 
     @Test
-    public void compositorDiagnosticAcceptsAllThreeModesWithoutCoercingGreenToOff() {
+    public void compositorDiagnosticAcceptsItsModesWithoutCoercingGreenToOff() {
         SettingSpec debug = SettingsRegistry.get("sf.debug");
         Controls.Control control = Controls.get("sf.debug");
         assertEquals(SettingSpec.Type.ENUM, debug.type);
         assertEquals("0", debug.defaultValue);
-        assertEquals("0,1,2", debug.choices);
+        // 5: the composition probe (docs/clear-glass/HU_ALPHA_PROBE.md); 3 and 4 stay setprop-only maps.
+        assertEquals("0,1,2,5", debug.choices);
         assertEquals(Controls.Format.CHOICE, control.format);
-        for (String mode : new String[] {"0", "1", "2"}) {
+        for (String mode : new String[] {"0", "1", "2", "5"}) {
             assertEquals(mode, debug.validate(mode));
             assertTrue(control.choices.containsKey(mode));
         }

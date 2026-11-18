@@ -106,6 +106,12 @@ public class Sheet extends Dialog {
         onDismiss = r;
     }
 
+    /** Removes the footer buttons (used when a sheet rebuilds its content). */
+    public void clearActions() {
+        actions.removeAllViews();
+        actions.setVisibility(View.GONE);
+    }
+
     /** Adds a footer button; FILLED is the main action. Returns it for enable/label updates. */
     public TextView action(String label, Ui.ButtonStyle style, Runnable r) {
         TextView b = Ui.button(activity, t, label, null, style, false);

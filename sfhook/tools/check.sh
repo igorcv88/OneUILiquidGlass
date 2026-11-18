@@ -16,6 +16,10 @@ cc -std=c99 -Wall -Wextra -Werror -O2 -o "$OUT/fc" field_check.c -lm
 "$OUT/fc"
 cc -std=c99 -Wall -Wextra -Werror -O2 -o "$OUT/hc" health_check.c
 "$OUT/hc"
+# Image reads the rewrite leaves untouched (RenderEngine's small-radius crossfade): detection, the
+# positive control and the device dump's rewritten programs.
+cc -std=c99 -Wall -Wextra -Werror -Wno-unused-function -Wno-unused-parameter -I.. -o "$OUT/ic" image_check.c
+"$OUT/ic" testdata/dzif_dump.txt
 LINE="$("$OUT/rc" "$DUMP" "$OUT")"
 echo "$LINE"
 set -- $EXPECT
@@ -48,9 +52,33 @@ for f in "$OUT/probe"/mod_*.frag; do
   fi
 done
 [ $fail -eq 0 ] && echo "glsl: source-luminance probe compiles and links"
+# Composition probe (debug 5): production text outside its block, on this dump and the DZIF dump;
+# every probe rewrite compiles, and links with the vertex rewrites where it reads voulg_tag.
+cc -std=c99 -Wall -Wextra -Werror -Wno-unused-function -Wno-unused-parameter -I.. -o "$OUT/pc" probe_check.c
+mkdir -p "$OUT/cprobe"
+"$OUT/pc" testdata/dzif_dump.txt "$OUT/cprobe" || fail=1
+"$OUT/pc" "$DUMP" >/dev/null || fail=1
+for f in "$OUT/cprobe"/probe_*.frag; do
+  [ -e "$f" ] || continue
+  glslangValidator -S frag "$f" >"$OUT/log" 2>&1 || { echo "FAIL composition probe compile $(basename "$f")"; cat "$OUT/log"; fail=1; }
+done
+mkdir -p "$OUT/dz"
+"$OUT/rc" testdata/dzif_dump.txt "$OUT/dz" 0 >/dev/null
+for f in "$OUT/cprobe"/probe_*.frag; do
+  [ -e "$f" ] || continue
+  if grep -q voulg_tag "$f"; then
+    for v in "$OUT"/dz/mod_*.vert; do
+      glslangValidator -l "$v" "$f" >"$OUT/log" 2>&1 || { echo "FAIL composition probe link $(basename "$v") + $(basename "$f")"; cat "$OUT/log"; fail=1; }
+    done
+  fi
+done
+[ $fail -eq 0 ] && echo "glsl: composition probe compiles and links"
 # Clear Glass: the field twin and bounds (U1-U8), parameter ranges, library sizes and text invariance;
 # then the generated GLSL: byte identity with optics 11 while off, and every mode/debug pair.
 cc -std=c99 -Wall -Wextra -Werror -Wno-unused-function -O2 -I.. -o "$OUT/cc" clear_check.c -lm
 "$OUT/cc" || fail=1
 python3 clear_shader_check.py "$OUT/rc" "$DUMP" "$OUT/clear" || fail=1
+python3 hl_neutral_check.py "$OUT/rc" "$DUMP" || fail=1
+# Opaque taps must give alpha 1 through every body kernel (sum and normaliser at one precision).
+python3 alpha_precision_check.py "$OUT/rc" "$DUMP" || fail=1
 exit $fail

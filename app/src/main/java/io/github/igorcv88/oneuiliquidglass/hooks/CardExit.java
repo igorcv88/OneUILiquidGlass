@@ -116,6 +116,10 @@ final class CardExit {
     static float shown(float ancestors, boolean leaving, float exit) {
         return leaving ? ancestors * exit : ancestors;
     }
+    /** The unlocked cut: hufadecut for a heads-up when it is set (>= 0), shadefadecut otherwise. */
+    static float fadeCut(float shade, float headsUp, boolean isHeadsUp) {
+        return isHeadsUp && headsUp >= 0f ? headsUp : shade;
+    }
     /** The drawable path's region alpha: whole or gone below a cut (0: follows the alpha). */
     static float drawableFade(float shown, float cut) {
         return cut > 0f ? (shown >= cut ? 1f : 0f) : shown;

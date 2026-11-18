@@ -79,6 +79,24 @@ public class GlassMaterialApplicabilityTest {
     }
 
     @Test
+    public void brightSampleContainmentFollowsTheCompiledBodyKernel() {
+        // Frosted and the original kernel read hubloom (oulg_disc0); the Gaussian kernels 1-3
+        // build disc A inline and compile it out (refract.h OULG_FS_HU_BODY_NESTED_FMT).
+        assertKind(Applicability.Kind.NEEDS_RESTART, of(true), "sf.hubloom");
+        assertKind(Applicability.Kind.NEEDS_RESTART, of(true, "sf.hckernel", "1"), "sf.hubloom");
+        assertKind(Applicability.Kind.NEEDS_RESTART, of(true, "sf.huclear", "1", "sf.hckernel", "0"), "sf.hubloom");
+        for (String k : new String[]{"1", "2", "3"}) {
+            Applicability a = of(true, "sf.huclear", "1", "sf.hckernel", k);
+            assertKind(Applicability.Kind.INACTIVE, a, "sf.hubloom");
+            assertEquals(Applicability.NEEDS_KERNEL0, a.rule("sf.hubloom").reason);
+            assertKind(Applicability.Kind.NEEDS_RESTART, of(true, "sf.huclear", "1", "sf.hckernel", k, "sf.hcadapt", "0"), "sf.hubloom");
+        }
+        // Per card both variants are compiled: the Frosted card still reads it.
+        assertKind(Applicability.Kind.NEEDS_RESTART, of(true, "sf.huclear", "2", "sf.hckernel", "1"), "sf.hubloom");
+        assertKind(Applicability.Kind.INACTIVE, of(false, "sf.huclear", "1", "sf.hckernel", "0"), "sf.hubloom");
+    }
+
+    @Test
     public void whiteNeutralisingNeedsTheMaterialBlock() {
         // Exercise the legacy neutral material explicitly; the new Clear-only defaults
         // activate saturation and lift, so the material is otherwise always present.
@@ -86,6 +104,8 @@ public class GlassMaterialApplicabilityTest {
                 "sf.hclift", "0", "sf.hcscrim", "0", "sf.hcscrimmax", "0"};
         assertKind(Applicability.Kind.INACTIVE, of(true, clear), "sf.hcneutral");
         assertEquals(Applicability.NEEDS_MATERIAL_BLOCK, of(true, clear).rule("sf.hcneutral").reason);
+        assertKind(Applicability.Kind.INACTIVE, of(true, concat(clear, "sf.hchlneutral", "0.6")), "sf.hcneutral");
+        assertKind(Applicability.Kind.NEEDS_RESTART, of(true, concat(clear, "sf.hchlneutral", "0.6")), "sf.hchlneutral");
         assertKind(Applicability.Kind.NEEDS_RESTART, of(true, concat(clear, "sf.hcsat", "1.05")), "sf.hcneutral");
         assertKind(Applicability.Kind.NEEDS_RESTART, of(true, concat(clear, "sf.hclift", "0.3")), "sf.hcneutral");
         assertKind(Applicability.Kind.NEEDS_RESTART, of(true, concat(clear, "sf.hcscrimmax", "0.2")), "sf.hcneutral");

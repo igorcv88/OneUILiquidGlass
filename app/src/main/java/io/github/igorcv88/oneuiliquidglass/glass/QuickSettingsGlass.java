@@ -239,15 +239,74 @@ public final class QuickSettingsGlass {
         if(lo<0){hi-=lo;lo=0;}
         if(hi>len){lo-=hi-len;hi=len;}
         lo=Math.max(0,lo);
-        // Vertical controls have a fixed transverse thickness even when the fill is shorter
-        // than one diameter. Shrinking it made the white shape detach from both glass sides.
-        // The low-fill renderer crops/morphs the UPPER arc; the bottom remains anchored.
-        // Horizontal controls retain their existing symmetric cap behaviour.
-        float cross = vertical ? narrow : Math.min(narrow,hi-lo);
+        // Both orientations keep a fixed transverse thickness even when the fill is shorter
+        // than one diameter: shrinking it made the white shape detach from both glass sides
+        // (vertical, approved) and turned the horizontal low fill into a disc (R5, capture 02).
+        // The low-fill renderer (lowFill) keeps the origin cap and flattens the moving shoulder.
+        float cross = narrow;
         if(vertical){out[0]=(w-cross)/2f;out[1]=lo;out[2]=cross;out[3]=hi-lo;}
         else{out[0]=lo;out[1]=(h-cross)/2f;out[2]=hi-lo;out[3]=cross;}
         out[4]=Math.min(out[2],out[3])/2f;
         return out;
+    }
+
+    /**
+     * Whether a body interval [lo, hi] on a bar of length {@code len} grows from the bar's high
+     * end (bottom of a vertical bar; right of a horizontal one, as in RTL): the origin is the end
+     * nearer to the bar's own edge. Read from the native interval, so neither LTR nor an OEM
+     * offset is assumed.
+     */
+    public static boolean anchoredHigh(float lo, float hi, float len) {
+        return len - hi < lo;
+    }
+
+    /** Receives a low fill's outline; the same commands as android.graphics.Path. */
+    public interface Outline {
+        void move(float x, float y);
+        void line(float x, float y);
+        void quad(float x1, float y1, float x2, float y2);
+        void cubic(float x1, float y1, float x2, float y2, float x3, float y3);
+        void close();
+    }
+
+    /**
+     * A fill shorter than its thickness ({@code g} = {x, y, w, h} from sliderPrimitive): a full
+     * semicircle at the origin end (on the capsule's own cap) and a shoulder at the moving end
+     * that flattens as the fill shrinks, at the full transverse thickness. One shape in a local
+     * frame (u across, v along toward the origin), mapped onto either axis and either origin; the
+     * vertical bottom-anchored case emits exactly the approved vertical outline.
+     */
+    public static void lowFill(float[] g, boolean vertical, boolean originHigh, Outline o) {
+        float x = g[0], y = g[1];
+        float across = vertical ? g[2] : g[3], len = vertical ? g[3] : g[2];
+        float half = across / 2f, shoulder = Math.max(0f, len - half), origin = Math.min(half, len);
+        float[] p = new float[6];
+        p[0] = shoulder; p[1] = 0; map(p, 2, x, y, len, vertical, originHigh); o.move(p[0], p[1]);
+        p[0] = across - shoulder; p[1] = 0; map(p, 2, x, y, len, vertical, originHigh); o.line(p[0], p[1]);
+        if (shoulder > 0f) {
+            p[0] = across; p[1] = 0; p[2] = across; p[3] = shoulder;
+            map(p, 4, x, y, len, vertical, originHigh); o.quad(p[0], p[1], p[2], p[3]);
+        }
+        p[0] = across; p[1] = len - origin; map(p, 2, x, y, len, vertical, originHigh); o.line(p[0], p[1]);
+        p[0] = across; p[1] = len - origin * .4477f; p[2] = half + half * .5523f; p[3] = len; p[4] = half; p[5] = len;
+        map(p, 6, x, y, len, vertical, originHigh); o.cubic(p[0], p[1], p[2], p[3], p[4], p[5]);
+        p[0] = half - half * .5523f; p[1] = len; p[2] = 0; p[3] = len - origin * .4477f; p[4] = 0; p[5] = len - origin;
+        map(p, 6, x, y, len, vertical, originHigh); o.cubic(p[0], p[1], p[2], p[3], p[4], p[5]);
+        p[0] = 0; p[1] = shoulder; map(p, 2, x, y, len, vertical, originHigh); o.line(p[0], p[1]);
+        if (shoulder > 0f) {
+            p[0] = 0; p[1] = 0; p[2] = shoulder; p[3] = 0;
+            map(p, 4, x, y, len, vertical, originHigh); o.quad(p[0], p[1], p[2], p[3]);
+        }
+        o.close();
+    }
+
+    /** Local (u across, v along toward the origin; v = len is the origin end) to canvas, in place. */
+    private static void map(float[] q, int n, float x, float y, float len, boolean vertical, boolean originHigh) {
+        for (int i = 0; i < n; i += 2) {
+            float u = q[i], along = originHigh ? q[i + 1] : len - q[i + 1];
+            q[i] = vertical ? x + u : x + along;
+            q[i + 1] = vertical ? y + along : y + u;
+        }
     }
 
     /** Packed Compose CornerRadius(x,y): no flat shoulders when a low fill is shorter than wide. */
@@ -284,6 +343,17 @@ public final class QuickSettingsGlass {
 
     /** Blur radius of an edge-light region: only the luma right at the outline matters, kept local. */
     public static final int EDGE_BLUR_PX = 8;
+
+    /**
+     * A uniform rounded rectangle cannot have a circular corner larger than half its
+     * short side. Resolve before tagging (Skia would otherwise clamp away the fraction),
+     * and before insetting the matching Compose outline for AGSL. Invalid input stays invalid.
+     */
+    public static float opticalRadius(float requested, float width, float height) {
+        if (!Float.isFinite(requested) || !Float.isFinite(width) || !Float.isFinite(height)
+                || requested <= 0f || width <= 0f || height <= 0f) return -1f;
+        return Math.min(requested, Math.min(width, height) * .5f);
+    }
 
     /**
      * Corner radius carrying the compositor's Quick Settings edge-light tag (sfhook profile 3):

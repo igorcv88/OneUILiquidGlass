@@ -128,6 +128,22 @@ public final class AppModel {
         }
     }
 
+    /**
+     * Saves a value edited from a control (row, sheet, exact field, reset). Refuses when the
+     * shared applicability rule says the control has no effect on that surface right now
+     * (INACTIVE or OFF), so no entry point can edit an inapplicable setting as if it were in
+     * effect; the value saved earlier is left untouched. NEEDS_RESTART stays editable.
+     */
+    public Result saveControl(String key, String value, Controls.Surface surface) {
+        Applicability.Result a = state().applicability().on(key, surface);
+        if (!a.usable()) {
+            drafts.remove(key);
+            notifyChanged();
+            return new Result(false, false, ControlReasons.text(activity, a.reason));
+        }
+        return save(key, value);
+    }
+
     /** Validates and saves a desired value; refuses silently overwriting a Terminal change. */
     public Result save(String key, String value) {
         SettingSpec s = SettingsRegistry.get(key);
@@ -312,10 +328,16 @@ public final class AppModel {
 
     // ---- dynamic lens
 
+    /**
+     * Compositor values to list and publish on the next restart. A saved value whose control has
+     * no effect now (Applicability INACTIVE, evaluated with the saved values that will compile) is
+     * kept in the app but not published: the editor locks it, and the restart must not write it.
+     */
     public Map<String, String> pendingCompositor() {
         SharedPreferences p = lensPrefs();
+        Applicability rules = state().applicability();
         return CompositorValues.pending(state().saved, SystemPropertyReader.snapshot(),
-                CompositorValues.baseline(p));
+                CompositorValues.baseline(p), k -> rules.rule(k).kind == Applicability.Kind.INACTIVE);
     }
 
     public Map<String, String> pendingIcons() { return repo.pendingIcons(); }

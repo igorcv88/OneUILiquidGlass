@@ -51,9 +51,22 @@ public final class CompositorValues {
      */
     public static Map<String, String> pending(
             Map<String, String> saved, Map<String, String> observed) {
+        return pending(saved, observed, k -> false);
+    }
+
+    /**
+     * As {@link #pending(Map, Map)}, skipping saved values the shared applicability rule marks as
+     * having no effect now ({@code inapplicable}): they stay saved in the app but are neither listed
+     * nor published, so the compositor keeps what it reads today (R5: sf.hubloom=1 saved under a
+     * Gaussian adaptive kernel was about to be written). They return when the condition is met.
+     */
+    public static Map<String, String> pending(
+            Map<String, String> saved, Map<String, String> observed,
+            java.util.function.Predicate<String> inapplicable) {
         Map<String, String> out = new TreeMap<>();
         for (Map.Entry<String, String> e : saved.entrySet()) {
             if (!writable(e.getKey())) continue;
+            if (inapplicable.test(e.getKey())) continue;
             SettingSpec spec = SettingsRegistry.get(e.getKey());
             if (spec == null) continue;
             if (!same(spec, e.getValue(), observed.get(e.getKey())))
@@ -71,7 +84,15 @@ public final class CompositorValues {
             Map<String, String> saved,
             Map<String, String> observed,
             Map<String, String> compiled) {
-        Map<String, String> out = pending(saved, observed);
+        return pending(saved, observed, compiled, k -> false);
+    }
+
+    public static Map<String, String> pending(
+            Map<String, String> saved,
+            Map<String, String> observed,
+            Map<String, String> compiled,
+            java.util.function.Predicate<String> inapplicable) {
+        Map<String, String> out = pending(saved, observed, inapplicable);
         if (compiled == null) return out; // No verified baseline: report uncertainty separately.
         for (String shortKey : SfLive.WRITABLE) {
             String key = "sf." + shortKey;

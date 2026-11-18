@@ -30,6 +30,8 @@
   "A central não usa lente": "The shade does not use this lens",
   "Ative o desfoque próprio por cartão": "Enable per-card blur",
   "Usado com o vidro Transparente": "Used with Clear glass",
+  "Sem efeito nos kernels gaussianos com o Desfoque adaptativo ligado; use o Original ou desligue o Desfoque adaptativo": "No effect on the Gaussian kernels while Adaptive blur is on; use Original or turn Adaptive blur off",
+  "Exige o desfoque adaptativo ligado": "Needs adaptive blur on",
   "Usado com o vidro Fosco": "Used with Frosted glass",
   "Só funciona com o menisco desligado": "Only used when Meniscus is off",
   "Exige saturação, escurecimento ou clareamento": "Needs saturation, darkening or brightening to be changed",

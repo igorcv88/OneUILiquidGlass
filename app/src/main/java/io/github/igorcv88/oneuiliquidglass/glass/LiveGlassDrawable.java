@@ -114,6 +114,34 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
             LiveMaterialTrace.note(materialTraceHost.get(), this, phase, canvas);
     }
     public void setOnRegionFailed(Runnable r) { onRegionFailed = r; }
+    /**
+     * Gain of the outer notification contour of the shared edge material (GlassDrawable
+     * setNotificationLineGain): the live card takes the pop-up's (debug.oulg.popuplinegain), as the
+     * heads-up does; 1 elsewhere. Applied to the optics when they are built and on change.
+     */
+    private float edgeLineGain = 1f;
+    public void setEdgeLineGain(float gain) {
+        if (edgeLineGain == gain) return;
+        edgeLineGain = gain;
+        if (optics != null) optics.setNotificationLineGain(gain);
+        invalidateSelf();
+    }
+    public float edgeLineGainForTest() { return edgeLineGain; }
+    /**
+     * The P3 edge compatibility of the shared edge material (GlassDrawable): the live card follows
+     * the same selection as the heads-up pop-up (P3EdgeSelection). Applied to the optics when they
+     * are built and on change. This drawable is the host's background, so invalidateSelf()
+     * reaches the host. Returns whether it changed. REGIONLESS draws its own rim (unchanged).
+     */
+    private boolean p3EdgeCompatibility;
+    public boolean setP3EdgeCompatibility(boolean on) {
+        if (p3EdgeCompatibility == on) return false;
+        p3EdgeCompatibility = on;
+        if (optics != null) optics.setP3EdgeCompatibility(on);
+        invalidateSelf();
+        return true;
+    }
+    public boolean p3EdgeCompatibility() { return p3EdgeCompatibility; }
     /** Temporary telemetry attached by the controller; no change to how the drawable renders. */
     public void setRenderProbe(String surface) { renderSurface = surface; renderProbe = new LiveRenderProbe(); }
     private final float[] lastRadii = new float[8];
@@ -306,7 +334,11 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
         }
         drawRimNeutral(canvas, b, tint);
         // The same shader/optical model as the approved notification material; no extra fill.
-        if (optics == null) optics = new GlassDrawable(blur, density, new GlassSpec());
+        if (optics == null) {
+            optics = new GlassDrawable(blur, density, new GlassSpec());
+            optics.setNotificationLineGain(edgeLineGain);
+            optics.setP3EdgeCompatibility(p3EdgeCompatibility);
+        }
         if (!optics.drawOptics(canvas, b, clamped, alpha)) drawRim(canvas, b);
         drawReport("OWN_REGION", canvas, b, "blurDrawReturned");
         } finally { Perf.end(Perf.LIVE_DRAW, token); }

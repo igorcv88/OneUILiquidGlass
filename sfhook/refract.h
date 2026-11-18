@@ -776,6 +776,7 @@ struct oulg_clear {
     float lift[2];                                  // positive tone map of the body (0 = none)
     float neutral;                                  // profile 0: near-white neutralisation strength
     int kernel;                                     // profile 0: adaptive body kernel (0 = optics 12)
+    float hlneutral;                                // profile 0: highlight neutrality (0 = none, nothing emitted)
 };
 // The approved visual defaults apply ONLY when each Clear selector opts in. Mode selectors
 // remain off by default (Frosted unchanged). Valid debug.oulg.sf.* overrides take precedence.
@@ -786,7 +787,7 @@ static const struct oulg_clear OULG_CLEAR_DEFAULT = {
     {24.0f, 24.0f}, {24.0f, 24.0f}, {2.0f, 2.0f},
     0.04f, 0.85f, 0.0f, 0.0f, 1.0f, 0.5f,
     {2.0f, 2.0f}, 1.05f, 0.0f, 0.0f,
-    1.0f, {0.30f, 0.0f}, 0.75f, 0};
+    1.0f, {0.30f, 0.0f}, 0.75f, 0, 0.0f};
 
 static float oulg_in(float v, float lo, float hi, float fallback) { return v >= lo && v <= hi ? v : fallback; }
 
@@ -823,6 +824,7 @@ static void oulg_fix_clear(struct oulg_clear *c) {
     c->adapt = oulg_in(c->adapt, 0.0f, 1.0f, d->adapt);
     c->neutral = oulg_in(c->neutral, 0.0f, 1.0f, d->neutral);
     if (c->kernel < 0 || c->kernel > 3) c->kernel = d->kernel;
+    c->hlneutral = oulg_in(c->hlneutral, 0.0f, 1.0f, d->hlneutral);
 }
 
 // The meniscus amplitude cap as a share of min(hs): with it the deepest sample (the outline's, at
@@ -831,10 +833,15 @@ static double oulg_meniscus_cap(const struct oulg_clear *c, int i, double rho) {
     double cap = 1.0 / (rho > 1.0 ? rho : 1.0) - c->body[i] - c->body2[i];
     return cap > 0.0 ? cap : 0.0;
 }
-static int oulg_hu_material_on(const struct oulg_clear *c) {
+static int oulg_hu_legacy_material_on(const struct oulg_clear *c) {
     return c && c->mode[0] != 0 && (c->hsat != 1.0f || c->scrimmax > 0.0f || c->lift[0] > 0.0f);
 }
+static int oulg_hu_material_on(const struct oulg_clear *c) {
+    return oulg_hu_legacy_material_on(c) || (c && c->mode[0] != 0 && c->adapt > 0.0f && c->hlneutral > 0.0f);
+}
 static int oulg_hu_adapt_on(const struct oulg_clear *c) { return c && c->mode[0] != 0 && c->adapt > 0.0f; }
+// Highlight neutrality needs the adaptive body: its selection uses the body's wide luma deviation.
+static int oulg_hu_hl_on(const struct oulg_clear *c) { return oulg_hu_adapt_on(c) && c->hlneutral > 0.0f; }
 
 // The clear amplitude cap for one profile: min(amp, amax), amax from the global scale rho so that
 // rho (l0 + 3 l2 + 1.5 A) <= 1 - OULG_CLEAR_M. Never negative.
@@ -952,11 +959,29 @@ static int oulg_replace_once(char *buf, size_t cap, const char *from, const char
     "  rgb = mix(vec3(y), rgb, mix(%.3f, 1.0, w) * (1.0 - n));\n" \
     "  rgb *= 1.0 - (%.3f + %.3f * w);\n"
 #define OULG_FS_LIFT_FMT "  rgb = 1.0 - pow(1.0 - clamp(rgb, 0.0, 1.0), vec3(%.3f));\n"
+// Highlight neutrality (hlneutral, emitted only when above 0; docs/clear-glass/HU_HIGHLIGHT_NEUTRALITY.md):
+// a near-white tinted by the colour blurred into it moves toward its own grey, luma kept, by
+// hlneutral x L x S x C. L: highlight (luma 0.25-0.70), S: low relative saturation ((max - min) / max,
+// 1 below 0.35, 0 above 0.95), C: the pixel is a mixture, i.e. disc B saw luma structure (sd 0.10-0.22);
+// a uniform pastel area has sd near 0 and keeps its colour. Linear in hlneutral; 0 is the identity.
+#define OULG_FS_HU_HL_FMT \
+    "  {\n" \
+    "    mediump float yh = dot(rgb, vec3(0.2126, 0.7152, 0.0722));\n" \
+    "    mediump float mh = max(max(rgb.r, rgb.g), rgb.b);\n" \
+    "    mediump float sh = (mh - min(min(rgb.r, rgb.g), rgb.b)) / max(mh, 1e-3);\n" \
+    "    rgb = mix(rgb, vec3(yh), %.3f * smoothstep(0.25, 0.70, yh) * (1.0 - smoothstep(0.35, 0.95, sh)) * smoothstep(0.10, 0.22, oulg_sd));\n" \
+    "  }\n"
 #define OULG_FS_HU_MATERIAL_TAIL \
     "  return vec4(clamp(rgb, 0.0, 1.0) * c.a, c.a);\n" \
     "}\n"
 // The heads-up adaptive body (taps, taps, wide factor, adapt, lo, hi): disc A, then disc B with the
 // luma variance of its taps, and the mix.
+// Precision (R4, 17/11): a normalised kernel must return alpha 1 from opaque taps whatever their RGB
+// and the A/B weight. Disc B's sum and its normaliser were of different precisions (mediump acc,
+// highp wsum): on fp16 hardware that rounds toward zero the sum lost ~1.2 % (nested kernels: ~2.0 %,
+// their weights sum to 83), b.a fell to ~0.98, and the region, drawn source-over, let that share of
+// the sharp backdrop through wherever the mix chose B. The device probe read 1.985 % (debug 5,
+// docs/clear-glass/HU_ALPHA_PROBE.md). Every sum divided by a highp weight is highp now.
 #define OULG_FS_HU_BODY_FMT \
     "mediump vec4 oulg_body_hu(sampler2D s, highp vec2 uv) {\n" \
     "  const mediump vec3 w709 = vec3(0.2126, 0.7152, 0.0722);\n" \
@@ -964,7 +989,7 @@ static int oulg_replace_once(char *buf, size_t cap, const char *from, const char
     "  highp float a0 = 6.2831853 * fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));\n" \
     "  highp vec2 dir = vec2(cos(a0), sin(a0));\n" \
     "  const highp mat2 rot = mat2(-0.7373688, 0.6754903, -0.6754903, -0.7373688);\n" \
-    "  mediump vec4 acc = vec4(0.0);\n" \
+    "  highp vec4 acc = vec4(0.0);\n" \
     "  highp float wsum = 0.0, m2 = 0.0;\n" \
     "  for (int i = 0; i < %d; i++) {\n" \
     "    highp float rr = sqrt((float(i) + 0.5) / %d.0);\n" \
@@ -990,7 +1015,8 @@ static int oulg_replace_once(char *buf, size_t cap, const char *from, const char
     "  highp float a0 = 6.2831853 * fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));\n" \
     "  highp vec2 dir = vec2(cos(a0), sin(a0));\n" \
     "  const highp mat2 rot = mat2(-0.7373688, 0.6754903, -0.6754903, -0.7373688);\n" \
-    "  mediump vec4 acc = vec4(0.0), accb = vec4(0.0);\n" \
+    "  mediump vec4 acc = vec4(0.0);\n" \
+    "  highp vec4 accb = vec4(0.0);\n" \
     "  mediump float wsum = 0.0;\n" \
     "  highp float wb = 0.0, m2 = 0.0;\n" \
     "  for (int i = 0; i < %d; i++) {\n" \
@@ -1147,6 +1173,7 @@ static int oulg_lib_into(char *out, size_t cap, int external, int debug, const s
     int wrap = oulg_clear_on(cl, 0) || oulg_clear_on(cl, 1) || debug >= 3;
     if (!oulg_append(out, cap, &at, "%s", OULG_FS_GLOBALS)) return 0;
     if (wrap && !oulg_append(out, cap, &at, "%s", "highp float oulg_cl;\nhighp vec4 oulg_map;\n")) return 0;
+    if (oulg_hu_hl_on(cl) && !oulg_append(out, cap, &at, "%s", "highp float oulg_sd = 0.0;\n")) return 0;
     if (!external) {
         if (!oulg_append(out, cap, &at, "%s", OULG_FS_BSPLINE)) return 0;
         for (int i = 0; i < 2; i++) {
@@ -1177,14 +1204,16 @@ static int oulg_lib_into(char *out, size_t cap, int external, int debug, const s
                          : debug >= 3 ? "if (oulg_on > 0.0) return oulg_map;\n" : "";
         if (!oulg_lens_text(tmp, OULG_TEXT_CAP, p, slot)) return 0;
         if (oulg_hu_material_on(cl)) {
-            if (!oulg_append(out, cap, &at, OULG_FS_HU_MATERIAL_FMT, (double) cl->neutral, (double) cl->hsat, (double) cl->scrim,
+            if (!oulg_append(out, cap, &at, OULG_FS_HU_MATERIAL_FMT, oulg_hu_legacy_material_on(cl) ? (double) cl->neutral : 0.0, (double) cl->hsat, (double) cl->scrim,
                              (double) (cl->scrimmax - cl->scrim))) return 0;
+            if (oulg_hu_hl_on(cl) && !oulg_append(out, cap, &at, OULG_FS_HU_HL_FMT, (double) cl->hlneutral)) return 0;
             if (cl->lift[0] > 0.0f && !oulg_append(out, cap, &at, OULG_FS_LIFT_FMT, 1.0 + (double) cl->lift[0])) return 0;
             if (!oulg_append(out, cap, &at, "%s", OULG_FS_HU_MATERIAL_TAIL)) return 0;
             if (!oulg_replace_once(tmp, OULG_TEXT_CAP, OULG_HU_MATERIAL_AT, OULG_HU_MATERIAL_TO)) return 0;
         }
         if (oulg_hu_adapt_on(cl)) {
             int ok;
+            size_t body = at;
             if (cl->kernel == 0) {
                 ok = oulg_append(out, cap, &at, OULG_FS_HU_BODY_FMT, p[0].taps, p[0].taps, OULG_ADAPT_WIDE, (double) cl->adapt,
                                  OULG_ADAPT_LO, OULG_ADAPT_HI);
@@ -1198,6 +1227,11 @@ static int oulg_lib_into(char *out, size_t cap, int external, int debug, const s
                                  (double) cl->adapt, OULG_NEST_LO(cl->kernel), OULG_NEST_HI(cl->kernel));
             }
             if (!ok) return 0;
+            // Highlight neutrality reads the body's wide luma deviation (0 where no body ran).
+            if (oulg_hu_hl_on(cl)) {
+                if (!oulg_replace_once(out + body, cap - body, "  return mix(a, b, ", "  oulg_sd = sd;\n  return mix(a, b, ")) return 0;
+                at = body + strlen(out + body);
+            }
             if (!oulg_replace_once(tmp, OULG_TEXT_CAP, OULG_HU_BODY_AT, OULG_HU_BODY_TO)) return 0;
         }
         if (oulg_clear_on(cl, 1)) { if (!oulg_clear_lens(out, cap, &at, tmp, OULG_TEXT_CAP, cl)) return 0; }
@@ -1222,6 +1256,37 @@ static size_t oulg_lib_cap(int debug, const struct oulg_clear *cl) {
     return oulg_clear_on(cl, 0) || oulg_clear_on(cl, 1) || debug >= 3 ? 32768 : 16384;
 }
 
+// Diagnostic mode 5, the composition probe (docs/clear-glass/HU_ALPHA_PROBE.md). The optics are
+// compiled as in production (the library is generated as for mode 0); only the program's final
+// colour is replaced, on tagged fragments, by an opaque code a screenshot can read back:
+//  - tiles where (floor(x/8) + floor(y/8)) is even: R = (1 - final alpha) x 12.75, G = (1 - paint
+//    alpha, outputColor_S0.w) x 12.75, B = (1 - alpha of the region's blurred texture at the
+//    sample) x 12.75; 0 means opaque, 1/255 is 0.03 % of transmission, 255 is 7.8 % or more;
+//  - odd tiles: the program's 16-bit id (R high byte, G low byte, B = 1), logged by oulg_sf.c as
+//    PROBE shader=... id=..., so the drawing program is known.
+// The final alpha is what a source-over draw leaves of the backdrop (1 - a): with every term at 0
+// this draw transmits nothing; any value names which factor does. Coverage (antialiasing) still
+// applies at the outline. Untagged fragments and every other mode are untouched.
+#define OULG_DEBUG_PROBE 5
+static unsigned oulg_probe_id(const char *src) {
+    unsigned h = 2166136261u;
+    for (const unsigned char *c = (const unsigned char *) src; *c; c++) { h ^= *c; h *= 16777619u; }
+    return (h ^ (h >> 16)) & 0xffffu;
+}
+static int oulg_probe_line(char *out, size_t cap, const char *src) {
+    const char *paint = strstr(src, "outputColor_S0") ? "outputColor_S0.w" : "1.0";
+    unsigned id = oulg_probe_id(src);
+    int n = snprintf(out, cap,
+        "if (oulg_on > 0.0) {\n"
+        "  highp vec2 oulg_pt = floor(gl_FragCoord.xy / 8.0);\n"
+        "  output_S1 = mod(oulg_pt.x + oulg_pt.y, 2.0) < 0.5\n"
+        "    ? vec4(clamp((1.0 - output_S1.a) * 12.75, 0.0, 1.0), clamp((1.0 - %s) * 12.75, 0.0, 1.0),\n"
+        "           clamp((1.0 - texture(uTextureSampler_0_S1, oulg_tc).a) * 12.75, 0.0, 1.0), 1.0)\n"
+        "    : vec4(%u.0 / 255.0, %u.0 / 255.0, 1.0, 1.0);\n"
+        "}\n", paint, id >> 8, id & 0xffu);
+    return n > 0 && (size_t) n < cap;
+}
+
 // Replaces the sample's coordinates (at sampleAt in src) with oulg_tc and, unless the texture is
 // external, its texture() call with oulg_sample(). Frees src.
 static char *oulg_route_sample(char *src, size_t sampleAt, size_t coordsLen, int external) {
@@ -1231,6 +1296,31 @@ static char *oulg_route_sample(char *src, size_t sampleAt, size_t coordsLen, int
     char *u = call ? oulg_splice(t, (size_t) (call - t), strlen("texture("), "oulg_sample(") : NULL;
     free(t);
     return u;
+}
+
+// Image reads a fragment program makes besides the sample the rewrite routes through oulg_sample()
+// (texture(uTextureSampler_0_S1, ...)). RenderEngine draws a blur region whose radius is below
+// 10 px as mix(original, blurred, radius / 10): a second image child, the unblurred input. The
+// FillRRect match counts only the sampler-0 read, so in such a program the blurred child would get
+// the lens and the original would still reach the screen at weight 1 - radius / 10, whatever the
+// lens blur (docs/clear-glass/HU_RESIDUAL.md). Dither tables, read at sk_FragCoord through a matrix,
+// are not images of the backdrop and are not counted. Compile-time only: oulg_sf.c reports a
+// rewritten program that has any, so a device log can attest or exclude this composition.
+static inline int oulg_extra_images(const char *src) {
+    static const char at[] = "texture(uTextureSampler_";
+    int n = 0;
+    for (const char *p = strstr(src, at); p; p = strstr(p + 1, at)) {
+        const char *q = p + strlen(at);
+        if (!strncmp(q, "0_S1, ", 6)) continue;
+        const char *comma = strchr(q, ',');
+        if (!comma) continue;
+        const char *c = comma + 1;
+        while (*c == ' ') c++;
+        const char *fc = strstr(c, "sk_FragCoord"), *end = strchr(c, ';');
+        if (!strncmp(c, "mat3x2(umatrix_", 15) && fc && end && fc < end) continue;
+        n++;
+    }
+    return n;
 }
 
 static char *oulg_rewrite_fragment_cl(const char *src, int debug, const struct oulg_profile *profiles, const struct oulg_clear *clear) {
@@ -1278,15 +1368,19 @@ static char *oulg_rewrite_fragment_cl(const char *src, int debug, const struct o
 
     // Splice from the end backwards so earlier offsets stay valid.
     // Debug mode paints tagged cards magenta: proof that the tag reached this program.
-    char *s = oulg_splice(src, (size_t) (final - src), 0, "output_S1.rgb = mix(output_S1.rgb, vec3(output_S1.a, 0.0, output_S1.a), oulg_dbg * 0.6);\n");
+    char probe[640];
+    if (debug == OULG_DEBUG_PROBE && !oulg_probe_line(probe, sizeof probe, src)) return NULL;
+    char *s = oulg_splice(src, (size_t) (final - src), 0, debug == OULG_DEBUG_PROBE ? probe
+        : "output_S1.rgb = mix(output_S1.rgb, vec3(output_S1.a, 0.0, output_S1.a), oulg_dbg * 0.6);\n");
     if (!s) return NULL;
     int external = strstr(src, "samplerExternalOES uTextureSampler_0_S1") != NULL;
     char *u = oulg_route_sample(s, (size_t) (call - src) + strlen("texture(uTextureSampler_0_S1, "), strlen(coords), external);
     if (!u) return NULL;
     u = oulg_insert_after(u, 1, "void main() {\n", block);
-    size_t libCap = oulg_lib_cap(debug, &cl);
+    int libDebug = debug == OULG_DEBUG_PROBE ? 0 : debug;
+    size_t libCap = oulg_lib_cap(libDebug, &cl);
     char *lib = malloc(libCap);
-    if (!lib || !oulg_lib(lib, libCap, external, debug, p, &cl)) { free(lib); free(u); return NULL; }
+    if (!lib || !oulg_lib(lib, libCap, external, libDebug, p, &cl)) { free(lib); free(u); return NULL; }
     char *v = oulg_insert_after(u, 1, OULG_FS_DECL_AT, OULG_FS_DECL);
     char *out = oulg_insert_after(v, 1, OULG_FS_DECL, lib);
     free(lib);
@@ -1349,7 +1443,10 @@ static char *oulg_rewrite_clip_cl(const char *src, int debug, const struct oulg_
         coords, coords, coords, rph, rect, rect, debug == 1 ? "1.0" : "0.0", rect, rect,
         flip ? "  oulg_off.y *= u_skRTFlip.y;\n  oulg_e.y *= u_skRTFlip.y;\n" : "");
     if (n <= 0 || (size_t) n >= sizeof block) return NULL;
-    char *s = oulg_splice(src, (size_t) (final - src), 0, "output_S1.rgb = mix(output_S1.rgb, vec3(0.0, output_S1.a, output_S1.a), oulg_dbg * 0.6);\n");
+    char probe[640];
+    if (debug == OULG_DEBUG_PROBE && !oulg_probe_line(probe, sizeof probe, src)) return NULL;
+    char *s = oulg_splice(src, (size_t) (final - src), 0, debug == OULG_DEBUG_PROBE ? probe
+        : "output_S1.rgb = mix(output_S1.rgb, vec3(0.0, output_S1.a, output_S1.a), oulg_dbg * 0.6);\n");
     if (!s) return NULL;
     int external = strstr(src, "samplerExternalOES uTextureSampler_0_S1") != NULL;
     char *t = oulg_route_sample(s, (size_t) (call - src) + strlen("texture(uTextureSampler_0_S1, "), strlen(coords), external);
@@ -1360,9 +1457,10 @@ static char *oulg_rewrite_clip_cl(const char *src, int debug, const struct oulg_
     char *u = fe2 ? oulg_splice(t, (size_t) (fe2 - t) + 1, 0, block) : NULL;
     free(t);
     if (!u) return NULL;
-    size_t libCap = oulg_lib_cap(debug, &cl);
+    int libDebug = debug == OULG_DEBUG_PROBE ? 0 : debug;
+    size_t libCap = oulg_lib_cap(libDebug, &cl);
     char *lib = malloc(libCap);
-    if (!lib || !oulg_lib(lib, libCap, external, debug, p, &cl)) { free(lib); free(u); return NULL; }
+    if (!lib || !oulg_lib(lib, libCap, external, libDebug, p, &cl)) { free(lib); free(u); return NULL; }
     char *out = oulg_insert_before(u, 1, "void main() {\n", lib);
     free(lib);
     return out;

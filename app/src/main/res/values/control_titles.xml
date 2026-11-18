@@ -52,6 +52,7 @@
     <string name="control_title_3f0437688241">Lock screen blur with lens</string>
     <string name="control_title_ddc008a84d95">Center blur</string>
     <string name="control_title_f27ba480c2b4">Shade background blur</string>
+    <string name="control_title_e533dec3633d">Pop-up blur with lens</string>
     <string name="control_title_bbd07c14d31f">Summary blur</string>
     <string name="control_title_6125817372a1">Overall blur</string>
     <string name="control_title_b3f0fd5c9935">Inner blur</string>
@@ -92,6 +93,7 @@
     <string name="control_title_ebe06a05f094">Optical transition width</string>
     <string name="control_title_97edb54dcb0f">Rim glow width</string>
     <string name="control_title_5aaf82f5a308">Dynamic lens</string>
+    <string name="control_title_b43bb6ef2255">Pop-up lens while entering</string>
     <string name="control_title_404a512dbeda">Uniformity limit</string>
     <string name="control_title_b060e343d3f2">Light text threshold</string>
     <string name="control_title_ef3825b141ca">Light text limit (lens)</string>
@@ -112,7 +114,8 @@
     <string name="control_title_6a5669f01728">Physical multiplier</string>
     <string name="control_title_a2faa45a9b05">Maximum visible icons</string>
     <string name="control_title_c0667c366b66">Adaptive blur method</string>
-    <string name="control_title_52ded0cf52dd">Neutral whites</string>
+    <string name="control_title_0810d3675871">Highlight neutrality</string>
+    <string name="control_title_3aa9c5d21068">Legacy neutralization</string>
     <string name="control_title_203fe4f25f20">Uniformity level</string>
     <string name="control_title_2848e8a83298">Veil level</string>
     <string name="control_title_b89e7df74a83">Hide strip during</string>

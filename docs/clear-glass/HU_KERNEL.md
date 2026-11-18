@@ -56,3 +56,40 @@ Pré-requisitos: APK deste PR instalado, lente dinâmica ativa, pop-up em Clear 
 Prefira o controle do app: na próxima aplicação, o app regrava os valores `sf.*` que ele controla, inclusive `hckernel`, então um `setprop` manual seria sobrescrito.
 
 **Reversão:** `Original` (0) no mesmo controle, ou `hckernel=0`. O texto GLSL volta a ser o da v0.30 byte a byte.
+
+## Contenção de realces e resposta tonal (adendo R2, 17/11)
+
+Estado: **sem nova curva tonal.** As cores do Gmail foram aprovadas (U). Este adendo corrige a aplicabilidade de `hubloom` na UI e mede o que espalha os brancos. Nenhum texto GLSL muda.
+
+### `hubloom` (D)
+
+O peso de amostras claras (`exp(-6 · bloom · excesso)`) existe só em `oulg_disc0`.
+- Frosted: atua no disco inteiro.
+- Clear com kernel 0: atua só no disco A; o laço do disco B adaptativo não o pondera.
+- Clear com kernels 1–3: o disco A é montado dentro de `OULG_FS_HU_BODY_NESTED_FMT` e **não lê `hubloom`**; o controle é compilado fora.
+
+A UI o tratava como "comum". Agora `Applicability` o marca como inativo nesse caso, com a razão "Sem efeito nos kernels gaussianos; use o Original". No seletor por cartão (`huclear=2`), o cartão Frosted continua lendo o controle, então ele permanece ativo. Não foi transportada para os kernels 1–3 a fórmula antiga: ela reconstrói contornos pela amostra central, como mostra o histórico v0.19 (resíduo de texto 2,61 → 5,2).
+
+### O que espalha os brancos (N, `hu_kernel_report` twin)
+
+Quadrado branco de 60 px sobre azul saturado; pequenos realces de 8 e 16 px sobre cinza escuro (0,13).
+
+| Configuração | Auréola (energia fora) | Alcance 10 % / 3 % | Saturação perdida | Pico 8 px / 16 px |
+|---|---:|---:|---:|---:|
+| K1 36, lift 0 | 61,1 % | 26 / 44 px | 7,7 % | 3,6 % / 6,4 % |
+| K1 36, lift 0,20 | 61,6 % | 30 / 44 px | 8,6 % | 4,2 % / 7,5 % |
+| K1 41,4 (×1,15), lift 0,20 | 67,9 % | 32 / 50 px | 9,8 % | 3,4 % / 7,5 % |
+| K0 36, lift 0,20 | 68,5 % | 32 / 46 px | 9,0 % | 4,2 % / 15,0 % |
+
+- **Dispersão do kernel:** domina, e cresce com R. O ×1,15 da rodada R2 custa +6,3 pontos de auréola e +6 px de alcance.
+- **Lift 0,20:** +0,5 ponto de auréola e +0,9 ponto de saturação perdida; é secundário.
+- **`hcneutral`:** atua só na cromaticidade de quase-brancos (não modelado aqui); não desloca energia.
+- **Iluminação de borda (`hulight`):** fica na faixa do contorno (`oulg_glow`, alcance ≤ r/4), fora do corpo medido.
+- **Pequenos realces:** o pico de 8 px cai para cerca de 4 % por conservação de energia; um quadrado de 8 px sob σ ≈ 18 px tem pico teórico ≈ 3 %. Recuperá-lo exigiria devolver a forma original (sharpen ou amostra central), o que está vetado.
+- **Composição residual:** o piso nítido de ≈1,7 % medido sob o pop-up (`HU_RESIDUAL.md`) não é tonal, e lift, neutral ou saturação não o removem.
+
+### Decisão
+
+- Manter `hcneutral` 0,80, `hclift` 0,20 e `hcsat` 1,02.
+- Não aumentar o branco globalmente nem acrescentar contenção por padrão.
+- Se o pop-up ainda mostrar auréola interna depois de resolvido o resíduo (#203), a primeira alavanca medida é o raio: o ×1,15 foi adotado para esconder a névoa, cuja causa é a composição e não blur insuficiente. Uma contenção opt-in só entra com evidência nova e gates de resíduo, conforme o protocolo da seção 6.3 do laudo.

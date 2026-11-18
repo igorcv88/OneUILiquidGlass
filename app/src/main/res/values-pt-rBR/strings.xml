@@ -246,6 +246,9 @@
     <string name="action_save">Salvar</string>
     <string name="control_no_preview_behavior">Sem prévia visual: este ajuste muda tempo ou comportamento. Teste com uma notificação real.</string>
     <string name="control_no_preview">Sem prévia visual para este ajuste.</string>
+    <string name="control_no_preview_device">Sem amostra no app: este efeito óptico só é desenhado no aparelho. Compare lá.</string>
+    <string name="control_locked_inactive">Edição bloqueada enquanto este ajuste não tem efeito. O valor salvo é mantido e volta a valer quando a condição for atendida.</string>
+    <string name="control_effective_none">Em vigor agora: nada (inativo)</string>
     <string name="action_test">Testar</string>
     <string name="control_less">Menos</string>
     <string name="control_current">Atual</string>

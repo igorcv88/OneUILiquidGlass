@@ -56,7 +56,9 @@ Dependências: `liveblur=1` só ativa `live` se `sfrefract=0` e `backdrop=auto`.
 | `shadeblur` | 1 | booleano | Blur próprio em cada card expandido |
 | `kgblurpath` | 1 | inteiro 0/1 | Lockscreen: blur desenhado no drawable vs instalado na View |
 | `shadeblurpath` | 1 | inteiro 0/1 | Shade: blur no drawable vs instalado na View |
+| `hublurpath` | 0 | inteiro 0/1 | Pop-up com lente: blur no drawable vs instalado na View (Samsung) |
 | `shadefadecut` | 0.5 | 0–1 | Limite para remover a região de blur ao desaparecer |
+| `hufadecut` | -1 | -1–1 | Pop-up: limite da região de blur ao aparecer/sumir; −1 segue shadefadecut |
 | `kgwinblur` | 0 | booleano | Permite rampas do blur da janela no keyguard ocioso |
 | `kgblurradius` | 12 | inteiro -1–400 px | Override do blur da lockscreen; -1 segue `semradiuslens` |
 | `pillglass` | 1 | booleano | Vidro na pill de overflow da lockscreen |
@@ -179,7 +181,7 @@ Observar que as propriedades `lightglass` e `shadelightglass` se aplicam a super
 | `sf.qslens` | 0.30 | Quick Settings: refração do fundo junto ao contorno (0 desliga a refração e o fundo refratado) |
 | `sf.qsbody` | 0.35 | Quick Settings: opacidade do fundo refratado no contorno |
 | `sf.qsdepth` | 18 | Quick Settings: profundidade (px) da luz vinda de um contorno branco |
-| `sf.debug` | 0 | Modo de diagnóstico 0–2: 0 sem tinta; 1 magenta/ciano para programas reescritos; 2 mapa verde da luminância local na borda das notificações do bloqueio |
+| `sf.debug` | 0 | Modo de diagnóstico 0–2 e 5: 0 sem tinta; 1 magenta/ciano para programas reescritos; 2 mapa verde da luminância local na borda das notificações do bloqueio; 5 sonda de composição (alpha e programa) |
 | `sf.norewrite` | 0 | 1 desativa a reescrita dos shaders ao compilar |
 | `sf.huclear` | 0 | Clear Glass experimental no heads-up (inteiro 0–2): 0 desligado, GLSL idêntico ao optics 11; 1 todos os cartões do perfil; 2 por cartão, pela fatia de força da tag |
 | `sf.kgclear` | 0 | Clear Glass experimental no bloqueio (inteiro 0–2): 0 desligado, GLSL idêntico ao optics 11; 1 todos os cartões do perfil; 2 por cartão, pela fatia de força da tag |
@@ -198,6 +200,7 @@ Observar que as propriedades `lightglass` e `shadelightglass` se aplicam a super
 | `sf.hclift` | 0.30 | Clear Glass heads-up: clareamento do corpo, 1 − (1 − c)^(1 + lift) (0–2; 0 desliga) |
 | `sf.kclift` | 0 | Clear Glass lockscreen: clareamento do corpo, 1 − (1 − c)^(1 + lift) (0–2; 0 desliga) |
 | `sf.hcneutral` | 0.75 | Clear Glass heads-up: neutralização dos quase-brancos do material (0–1; só age com o material ativo) |
+| `sf.hchlneutral` | 0 | Clear Glass heads-up: neutralidade dos realces (0–1, linear; 0 = nada emitido); exige o blur adaptativo |
 | `sf.hckernel` | 0 | Clear Glass heads-up: kernel do blur adaptativo (0 = discos atuais; 1–3 = Gaussiano aninhado, limiares 0,035–0,14 / 0,04–0,16 / 0,03–0,12; só age com o blur adaptativo ligado) |
 | `sf.hcscrimmax` | 0 | Clear Glass heads-up: escurecimento sobre fundo branco (0–0.8; limitado a scrim + (1 − scrim)/2) |
 | `sf.kcband` | 0.42 | Clear Glass bloqueio: largura da banda de refração (fração do raio do canto, 0.42–1) |
