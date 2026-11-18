@@ -214,11 +214,28 @@ public final class SfLiveController {
      * restarts. Recorded so the next launch can check what the new compositor compiled with.
      */
     public void restartConfirmed(Map<String, String> compositorValues) {
+        restartConfirmed(compositorValues, null, null);
+    }
+
+    /**
+     * As {@link #restartConfirmed(Map)}, but before anything is written the plan is recomputed with
+     * the status and the properties read just now; if its fingerprint is no longer
+     * {@code fingerprint} the restart is aborted (the person confirmed another list).
+     *
+     * @param recompute the plan's fingerprint for a fresh helper status; null skips the check
+     */
+    public void restartConfirmed(
+            Map<String, String> compositorValues, String fingerprint,
+            java.util.function.Function<Map<String, String>, String> recompute) {
         restartValues = new LinkedHashMap<>(compositorValues);
+        confirmedFingerprint = fingerprint;
+        fingerprintCheck = recompute;
         submit(Action.RESTART);
     }
 
     private Map<String, String> restartValues = Collections.emptyMap();
+    private String confirmedFingerprint;
+    private java.util.function.Function<Map<String, String>, String> fingerprintCheck;
 
     /** Only an observed, loaded new SF process can establish the compiled-input baseline. */
     private void confirmCompiled(Map<String, String> status) {
@@ -300,6 +317,12 @@ public final class SfLiveController {
                                 io.github.igorcv88.oneuiliquidglass.config.SystemPropertyReader.refresh();
                                 if (!io.github.igorcv88.oneuiliquidglass.config.SystemPropertyReader.available())
                                     throw new LocalizedFailure(R.string.sf_props_unavailable);
+                                if (confirmedFingerprint != null && fingerprintCheck != null
+                                        && !confirmedFingerprint.equals(fingerprintCheck.apply(freshStatus)))
+                                    throw new LocalizedFailure(R.string.apply_list_changed);
+                                // Every restart of the app loads the lens: the intent survives a reboot.
+                                io.github.igorcv88.oneuiliquidglass.config.state.LensIntent.record(
+                                        activity.getSharedPreferences("sf_live_ui", Activity.MODE_PRIVATE), true);
                                 Map<String, String> inputs = CompositorValues.restartInputs(
                                         io.github.igorcv88.oneuiliquidglass.config.SystemPropertyReader.snapshot(), values);
                                 android.content.SharedPreferences prefs = activity.getSharedPreferences(
@@ -324,6 +347,8 @@ public final class SfLiveController {
                                 if (removed.exit != 0
                                         || !"ok".equals(removed.values().get("uninstall")))
                                     throw new IOException(removed.output);
+                                io.github.igorcv88.oneuiliquidglass.config.state.LensIntent.record(
+                                        activity.getSharedPreferences("sf_live_ui", Activity.MODE_PRIVATE), false);
                                 status = flow.status();
                                 message = () -> activity.getString(R.string.sf_removed);
                                 break;

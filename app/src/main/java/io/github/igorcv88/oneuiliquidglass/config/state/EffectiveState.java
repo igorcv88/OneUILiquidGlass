@@ -17,7 +17,9 @@ import java.util.Set;
  */
 public final class EffectiveState {
     public enum Kind {
-        ACTIVE, PENDING_COMPILE, INACTIVE, OFF, READ_ONLY, EXTERNAL, UNKNOWN
+        ACTIVE, PENDING_COMPILE, INACTIVE, OFF, READ_ONLY, EXTERNAL, UNKNOWN,
+        /** Usable once the lens is activated: saved, editable, not in effect while it is not loaded. */
+        PENDING_ACTIVATION
     }
 
     /** Short qualifiers the UI turns into copy. */
@@ -55,7 +57,18 @@ public final class EffectiveState {
     /** {@code draft}: a value being dragged; it changes only the text of an ACTIVE row. */
     public static Effective of(
             ControlState st, PublicationPlan plan, String key, Controls.Surface surface, String draft) {
-        Applicability.Result rule = st.applicability().on(key, surface);
+        return of(st, plan, key, surface, draft, false);
+    }
+
+    /**
+     * @param lensIntent the person means to use the lens: compositor keys are judged on the next
+     *     compile, so an unloaded lens shows PENDING_ACTIVATION instead of INACTIVE
+     */
+    public static Effective of(
+            ControlState st, PublicationPlan plan, String key, Controls.Surface surface, String draft,
+            boolean lensIntent) {
+        Applicability rules = st.applicability(lensIntent);
+        Applicability.Result rule = rules.on(key, surface);
         String confirmed = st.confirmed(key);
         Set<Note> none = EnumSet.noneOf(Note.class);
         switch (rule.kind) {
@@ -69,14 +82,18 @@ public final class EffectiveState {
                 break;
         }
         Set<Note> notes = EnumSet.noneOf(Note.class);
+        if (rules.pendingActivation(key, surface)) {
+            notes.add(Note.APPLY_TO_TAKE_EFFECT);
+            return new Effective(Kind.PENDING_ACTIVATION, confirmed, null, "", notes);
+        }
         if (plan.writes.containsKey(key)) {
             notes.add(Note.APPLY_TO_TAKE_EFFECT);
-            return new Effective(Kind.PENDING_COMPILE, plan.writes.get(key), null, "", notes);
+            return new Effective(Kind.PENDING_COMPILE, plan.writes.get(key).value, null, "", notes);
         }
-        if (plan.activeDrift.containsKey(key)) {
+        if (plan.drift.containsKey(key)) {
             notes.add(Note.APPLY_TO_TAKE_EFFECT);
             if (plan.external.contains(key)) notes.add(Note.CHANGED_OUTSIDE_APP);
-            return new Effective(Kind.PENDING_COMPILE, plan.activeDrift.get(key), null, "", notes);
+            return new Effective(Kind.PENDING_COMPILE, plan.drift.get(key).value, null, "", notes);
         }
         if (plan.external.contains(key))
             return new Effective(Kind.EXTERNAL, confirmed, null, "", notes);

@@ -26,8 +26,11 @@ final class PresetsSheet extends Sheet {
         LinearLayout save = Ui.listRow(activity, t, Icon.STAR, activity.getString(R.string.preset_save), saved == null ? activity.getString(R.string.preset_save_desc) : activity.getString(R.string.preset_replace_desc), null);
         save.setOnClickListener(v -> {
             try {
+                // A style is a schema 2 file without the system diagnostic: what the person chose, nothing more.
                 m.repo.preferences().edit().putString("preset.custom",
-                        PresetCodec.encode(m.repo.overrides(), m.state().enabled, device())).apply();
+                        PresetCodec.encodeV2(m.repo.overrides(), m.state().enabled, device(),
+                                versionCode(activity),
+                                System.currentTimeMillis(), null, null)).apply();
                 host.feedback(activity.getString(R.string.preset_saved));
                 dismiss();
             } catch (Exception e) {
@@ -40,39 +43,35 @@ final class PresetsSheet extends Sheet {
         Ui.enable(load, saved != null);
         load.setOnClickListener(v -> {
             dismiss();
-            PresetReview.open(host, saved);
+            ImportReview.open(host, saved, ConfigRepository.Source.STYLE);
         });
         card.addView(load);
         card.addView(Ui.divider(activity, t, t.dp(72)));
         LinearLayout defaults = Ui.listRow(activity, t, Icon.RESET, activity.getString(R.string.preset_reset), activity.getString(R.string.preset_all_surfaces), null);
-        defaults.setOnClickListener(v -> confirmDefaults());
+        defaults.setOnClickListener(v -> {
+            dismiss();
+            ImportReview.openDefaults(host);
+        });
         card.addView(defaults);
         card.addView(Ui.divider(activity, t, t.dp(72)));
         LinearLayout undo = Ui.listRow(activity, t, Icon.UNDO, activity.getString(R.string.preset_undo), m.repo.canUndo() ? activity.getString(R.string.preset_undo_desc) : activity.getString(R.string.preset_nothing_undo), null);
         Ui.enable(undo, m.repo.canUndo());
         undo.setOnClickListener(v -> {
-            host.feedback(m.undo() ? activity.getString(R.string.preset_undone) : activity.getString(R.string.preset_nothing_undo));
+            // Undo is a review first: the difference is shown before anything is changed.
             dismiss();
+            ImportReview.openUndo(host);
         });
         card.addView(undo);
         body().addView(card, Ui.match());
     }
 
-    private void confirmDefaults() {
-        dismiss();
-        Sheet s = new Sheet(activity, t, activity.getString(R.string.preset_reset_question));
-        s.text(activity.getString(R.string.preset_reset_warning));
-        s.action(host.activity().getString(R.string.action_cancel), Ui.ButtonStyle.OUTLINED, s::dismiss);
-        s.action(activity.getString(R.string.preset_reset), Ui.ButtonStyle.FILLED, () -> {
-            Map<String, String> m = new LinkedHashMap<>();
-            for (SettingSpec spec : SettingsRegistry.all())
-                if (Controls.editable(spec.key)) m.put(spec.key, spec.defaultValue);
-            host.model().repo.replace(m, true);
-            host.model().notifyChanged();
-            host.feedback(activity.getString(R.string.preset_restored));
-            s.dismiss();
-        });
-        s.show();
+    /** The installed version, written into backups so a file's defaults can be told from this version's. */
+    static int versionCode(android.content.Context context) {
+        try {
+            return (int) context.getPackageManager().getPackageInfo(context.getPackageName(), 0).getLongVersionCode();
+        } catch (Exception e) {
+            return 0;
+        }
     }
 
     static String device() {
@@ -82,50 +81,7 @@ final class PresetsSheet extends Sheet {
     /** Diff review before a saved or imported style replaces the current one. */
     static final class PresetReview {
         static void open(Host host, String json) {
-            Theme t = host.theme();
-            PresetCodec.Parsed parsed;
-            try {
-                parsed = PresetCodec.parse(json);
-            } catch (Exception e) {
-                host.feedback(importError(host.activity(), e));
-                return;
-            }
-            AppModel m = host.model();
-            ControlState st = m.state();
-            Sheet s = new Sheet(host.activity(), t, host.activity().getString(R.string.preset_use_question));
-            List<String> lines = new ArrayList<>();
-            // Rules as they will be once the style is applied: a value the new setup does not use
-            // is still saved, and the review says it stays stored and inactive.
-            Applicability after = new ControlState(parsed.values, st.observed, Collections.emptyMap(), parsed.enabled).applicability();
-            int compositor = 0;
-            for (Map.Entry<String, String> e : parsed.values.entrySet()) {
-                Controls.Control c = Controls.get(e.getKey());
-                String now = c != null ? st.shown(e.getKey()) : st.shown(e.getKey());
-                if (now != null && now.equals(e.getValue())) continue;
-                if (c != null) {
-                    lines.add(ControlTitles.title(host.activity(), c) + " · " + surfaces(host.activity(), c) + ": " + ControlValues.display(host.activity(), c, now) + " → " + ControlValues.display(host.activity(), c, e.getValue())
-                            + (EditGuard.check(EditGuard.Action.PRESET_APPLY, e.getKey(), null, after).outcome == EditGuard.Outcome.ALLOW_LATENT
-                                    ? " · " + host.activity().getString(R.string.state_inactive) : ""));
-                    if (c.needsRestart()) compositor++;
-                } else lines.add(flagName(host.activity(), e.getKey()) + ": " + host.activity().getString("1".equals(e.getValue()) ? R.string.switch_on : R.string.switch_off));
-            }
-            StringBuilder b = new StringBuilder();
-            if (lines.isEmpty()) b.append(host.activity().getString(R.string.preset_no_changes));
-            else b.append(host.activity().getString(lines.size() == 1 ? R.string.preset_change_one : R.string.preset_change_many, lines.size()) + "\n");
-            for (int i = 0; i < Math.min(40, lines.size()); i++) b.append("• ").append(lines.get(i)).append('\n');
-            if (lines.size() > 40) b.append(host.activity().getString(R.string.preset_and_more, lines.size() - 40)).append('\n');
-            if (parsed.enabled != st.enabled) b.append("\n").append(host.activity().getString(parsed.enabled ? R.string.preset_glass_enabled : R.string.preset_glass_disabled));
-            if (compositor > 0) b.append("\n").append(host.activity().getString(R.string.preset_lens_pending));
-            if (!parsed.unknown.isEmpty()) b.append("\n").append(host.activity().getString(R.string.preset_ignored, parsed.unknown.size()));
-            s.text(b.toString().trim());
-            s.action(host.activity().getString(R.string.action_cancel), Ui.ButtonStyle.OUTLINED, s::dismiss);
-            s.action(host.activity().getString(R.string.preset_use), Ui.ButtonStyle.FILLED, () -> {
-                m.repo.replace(parsed.values, true, parsed.enabled);
-                m.notifyChanged();
-                host.feedback(host.activity().getString(R.string.preset_applied));
-                s.dismiss();
-            });
-            s.show();
+            ImportReview.open(host, json, ConfigRepository.Source.IMPORT);
         }
 
         static String importError(android.content.Context context, Exception error) {
@@ -139,13 +95,6 @@ final class PresetsSheet extends Sheet {
                 }
             }
             return context.getString(R.string.preset_invalid);
-        }
-
-        private static String surfaces(android.content.Context context, Controls.Control c) {
-            if (c.surfaces.size() == 3) return context.getString(R.string.preset_all);
-            StringBuilder b = new StringBuilder();
-            for (Controls.Surface s : c.surfaces) b.append(b.length() == 0 ? "" : "/").append(HomePage.surfaceLabel(context, s));
-            return b.toString();
         }
 
         static String flagName(android.content.Context context, String key) {

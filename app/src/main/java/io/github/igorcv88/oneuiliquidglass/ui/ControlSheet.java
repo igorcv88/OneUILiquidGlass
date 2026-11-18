@@ -50,7 +50,7 @@ final class ControlSheet extends Sheet {
     }
 
     private Applicability.Result rule() {
-        return model.state().applicability().on(c.key, surface);
+        return model.rules().on(c.key, surface);
     }
 
     /**
@@ -87,7 +87,8 @@ final class ControlSheet extends Sheet {
             body.addView(n, Ui.match(0, t.dp(12)));
         } else if (a.kind == Applicability.Kind.NEEDS_RESTART) {
             body.addView(Ui.notice(activity, t, Ui.Tone.WARN,
-                    activity.getString(R.string.control_restart_needed),
+                    activity.getString(model.rules().pendingActivation(c.key, surface)
+                            ? R.string.lens_not_loaded_banner : R.string.control_restart_needed),
                     activity.getString(R.string.home_apply), () -> {
                         dismiss();
                         host.openLens();
@@ -102,6 +103,12 @@ final class ControlSheet extends Sheet {
         TextView help = Ui.text(activity, t, ControlDescriptions.help(activity, c), Theme.LABEL, t.inkMuted, false);
         help.setPadding(t.dp(8), t.dp(14), t.dp(8), t.dp(4));
         body.addView(help);
+        String provenance = ProvenanceText.line(activity, model.repo.provenance(c.key));
+        if (!provenance.isEmpty()) {
+            TextView last = Ui.text(activity, t, provenance, Theme.LABEL, t.inkMuted, false);
+            last.setPadding(t.dp(8), 0, t.dp(8), t.dp(4));
+            body.addView(last);
+        }
         values(body, st, editable);
         technical(body);
         action(model.ui.getBoolean("favorite." + c.key, false) ? activity.getString(R.string.control_favorite_remove) : activity.getString(R.string.control_favorite_add),
@@ -109,7 +116,7 @@ final class ControlSheet extends Sheet {
                     boolean fav = !model.ui.getBoolean("favorite." + c.key, false);
                     if (fav) {
                         EditGuard.Decision d = EditGuard.check(EditGuard.Action.FAVORITE_ADD, c.key, surface,
-                                model.state().applicability());
+                                model.rules());
                         if (!d.permitted()) {
                             host.feedback(ControlReasons.text(activity, d.reason));
                             return;

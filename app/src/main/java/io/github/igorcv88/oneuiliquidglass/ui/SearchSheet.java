@@ -78,7 +78,7 @@ final class SearchSheet extends Sheet {
             return;
         }
         ControlState st = host.model().state();
-        Applicability app = st.applicability();
+        Applicability app = host.model().rules();
         Map<Controls.Section, List<Controls.Control>> groups = new EnumMap<>(Controls.Section.class);
         for (Controls.Control c : Controls.all()) {
             if (!technical && c.tier == Controls.Tier.INTERNAL) continue;

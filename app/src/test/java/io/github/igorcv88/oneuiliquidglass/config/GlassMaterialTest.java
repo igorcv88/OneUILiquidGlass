@@ -208,8 +208,6 @@ public class GlassMaterialTest {
         assertEquals("0.42", r.get("sf.kcband"));
         assertEquals("24", r.get("sf.kcedge"));
         assertEquals("24", r.get("sf.kccore"));
-        // HU lift 0.30 was approved in the final physical calibration.
-        assertEquals("0.3", r.get("sf.hclift"));
         assertFalse(r.containsKey("sf.kclift"));
         assertFalse(r.containsKey("sf.hcneutral"));
         for (Map.Entry<String, String> e : r.entrySet()) {
@@ -219,8 +217,13 @@ public class GlassMaterialTest {
         }
         // Clear-only defaults now start with the approved look, without stored overrides.
         assertEquals(SettingsRegistry.get("sf.hcfold").defaultValue, r.get("sf.hcfold"));
-        assertEquals(0, new java.math.BigDecimal(SettingsRegistry.get("sf.hclift").defaultValue)
-                .compareTo(new java.math.BigDecimal(r.get("sf.hclift"))));
+    }
+
+    @Test
+    public void recommendedClearLeavesLift() {
+        Map<String, String> r = GlassMaterial.recommendedClear();
+        assertFalse("Brightening is the person's own choice", r.containsKey("sf.hclift"));
+        assertFalse(r.containsKey("sf.kclift"));
     }
 
     @Test

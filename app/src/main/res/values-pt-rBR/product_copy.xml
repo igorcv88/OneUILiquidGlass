@@ -1,9 +1,44 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Source: docs/OULG_UI_PLAN/COPY_PT_EN.csv. Phase B subset; T08 regenerates the full file. -->
+<!-- Source: docs/OULG_UI_PLAN/COPY_PT_EN.csv. Phases B and B2 subset; T08 regenerates the full file. -->
 <resources>
     <string name="state_inactive">Inativo</string>
     <string name="state_external">Alterado fora do app</string>
     <string name="apply_list_changed">A lista mudou enquanto o diálogo estava aberto. Confira de novo.</string>
     <string name="apply_contradiction">Configuração contraditória: %1$s. Ajuste um deles antes de aplicar.</string>
     <string name="error_style_order">O limite claro precisa ficar abaixo do limite escuro.</string>
+    <string name="state_pending_activation">Vale ao ativar a lente</string>
+    <string name="lens_not_loaded_banner">A lente não está carregada. Estes ajustes ficam salvos e valem quando você ativar a lente.</string>
+    <string name="activation_title">Ativar a lente</string>
+    <string name="activation_restore_group">Restaurar seus ajustes salvos (%1$d)</string>
+    <string name="activation_restore_origin">ausente no sistema</string>
+    <string name="activation_changes_group">Suas alterações (%1$d)</string>
+    <string name="activation_external_group">Alterados fora do app (%1$d)</string>
+    <string name="activation_dormant_group">Guardados sem efeito (%1$d)</string>
+    <string name="activation_lost_external_group">Valores anteriores do Terminal que não existem mais (%1$d)</string>
+    <string name="activation_adopt">Adotar no app</string>
+    <string name="compiled_historical">Último compilado: %1$s, outra sessão do sistema</string>
+    <string name="plan_blocked_props">Não foi possível ler as propriedades do sistema. Nada será aplicado até a leitura funcionar.</string>
+    <string name="import_mode_replace">Substituir tudo</string>
+    <string name="import_mode_merge">Mesclar</string>
+    <string name="import_group_changed">Alterados (%1$d)</string>
+    <string name="import_group_added">Adicionados (%1$d)</string>
+    <string name="import_group_removed">Voltam ao padrão (%1$d)</string>
+    <string name="import_group_kept">Mantidos (%1$d)</string>
+    <string name="import_group_dormant">Guardados sem efeito agora (%1$d)</string>
+    <string name="import_group_ignored">Ignorados (%1$d)</string>
+    <string name="import_use_backup_defaults">Usar os padrões do backup</string>
+    <string name="import_adopt_terminal">Adotar valores do Terminal do arquivo</string>
+    <string name="import_needs_lens">Depois de importar, aplique a lente para os ajustes do compositor valerem. Nada é reiniciado agora.</string>
+    <string name="import_diagnostic_note">O arquivo também contém um diagnóstico do sistema; ele não é importado.</string>
+    <string name="export_include_terminal">Incluir valores definidos pelo Terminal</string>
+    <string name="undo_review_title">Desfazer: %1$s</string>
+    <string name="undo_previous_change">Alteração anterior</string>
+    <string name="provenance_line">Última alteração: %1$s, %2$s</string>
+    <string name="provenance_edit">edição</string>
+    <string name="provenance_reset">restaurar padrão</string>
+    <string name="provenance_undo">desfazer</string>
+    <string name="provenance_import">importação</string>
+    <string name="provenance_style">estilo</string>
+    <string name="provenance_material">troca de material</string>
+    <string name="provenance_adopt">adotado do Terminal</string>
 </resources>

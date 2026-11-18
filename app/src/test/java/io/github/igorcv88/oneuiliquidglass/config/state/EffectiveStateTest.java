@@ -27,7 +27,7 @@ public class EffectiveStateTest {
     private static final Controls.Surface HU = Controls.Surface.HEADSUP;
 
     private static EffectiveState.Effective of(ControlState st, Map<String, String> compiled, String key) throws Exception {
-        return EffectiveState.of(st, PublicationPlan.of(st.snapshot(compiled, false),
+        return EffectiveState.of(st, PublicationPlan.of(Snapshots.of(st, compiled, false),
                 io.github.igorcv88.oneuiliquidglass.config.Applicability::new), key, HU);
     }
 
@@ -109,14 +109,14 @@ public class EffectiveStateTest {
     @Test
     public void aDraftChangesTheDisplayOnlyWhileActive() throws Exception {
         ControlState st = state(map("liveradius", "40"), Collections.emptyMap());
-        PublicationPlan plan = PublicationPlan.of(st.snapshot(null, false),
+        PublicationPlan plan = PublicationPlan.of(Snapshots.of(st, null, false),
                 io.github.igorcv88.oneuiliquidglass.config.Applicability::new);
         assertEquals("55", EffectiveState.of(st, plan, "liveradius", HU, "55").displayValue);
         assertEquals("40", EffectiveState.of(st, plan, "liveradius", HU, null).displayValue);
 
         Map<String, String> o = plus(CLEAR, "sf.hckernel", "1");
         ControlState inactive = state(map("sf.hubloom", "1"), o);
-        PublicationPlan p2 = PublicationPlan.of(inactive.snapshot(o, false),
+        PublicationPlan p2 = PublicationPlan.of(Snapshots.of(inactive, o, false),
                 io.github.igorcv88.oneuiliquidglass.config.Applicability::new);
         assertEquals(EffectiveState.DISPLAY_INACTIVE, EffectiveState.of(inactive, p2, "sf.hubloom", HU, "2").displayValue);
     }
@@ -127,5 +127,20 @@ public class EffectiveStateTest {
         Map<String, String> compiled = plus(CLEAR, "sf.hubloom", "0");
         // hubloom stays usable: the kernel is still the original one until the draft is saved.
         assertNotEquals(EffectiveState.Kind.INACTIVE, of(st, compiled, "sf.hubloom").kind);
+    }
+
+    @Test
+    public void anUnloadedLensWithIntentShowsPendingActivationAndTheSavedValue() throws Exception {
+        ControlState st = state(map("sf.huclear", "1", "sf.hcsat", "1.2"), Collections.<String, String>emptyMap());
+        ConfirmedSnapshot snapshot = new ConfirmedSnapshot(st.saved, st.observed,
+                io.github.igorcv88.oneuiliquidglass.live.CompiledEvidence.none(),
+                Collections.<String, String>emptyMap(), true, true, false, 1);
+        PublicationPlan plan = PublicationPlan.of(snapshot, io.github.igorcv88.oneuiliquidglass.config.Applicability::new);
+        EffectiveState.Effective e = EffectiveState.of(st, plan, "sf.hcsat", HU, null, true);
+        assertEquals(EffectiveState.Kind.PENDING_ACTIVATION, e.kind);
+        assertEquals("1.2", e.displayValue);
+        assertTrue(e.notes.contains(EffectiveState.Note.APPLY_TO_TAKE_EFFECT));
+        assertEquals("without the intent it stays inactive", EffectiveState.Kind.INACTIVE,
+                EffectiveState.of(st, plan, "sf.hcsat", HU, null, false).kind);
     }
 }

@@ -179,7 +179,6 @@ public enum GlassMaterial {
         m.put("sf.hcbody2", "0");
         m.put("sf.hcadapt", "1");
         m.put("sf.hcsat", "1.05");
-        m.put("sf.hclift", "0.3");
         m.put("sf.hcscrim", "0");
         m.put("sf.hcscrimmax", "0");
         m.put("sf.kcband", "0.42");

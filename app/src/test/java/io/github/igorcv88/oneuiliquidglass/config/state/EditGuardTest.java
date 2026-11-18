@@ -78,7 +78,7 @@ public class EditGuardTest {
 
     @Test
     public void importsAndPresetsKeepInactiveValuesAsLatentAndIgnoreReadOnly() {
-        for (Action a : new Action[] {Action.BULK_IMPORT, Action.PRESET_APPLY}) {
+        for (Action a : new Action[] {Action.BULK_IMPORT, Action.PRESET_APPLY, Action.ADOPT_EXTERNAL}) {
             assertEquals(a.name(), Outcome.ALLOW, check(a, "liveradius", STANDARD));
             assertEquals(a.name(), Outcome.ALLOW_LATENT, check(a, "sf.core", STANDARD));
             assertEquals(a.name(), Outcome.ALLOW_LATENT, check(a, "liveradius", OFF));

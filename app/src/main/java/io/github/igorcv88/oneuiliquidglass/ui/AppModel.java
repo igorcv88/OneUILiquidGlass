@@ -8,7 +8,9 @@ import android.os.Looper;
 import io.github.igorcv88.oneuiliquidglass.Config;
 import io.github.igorcv88.oneuiliquidglass.R;
 import io.github.igorcv88.oneuiliquidglass.config.*;
+import io.github.igorcv88.oneuiliquidglass.config.state.ConfirmedSnapshot;
 import io.github.igorcv88.oneuiliquidglass.config.state.EditGuard;
+import io.github.igorcv88.oneuiliquidglass.config.state.LensIntent;
 import io.github.igorcv88.oneuiliquidglass.live.*;
 
 import java.util.*;
@@ -142,7 +144,7 @@ public final class AppModel {
 
     /** As {@link #saveControl(String, String, Controls.Surface)} for EDIT or RESET_ONE. */
     public Result saveControl(String key, String value, Controls.Surface surface, EditGuard.Action action) {
-        EditGuard.Decision d = EditGuard.check(action, key, surface, state().applicability());
+        EditGuard.Decision d = EditGuard.check(action, key, surface, rules());
         if (d.outcome != EditGuard.Outcome.ALLOW) {
             drafts.remove(key);
             notifyChanged();
@@ -209,7 +211,7 @@ public final class AppModel {
             }
         }
         try {
-            repo.replace(selection, false);
+            repo.replace(selection, false, null, ConfigRepository.Source.MATERIAL);
             notifyChanged();
             return new Result(true, false, "");
         } catch (IllegalArgumentException e) {
@@ -270,7 +272,7 @@ public final class AppModel {
             }
         }
         try {
-            repo.replace(values, false);
+            repo.replace(values, false, null, ConfigRepository.Source.ADOPT);
             notifyChanged();
             return new Result(true, false, "");
         } catch (IllegalArgumentException e) {
@@ -301,7 +303,7 @@ public final class AppModel {
      * @return the keys left alone
      */
     public List<String> reset(Collection<String> keys, Controls.Surface surface) {
-        Applicability rules = state().applicability();
+        Applicability rules = rules();
         List<String> approved = new ArrayList<>(), refused = new ArrayList<>();
         for (String key : keys)
             (EditGuard.check(EditGuard.Action.RESET_ONE, key, surface, rules).outcome == EditGuard.Outcome.ALLOW
@@ -369,25 +371,67 @@ public final class AppModel {
     // ---- dynamic lens
 
     /** Result of revalidating an Apply confirmation against the current list. */
-    public enum PlanCheck { OK, STALE, CONTRADICTION }
+    public enum PlanCheck { OK, STALE, CONTRADICTION, BLOCKED }
 
     private PlanContradiction contradiction;
 
     /**
+     * What is confirmed now, with no draft: saved values, the properties read last, the evidence of
+     * the last compile and the helper status. Reads only thread-safe state, so the lens worker
+     * can rebuild it for a fresh status.
+     */
+    public ConfirmedSnapshot confirmedSnapshot(Map<String, String> status) {
+        SharedPreferences p = lensPrefs();
+        ControlState st = new ControlState(repo.overrides(), SystemPropertyReader.snapshot(),
+                Collections.<String, String>emptyMap(), repo.preferences().getBoolean(Config.KEY_ENABLED, false));
+        return st.snapshot(CompiledEvidence.from(p, status), status,
+                CompositorValues.awaitingVerification(p), repo.generation());
+    }
+
+    public ConfirmedSnapshot confirmedSnapshot() {
+        return confirmedSnapshot(lens.model().status);
+    }
+
+    /** Whether the person means to use the lens: compositor controls are then judged on the next compile. */
+    public boolean lensIntent() {
+        return LensIntent.of(confirmedSnapshot(), lensPrefs());
+    }
+
+    /** The rules every edit entry point uses: confirmed values only, the lens intent taken into account. */
+    public Applicability rules() {
+        return state().applicability(lensIntent());
+    }
+
+    /** The evidence of the last confirmed compile, current only for the loaded compositor process. */
+    public CompiledEvidence compiledEvidence() {
+        return confirmedSnapshot().compiled;
+    }
+
+    /**
      * What the next Apply writes and recompiles, from the confirmed state only (no drafts), the
-     * compositor baseline and the properties read last. Null when the saved values contradict the
+     * compile evidence and the properties read last. Null when the saved values contradict the
      * rules; see {@link #contradiction()}.
      */
     public PublicationPlan plan() {
-        SharedPreferences p = lensPrefs();
         try {
-            PublicationPlan plan = PublicationPlan.of(
-                    state().snapshot(CompositorValues.baseline(p), CompositorValues.awaitingVerification(p)),
-                    Applicability::new);
+            PublicationPlan plan = PublicationPlan.of(confirmedSnapshot(), Applicability::new);
             contradiction = null;
             return plan;
         } catch (PlanContradiction e) {
             contradiction = e;
+            return null;
+        }
+    }
+
+    /**
+     * The fingerprint of the plan for a helper status read just now (safe on the worker thread);
+     * null when the plan is contradictory. The lens controller compares it with the confirmed one
+     * before writing anything.
+     */
+    public String planFingerprint(Map<String, String> freshStatus) {
+        try {
+            return PublicationPlan.of(confirmedSnapshot(freshStatus), Applicability::new).fingerprint;
+        } catch (PlanContradiction e) {
             return null;
         }
     }
@@ -405,13 +449,53 @@ public final class AppModel {
         cached = null;
         PublicationPlan now = plan();
         if (now == null) return PlanCheck.CONTRADICTION;
+        if (now.blocked) return PlanCheck.BLOCKED;
         return now.fingerprint.equals(shownFingerprint) ? PlanCheck.OK : PlanCheck.STALE;
     }
 
-    /** Compositor values to list on the next restart: the plan's writes and active drift. */
+    /** Compositor values to list on the next restart: the plan writes and drift. */
     public Map<String, String> pendingCompositor() {
         PublicationPlan plan = plan();
         return plan == null ? Collections.<String, String>emptyMap() : plan.listed();
+    }
+
+    // ---- backup, styles and undo: one plan, reviewed, then applied as reviewed
+
+    public ImportPlan importPlan(PresetCodec.Parsed parsed, ImportPlan.Mode mode,
+            boolean useBackupDefaults, boolean adoptTerminal) {
+        return ImportPlan.of(confirmedSnapshot(), parsed, mode, useBackupDefaults, adoptTerminal);
+    }
+
+    /** What Undo would do, as a review; null when there is nothing to undo. */
+    public ImportPlan undoPlan() {
+        ConfigRepository.UndoSnapshot snapshot = repo.undoSnapshot();
+        return snapshot == null ? null : ImportPlan.ofSnapshot(confirmedSnapshot(), snapshot.overrides, snapshot.enabled);
+    }
+
+    /** Saves what the plan decided in one transaction; nothing is published or restarted. */
+    public void applyPlan(ImportPlan plan, ConfigRepository.Source source) {
+        repo.replaceAll(plan.result, plan.enabled, source);
+        drafts.clear();
+        notifyChanged();
+    }
+
+    /**
+     * Saves, as the person own value, one an earlier session or the Terminal had set. Goes through
+     * the guard (ADOPT_EXTERNAL) and records the adoption as its provenance.
+     */
+    public Result adoptExternal(String key, String value) {
+        SettingSpec s = SettingsRegistry.get(key);
+        if (s == null || !Controls.editable(key))
+            return new Result(false, false, activity.getString(R.string.error_not_editable));
+        EditGuard.Decision d = EditGuard.check(EditGuard.Action.ADOPT_EXTERNAL, key, null, rules());
+        if (!d.permitted()) return new Result(false, false, ControlReasons.text(activity, d.reason));
+        try {
+            repo.save(s, value, ConfigRepository.Source.ADOPT);
+            notifyChanged();
+            return new Result(true, false, "");
+        } catch (IllegalArgumentException e) {
+            return new Result(false, false, activity.getString(R.string.error_invalid_setting, key));
+        }
     }
 
     public Map<String, String> pendingIcons() { return repo.pendingIcons(); }

@@ -271,7 +271,7 @@ public final class SurfacesPage implements Page {
     public void bind() {
         AppModel m = host.model();
         ControlState st = m.state();
-        Applicability app = st.applicability();
+        Applicability app = m.rules();
         if (baseline == null) baseline = new HashMap<>(st.shownMap());
         Set<String> fav = favorites();
         GlassMaterial material = GlassMaterial.forSurface(st::shown, surface);

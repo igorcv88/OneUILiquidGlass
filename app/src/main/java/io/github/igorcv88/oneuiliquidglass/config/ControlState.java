@@ -1,6 +1,7 @@
 package io.github.igorcv88.oneuiliquidglass.config;
 
 import io.github.igorcv88.oneuiliquidglass.config.state.ConfirmedSnapshot;
+import io.github.igorcv88.oneuiliquidglass.live.CompiledEvidence;
 
 import java.util.*;
 
@@ -131,15 +132,31 @@ public final class ControlState {
         return new Applicability(this::confirmed);
     }
 
+    /**
+     * The rules with the lens intent in mind: {@code sf.*} keys are judged on the next compile
+     * (virtual {@code sfrefract=1}, held in memory only) when the person means to use the lens.
+     * Still no drafts.
+     */
+    public Applicability applicability(boolean lensIntent) {
+        Applicability now = applicability();
+        return lensIntent ? now.withNext(nextApplicability()) : now;
+    }
+
+    /** The rules of the next compile: every restart of the app loads the lens. */
+    public Applicability nextApplicability() {
+        return new Applicability(k -> "sfrefract".equals(k) ? "1" : confirmed(k));
+    }
+
     /** The rules as the preview draws them, drafts included. Only the preview may call this. */
     public Applicability previewApplicability() {
         return new Applicability(this::shown);
     }
 
     /** The draft-free snapshot the publication plan and the effective state work from. */
-    public ConfirmedSnapshot snapshot(Map<String, String> compiled, boolean awaitingVerification) {
-        return new ConfirmedSnapshot(saved, observed, compiled, enabled,
-                SystemPropertyReader.available(), awaitingVerification);
+    public ConfirmedSnapshot snapshot(
+            CompiledEvidence compiled, Map<String, String> status, boolean awaitingVerification, long revision) {
+        return new ConfirmedSnapshot(saved, observed, compiled, status, enabled,
+                SystemPropertyReader.available(), awaitingVerification, revision);
     }
 
     /** Every registry key and product flag, as the preview reads them. */

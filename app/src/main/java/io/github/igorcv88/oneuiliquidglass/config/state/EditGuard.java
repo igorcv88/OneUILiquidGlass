@@ -10,7 +10,9 @@ import io.github.igorcv88.oneuiliquidglass.config.Controls;
  */
 public final class EditGuard {
     public enum Action {
-        EDIT, RESET_ONE, RESET_GROUP, FAVORITE_ADD, OPEN_EDITOR, BULK_IMPORT, PRESET_APPLY, MATERIAL_SELECT
+        EDIT, RESET_ONE, RESET_GROUP, FAVORITE_ADD, OPEN_EDITOR, BULK_IMPORT, PRESET_APPLY, MATERIAL_SELECT,
+        /** Saving, as the person's own value, one an earlier session or the Terminal had set. */
+        ADOPT_EXTERNAL
     }
 
     public enum Outcome {
@@ -67,6 +69,7 @@ public final class EditGuard {
                 return usable ? allow() : new Decision(Outcome.VIEW_ONLY, rule.reason);
             case BULK_IMPORT:
             case PRESET_APPLY:
+            case ADOPT_EXTERNAL:
                 if (usable) return allow();
                 return readOnly ? new Decision(Outcome.SKIP, rule.reason) : latent(rule);
             default:

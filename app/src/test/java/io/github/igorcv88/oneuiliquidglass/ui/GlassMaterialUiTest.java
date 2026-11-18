@@ -56,19 +56,19 @@ public class GlassMaterialUiTest {
 
     /** The property snapshot the screens read; the real one is filled by an off-thread getprop. */
     private static void observe(Map<String, String> values) {
-        try {
-            java.lang.reflect.Field f = SystemPropertyReader.class.getDeclaredField("observed");
-            f.setAccessible(true);
-            f.set(null, Collections.unmodifiableMap(new HashMap<>(values)));
-        } catch (ReflectiveOperationException e) {
-            throw new AssertionError(e);
-        }
+        lastObserved = values;
+        io.github.igorcv88.oneuiliquidglass.config.ReaderState.set(values, !values.isEmpty());
     }
 
     private MainActivity open() {
         controller = Robolectric.buildActivity(MainActivity.class).setup();
+        // The activity starts a real getprop read, which fails off a device and marks the reader
+        // unavailable: put the test's read back (an unreadable system blocks the plan by design).
+        observe(lastObserved);
         return controller.get();
     }
+
+    private static Map<String, String> lastObserved = Collections.emptyMap();
 
     // ---- view helpers
 
@@ -164,7 +164,8 @@ public class GlassMaterialUiTest {
         changed.keySet().removeAll(before.keySet());
         for (String key : changed.keySet())
             assertTrue(key, key.startsWith("desired.sf.") || key.startsWith("baseline") || key.equals("undo")
-                    || key.equals("undo.enabled") || key.equals("generation") || key.equals("lastChange"));
+                    || key.equals("undo.enabled") || key.equals("undo.label") || key.equals("undo.at")
+                    || key.startsWith("src.") || key.startsWith("srcAt.") || key.equals("generation") || key.equals("lastChange"));
         assertEquals(GlassMaterial.CLEAR, a.model().material());
         assertFalse(a.model().root.granted());
         assertFalse(a.model().root.busy());

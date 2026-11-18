@@ -49,9 +49,35 @@ public final class Applicability {
 
     public final Mode mode;
 
+    /**
+     * The rules of the next compile (a restart loads the lens), consulted for compositor keys when
+     * the person means to use the lens; null when the rendering state now is the only context.
+     */
+    private final Applicability next;
+
     public Applicability(Function<String, String> value) {
+        this(value, null);
+    }
+
+    private Applicability(Function<String, String> value, Applicability next) {
         this.value = value;
+        this.next = next;
         mode = Mode.of(value);
+    }
+
+    /**
+     * These rules, with {@code sf.*} keys judged on {@code nextRules}: a lens that is installed but
+     * not loaded is a transient unavailability, not a reason to lock its controls
+     * (docs/OULG_UI_PLAN/ACTIVATION_AND_BACKUP_CONTRACT.md section 2).
+     */
+    public Applicability withNext(Applicability nextRules) {
+        return new Applicability(value, nextRules);
+    }
+
+    /** Whether a compositor key is unusable now only because the lens is not loaded. */
+    public boolean pendingActivation(String key, Controls.Surface surface) {
+        return next != null && key.startsWith("sf.")
+                && !onNow(key, surface).usable() && next.onNow(key, surface).usable();
     }
 
     private String v(String key) {
@@ -333,6 +359,11 @@ public final class Applicability {
      * layer it belongs to and the mode rule, in that order.
      */
     public Result on(String key, Controls.Surface surface) {
+        return next != null && key.startsWith("sf.") ? next.onNow(key, surface) : onNow(key, surface);
+    }
+
+    /** As {@link #on} but always for the rendering state now. */
+    public Result onNow(String key, Controls.Surface surface) {
         Result rule = rule(key);
         if (rule.kind == Kind.READ_ONLY) return rule;
         Controls.Control c = Controls.get(key);

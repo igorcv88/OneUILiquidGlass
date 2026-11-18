@@ -219,7 +219,10 @@ public final class ControlRow extends LinearLayout {
         String line = null;
         int color = t.inkMuted;
         if (a.kind == Applicability.Kind.INACTIVE) line = ControlReasons.text(host.activity(), a.reason);
-        else if (a.kind == Applicability.Kind.NEEDS_RESTART && st.pendingRestart(control.key)) {
+        else if (app.pendingActivation(control.key, surface)) {
+            line = host.activity().getString(R.string.state_pending_activation);
+            color = t.warn;
+        } else if (a.kind == Applicability.Kind.NEEDS_RESTART && st.pendingRestart(control.key)) {
             line = host.activity().getString(R.string.control_pending_restart);
             color = t.warn;
         } else if (host.model().observedAvailable() && host.model().repo.conflict(control.spec())) {

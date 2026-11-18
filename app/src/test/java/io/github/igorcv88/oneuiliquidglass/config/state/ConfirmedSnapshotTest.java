@@ -2,6 +2,7 @@ package io.github.igorcv88.oneuiliquidglass.config.state;
 
 import static org.junit.Assert.*;
 
+import io.github.igorcv88.oneuiliquidglass.live.CompiledEvidence;
 import io.github.igorcv88.oneuiliquidglass.config.ControlState;
 import io.github.igorcv88.oneuiliquidglass.config.ProductFlags;
 import io.github.igorcv88.oneuiliquidglass.config.SettingSpec;
@@ -26,7 +27,7 @@ public class ConfirmedSnapshotTest {
         ControlState st = state(map("liveradius", "40"), Collections.emptyMap(), map("liveradius", "99", "sf.hcfold", "2"));
         assertEquals("99", st.shown("liveradius"));
         assertEquals("40", st.confirmed("liveradius"));
-        assertEquals("40", st.snapshot(null, false).value("liveradius"));
+        assertEquals("40", st.snapshot(CompiledEvidence.none(), Collections.<String, String>emptyMap(), false, 1).value("liveradius"));
         // A draft of a key with nothing saved falls back to the device value, never the draft.
         assertEquals(SettingsRegistry.get("sf.hcfold").defaultValue, st.confirmed("sf.hcfold"));
         assertEquals("2", st.shown("sf.hcfold"));
@@ -43,31 +44,31 @@ public class ConfirmedSnapshotTest {
     @Test
     public void helperOwnedAndReadOnlyKeysReadTheObservedValue() {
         ControlState st = state(map("sfrefract", "0"), map("sfrefract", "1"), Collections.emptyMap());
-        ConfirmedSnapshot s = st.snapshot(null, false);
+        ConfirmedSnapshot s = st.snapshot(CompiledEvidence.none(), Collections.<String, String>emptyMap(), false, 1);
         assertEquals("1", s.value("sfrefract"));
         assertEquals("1", st.confirmed("sfrefract"));
         SettingSpec ro = null;
         for (SettingSpec spec : SettingsRegistry.all()) if (spec.type == SettingSpec.Type.READONLY) { ro = spec; break; }
         assertNotNull(ro);
         assertEquals(ro.defaultValue, s.value(ro.key));
-        ConfirmedSnapshot seen = state(Collections.emptyMap(), map(ro.key, "7"), Collections.emptyMap()).snapshot(null, false);
+        ConfirmedSnapshot seen = state(Collections.emptyMap(), map(ro.key, "7"), Collections.emptyMap()).snapshot(CompiledEvidence.none(), Collections.<String, String>emptyMap(), false, 1);
         assertEquals("7", seen.value(ro.key));
     }
 
     @Test
     public void aFlagWithoutASavedValueUsesItsProductDefault() {
-        ConfirmedSnapshot s = state(Collections.emptyMap(), Collections.emptyMap(), Collections.emptyMap()).snapshot(null, false);
+        ConfirmedSnapshot s = state(Collections.emptyMap(), Collections.emptyMap(), Collections.emptyMap()).snapshot(CompiledEvidence.none(), Collections.<String, String>emptyMap(), false, 1);
         assertEquals("1", s.value("surface.headsup.enabled"));
         assertEquals("0", s.value(ProductFlags.QUICK_SETTINGS));
-        ConfirmedSnapshot on = state(map(ProductFlags.QUICK_SETTINGS, "1"), Collections.emptyMap(), Collections.emptyMap()).snapshot(null, false);
+        ConfirmedSnapshot on = state(map(ProductFlags.QUICK_SETTINGS, "1"), Collections.emptyMap(), Collections.emptyMap()).snapshot(CompiledEvidence.none(), Collections.<String, String>emptyMap(), false, 1);
         assertEquals("1", on.value(ProductFlags.QUICK_SETTINGS));
         assertEquals("1", s.value("enabled"));
-        assertEquals("0", state(Collections.emptyMap(), Collections.emptyMap(), Collections.emptyMap()).withEnabled(false).snapshot(null, false).value("enabled"));
+        assertEquals("0", state(Collections.emptyMap(), Collections.emptyMap(), Collections.emptyMap()).withEnabled(false).snapshot(CompiledEvidence.none(), Collections.<String, String>emptyMap(), false, 1).value("enabled"));
     }
 
     @Test
     public void aKeyWithoutASavedValueUsesTheObservedValueThenTheDefault() {
-        ConfirmedSnapshot s = state(Collections.emptyMap(), map("sf.hcsat", "1.2", "sf.hckernel", ""), Collections.emptyMap()).snapshot(null, false);
+        ConfirmedSnapshot s = state(Collections.emptyMap(), map("sf.hcsat", "1.2", "sf.hckernel", ""), Collections.emptyMap()).snapshot(CompiledEvidence.none(), Collections.<String, String>emptyMap(), false, 1);
         assertEquals("1.2", s.value("sf.hcsat"));
         assertEquals(SettingsRegistry.get("sf.hckernel").defaultValue, s.value("sf.hckernel"));
         assertEquals(SettingsRegistry.get("sf.hcband").defaultValue, s.value("sf.hcband"));
@@ -76,7 +77,7 @@ public class ConfirmedSnapshotTest {
 
     @Test
     public void savedWinsOverObservedForTheAppsIntent() {
-        ConfirmedSnapshot s = state(map("sf.hcsat", "1.4"), map("sf.hcsat", "1.2"), Collections.emptyMap()).snapshot(null, false);
+        ConfirmedSnapshot s = state(map("sf.hcsat", "1.4"), map("sf.hcsat", "1.2"), Collections.emptyMap()).snapshot(CompiledEvidence.none(), Collections.<String, String>emptyMap(), false, 1);
         assertEquals("1.4", s.value("sf.hcsat"));
     }
 
@@ -90,7 +91,7 @@ public class ConfirmedSnapshotTest {
             i++;
         }
         ControlState st = state(saved, observed, map("liveradius", "5"));
-        ConfirmedSnapshot s = st.snapshot(null, false);
+        ConfirmedSnapshot s = st.snapshot(CompiledEvidence.none(), Collections.<String, String>emptyMap(), false, 1);
         for (SettingSpec spec : SettingsRegistry.all())
             assertEquals(spec.key, st.confirmed(spec.key), s.value(spec.key));
     }
@@ -99,11 +100,12 @@ public class ConfirmedSnapshotTest {
     public void theSnapshotIsImmutableAndKeepsAnUnknownBaselineApart() {
         Map<String, String> compiled = map("sf.core", "48");
         ControlState st = state(map("sf.core", "50"), Collections.emptyMap(), Collections.emptyMap());
-        ConfirmedSnapshot s = st.snapshot(compiled, true);
+        ConfirmedSnapshot s = Snapshots.of(st, compiled, true);
         compiled.put("sf.core", "99");
-        assertEquals("48", s.compiled.get("sf.core"));
+        assertEquals("48", s.compiled.inputs.get("sf.core"));
         assertTrue(s.awaitingVerification);
-        assertNull(st.snapshot(null, false).compiled);
+        assertEquals(CompiledEvidence.Freshness.NONE,
+                st.snapshot(CompiledEvidence.none(), Collections.<String, String>emptyMap(), false, 1).compiled.freshness);
         try {
             s.saved.put("x", "y");
             fail("saved must be immutable");

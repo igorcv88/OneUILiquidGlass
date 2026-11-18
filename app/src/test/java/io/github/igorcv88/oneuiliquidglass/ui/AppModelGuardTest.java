@@ -56,13 +56,8 @@ public class AppModelGuardTest {
     }
 
     private static void observe(Map<String, String> values) {
-        try {
-            java.lang.reflect.Field f = SystemPropertyReader.class.getDeclaredField("observed");
-            f.setAccessible(true);
-            f.set(null, Collections.unmodifiableMap(new HashMap<>(values)));
-        } catch (ReflectiveOperationException e) {
-            throw new AssertionError(e);
-        }
+        lastObserved = values;
+        io.github.igorcv88.oneuiliquidglass.config.ReaderState.set(values, !values.isEmpty());
     }
 
     private static Map<String, String> map(String... kv) {
@@ -73,8 +68,13 @@ public class AppModelGuardTest {
 
     private MainActivity open() {
         controller = Robolectric.buildActivity(MainActivity.class).setup();
+        // The activity starts a real getprop read, which fails off a device and marks the reader
+        // unavailable: put the test's read back (an unreadable system blocks the plan by design).
+        observe(lastObserved);
         return controller.get();
     }
+
+    private static Map<String, String> lastObserved = Collections.emptyMap();
 
     /** Clear pop-up on Gaussian kernel 1 with adaptive blur: sf.hubloom is inactive. */
     private static void gaussianAdaptive(MainActivity a) {
@@ -117,7 +117,7 @@ public class AppModelGuardTest {
         assertTrue(a.model().saveControl("sf.hubloom", "1.5", HU).ok);
         assertEquals(before.writes.keySet(), a.model().plan().writes.keySet());
         a.model().draft("sf.hubloom", "0.2");
-        assertEquals("1.5", a.model().plan().writes.get("sf.hubloom"));
+        assertEquals("1.5", a.model().plan().writes.get("sf.hubloom").value);
     }
 
     @Test
@@ -152,11 +152,46 @@ public class AppModelGuardTest {
         CompositorValues.recordCompiled(a.model().lensPrefs(), map("sf.huclear", "1", "sf.hcsat", "1.05"), 1, "g");
         a.model().notifyChanged();
         PublicationPlan plan = a.model().plan();
-        assertFalse(plan.needsCompile());
+        assertFalse(plan.needsRestart());
         assertEquals(AppModel.PlanCheck.OK, a.model().confirmPlan(plan.fingerprint));
         observe(map("sfrefract", "1", "sf.huclear", "1", "sf.hcsat", "1.2"));
         assertEquals(AppModel.PlanCheck.STALE, a.model().confirmPlan(plan.fingerprint));
-        assertEquals("1.2", a.model().plan().activeDrift.get("sf.hcsat"));
         assertEquals("the pending list is the plan's", a.model().plan().listed(), a.model().pendingCompositor());
+    }
+
+    @Test
+    public void undoIsAReviewThatChangesNothingUntilItIsApplied() {
+        MainActivity a = open();
+        assertTrue(a.model().save("sf.hcsat", "1.2").ok);
+        assertTrue(a.model().save("sf.hcsat", "1.5").ok);
+        io.github.igorcv88.oneuiliquidglass.config.ImportPlan plan = a.model().undoPlan();
+        assertNotNull(plan);
+        assertEquals("1.2", plan.result.get("sf.hcsat"));
+        assertEquals("reviewing saves nothing", "1.5", a.model().state().saved.get("sf.hcsat"));
+        a.model().applyPlan(plan, io.github.igorcv88.oneuiliquidglass.config.ConfigRepository.Source.UNDO);
+        assertEquals("1.2", a.model().state().saved.get("sf.hcsat"));
+        assertEquals(io.github.igorcv88.oneuiliquidglass.config.ConfigRepository.Source.UNDO,
+                a.model().repo.provenance("sf.hcsat").source);
+    }
+
+    @Test
+    public void adoptingAnExternalValueSavesItWithItsOwnProvenance() {
+        MainActivity a = open();
+        assertTrue(a.model().adoptExternal("sf.hcsat", "1.3").ok);
+        assertEquals("1.3", a.model().state().saved.get("sf.hcsat"));
+        assertEquals(io.github.igorcv88.oneuiliquidglass.config.ConfigRepository.Source.ADOPT,
+                a.model().repo.provenance("sf.hcsat").source);
+        assertFalse("an invalid value is refused", a.model().adoptExternal("sf.hcsat", "bad").ok);
+    }
+
+    @Test
+    public void anUnloadedLensWithTheIntentSavedShowsPendingActivationNotInactive() {
+        MainActivity a = open();
+        observe(map("helper", "1"));
+        assertTrue(a.model().selectMaterial(GlassMaterial.CLEAR).ok);
+        io.github.igorcv88.oneuiliquidglass.config.state.LensIntent.record(a.model().lensPrefs(), true);
+        a.model().notifyChanged();
+        assertTrue(a.model().rules().pendingActivation("sf.hcsat", HU));
+        assertTrue(a.model().rules().on("sf.hcsat", HU).usable());
     }
 }
