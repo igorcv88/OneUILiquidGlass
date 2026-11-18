@@ -40,7 +40,7 @@ Nada muda em blur, kernel, lift, cores semânticas, barra de progresso, ações 
 
 ## Não alterado, com motivo
 
-- **Compatibilidade P3 da borda.** O pop-up depende de um watcher de entrada (modos 7 ↔ 9). Replicá-lo no CARD é outra mudança, a fazer só se o log do aparelho mostrar o modo 9 com o CARD aberto.
+- **Compatibilidade P3 da borda.** Implementada no R5 (`R5_FIXES.md`, B3): o CARD usa a mesma seleção e compartilha o watcher do pop-up enquanto é heads-up visível.
 - **Contorno duplo SF + Java.** É comum às duas rotas e foi aprovado no pop-up. Um segundo contorno **exterior** às superfícies é outra questão: geometria do #202, região × cartão e rota Samsung no `HU_RESIDUAL.md`. Para atribuí-lo é preciso o trace geométrico do #202 (`QS_EDGE_GEOMETRY`, `BLUR_REGION_GEOMETRY`, `SEM_REGION_GEOMETRY`).
 - **42 % do CARD e o #198.** Não chegam à tela com `semalpha=0`. Alterá-los não muda nada nesta configuração.
 
