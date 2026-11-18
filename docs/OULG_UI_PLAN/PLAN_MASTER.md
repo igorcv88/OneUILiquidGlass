@@ -17,6 +17,7 @@ Reorganizar o app para o público geral sem perder granularidade: cada superfíc
 | `CONTROL_INVENTORY.csv` | 208 chaves × 32 colunas, gerado por `tools/build_inventory.py` (cobertura obrigatória; `--check`) |
 | `CONTROL_MAPPING.json` | Fonte do layout por superfície/rota (entrada do gerador T07) |
 | `EFFECT_MAP.md` | Intenções, rotas, relações entre chaves, fórmulas efetivas |
+| `ACTIVATION_AND_BACKUP_CONTRACT.md` | Adendo P0: contexto NEXT, evidência compilada por geração, plano de ativação, backup schema 2, ImportPlan, proveniência, investigação de `hclift` |
 | `EFFECTIVE_STATE_CONTRACT.md` | Estados, snapshot sem drafts, algoritmo de publicação, prova de neutralidade, guard, 18 casos |
 | `HIGHLIGHT_DIFFUSION_FEASIBILITY.md` | NO-GO + protocolo |
 | `ENERGY_POLICY.md` | Auditoria das rotas, máquina de estados, governor, UI de estado |
@@ -33,7 +34,7 @@ Reorganizar o app para o público geral sem perder granularidade: cada superfíc
 
 ## 4. Fases
 
-B Estado efetivo (T01–T06) → C Layout e telas (T07–T14) → D Energia (T15–T18) → E Docs, CI, PR draft, APK (T19–T20). Um commit por fase. Depois: revisão Opus; correções pelo Sonnet; CI de novo.
+B Estado efetivo (T01–T06) → B2 Ativação/evidência/backup (T21–T28, adendo P0, `ACTIVATION_AND_BACKUP_CONTRACT.md`) → C Layout e telas (T07–T14) → D Energia (T15–T18) → E Docs, CI, PR draft, APK (T19–T20). Um commit por fase. Depois: revisão Opus; correções pelo Sonnet; CI de novo.
 
 ## 5. Números
 

@@ -78,3 +78,38 @@ technical_group_diagnostic,group,Diagnóstico,Diagnostics,
 technical_group_read_only,group,Estado do sistema (somente leitura),System state (read only),
 technical_group_legacy,group,Legado sem efeito,Legacy with no effect,
 material_per_card,choice,Por cartão (teste),Per card (test),"valor 2; só Técnico"
+state_pending_activation,state,Vale ao ativar a lente,Applies when the lens is activated,B2
+lens_not_loaded_banner,banner,"A lente não está carregada. Estes ajustes ficam salvos e valem quando você ativar a lente.","The lens is not loaded. These settings are saved and apply when you activate the lens.",B2
+activation_title,dialog,Ativar a lente,Activate the lens,B2
+activation_restore_group,group,Restaurar seus ajustes salvos (%1$d),Restore your saved settings (%1$d),B2
+activation_restore_origin,line,ausente no sistema,missing from the system,B2
+activation_changes_group,group,Suas alterações (%1$d),Your changes (%1$d),B2
+activation_external_group,group,Alterados fora do app (%1$d),Changed outside the app (%1$d),B2
+activation_dormant_group,group,Guardados sem efeito (%1$d),Saved without effect (%1$d),B2
+activation_lost_external_group,group,Valores anteriores do Terminal que não existem mais (%1$d),Earlier Terminal values that no longer exist (%1$d),B2
+activation_adopt,action,Adotar no app,Adopt in the app,B2
+compiled_historical,line,"Último compilado: %1$s, outra sessão do sistema","Last compiled: %1$s, another system session",B2
+plan_blocked_props,error,"Não foi possível ler as propriedades do sistema. Nada será aplicado até a leitura funcionar.","Could not read the system properties. Nothing will be applied until reading works.",B2
+import_mode_replace,choice,Substituir tudo,Replace everything,B2
+import_mode_merge,choice,Mesclar,Merge,B2
+import_group_changed,group,Alterados (%1$d),Changed (%1$d),B2
+import_group_added,group,Adicionados (%1$d),Added (%1$d),B2
+import_group_removed,group,Voltam ao padrão (%1$d),Return to default (%1$d),B2
+import_group_kept,group,Mantidos (%1$d),Kept (%1$d),B2
+import_group_dormant,group,Guardados sem efeito agora (%1$d),Saved with no effect now (%1$d),B2
+import_group_ignored,group,Ignorados (%1$d),Ignored (%1$d),B2
+import_use_backup_defaults,toggle,Usar os padrões do backup,Use the backup's defaults,B2
+import_adopt_terminal,toggle,Adotar valores do Terminal do arquivo,Adopt the file's Terminal values,B2
+import_needs_lens,line,"Depois de importar, aplique a lente para os ajustes do compositor valerem. Nada é reiniciado agora.","After importing, apply the lens for compositor settings to take effect. Nothing restarts now.",B2
+import_diagnostic_note,line,O arquivo também contém um diagnóstico do sistema; ele não é importado.,The file also contains a system diagnostic; it is not imported.,B2
+export_include_terminal,toggle,Incluir valores definidos pelo Terminal,Include values set from Terminal,B2
+undo_review_title,dialog,Desfazer: %1$s,Undo: %1$s,B2
+undo_previous_change,label,Alteração anterior,Previous change,B2
+provenance_line,line,"Última alteração: %1$s, %2$s","Last change: %1$s, %2$s",B2
+provenance_edit,label,edição,edit,B2
+provenance_reset,label,restaurar padrão,restore default,B2
+provenance_undo,label,desfazer,undo,B2
+provenance_import,label,importação,import,B2
+provenance_style,label,estilo,style,B2
+provenance_material,label,troca de material,material change,B2
+provenance_adopt,label,adotado do Terminal,adopted from Terminal,B2

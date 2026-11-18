@@ -73,6 +73,56 @@ public final class PlanContradiction extends Exception { public final Set<String
 
 ---
 
+## Fase B2 — Ativação, evidência compilada e backup (P0; commit `fix: plan lens activation from saved intent and make backups faithful`)
+
+Contrato: `ACTIVATION_AND_BACKUP_CONTRACT.md` (prevalece sobre §4/§8 do contrato de estado). Fazer antes da Fase C. TDD em todas.
+
+### T21 Fixture e regressão
+- `TEST/live/fixtures/ActivationFixture.java`: mapas sintéticos equivalentes ao JSON do adendo (desired completo do arquivo, sem `device`; observado disponível vazio; checkpoint com as 75 entradas e geração `g-old`; status helper `sf_loaded=0`, `sfrefract` ausente, `sf_generation=g-new`).
+- `ActivationFixtureTest.legacyPendingReproducesAdendum`: `CompositorValues.pending(saved, {}, checkpoint, regra-atual-INACTIVE)` == as 14 chaves do adendo com os defaults (documenta a causa; não alterar o método deprecado).
+- `ActivationFixtureTest.planRestoresSavedIntent`: asserções do contrato §4 (writes RESTORE inclui os 13 valores; `hclift` fora de writes com `T=0.30`; `hubloom` dormente; nenhum valor default escrito para chave com override diferente; drift vazio).
+
+### T22 Contexto NEXT e intenção de lente
+- Novo `config/state/LensIntent.java` (`static boolean of(ConfirmedSnapshot, SharedPreferences sfLiveUi)` + `record(prefs, boolean)`), pref `lens.intent` no arquivo `sf_live_ui`.
+- `ConfirmedSnapshot.next()` → leitor de valores com `sfrefract="1"` virtual. `ControlState.nextApplicability(boolean lensIntent)`: `sf.*` avaliadas em NEXT quando há intenção; LIVE sempre NOW.
+- `PublicationPlan.of(...)` avalia regras sempre em NEXT (restart = rewrite).
+- `EditGuard`, `EffectiveState`: `sf.*` usam NEXT; novo `Kind.PENDING_ACTIVATION` quando NEXT usável e NOW = NEEDS_LENS; copy `state_pending_activation` ("Vale ao ativar a lente") e `lens_not_loaded_banner` no CSV.
+- `SfLiveController.restartConfirmed` grava `lens.intent=1` antes do restart; `uninstallConfirmed` grava 0.
+- Testes `NextContextTest`, `LensIntentTest`, atualizar `EditGuardTest`/`EffectiveStateTest`.
+
+### T23 Evidência compilada
+- Novo `live/CompiledEvidence.java` (§3). `AppModel` passa a construí-la do `sf_live_ui` + último status do helper (`m.lens.model().status`); sem status → HISTORICAL.
+- `ConfirmedSnapshot.compiled` vira `CompiledEvidence`. Testes `CompiledEvidenceTest` (§8.2).
+
+### T24 Plano novo
+- Reescrever `PublicationPlan` conforme §4 (manter nome e `fingerprint`; campos: `writes: Map<String, Write>`, `drift`, `dormant`, `external`, `lostExternal`, `activation`, `verifyOnly`, `blocked`). `listed()` = writes ∪ drift. `fingerprint` inclui activation, geração e revisão de preferências (`repo.generation()`).
+- `AppModel.plan()`, `confirmPlan()`, `pendingCompositor()` adaptados; `LensSheet` com os grupos do §4, título "Ativar a lente" quando `activation`; toque revalida status (`m.lens.status()` + `refreshObserved`) antes de comparar.
+- `SfLiveController.RESTART`: antes de escrever, recalcular o plano com status fresco (já lido ali) e abortar com `apply_list_changed` se o fingerprint divergir do confirmado (passar o fingerprint em `restartConfirmed(writes, fingerprint)`; sobrecarga antiga delega com `null` = sem checagem só para testes existentes).
+- Atualizar `PublicationPlanTest` (18 casos reinterpretados com evidência CURRENT; casos HISTORICAL novos), `ActivationAfterEditTest`, `PlanRaceTest`.
+
+### T25 Conflito externo
+- `ExternalChanges.conflict`: observado ausente/vazio → `false`. `ExternalChangesTest.absentIsNotExternal`, boot desconhecido.
+
+### T26 Backup schema 2 e ImportPlan
+- `PresetCodec`: `encodeV2(...)` (§6.1), `parse` aceita 1 e 2 (`Parsed` ganha `implicitDefaults`, `terminal`, `schema`); limite 128 KiB; validação atômica; diagnostic nunca em `values`.
+- Novo `config/ImportPlan.java` (§6.2). `PresetsSheet.PresetReview` renderiza `ImportPlan` (grupos, modo Substituir/Mesclar, checkbox "Usar padrões do backup" quando schema 2 e algum difere, checkbox "Adotar valores do Terminal" quando presentes); confirmação aplica `plan.result`.
+- `ConfigRepository.replaceAll(Map result, Boolean enabled, Source src, String undoLabel)`: uma transação, um undo.
+- `MainActivity` exportação: diálogo curto com toggle "Incluir valores definidos pelo Terminal" (desligado); usa `encodeV2`. Estilo salvo usa `encodeV2` sem diagnostic.
+- Testes `BackupRoundTripTest`, `ImportPlanTest`, `PresetCodecTest` (v1 legado).
+
+### T27 Desfazer revisado, restaurar e proveniência
+- Snapshot de undo `{label, at, overrides, enabled}` (compatível: string antiga sem label → label "Alteração anterior"). `PresetsSheet` Desfazer abre revisão `ImportPlan` REPLACE antes de aplicar.
+- Proveniência `src.<key>`/`srcAt.<key>` em toda escrita (`save`=EDIT, `resetToDefaults`=RESET, `undo`=UNDO, import=IMPORT, estilo=STYLE, `selectMaterial`=MATERIAL, adoção=ADOPT); exibida no `ControlSheet` (copy `provenance_line`).
+- `GlassMaterial.recommendedClear()`: remover `sf.hclift` (alinha ao comentário); teste `recommendedClearLeavesLift`.
+- Testes `ProvenanceTest`, `UndoReviewTest`.
+
+### T28 Documentos
+- Atualizar `EXECUTION_TRACKER.md`, `VALIDATION_MATRIX.md` (casos físicos de ativação abaixo), `MIGRATION_AND_ROLLBACK.md` (schema 2, undo novo), `docs/sf-live-app.md` (contrato de backup).
+
+**Commit da fase B2** após `V` verde.
+
+---
+
 ## Fase C — Layout de produto e telas (commit `feat: reorganize surfaces into main controls and appearance details`)
 
 ### T07 Gerador de layout

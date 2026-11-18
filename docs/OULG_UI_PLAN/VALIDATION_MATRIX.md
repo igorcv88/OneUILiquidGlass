@@ -38,3 +38,12 @@ Diff completo vs. `origin/main`; checagem das regras invioláveis; leitura dos 1
 11. Central de controle, sliders R5, animação #205 do pop-up: inalterados.
 12. Busca "brilho": encontra Contenção de brilho com caminho; técnico só com o toggle.
 13. Favorito técnico antigo: aviso único; item continua em Técnico.
+
+## 4. Físico — ativação e backup (adendo, prioridade)
+
+1. Antes de instalar: exportar ajustes (arquivo atual) e guardar. Instalar o APK do PR; **não** ativar ainda.
+2. Abrir Lente: título "Ativar a lente"; grupo "Restaurar seus ajustes salvos" com Transparente (pop-up e bloqueio), kernel 1, borda 30, centro 32, transição 1, desfoque 120 %, refração 109 %, neutralidade clássica 1, saturação 1, alcance 4,4, uniformidade 0 / 0,6; **sem** nenhum valor Fosco/Original/default; Clareamento não listado (salvo 0,30 = padrão); Contenção de brilho em "Guardados sem efeito".
+3. Superfícies com lente desligada: controles Transparente editáveis com "Vale ao ativar a lente" (não bloqueados).
+4. Ativar uma vez; depois: Lente sem pendências; `getprop | grep debug.oulg.sf.h` mostra os valores salvos; aparência Clear/Gaussiano como antes da atualização.
+5. Exportar de novo: `schemaVersion 2`, `desired` igual ao anterior; importar o arquivo antigo (schema 1) em modo Substituir: revisão mostra 0 alterações (igualdade numérica) e nenhuma remoção inesperada.
+6. Fazer uma edição, tocar Desfazer: revisão lista exatamente a edição revertida.

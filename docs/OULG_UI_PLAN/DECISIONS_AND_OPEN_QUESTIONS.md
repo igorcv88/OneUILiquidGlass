@@ -21,6 +21,11 @@
 | D10 | Copy nova em `COPY_PT_EN.csv` → gerador | Paridade pt/en garantida |
 | D11 | Sem nova aba; Técnico como sheet em Configurações | ≤ 5 abas; general audience |
 | D12 | Valor 2 (por cartão) só no Técnico | Modo de teste |
+| D13 | Plano de restart avaliado no contexto NEXT (lente virtualmente carregada, sem forjar `sfrefract`) | Lente desligada é indisponibilidade transitória; causa das 14 linhas (adendo) |
+| D14 | Checkpoint compilado só vale para diffs com a mesma geração SF e lente carregada; caso contrário é histórico | Checkpoint morto + props ausentes = defaults falsos |
+| D15 | Ausência de propriedade nunca é edição externa; leitura indisponível bloqueia o plano | Falsos conflitos e diffs artificiais |
+| D16 | Backup schema 2 (desired + implicitDefaults + terminal opt-in + diagnostic nunca importado); ImportPlan único para importar, estilos e desfazer | Fidelidade e revisão == aplicação |
+| D17 | Proveniência por chave (uma entrada, não log) e revisão antes de Desfazer; `recommendedClear` sem `hclift` | Atribuir futuras mudanças não reconhecidas; preservar Clareamento |
 
 ## Pendências (não bloqueiam este PR)
 
@@ -28,7 +33,8 @@
 |---|---|---|
 | P-DIFF | Dispersão dos realces | Issue nova após merge, protocolo em `HIGHLIGHT_DIFFUSION_FEASIBILITY.md` |
 | P-TEL | Diagnóstico de custo por superfície (MVP de tempo/ativações/CPU amostrada) | Issue nova; `ENERGY_TELEMETRY_FEASIBILITY.md` |
-| P-NEUTRAL | Se T04 achar par não idêntico | Bloqueio para Opus (ajustar regra para ACTIVE ou neutro explícito) |
+| P-NEUTRAL | Resolvido (Opus): 4 chaves ACTIVE sob Transparente, 15 com prova por leitor | T04b |
+| P-HCLIFT | Origem de `hclift=0.30` explícito não comprovada | Hipóteses e ações em `ACTIVATION_AND_BACKUP_CONTRACT.md §7` |
 | P-196/181/178 | Backlog existente | Não tocar |
 | P-ODPM | Rails de energia do S25 | Investigar só se P-TEL avançar |
 
