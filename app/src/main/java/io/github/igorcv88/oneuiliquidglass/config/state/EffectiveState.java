@@ -54,7 +54,10 @@ public final class EffectiveState {
         return of(st, plan, key, surface, null);
     }
 
-    /** {@code draft}: a value being dragged; it changes only the text of an ACTIVE row. */
+    /**
+     * {@code plan} is null when the saved values contradict the rules: the row then shows only what
+     * the rules say. {@code draft}: a value being dragged; it changes only the text of an ACTIVE row.
+     */
     public static Effective of(
             ControlState st, PublicationPlan plan, String key, Controls.Surface surface, String draft) {
         return of(st, plan, key, surface, draft, false);
@@ -86,6 +89,7 @@ public final class EffectiveState {
             notes.add(Note.APPLY_TO_TAKE_EFFECT);
             return new Effective(Kind.PENDING_ACTIVATION, confirmed, null, "", notes);
         }
+        if (plan == null) return new Effective(Kind.ACTIVE, draft != null ? draft : confirmed, null, "", notes);
         if (plan.writes.containsKey(key)) {
             notes.add(Note.APPLY_TO_TAKE_EFFECT);
             return new Effective(Kind.PENDING_COMPILE, plan.writes.get(key).value, null, "", notes);

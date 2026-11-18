@@ -113,7 +113,9 @@ public final class IconsPage implements Page {
         preview.update(model.appliedIcon("statusiconsize"), state.shown("statusiconsize"),
                 model.appliedIcon("iconcardsize"), state.shown("iconcardsize"),
                 model.appliedIcon("statusmaxicons"), state.shown("statusmaxicons"));
-        for (ControlRow row : rows) row.bind(state, state.applicability());
+        EffectiveView view = model.effectiveView();
+        for (ControlRow row : rows)
+            row.bind(state, state.applicability(), view.of(row.control.key, io.github.igorcv88.oneuiliquidglass.config.Controls.Surface.SHADE));
         String notifications = state.shown("iconinkmode");
         String status = state.shown("statusinkmode");
         for (View v : fixedNotification) v.setVisibility("1".equals(notifications) ? View.VISIBLE : View.GONE);

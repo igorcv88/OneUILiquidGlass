@@ -20,14 +20,15 @@ Atualizado pelo executor a cada tarefa. Status: TODO / DOING / DONE / BLOCKED.
 | T26 | DONE | (commit B2) | `ImportPlan` puro + `ImportReview` (Substituir/Mesclar, padrões do backup, valores do Terminal, Desfazer, Restaurar padrões, estilos); `ImportPlanTest` 9. | `PresetReview.open` delega a `ImportReview`; `confirmDefaults()` removido. |
 | T27 | DONE | (commit B2) | Proveniência (`src.*`/`srcAt.*`, Source EDIT/RESET/UNDO/IMPORT/STYLE/MATERIAL/ADOPT) e rótulo do Desfazer; `ProvenanceTest` 9; linha "Última alteração" no `ControlSheet`; `ExternalChangesTest.absentIsNotExternal`; `GlassMaterialTest.recommendedClearLeavesLift` (sf.hclift removido de `recommendedClear()`, sem mudar o registro). | `replaceAll` marca como STYLE/IMPORT toda chave escrita, mesmo com valor igual. |
 | T28 | DONE | (commit B2) | `MIGRATION_AND_ROLLBACK.md`, `docs/sf-live-app.md`, este tracker; `VALIDATION_MATRIX.md` §4 já cobria os casos físicos. 35 strings B2 em `product_copy.xml` (en e pt-rBR, paridade). | Cópia adicionada à mão (o gerador T08 não existe). |
-| T07 | TODO | | | |
-| T08 | TODO | | | |
-| T09 | TODO | | | |
-| T10 | TODO | | | |
-| T11 | TODO | | | |
-| T12 | TODO | | | |
-| T13 | TODO | | | |
-| T14 | TODO | | | |
+| T07 | DONE | (commit C) | `tools/generate-product-layout.py` (valida rotas, grupos, cobertura, títulos) gera `config/product/ProductLayout.java`; `Routes.of(snapshot|reader, surface)`; passo no `controls.yml` com `git diff --exit-code`. `ProductLayoutTest` 11, `RoutesTest` 7. | A cobertura "exatamente uma vez" vale por categoria (chaves compartilhadas entre superfícies são permitidas). |
+| T08 | DONE | (commit C) | `tools/generate-product-copy.py` gera `values/product_copy.xml` e `values-pt-rBR/product_copy.xml` (114 strings) a partir de `COPY_PT_EN.csv`, LF, passo no CI. `section_behavior` e `material_per_card` saíram de `strings.xml` (duplicavam o gerado); `selector_per_card` mantém o texto "Por cartão (avançado)". | Strings que o gerador cobre não podem mais ser editadas à mão. |
+| T09 | DONE | (commit C) | `SurfacesPage` reconstruída por `SurfacesPlan` (favoritos, principais, grupos de detalhes, Central de controle, Comportamento, camadas); rota pelo contexto NEXT quando há `LensIntent`, com `lens_not_loaded_banner`; `AppModel.surfaceRoute`. `SurfacesLayoutTest` 9. | Preview, interruptor da superfície e linha de material mantidos. |
+| T10 | DONE | (commit C) | `ui/kit/GroupHeader`, `ui/surfaces/GroupSection`, `AppModel.resetGroup` (uma transação, uma desfazer, chaves inativas ficam de fora), confirmação `restore_group_confirm`. Estado aberto em `group.<superfície>.<rota>.<id>`. `AppModelResetGroupTest` 3. | Desfazer continua em Estilos > Desfazer; o toast é `preset_restored`. |
+| T11 | DONE | (commit C) | `RowText`/`ControlRow.bind(state, applicability, effective)`, `ControlSheet` com estado (Ativo, Aplicar para valer, Inativo+motivo, Externo), somente leitura com `state_latent`, multiplicadores em % (`ValueFormat.percentOfMultiplier/multiplierFromEdit`, `ControlValues.display`), linha "Afeta" e `blur_effective_nominal` (`ControlInsights`). `ControlRowStateTest` 9, `ValueFormatPercentTest` 5, `ControlInsightsTest` 5. | Só apresentação: nenhum valor, padrão ou fórmula mudou. |
+| T12 | DONE | (commit C) | `SearchIndex` (título de produto indexado, caminho "Pop-up › Detalhes › Grupo", legado nunca, técnico só no modo técnico); `SearchSheet` usa o índice. `SearchIndexTest` 6. |  |
+| T13 | DONE | (commit C) | Favoritos filtrados por `SurfacesPlan.favorites`; aviso único `favorites_migrated` (pref `favorites.migrated.r6`), sem apagar `favorite.*`; chave técnica não pode ser favoritada. `FavoritesFilterTest` 4. | O aviso é emitido no primeiro `bind` de qualquer página (todas ligam ao iniciar). |
+| T14 | DONE | (commit C) | `TechnicalSheet` (grupos técnicos, estado do sistema, legado, seletor de material com "Por cartão", Todos os parâmetros, Copiar relatório) aberta por linha em Configurações entre Diagnóstico e Recuperação; `AppModel.selectPerCard`/`perCardSelected`. `TechnicalLayoutTest` 4. `GlassMaterialUiTest` ajustado ao novo layout (5 asserções). | "Por cartão" só existe em Técnico; o `MaterialSheet` não oferece essa opção (nenhuma mudança de comportamento do seletor Fosco/Claro). |
+| T14b | DONE | (commit C) | `InfoSheets` reinjeta pela rota do plano: `AppModel.reinjectPlan()` (START/BLOCKED/CONTRADICTION, escritas imutáveis, fingerprint) e `lens.restartConfirmed(writes, fingerprint, m::planFingerprint)`. `AppModelReinjectTest` 4. | Fecha o desvio B2 (2). |
 | T15 | TODO | | | |
 | T16 | TODO | | | |
 | T17 | TODO | | | |
@@ -68,7 +69,15 @@ Desvios: (1) o contrato lista `kgflat`/`kglevel` entre as escritas da fixture; a
 
 ## Ambiente local
 
-`python tools/generate-*.py` no Windows exige `PYTHONUTF8=1` (sem isso o gerador de motivos produz hashes errados). `local.properties` (git-ignorado): `sdk.dir=C\:/Users/igorv/AppData/Local/Android/Sdk`. `check.sh`/`live_check.sh` rodados no WSL Ubuntu 26.04 com `MSYS_NO_PATHCONV=1`. `tools/generate-product-layout.py` e `generate-product-copy.py` do comando V ainda não existem (Fase C).
+`python tools/generate-*.py` no Windows exige `PYTHONUTF8=1` (sem isso o gerador de motivos produz hashes errados). `local.properties` (git-ignorado): `sdk.dir=C\:/Users/igorv/AppData/Local/Android/Sdk`. `check.sh`/`live_check.sh` rodados no WSL Ubuntu 26.04 com `MSYS_NO_PATHCONV=1`. `tools/generate-product-layout.py` e `generate-product-copy.py` existem (Fase C) e rodam no CI com `git diff --exit-code`.
+
+## Fase C: validação
+
+`./gradlew testDebugUnitTest lintDebug assembleDebug` => BUILD SUCCESSFUL; 1099 testes, 0 falhas (67 novos). Todos os `tools/generate-*.py` idempotentes (o conteúdo não muda; no Windows os geradores antigos regravam CRLF). `python tools/test-distribution.py` => 6 OK. `build_inventory.py --check` => 208 chaves em dia (CSV regenerado, referências de linha). WSL: `sh sfhook/tools/check.sh` e `live_check.sh` => OK.
+
+### Fase C: sem bloqueio arquitetural
+
+Desvios: (1) cobertura do layout por categoria. (2) `GlassMaterialUiTest` reescrito para o novo layout (títulos de produto, grupos). (3) "Por cartão" só em Técnico. (4) O aviso de favoritos aparece ao iniciar, não ao abrir Superfícies.
 
 ## Artefatos
 

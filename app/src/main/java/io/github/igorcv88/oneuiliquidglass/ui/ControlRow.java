@@ -6,6 +6,7 @@ import android.widget.*;
 
 import io.github.igorcv88.oneuiliquidglass.config.*;
 import io.github.igorcv88.oneuiliquidglass.config.state.EditGuard;
+import io.github.igorcv88.oneuiliquidglass.config.state.EffectiveState;
 import io.github.igorcv88.oneuiliquidglass.R;
 import io.github.igorcv88.oneuiliquidglass.ui.kit.*;
 
@@ -27,9 +28,15 @@ public final class ControlRow extends LinearLayout {
     private Toggle toggle;
     private Icon.View chevron;
     private Scale scale;
+    private LinearLayout titleLine;
     private boolean usable = true, dragging;
 
     public ControlRow(Context c, Host host, Controls.Control control, Controls.Surface surface) {
+        this(c, host, control, surface, false);
+    }
+
+    /** @param primary a main row: taller, with the title one step larger */
+    public ControlRow(Context c, Host host, Controls.Control control, Controls.Surface surface, boolean primary) {
         super(c);
         this.host = host;
         this.t = host.theme();
@@ -39,8 +46,10 @@ public final class ControlRow extends LinearLayout {
         setPadding(t.dp(20), t.dp(12), t.dp(8), t.dp(control.format == Controls.Format.TOGGLE
                 || control.format == Controls.Format.CHOICE || control.format == Controls.Format.COLOR ? 12 : 2));
         LinearLayout line = Ui.row(c);
+        titleLine = line;
         LinearLayout texts = Ui.column(c);
-        title = Ui.text(c, t, ControlTitles.title(host.activity(), control), Theme.BODY, t.ink, false);
+        String productTitle = ProductTitles.title(host.activity(), control);
+        title = Ui.text(c, t, productTitle, primary ? Theme.HEADLINE : Theme.BODY, t.ink, primary);
         texts.addView(title);
         status = Ui.text(c, t, "", Theme.CAPTION, t.inkMuted, false);
         status.setVisibility(GONE);
@@ -48,7 +57,7 @@ public final class ControlRow extends LinearLayout {
         line.addView(texts, new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1));
         value = Ui.text(c, t, "", Theme.LABEL, t.inkMuted, true);
         value.setPadding(t.dp(8), 0, t.dp(4), 0);
-        reset = Ui.iconButton(c, t, Icon.RESET, t.inkFaint, host.activity().getString(R.string.control_reset_a11y, ControlTitles.title(host.activity(), control)));
+        reset = Ui.iconButton(c, t, Icon.RESET, t.inkFaint, host.activity().getString(R.string.control_reset_a11y, productTitle));
         reset.setOnClickListener(v -> resetToDefault());
         reset.setVisibility(INVISIBLE);
         SettingSpec spec = control.spec();
@@ -81,7 +90,7 @@ public final class ControlRow extends LinearLayout {
                 scale = Scale.of(control);
                 slider = new Slider(c, t);
                 slider.configure(scale.steps, scale.index(spec.defaultValue), scale.auto);
-                slider.describe(ControlTitles.title(host.activity(), control), i -> ControlValues.display(host.activity(), control, scale.value(i)));
+                slider.describe(productTitle, i -> ControlValues.display(host.activity(), control, scale.value(i)));
                 slider.listener(new Slider.Listener() {
                     @Override
                     public void start() {
@@ -105,7 +114,7 @@ public final class ControlRow extends LinearLayout {
                 // Title and value open the editor; the slider is the direct control.
                 line.setOnClickListener(v -> open());
                 line.setBackground(Ui.ripple(t, null, t.dpf(12)));
-                line.setMinimumHeight(t.dp(40));
+                line.setMinimumHeight(t.dp(primary ? Theme.PRIMARY_ROW_MIN - 32 : 40));
                 break;
         }
         addView(line, Ui.match());
@@ -167,7 +176,7 @@ public final class ControlRow extends LinearLayout {
         String def = control.spec().defaultValue;
         commit(def, EditGuard.Action.RESET_ONE);
         performHapticFeedback(HapticFeedbackConstants.CONFIRM);
-        announceForAccessibility(host.activity().getString(R.string.control_reset_done, ControlTitles.title(host.activity(), control)));
+        announceForAccessibility(host.activity().getString(R.string.control_reset_done, ProductTitles.title(host.activity(), control)));
     }
 
     /** What an automatic value resolves to now, as the readers resolve it. */
@@ -194,18 +203,18 @@ public final class ControlRow extends LinearLayout {
         return key.equals("semradiuslens") ? followed("semradius", st) : "180 px";
     }
 
-    /** Incremental update from the shared state; never rebuilds the row. */
-    public void bind(ControlState st, Applicability app) {
+    /** Incremental update from the shared state and the effective state; never rebuilds the row. */
+    public void bind(ControlState st, Applicability app, EffectiveState.Effective effective) {
         if (dragging) return;
         String raw = st.shown(control.key);
-        Applicability.Result a = app.on(control.key, surface);
-        usable = a.usable();
+        usable = RowText.enabled(effective) && app.on(control.key, surface).usable();
         boolean changed = st.changed(control.key);
         String shown = ControlValues.display(host.activity(), control, raw);
         String follows = ValueFormat.isAuto(control, raw) ? followed(st, app.mode) : null;
         if (follows != null) shown = shown + " · " + follows;
-        value.setText(shown);
-        value.setTextColor(changed && usable ? t.accent : t.inkMuted);
+        RowText text = RowText.of(host.activity(), effective, title.getText().toString(), shown);
+        value.setText(text.value);
+        value.setTextColor(!usable ? t.inkFaint : changed ? t.accent : t.inkMuted);
         if (toggle != null) {
             toggle.set("1".equals(raw), isAttachedToWindow());
             toggle.setEnabled(usable);
@@ -213,32 +222,39 @@ public final class ControlRow extends LinearLayout {
         if (slider != null) {
             slider.set(scale.index(raw));
             slider.setEnabled(usable);
+            slider.setAlpha(usable ? 1f : DISABLED_ALPHA);
             reset.setVisibility(changed && usable ? VISIBLE : INVISIBLE);
         }
         title.setTextColor(usable ? t.ink : t.inkFaint);
-        String line = null;
-        int color = t.inkMuted;
-        if (a.kind == Applicability.Kind.INACTIVE) line = ControlReasons.text(host.activity(), a.reason);
-        else if (app.pendingActivation(control.key, surface)) {
-            line = host.activity().getString(R.string.state_pending_activation);
-            color = t.warn;
-        } else if (a.kind == Applicability.Kind.NEEDS_RESTART && st.pendingRestart(control.key)) {
-            line = host.activity().getString(R.string.control_pending_restart);
-            color = t.warn;
-        } else if (host.model().observedAvailable() && host.model().repo.conflict(control.spec())) {
+        String line = text.line;
+        RowText.Tone tone = text.tone;
+        if (line == null && host.model().observedAvailable() && host.model().repo.conflict(control.spec())) {
             line = host.activity().getString(R.string.control_external_change);
-            color = t.warn;
+            tone = RowText.Tone.PENDING;
         }
         if (usable && caution(raw)) {
             String warning = host.activity().getString(R.string.control_caution_contrast);
             line = line == null ? warning : line + " · " + warning;
-            color = t.warn;
+            if (tone == RowText.Tone.NORMAL) tone = RowText.Tone.PENDING;
         }
-        status.setText(line == null ? "" : line);
-        status.setTextColor(color);
+        status.setText(line == null ? "" : statusLine(line, tone));
+        status.setTextColor(t.inkMuted);
         status.setVisibility(line == null ? GONE : VISIBLE);
-        setStateDescription(shown + (line == null ? "" : ". " + line));
+        String description = line == null || line.equals(text.line) ? text.description : text.description + ", " + line;
+        (slider != null ? titleLine : this).setContentDescription(description);
+        setStateDescription(line == null ? shown : shown + ". " + line);
         if (slider != null)
             slider.setStateDescription(shown);
+    }
+
+    private static final float DISABLED_ALPHA = .38f;
+
+    /** A coloured dot before the text for a pending or external state; the words carry the meaning. */
+    private CharSequence statusLine(String line, RowText.Tone tone) {
+        if (tone == RowText.Tone.NORMAL) return line;
+        android.text.SpannableStringBuilder b = new android.text.SpannableStringBuilder("● ").append(line);
+        b.setSpan(new android.text.style.ForegroundColorSpan(tone == RowText.Tone.EXTERNAL ? t.lilac : t.warn),
+                0, 1, android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+        return b;
     }
 }

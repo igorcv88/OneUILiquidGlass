@@ -88,15 +88,14 @@ public final class SettingsPage implements Page {
         conflictsRow = Ui.listRow(a, t, Icon.WARNING, host.activity().getString(R.string.external_changes), "", Ui.chevron(a, t));
         conflictsRow.setOnClickListener(v -> host.openConflicts());
         diag.addView(conflictsRow);
-        diag.addView(Ui.divider(a, t, t.dp(72)));
-        LinearLayout all = Ui.listRow(a, t, Icon.CODE, host.activity().getString(R.string.all_parameters), host.activity().getString(R.string.all_parameters_desc), Ui.chevron(a, t));
-        all.setOnClickListener(v -> new SearchSheet(host, Controls.Surface.HEADSUP, true).show());
-        diag.addView(all);
-        diag.addView(Ui.divider(a, t, t.dp(72)));
-        LinearLayout report = Ui.listRow(a, t, Icon.COPY, host.activity().getString(R.string.copy_report), host.activity().getString(R.string.copy_report_desc), null);
-        report.setOnClickListener(v -> host.copy(report()));
-        diag.addView(report);
         content.addView(diag, Ui.match());
+
+        LinearLayout technical = Ui.card(a, t);
+        LinearLayout technicalRow = Ui.listRow(a, t, Icon.CODE, a.getString(R.string.settings_technical),
+                a.getString(R.string.technical_warning), Ui.chevron(a, t));
+        technicalRow.setOnClickListener(v -> new TechnicalSheet(host, this::report).show());
+        technical.addView(technicalRow);
+        content.addView(technical, Ui.match(t.dp(10), 0));
 
         content.addView(Ui.section(a, t, host.activity().getString(R.string.recovery)));
         LinearLayout rec = Ui.card(a, t);

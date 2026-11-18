@@ -85,7 +85,7 @@ final class LensPlanView {
     }
 
     private String label(Controls.Control c) {
-        return ControlTitles.title(a, c) + " · " + SearchSheet.surfaces(a, c);
+        return ProductTitles.title(a, c) + " · " + SearchSheet.surfaces(a, c);
     }
 
     private String display(Controls.Control c, String raw) {

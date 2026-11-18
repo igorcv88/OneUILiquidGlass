@@ -120,4 +120,6 @@ public final class Theme {
     public static final int GUTTER = 20, CARD_RADIUS = 24, ROW_MIN = 56, BUTTON = 52,
             BUTTON_SMALL = 48, ICON = 24, TOUCH = 48;
     public static final long FAST = 140, STANDARD_MS = 220, EMPHASIZED = 320;
+    // Product layout rhythm (dp): groups breathe more than rows; a main row is taller than a detail row.
+    public static final int GROUP_GAP = 28, ROW_GAP_TIGHT = 4, PRIMARY_ROW_MIN = 72;
 }

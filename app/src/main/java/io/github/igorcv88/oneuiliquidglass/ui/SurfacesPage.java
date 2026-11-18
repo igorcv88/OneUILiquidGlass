@@ -5,7 +5,12 @@ import android.view.*;
 import android.widget.*;
 
 import io.github.igorcv88.oneuiliquidglass.config.*;
+import io.github.igorcv88.oneuiliquidglass.config.product.ProductLayout;
+import io.github.igorcv88.oneuiliquidglass.config.state.EditGuard;
+import io.github.igorcv88.oneuiliquidglass.config.state.EffectiveState;
 import io.github.igorcv88.oneuiliquidglass.R;
+import io.github.igorcv88.oneuiliquidglass.ui.surfaces.GroupSection;
+import io.github.igorcv88.oneuiliquidglass.ui.surfaces.SurfacesPlan;
 import io.github.igorcv88.oneuiliquidglass.ui.kit.*;
 import io.github.igorcv88.oneuiliquidglass.ui.preview.NotificationPreview;
 
@@ -13,8 +18,9 @@ import java.util.*;
 
 /**
  * Superfícies: Pop-up / Bloqueio / Central, a sample that shrinks while the list scrolls under
- * it, the surface switch, the main controls for the current mode, effect layers, and the rest
- * grouped by perceived effect, closed by default.
+ * it, the surface switch, the main controls of the route in use, and the appearance details in
+ * collapsed groups (docs/OULG_UI_PLAN/SCREEN_SPECS.md section 2). Technical controls live in
+ * Settings.
  */
 public final class SurfacesPage implements Page {
     private final Host host;
@@ -29,10 +35,10 @@ public final class SurfacesPage implements Page {
     private final FrameLayout previewFrame;
     private final List<ControlRow> rows = new ArrayList<>();
     private final Map<String, LinearLayout> layerRows = new HashMap<>();
-    private final Set<String> open = new HashSet<>();
+    private final List<GroupSection> groups = new ArrayList<>();
     private Controls.Surface surface = Controls.Surface.HEADSUP;
-    private Mode builtMode;
-    private String builtMaterial = "";
+    private ProductLayout.Route builtRoute;
+    private LinearLayout lensBanner;
     private LinearLayout materialRow;
     private Controls.Surface builtSurface;
     private Set<String> builtFavorites = Collections.emptySet();
@@ -239,45 +245,48 @@ public final class SurfacesPage implements Page {
     @Override
     public void save(Bundle out) {
         out.putString("surface", surface.id);
-        out.putStringArrayList("open", new ArrayList<>(open));
         out.putInt("scroll", scroll.getScrollY());
     }
 
     @Override
     public void restore(Bundle in) {
         surface = Controls.Surface.of(in.getString("surface", "headsup"));
-        ArrayList<String> o = in.getStringArrayList("open");
-        if (o != null) open.addAll(o);
         tabs.select(surface.ordinal(), false);
         preview.surface(surface);
         int y = in.getInt("scroll");
         scroll.post(() -> scroll.scrollTo(0, y));
     }
 
-    private Set<String> favorites() {
-        Set<String> out = new LinkedHashSet<>();
-        for (Controls.Control c : Controls.all())
-            if (c.on(surface) && !IconsPage.isIconKey(c.key) && Controls.editable(c.key) && visible(c)
-                    && host.model().ui.getBoolean("favorite." + c.key, false)) out.add(c.key);
-        return out;
+    /** The ordered sections of the page for a surface and a route (no View). */
+    static SurfacesPlan plan(Controls.Surface surface, ProductLayout.Route route, Set<String> favorites) {
+        return SurfacesPlan.of(surface, route, favorites);
     }
 
-    /** Whether a control belongs in this surface's lists for the material that decides it. */
-    private boolean visible(Controls.Control c) {
-        return GlassMaterial.visible(c.key, surface, host.model().state()::shown);
+    private Set<String> favorites() {
+        List<String> favored = new ArrayList<>();
+        for (Controls.Control c : Controls.all())
+            if (host.model().ui.getBoolean("favorite." + c.key, false)) favored.add(c.key);
+        return SurfacesPlan.favorites(surface, favored);
     }
+
+    private boolean favoritesNoticeChecked;
 
     @Override
     public void bind() {
         AppModel m = host.model();
+        if (!favoritesNoticeChecked) {
+            favoritesNoticeChecked = true;
+            int left = m.takeFavoritesMigrationNotice();
+            if (left > 0) host.feedback(host.activity().getString(R.string.favorites_migrated, left));
+        }
         ControlState st = m.state();
         Applicability app = m.rules();
         if (baseline == null) baseline = new HashMap<>(st.shownMap());
         Set<String> fav = favorites();
+        AppModel.SurfaceRoute where = m.surfaceRoute(surface);
+        if (builtSurface != surface || builtRoute != where.route || !fav.equals(builtFavorites))
+            rebuild(where.route, fav);
         GlassMaterial material = GlassMaterial.forSurface(st::shown, surface);
-        String materialKey = material == null ? "-" : material.id;
-        if (builtSurface != surface || builtMode != app.mode || !fav.equals(builtFavorites)
-                || !materialKey.equals(builtMaterial)) build(app.mode, fav, material);
         if (materialRow != null) Ui.setSubtitle(materialRow, material == null
                 ? UiLabels.selector(host.activity(), st.shown(surface == Controls.Surface.HEADSUP
                         ? GlassMaterial.HU_SELECTOR : GlassMaterial.KG_SELECTOR))
@@ -286,12 +295,13 @@ public final class SurfacesPage implements Page {
             qsToggle.set(!"0".equals(st.shown(ProductFlags.QUICK_SETTINGS)), true);
             Ui.enable(qsRow, st.enabled);
         }
+        lensBanner.setVisibility(where.lensNotLoaded ? View.VISIBLE : View.GONE);
         boolean surfaceOn = app.surfaceOn(surface);
         surfaceToggle.set(surfaceOn, true);
         Ui.enable(surfaceRow, st.enabled);
         Ui.setSubtitle(surfaceRow, !st.enabled ? host.activity().getString(R.string.surface_master_off) : surfaceOn ? host.activity().getString(R.string.switch_on) : host.activity().getString(R.string.surface_original));
         offNotice.setVisibility(st.enabled ? View.GONE : View.VISIBLE);
-        for (ControlRow r : rows) r.bind(st, app);
+        bindRows(m, st, app);
         for (Map.Entry<String, LinearLayout> e : layerRows.entrySet()) {
             Applicability.Result res = app.layer(surface, e.getKey());
             Toggle tg = (Toggle) e.getValue().getChildAt(e.getValue().getChildCount() - 1);
@@ -303,19 +313,46 @@ public final class SurfacesPage implements Page {
         preview.values(st::shown, baseline::get);
     }
 
-    private void build(Mode mode, Set<String> fav, GlassMaterial material) {
+    /** One plan for every row; each group counts the controls that take effect. */
+    private void bindRows(AppModel m, ControlState st, Applicability app) {
+        EffectiveView view = m.effectiveView();
+        Set<String> active = new HashSet<>();
+        for (ControlRow r : rows) {
+            EffectiveState.Effective e = view.of(r.control.key, surface);
+            if (RowText.enabled(e)) active.add(r.control.key);
+            r.bind(st, app, e);
+        }
+        for (GroupSection g : groups) {
+            int n = 0;
+            for (String k : g.keys) if (active.contains(k)) n++;
+            g.counter(n);
+        }
+    }
+
+    /** Rebuilds the list for a new route or favorites set, keeping the scroll position. */
+    private void rebuild(ProductLayout.Route route, Set<String> fav) {
+        int y = scroll.getScrollY();
+        build(route, fav);
+        scroll.post(() -> scroll.scrollTo(0, y));
+    }
+
+    private void build(ProductLayout.Route route, Set<String> fav) {
         android.app.Activity a = host.activity();
         builtSurface = surface;
-        builtMode = mode;
+        builtRoute = route;
         builtFavorites = fav;
-        builtMaterial = material == null ? "-" : material.id;
         materialRow = null;
+        qsToggle = null;
+        qsRow = null;
         rows.clear();
+        groups.clear();
         layerRows.clear();
         list.removeAllViews();
 
         offNotice = Ui.notice(a, t, Ui.Tone.INFO, a.getString(R.string.surface_master_off_notice), a.getString(R.string.action_enable), () -> host.model().master(true));
         list.addView(offNotice, Ui.match(0, t.dp(10)));
+        lensBanner = Ui.notice(a, t, Ui.Tone.INFO, a.getString(R.string.lens_not_loaded_banner), null, null);
+        list.addView(lensBanner, Ui.match(0, t.dp(10)));
 
         LinearLayout gate = Ui.card(a, t);
         surfaceToggle = new Toggle(a, t);
@@ -334,19 +371,32 @@ public final class SurfacesPage implements Page {
             list.addView(materialCard, Ui.match(t.dp(10), 0));
         }
 
-        Set<String> placed = new HashSet<>();
-        if (!fav.isEmpty()) {
-            list.addView(Ui.section(a, t, a.getString(R.string.surface_favorites)));
-            list.addView(card(new ArrayList<>(fav), placed), Ui.match());
-        }
-        list.addView(Ui.section(a, t, a.getString(R.string.surface_main)));
-        List<String> primary = new ArrayList<>();
-        for (String k : Controls.primary(surface, mode, material)) if (!placed.contains(k) && !IconsPage.isIconKey(k)) primary.add(k);
-        list.addView(card(primary, placed), Ui.match());
-
-        if (surface == Controls.Surface.SHADE && !placed.contains("mediaart")) {
-            list.addView(Ui.section(a, t, a.getString(R.string.surface_media)));
-            list.addView(card(Collections.singletonList("mediaart"), placed), Ui.match());
+        SurfacesPlan plan = plan(surface, route, fav);
+        boolean detailsTitled = false;
+        for (SurfacesPlan.Section section : plan.sections) {
+            switch (section.kind) {
+                case FAVORITES:
+                case MAIN:
+                    list.addView(Ui.section(a, t, a.getString(section.titleRes)));
+                    list.addView(card(section.keys, section.kind == SurfacesPlan.Kind.MAIN), Ui.match());
+                    break;
+                case DETAIL_GROUP:
+                    if (!detailsTitled) {
+                        list.addView(Ui.section(a, t, a.getString(R.string.section_appearance_details)),
+                                Ui.match(t.dp(Theme.GROUP_GAP - 22), 0));
+                        detailsTitled = true;
+                    }
+                    list.addView(group(section, route, groupIcon(section.id)), Ui.match(t.dp(Theme.ROW_GAP_TIGHT * 2), 0));
+                    break;
+                case QS_MAIN:
+                    quickSettingsMain(a, section);
+                    break;
+                case QS_DETAILS:
+                    list.addView(group(section, route, Icon.SHADE), Ui.match(t.dp(Theme.ROW_GAP_TIGHT * 2), 0));
+                    break;
+                default:
+                    list.addView(group(section, route, Icon.CLOCK), Ui.match(t.dp(Theme.GROUP_GAP), 0));
+            }
         }
 
         list.addView(Ui.section(a, t, a.getString(R.string.surface_layers)));
@@ -364,206 +414,100 @@ public final class SurfacesPage implements Page {
         }
         list.addView(layers, Ui.match());
 
-        qsToggle = null;
-        qsRow = null;
-        if (surface == Controls.Surface.SHADE) quickSettings(a, placed);
-
-        list.addView(Ui.section(a, t, a.getString(R.string.surface_more)));
-        LinearLayout groups = Ui.card(a, t);
-        boolean any = false;
-        for (Controls.Section section : Controls.Section.values()) {
-            if (section == Controls.Section.TECHNICAL || section == Controls.Section.QUICK_SETTINGS) continue;
-            if (section == Controls.Section.LENS_TUNING && mode != Mode.DYNAMIC_LENS) continue;
-            List<String> std = new ArrayList<>(), adv = new ArrayList<>();
-            for (Controls.Control c : Controls.all()) {
-                if (c.section != section || !c.on(surface) || !Controls.editable(c.key) || !visible(c)
-                        || placed.contains(c.key) || IconsPage.isIconKey(c.key)) continue;
-                if (c.tier == Controls.Tier.STANDARD) std.add(c.key);
-                else if (c.tier == Controls.Tier.ADVANCED) adv.add(c.key);
-            }
-            if (std.isEmpty() && adv.isEmpty()) continue;
-            String id = surface.id + "." + section.name();
-            int count = std.size() + adv.size();
-            View[] d = Ui.disclosure(a, t, sectionIcon(section), UiLabels.section(a, section), UiLabels.count(a, count), open.contains(id), on -> {
-                if (on) open.add(id);
-                else open.remove(id);
-            });
-            if (any) groups.addView(Ui.divider(a, t, t.dp(72)));
-            any = true;
-            groups.addView(d[0]);
-            LinearLayout body = (LinearLayout) d[1];
-            for (String k : std) addRow(body, k, placed);
-            if (!adv.isEmpty()) {
-                if (!std.isEmpty()) {
-                    TextView label = Ui.text(a, t, a.getString(R.string.surface_advanced), Theme.CAPTION, t.inkFaint, true);
-                    label.setPadding(t.dp(20), t.dp(14), t.dp(20), t.dp(2));
-                    body.addView(label);
-                }
-                for (String k : adv) addRow(body, k, placed);
-            }
-            groups.addView(body);
-        }
-        if (any) list.addView(groups, Ui.match());
-
-        // Keep the advanced provider catalogue discoverable from its own surface page.
-        // Previously all TECHNICAL-tier controls disappeared here and existed only in
-        // "Todos os parâmetros". Keep them collapsed to avoid crowding the visual controls.
-        List<String> technical = new ArrayList<>();
-        for (Controls.Control c : Controls.all())
-            if (c.on(surface) && Controls.editable(c.key) && !placed.contains(c.key) && visible(c)
-                    && !IconsPage.isIconKey(c.key)
-                    && (c.section == Controls.Section.TECHNICAL || c.tier == Controls.Tier.TECHNICAL))
-                technical.add(c.key);
-        if (!technical.isEmpty()) {
-            String id=surface.id + ".technical";
-            View[] d=Ui.disclosure(a,t,Icon.RESTART,a.getString(R.string.surface_technical),
-                    UiLabels.count(a, technical.size()),open.contains(id),on->{
-                        if(on)open.add(id);else open.remove(id);
-                    });
-            LinearLayout group=Ui.card(a,t);
-            group.addView(d[0]);
-            LinearLayout body=(LinearLayout)d[1];
-            for(String k:technical)addRow(body,k,placed);
-            group.addView(body);
-            list.addView(group,Ui.match(t.dp(8),0));
-        }
-
         LinearLayout footer = Ui.row(a);
         TextView search = Ui.button(a, t, a.getString(R.string.search_title), Icon.SEARCH, Ui.ButtonStyle.OUTLINED, true);
         search.setOnClickListener(v -> new SearchSheet(host, surface).show());
         footer.addView(search, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         TextView reset = Ui.button(a, t, host.activity().getString(R.string.action_restore), Icon.RESET, Ui.ButtonStyle.TEXT, true);
         reset.setContentDescription(a.getString(R.string.surface_restore_desc, HomePage.surfaceLabel(a, surface)));
-        reset.setOnClickListener(v -> confirmReset());
+        reset.setOnClickListener(v -> confirmReset(plan));
         footer.addView(reset);
         list.addView(footer, Ui.match(t.dp(18), 0));
     }
 
-    /** Groups for the Central de controle: same scene splits as the renderer, no hidden palette. */
-    private static final Object[][] QS_GROUPS = {
-            {"Discos desligados", Icon.CONTRAST,
-                    new String[] {"qs.hideoffdiscs"}},
-            {"Discos e ícones · fundo claro", Icon.PALETTE,
-                    new String[] {"qs.tilelight", "qs.tilelighton", "qs.tilelightoff",
-                            "qs.tilelightonink", "qs.tilelightoffink", "qs.tilelightoffalpha"}},
-            {"Discos e ícones · fundo colorido", Icon.PALETTE,
-                    new String[] {"qs.tiledark", "qs.tiledarkon", "qs.tiledarkoff",
-                            "qs.tiledarkonink", "qs.tiledarkoffink", "qs.tiledarkoffalpha"}},
-            {"Sliders", Icon.LAYERS,
-                    new String[] {"qs.outer", "qs.fill", "qs.sliderlightcolor", "qs.sliderdarkcolor"}},
-            {"Vidro", Icon.PALETTE,
-                    new String[] {"qs.lightglassopacity", "qs.lightglasscolor", "qs.lightfill", "qs.lightcolor"}},
-            {"Contorno", Icon.CONTRAST,
-                    new String[] {"qs.darkrim", "qs.lightrim", "qs.glint"}},
-            {"Luz e refração", Icon.LENS,
-                    new String[] {"qs.lightoptics", "sf.qslight", "sf.qslens", "sf.qsbody", "sf.qsdepth", "qs.edgeblur"}},
-    };
+    private static Icon groupIcon(String id) {
+        switch (id) {
+            case "blur": return Icon.LAYERS;
+            case "refraction": return Icon.LENS;
+            case "light": return Icon.PULSE;
+            case "color": return Icon.PALETTE;
+            default: return Icon.CONTRAST;
+        }
+    }
 
-    /**
-     * Central de controle: its own opt-in, then one collapsed group per part, like
-     * More settings. The values apply live on the panel; the preview above shows notifications,
-     * so the switch says so instead of a separate notice.
-     */
-    private void quickSettings(android.app.Activity a, Set<String> placed) {
-        list.addView(Ui.section(a, t, a.getString(R.string.section_qs)));
+    /** A collapsed group with its counter and "Restore group"; its open state is remembered per route. */
+    private View group(SurfacesPlan.Section section, ProductLayout.Route route, Icon icon) {
+        android.app.Activity a = host.activity();
+        String pref = "group." + surface.id + "." + route.name() + "." + section.id;
+        String title = a.getString(section.titleRes);
+        GroupSection g = new GroupSection(a, t, icon, title, section.keys,
+                host.model().ui.getBoolean(pref, false),
+                now -> host.model().ui.edit().putBoolean(pref, now).apply(),
+                (body, key) -> addRow(body, key, false),
+                () -> confirmRestoreGroup(title, section.keys));
+        groups.add(g);
+        return g.card;
+    }
+
+    private LinearLayout card(List<String> keys, boolean primary) {
+        LinearLayout card = Ui.card(host.activity(), t);
+        for (String k : keys) addRow(card, k, primary);
+        return card;
+    }
+
+    /** Central de controle: its own opt-in, then the main quick-panel controls; the rest is a group. */
+    private void quickSettingsMain(android.app.Activity a, SurfacesPlan.Section section) {
+        list.addView(Ui.section(a, t, a.getString(section.titleRes)));
         LinearLayout card = Ui.card(a, t);
         qsToggle = new Toggle(a, t);
         qsRow = Ui.switchRow(a, t, Icon.SHADE, a.getString(R.string.home_qs_glass),
                 a.getString(R.string.qs_summary), qsToggle);
         qsToggle.listener((x, on) -> host.model().flag(ProductFlags.QUICK_SETTINGS, on));
         card.addView(qsRow);
-        int[] qsTitles = {R.string.qs_off_discs, R.string.qs_light_discs, R.string.qs_dark_discs,
-                R.string.qs_sliders, R.string.qs_glass, R.string.qs_outline, R.string.qs_light_refraction};
-        int[] qsHints = {R.string.qs_off_discs_desc, R.string.qs_light_discs_desc, R.string.qs_dark_discs_desc,
-                R.string.qs_sliders_desc, R.string.qs_glass_desc, R.string.qs_outline_desc, R.string.dynamic_lens};
-        for (int groupIndex = 0; groupIndex < QS_GROUPS.length; groupIndex++) {
-            Object[] g = QS_GROUPS[groupIndex];
-            List<String> std = new ArrayList<>(), adv = new ArrayList<>();
-            for (String k : (String[]) g[2]) {
-                Controls.Control c = Controls.get(k);
-                if (c == null || !Controls.editable(k) || IconsPage.isIconKey(k)) continue;
-                (c.tier == Controls.Tier.STANDARD ? std : adv).add(k);
-            }
-            if (std.isEmpty() && adv.isEmpty()) continue;
-            String id = surface.id + ".qs." + g[0];
-            View[] d = Ui.disclosure(a, t, (Icon) g[1], a.getString(qsTitles[groupIndex]), a.getString(qsHints[groupIndex]), open.contains(id), on -> {
-                if (on) open.add(id);
-                else open.remove(id);
-            });
-            card.addView(Ui.divider(a, t, t.dp(72)));
-            card.addView(d[0]);
-            LinearLayout body = (LinearLayout) d[1];
-            for (String k : std) addRow(body, k, placed);
-            if (!adv.isEmpty() && !std.isEmpty()) {
-                TextView label = Ui.text(a, t, a.getString(R.string.surface_advanced), Theme.CAPTION, t.inkFaint, true);
-                label.setPadding(t.dp(20), t.dp(14), t.dp(20), t.dp(2));
-                body.addView(label);
-            }
-            for (String k : adv) addRow(body, k, placed);
-            card.addView(body);
-        }
-        // The catalogue is the source of truth. A newly added QS setting must never become
-        // accessible only through "Todos os parâmetros" because a manual group was not updated.
-        // INTERNAL/READONLY legacy keys stay available for profile round-trips, but never appear
-        // in these user-facing pages.
-        List<String> remaining = new ArrayList<>();
-        for (Controls.Control c : Controls.all())
-            if (c.section == Controls.Section.QUICK_SETTINGS && c.on(surface)
-                    && Controls.editable(c.key) && !placed.contains(c.key)
-                    && !IconsPage.isIconKey(c.key)) remaining.add(c.key);
-        if (!remaining.isEmpty()) {
-            String id = surface.id + ".qs.remaining";
-            View[] d = Ui.disclosure(a, t, Icon.SHADE, a.getString(R.string.surface_other_settings),
-                    UiLabels.count(a, remaining.size()), open.contains(id), on -> {
-                        if (on) open.add(id);
-                        else open.remove(id);
-                    });
-            card.addView(Ui.divider(a, t, t.dp(72)));
-            card.addView(d[0]);
-            LinearLayout body = (LinearLayout)d[1];
-            for (String key : remaining) addRow(body, key, placed);
-            card.addView(body);
-        }
+        for (String k : section.keys) addRow(card, k, true);
         list.addView(card, Ui.match());
     }
 
-    private Icon sectionIcon(Controls.Section s) {
-        switch (s) {
-            case GLASS: return Icon.LAYERS;
-            case EDGES: return Icon.LENS;
-            case COLOR: return Icon.CONTRAST;
-            case BEHAVIOR: return Icon.CLOCK;
-            case MOTION: return Icon.PULSE;
-            case QUICK_SETTINGS: return Icon.SHADE;
-            default: return Icon.RESTART;
-        }
-    }
-
-    private LinearLayout card(List<String> keys, Set<String> placed) {
-        LinearLayout card = Ui.card(host.activity(), t);
-        for (String k : keys) addRow(card, k, placed);
-        return card;
-    }
-
-    private void addRow(LinearLayout parent, String key, Set<String> placed) {
+    private void addRow(LinearLayout parent, String key, boolean primary) {
         Controls.Control c = Controls.get(key);
-        if (c == null || !Controls.editable(key) || IconsPage.isIconKey(key)) return;
+        if (c == null || !Controls.editable(key)) return;
         if (parent.getChildCount() > 0 && parent.getChildAt(parent.getChildCount() - 1) instanceof ControlRow)
             parent.addView(Ui.divider(host.activity(), t, t.dp(20)));
-        ControlRow r = new ControlRow(host.activity(), host, c, surface);
+        ControlRow r = new ControlRow(host.activity(), host, c, surface, primary);
         parent.addView(r, Ui.match());
         rows.add(r);
-        placed.add(key);
     }
 
-    private void confirmReset() {
+    /** Asks before restoring a group; keys that are not in effect keep their saved value. */
+    private void confirmRestoreGroup(String title, List<String> keys) {
+        AppModel m = host.model();
+        android.app.Activity a = host.activity();
+        Applicability rules = m.rules();
+        int count = 0;
+        for (String k : keys)
+            if (EditGuard.check(EditGuard.Action.RESET_GROUP, k, surface, rules).outcome == EditGuard.Outcome.ALLOW) count++;
+        if (count == 0) {
+            host.feedback(a.getString(R.string.restore_group_nothing));
+            return;
+        }
+        Sheet sheet = new Sheet(a, t, a.getString(R.string.restore_group));
+        sheet.text(a.getString(R.string.restore_group_confirm, count, title));
+        sheet.action(a.getString(R.string.action_cancel), Ui.ButtonStyle.OUTLINED, sheet::dismiss);
+        sheet.action(a.getString(R.string.restore_group), Ui.ButtonStyle.FILLED, () -> {
+            m.resetGroup(keys, surface);
+            host.feedback(a.getString(R.string.preset_restored));
+            sheet.dismiss();
+        });
+        sheet.show();
+    }
+
+    private void confirmReset(SurfacesPlan plan) {
         List<String> keys = new ArrayList<>();
         boolean shared = false;
-        for (Controls.Control c : Controls.all())
-            if (c.on(surface) && Controls.editable(c.key) && c.tier != Controls.Tier.TECHNICAL
-                    && visible(c) && !IconsPage.isIconKey(c.key)) {
-                keys.add(c.key);
-                shared |= c.surfaces.size() > 1;
+        for (SurfacesPlan.Section section : plan.sections)
+            for (String k : section.keys) {
+                keys.add(k);
+                shared |= Controls.get(k).surfaces.size() > 1;
             }
         Sheet sheet = new Sheet(host.activity(), t, host.activity().getString(R.string.surface_reset_question, HomePage.surfaceLabel(host.activity(), surface)));
         sheet.text(host.activity().getString(R.string.surface_reset_warning)

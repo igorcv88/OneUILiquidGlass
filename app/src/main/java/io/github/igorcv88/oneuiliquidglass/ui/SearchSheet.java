@@ -8,7 +8,6 @@ import io.github.igorcv88.oneuiliquidglass.config.*;
 import io.github.igorcv88.oneuiliquidglass.R;
 import io.github.igorcv88.oneuiliquidglass.ui.kit.*;
 
-import java.text.Normalizer;
 import java.util.*;
 
 /**
@@ -61,13 +60,11 @@ final class SearchSheet extends Sheet {
     }
 
     static String fold(String s) {
-        return Normalizer.normalize(s, Normalizer.Form.NFD).replaceAll("\\p{M}", "").toLowerCase(Locale.ROOT);
+        return SearchIndex.fold(s);
     }
 
     static boolean matchesControl(android.content.Context context, Controls.Control c, String query) {
-        String hay = fold(ControlTitles.title(context, c) + " " + c.title + " " + ControlDescriptions.hint(context, c) + " " + ControlDescriptions.help(context, c) + " " + c.hint + " " + c.help + " " + c.spec().fullKey()
-                + " " + c.section.label + " " + UiLabels.section(context, c.section));
-        return hay.contains(fold(query == null ? "" : query.trim()));
+        return SearchIndex.matches(context, c, query);
     }
 
     private void render() {
@@ -81,7 +78,8 @@ final class SearchSheet extends Sheet {
         Applicability app = host.model().rules();
         Map<Controls.Section, List<Controls.Control>> groups = new EnumMap<>(Controls.Section.class);
         for (Controls.Control c : Controls.all()) {
-            if (!technical && c.tier == Controls.Tier.INTERNAL) continue;
+            // Legacy never; technical and diagnostic controls only in the technical list.
+            if (!SearchIndex.listed(c, technical)) continue;
             // Ordinary search follows the material that decides the surface; the technical list
             // keeps every parameter and says which material uses it.
             if (!technical && !GlassMaterial.visible(c.key, c.on(surface) ? surface : c.surfaces.iterator().next(), st::shown)) continue;
@@ -100,9 +98,13 @@ final class SearchSheet extends Sheet {
                 Controls.Surface where = c.on(surface) ? surface : c.surfaces.iterator().next();
                 Applicability.Result a = app.on(c.key, where);
                 String value = ControlValues.display(host.activity(), c, st.shown(c.key));
-                String sub = surfaces(activity, c) + " · " + value + (a.usable() || a.kind == Applicability.Kind.READ_ONLY ? "" : " · " + ControlReasons.text(activity, a.reason));
+                String place = technical ? surfaces(activity, c) : SearchIndex.path(activity, c, where,
+                        host.model().surfaceRoute(where).route, HomePage.surfaceLabel(activity, where));
+                String shownValue = a.usable() || a.kind == Applicability.Kind.READ_ONLY ? value
+                        : activity.getString(R.string.state_inactive);
+                String sub = place + " · " + shownValue + (a.usable() || a.kind == Applicability.Kind.READ_ONLY ? "" : " · " + ControlReasons.text(activity, a.reason));
                 if (technical) sub += "\n" + c.spec().fullKey() + materialNote(c.key);
-                LinearLayout r = Ui.listRow(activity, t, null, ControlTitles.title(activity, c), sub, Controls.editable(c.key) ? Ui.chevron(activity, t) : null);
+                LinearLayout r = Ui.listRow(activity, t, null, ProductTitles.title(activity, c), sub, Controls.editable(c.key) ? Ui.chevron(activity, t) : null);
                 if (Controls.editable(c.key)) r.setOnClickListener(v -> {
                     dismiss();
                     host.openControl(c.key, where);

@@ -40,7 +40,7 @@ final class UiLabels {
     static String selector(Context c, String raw) {
         GlassMaterial material = GlassMaterial.ofSelector(raw);
         if (material != null) return material(c, material);
-        return "2".equals(raw == null ? "" : raw.trim()) ? c.getString(R.string.material_per_card) : String.valueOf(raw);
+        return "2".equals(raw == null ? "" : raw.trim()) ? c.getString(R.string.selector_per_card) : String.valueOf(raw);
     }
     static String backdrop(Context c, NotificationPreview.Backdrop backdrop) {
         switch (backdrop) {

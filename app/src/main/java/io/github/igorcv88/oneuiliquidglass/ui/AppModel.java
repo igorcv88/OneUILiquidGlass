@@ -8,10 +8,13 @@ import android.os.Looper;
 import io.github.igorcv88.oneuiliquidglass.Config;
 import io.github.igorcv88.oneuiliquidglass.R;
 import io.github.igorcv88.oneuiliquidglass.config.*;
+import io.github.igorcv88.oneuiliquidglass.config.product.ProductLayout;
+import io.github.igorcv88.oneuiliquidglass.config.product.Routes;
 import io.github.igorcv88.oneuiliquidglass.config.state.ConfirmedSnapshot;
 import io.github.igorcv88.oneuiliquidglass.config.state.EditGuard;
 import io.github.igorcv88.oneuiliquidglass.config.state.LensIntent;
 import io.github.igorcv88.oneuiliquidglass.live.*;
+import io.github.igorcv88.oneuiliquidglass.ui.surfaces.SurfacesPlan;
 
 import java.util.*;
 import java.util.concurrent.ExecutorService;
@@ -201,7 +204,10 @@ public final class AppModel {
      * a selector the app never saved is replaced by an explicit choice, still pending until applied.
      */
     public Result selectMaterial(GlassMaterial material) {
-        Map<String, String> selection = material.selection();
+        return saveSelectors(material.selection(), material.id);
+    }
+
+    private Result saveSelectors(Map<String, String> selection, String label) {
         for (String key : selection.keySet()) {
             SettingSpec spec = SettingsRegistry.get(key);
             if (spec == null) return new Result(false, false, activity.getString(R.string.error_not_editable));
@@ -216,7 +222,7 @@ public final class AppModel {
             return new Result(true, false, "");
         } catch (IllegalArgumentException e) {
             notifyChanged();
-            return new Result(false, false, activity.getString(R.string.error_invalid_setting, material.id));
+            return new Result(false, false, activity.getString(R.string.error_invalid_setting, label));
         }
     }
 
@@ -281,6 +287,36 @@ public final class AppModel {
         }
     }
 
+    /** Saves "per card" (2) as both selectors in one edit; only the technical screen offers it. */
+    public Result selectPerCard() {
+        Map<String, String> selection = new LinkedHashMap<>();
+        selection.put(GlassMaterial.HU_SELECTOR, "2");
+        selection.put(GlassMaterial.KG_SELECTOR, "2");
+        return saveSelectors(selection, "per-card");
+    }
+
+    /** Whether either selector is saved as per-card: the only case where that option is offered outside Technical. */
+    public boolean perCardSelected() {
+        return "2".equals(state().shown(GlassMaterial.HU_SELECTOR).trim())
+                || "2".equals(state().shown(GlassMaterial.KG_SELECTOR).trim());
+    }
+
+    private static final String FAVORITES_MIGRATED = "favorites.migrated.r6";
+
+    /**
+     * How many saved favorites the surface lists no longer show (technical, diagnostic, legacy), once
+     * after the update; 0 afterwards. The favorite flags are never deleted.
+     */
+    public int takeFavoritesMigrationNotice() {
+        if (ui.getBoolean(FAVORITES_MIGRATED, false)) return 0;
+        List<String> favored = new ArrayList<>();
+        for (Map.Entry<String, ?> e : ui.getAll().entrySet())
+            if (e.getKey().startsWith("favorite.") && Boolean.TRUE.equals(e.getValue()))
+                favored.add(e.getKey().substring("favorite.".length()));
+        ui.edit().putBoolean(FAVORITES_MIGRATED, true).apply();
+        return SurfacesPlan.hiddenFavorites(favored).size();
+    }
+
     public void flag(String key, boolean on) {
         repo.flag(key, on);
         notifyChanged();
@@ -312,6 +348,24 @@ public final class AppModel {
         repo.resetToDefaults(approved);
         notifyChanged();
         return refused;
+    }
+
+    /**
+     * Restores a group of keys (a parent and its children) to their defaults in one transaction, one
+     * undo step. Keys the guard skips (RESET_GROUP: inactive, off or read-only) keep their saved value.
+     *
+     * @return the keys left alone, for the confirmation text
+     */
+    public List<String> resetGroup(Collection<String> keys, Controls.Surface surface) {
+        Applicability rules = rules();
+        List<String> approved = new ArrayList<>(), skipped = new ArrayList<>();
+        for (String key : keys)
+            (EditGuard.check(EditGuard.Action.RESET_GROUP, key, surface, rules).outcome == EditGuard.Outcome.ALLOW
+                    ? approved : skipped).add(key);
+        drafts.keySet().removeAll(approved);
+        repo.resetToDefaults(approved);
+        notifyChanged();
+        return skipped;
     }
 
     public boolean undo() {
@@ -434,6 +488,63 @@ public final class AppModel {
         } catch (PlanContradiction e) {
             return null;
         }
+    }
+
+    /** The layout route of a surface and whether the lens it shows is not loaded yet. */
+    public static final class SurfaceRoute {
+        public final ProductLayout.Route route;
+        /** The lens routes are shown from the saved intent, but the lens is not loaded now. */
+        public final boolean lensNotLoaded;
+
+        SurfaceRoute(ProductLayout.Route route, boolean lensNotLoaded) {
+            this.route = route;
+            this.lensNotLoaded = lensNotLoaded;
+        }
+    }
+
+    /**
+     * The route a surface page lays out, from confirmed values only. With the lens intent the next
+     * compile's values decide (the lens routes stay visible and editable while it is not loaded).
+     */
+    public SurfaceRoute surfaceRoute(Controls.Surface surface) {
+        ConfirmedSnapshot snapshot = confirmedSnapshot();
+        boolean intent = LensIntent.of(snapshot, lensPrefs());
+        ProductLayout.Route route = Routes.of(intent ? snapshot.nextReader() : snapshot::value, surface);
+        boolean lens = route != ProductLayout.Route.STANDARD && route != ProductLayout.Route.CAPTURE
+                && route != ProductLayout.Route.PLAIN_BLUR;
+        return new SurfaceRoute(route, intent && lens && !snapshot.lensLoaded());
+    }
+
+    /** One plan and the confirmed state for rendering many rows; never a draft. */
+    EffectiveView effectiveView() {
+        return new EffectiveView(state(), plan(), lensIntent());
+    }
+
+    /** What the userspace restart that reloads the lens would write, from the same plan as Apply. */
+    public static final class Reinject {
+        public enum Outcome { START, BLOCKED, CONTRADICTION }
+
+        public final Outcome outcome;
+        public final Map<String, String> writes;
+        public final String fingerprint;
+
+        Reinject(Outcome outcome, Map<String, String> writes, String fingerprint) {
+            this.outcome = outcome;
+            this.writes = Collections.unmodifiableMap(new LinkedHashMap<>(writes));
+            this.fingerprint = fingerprint;
+        }
+    }
+
+    /**
+     * The restart that reloads the lens writes the plan's values and checks the plan's fingerprint
+     * before writing, like the Apply dialog: after a reboot the properties are gone, so a restart
+     * that writes nothing would compile defaults. The caller refreshes the properties first.
+     */
+    public Reinject reinjectPlan() {
+        PublicationPlan plan = plan();
+        if (plan == null) return new Reinject(Reinject.Outcome.CONTRADICTION, Collections.<String, String>emptyMap(), null);
+        if (plan.blocked) return new Reinject(Reinject.Outcome.BLOCKED, Collections.<String, String>emptyMap(), plan.fingerprint);
+        return new Reinject(Reinject.Outcome.START, plan.writeValues(), plan.fingerprint);
     }
 
     /** The contradiction found by the last {@link #plan()}, or null. */

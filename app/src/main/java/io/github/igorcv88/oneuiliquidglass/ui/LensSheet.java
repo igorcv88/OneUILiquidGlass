@@ -332,15 +332,19 @@ final class LensSheet extends Sheet {
     }
 
     private String contradictionText() {
+        return contradictionText(m, activity);
+    }
+
+    static String contradictionText(AppModel m, android.content.Context context) {
         PlanContradiction c = m.contradiction();
         StringBuilder keys = new StringBuilder();
         if (c != null)
             for (String key : c.keys) {
                 Controls.Control control = Controls.get(key);
                 keys.append(keys.length() == 0 ? "" : ", ")
-                        .append(control == null ? key : ControlTitles.title(activity, control));
+                        .append(control == null ? key : ControlTitles.title(context, control));
             }
-        return activity.getString(R.string.apply_contradiction, keys);
+        return context.getString(R.string.apply_contradiction, keys);
     }
 
     private void confirmRemove() {
