@@ -1186,3 +1186,7 @@ Controles qs.* aplicam via provider; sf.qs* exigem o fluxo transacional existent
 agora é lido pelo perfil 3 e autorizado no helper. Ver docs/quick-settings-glass.md para assinaturas
 verificadas, limites, diagnóstico e protocolo de hardware. Não houve ajuste especulativo da luz
 ou do shade global das notificações.
+
+## Estado efetivo e publicação (R6)
+
+O estado exibido de cada controle e o que o próximo Aplicar escreve vêm só de valores confirmados (salvos, observados, compilados), nunca de drafts: `config/state/ConfirmedSnapshot`, `EffectiveState`, `EditGuard` e `live/PublicationPlan`. O plano de restart é avaliado no contexto `NEXT` (lente virtualmente carregada, sem gravar `sfrefract`), restaura valores salvos que o sistema perdeu e só compara com o checkpoint compilado quando ele é da geração SF atual (`live/CompiledEvidence`). Backup schema 2, `ImportPlan` (importar, estilos, desfazer com revisão) e proveniência por chave completam o contrato. A camada de produto (`config/product/ProductLayout`, gerada de `docs/OULG_UI_PLAN/CONTROL_MAPPING.json`) decide principais/detalhes/técnico por rota; a política de energia (`glass/EnergyPolicy`, `config/EnergyGovernor`) só suspende superfícies mascarando flags, sem tocar preferências. Contratos: `docs/OULG_UI_PLAN/EFFECTIVE_STATE_CONTRACT.md`, `ACTIVATION_AND_BACKUP_CONTRACT.md`, `ENERGY_POLICY.md`.

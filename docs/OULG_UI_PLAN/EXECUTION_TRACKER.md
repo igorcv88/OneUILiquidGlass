@@ -91,3 +91,10 @@ Desvios: (1) `Config.fromSnapshot` além do `from(Tuning, master)`. (2) O govern
 ## Artefatos
 
 PR: — · CI: — · APK: — · SHA-256: —
+
+## Fase E (Opus)
+
+- T19: seção "Estado efetivo e publicação (R6)" em `docs/architecture.md`; inventário/matriz regenerados nas fases (214 chaves, `--check` ok).
+- T20: PR draft #212 aberto após B2 (`gh pr create --draft`), um push por fase. CI `Controls panel checks` verde em 30f7785, 9c0af0d e d7484a0 (android-and-contracts + Sign temporary PR APK). APK assinado de 1 dia: artefato do run do último commit.
+- Revisão Opus (parcial, durante a execução): `PublicationPlan` (contexto NEXT, writes RESTORE/CHANGE, drift só com evidência CURRENT, lostExternal informativo, BLOCKED), `CompiledEvidence` (geração == `sf_generation` e lente carregada), revalidação do fingerprint no RESTART, `EnergyGovernor` (receiver único não exportado, tupla sem mudança ignorada, só máscara) e remoção do gate do Saver em `LiveSurfaceHooks` (mantidos `disable_window_blurs`/doze). Nenhum defeito bloqueante. `git diff origin/main` sem C/H nativos; catálogo só com +6 linhas de energia.
+- Pendente: validação física (`VALIDATION_MATRIX.md` §4 primeiro, depois §3).
