@@ -203,3 +203,14 @@ Todas as caixas que casam são afetadas. Cada armação registra `state=matched`
    - repita com `:2` e `:4`;
    - para as cápsulas, use `container@652x282:<máscara>`;
    - volte com `setprop debug.oulg.qslayers ""`.
+
+## R5.3. Valor salvo de controle inativo não é publicado
+
+Relato (U, 18/11): com Clear gaussiano e Desfoque adaptativo ligado, a lente listava "Highlight suppression · Pop-up: 0.00 → 1.00" entre as pendências e iria publicá-lo ao aplicar. O editor (B1) bloqueava a edição, mas `CompositorValues.pending()` comparava salvo × observado sem consultar a aplicabilidade. O mesmo mapa é a lista "Waiting for restart" e os valores escritos no restart (`restartConfirmed(pending)`).
+
+Correção: `AppModel.pendingCompositor()` descarta as chaves cuja regra compartilhada (`Applicability.rule`, avaliada com os valores salvos que vão compilar) é `INACTIVE`.
+- O valor continua salvo no aplicativo.
+- Volta à lista quando a condição é atendida, por exemplo com o adaptativo desligado.
+- A deriva entre o compilado e o observado continua sendo informada.
+
+Fica para o #209: a unificação geral de valor salvo, efetivo, pendente e publicado.

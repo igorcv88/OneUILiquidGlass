@@ -168,6 +168,25 @@ public class ControlSheetApplicabilityTest {
         assertEquals("1.25", a.model().state().saved.get("sf.hubloom"));
     }
 
+    /**
+     * R5: the editor locked sf.hubloom, but the restart would still have written the value saved
+     * earlier. An inactive control is neither listed as pending nor published; it stays saved and
+     * returns to the pending list when the condition is met.
+     */
+    @Test
+    public void anInactiveSavedValueIsNeitherPendingNorPublished() {
+        MainActivity a = open();
+        assertTrue(a.model().save("sf.hubloom", "1").ok);
+        gaussianAdaptive(a);
+        assertTrue(a.model().save("sf.hclift", "0.4").ok);
+        Map<String, String> pending = a.model().pendingCompositor();
+        assertFalse("locked control is not published: " + pending, pending.containsKey("sf.hubloom"));
+        assertTrue("other saved values still apply: " + pending, pending.containsKey("sf.hclift"));
+        assertEquals("kept in the app", "1", a.model().state().saved.get("sf.hubloom"));
+        assertTrue(a.model().save("sf.hcadapt", "0").ok);
+        assertEquals("1", a.model().pendingCompositor().get("sf.hubloom"));
+    }
+
     @Test
     public void opticalParametersAreNotDescribedAsTiming() {
         for (String key : new String[] {"sf.hubloom", "sf.hulight", "sf.kglight", "sf.qslight", "sf.qslens",

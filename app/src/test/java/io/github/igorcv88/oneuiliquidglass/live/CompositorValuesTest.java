@@ -280,4 +280,15 @@ public final class CompositorValuesTest {
         String helper = new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get("../sfhook/live/oulg-live.sh")), "UTF-8");
         for (String k : SfLive.WRITABLE) assertTrue(k, helper.contains("|" + k + "|") || helper.contains(" " + k + "|") || helper.contains("|" + k + ")"));
     }
+
+    @org.junit.Test public void inapplicableSavedValuesAreSkippedButCompiledDriftIsStillReported() {
+        java.util.Map<String, String> saved = new java.util.HashMap<>();
+        saved.put("sf.hubloom", "1");
+        saved.put("sf.hclift", "0.4");
+        java.util.Map<String, String> observed = new java.util.HashMap<>();
+        java.util.Map<String, String> out = CompositorValues.pending(saved, observed, k -> k.equals("sf.hubloom"));
+        org.junit.Assert.assertFalse(out.containsKey("sf.hubloom"));
+        org.junit.Assert.assertEquals("0.4", out.get("sf.hclift"));
+        org.junit.Assert.assertEquals("1", CompositorValues.pending(saved, observed).get("sf.hubloom"));
+    }
 }

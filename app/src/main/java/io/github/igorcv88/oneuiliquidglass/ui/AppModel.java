@@ -328,10 +328,16 @@ public final class AppModel {
 
     // ---- dynamic lens
 
+    /**
+     * Compositor values to list and publish on the next restart. A saved value whose control has
+     * no effect now (Applicability INACTIVE, evaluated with the saved values that will compile) is
+     * kept in the app but not published: the editor locks it, and the restart must not write it.
+     */
     public Map<String, String> pendingCompositor() {
         SharedPreferences p = lensPrefs();
+        Applicability rules = state().applicability();
         return CompositorValues.pending(state().saved, SystemPropertyReader.snapshot(),
-                CompositorValues.baseline(p));
+                CompositorValues.baseline(p), k -> rules.rule(k).kind == Applicability.Kind.INACTIVE);
     }
 
     public Map<String, String> pendingIcons() { return repo.pendingIcons(); }
