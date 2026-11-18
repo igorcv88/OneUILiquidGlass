@@ -429,6 +429,14 @@ final class QuickSettingsEdgeLight {
             int right = Math.round(-out + envelope[2]), bottom = Math.round(-out + envelope[3]);
             radius = QuickSettingsGlass.opticalRadius(radius, right - left, bottom - top);
             float tag = QuickSettingsGlass.edgeTag(radius);
+            if (tag >= 0f && isolation.off(e.spec.token.id, QsLayerIsolation.SF_PROFILE3, android.os.SystemClock.uptimeMillis())) {
+                // Diagnostic: same region and blur, integer radius, so profile 3 is not selected.
+                tag = (float) Math.floor(radius);
+                if (isolation.firstHit(QsLayerIsolation.SF_PROFILE3))
+                    Probe.log("QS_LAYER_ISOLATION", "state=applied layer=sfProfile3 id=" + e.spec.token.id
+                            + " role=" + e.spec.token.role + " bounds=" + left + "," + top + "," + right + "," + bottom
+                            + " radius=" + radius + " tag=" + tag);
+            }
             if (tag < 0f) {
                 if (diagnostic.count(QuickSettingsEdgeDiagnostics.Event.INVALID_RADIUS_TAG))
                     diagnostic.event(QuickSettingsEdgeDiagnostics.Event.INVALID_RADIUS_TAG,
@@ -549,6 +557,7 @@ final class QuickSettingsEdgeLight {
         if (!visible) {
             visible = true;
             coverage.begin();
+            armIsolation();
             for (Edge e : nodes.values()) {
                 e.spec.token.attempted = false; e.spec.token.drawn = false;
                 coverage.adopt(e.spec.token);
@@ -621,6 +630,11 @@ final class QuickSettingsEdgeLight {
     }
 
     private QsCapsuleOptics optics;
+    /** Opt-in per-box layer isolation (debug.oulg.qslayers); inert unless armed. */
+    final QsLayerIsolation isolation = new QsLayerIsolation();
+    /** Told when an isolation window ends, so outlines recompose with their normal brush. */
+    private volatile Runnable isolationEnded = () -> {};
+    void onIsolationEnded(Runnable r) { isolationEnded = r == null ? () -> {} : r; }
     static boolean usesCompositor(String role) { return role == null || !role.startsWith("media"); }
     private BooleanSupplier lightScene = () -> false;
     private DoubleSupplier lightGain = () -> 1d;
@@ -670,6 +684,12 @@ final class QuickSettingsEdgeLight {
         // compositor regions (suppress) instead of relying on the layer alpha alone. The dragged
         // slider's container keeps its optics. Not a failure: the outline state is left as it is.
         if (dragging && !e.spec.token.role.equals("slider")) return;
+        if (isolation.off(e.spec.token.id, QsLayerIsolation.AGSL, android.os.SystemClock.uptimeMillis())) {
+            // Diagnostic: this box's AGSL optics are not drawn; its outline state is left as it is.
+            if (isolation.firstHit(QsLayerIsolation.AGSL))
+                Probe.log("QS_LAYER_ISOLATION", "state=applied layer=agsl id=" + e.spec.token.id + " role=" + e.spec.token.role);
+            return;
+        }
         if (o == null || !QsCapsuleOptics.available() || !enabled.getAsBoolean()) {
             coverage.stage(e.spec.token, "fallback", "disabled-or-shader"); return;
         }
@@ -785,6 +805,28 @@ final class QuickSettingsEdgeLight {
 
     /** DrawModifierNodeKt.invalidateDraw: the background nodes' own draw runs again (null: unavailable). */
     private Method invalidateDraw;
+
+    /** Panel opened: read debug.oulg.qslayers once; schedule the automatic return to normal. */
+    private void armIsolation() {
+        long now = android.os.SystemClock.uptimeMillis();
+        boolean was = isolation.active(now);
+        String line = isolation.arm(QsLayerIsolation.read(), now);
+        isolation.resetHits();
+        if (line == null) { if (was) restoreIsolation(); return; }
+        Probe.log("QS_LAYER_ISOLATION", "state=armed " + line);
+        View v = host.get();
+        if (v != null) v.postDelayed(() -> {
+            if (isolation.active(android.os.SystemClock.uptimeMillis())) return; // re-armed later
+            Probe.log("QS_LAYER_ISOLATION", "state=ended target=" + isolation.target());
+            restoreIsolation();
+        }, QsLayerIsolation.WINDOW_MS + 50);
+    }
+
+    private void restoreIsolation() {
+        redrawNodes();
+        try { isolationEnded.run(); }
+        catch (RuntimeException | LinkageError e) { Probe.error("QS_LAYER_ISOLATION_RESTORE_FAILED", e); }
+    }
 
     /** Rebuilds released regions: each background node draws again, which creates its region. */
     private void redrawNodes() {

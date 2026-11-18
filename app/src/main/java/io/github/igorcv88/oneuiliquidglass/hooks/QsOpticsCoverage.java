@@ -52,21 +52,42 @@ final class QsOpticsCoverage {
         log.accept("QS_OPTICS_PATH", "session=" + session + " id=" + t.id + " role=" + t.role
                 + " stage=" + stage + " reason=" + reason);
     }
+    /**
+     * The outline invariant is per box (its BoxWithOutline restart scope, the key QsLitRims uses),
+     * not per token: every recomposition selects a new token, and once a box is lit its border is
+     * built attenuated on that new token, while the drawing stays with the token already bound to
+     * the box's background node (Compose does not update a node whose element is unchanged). A
+     * token count therefore always reported rimWithoutOptics == rimAttenuated (R4 trace). A box is
+     * "without optics" only if it has an attenuated outline and none of its tokens drew in this
+     * session. The token count stays available as rimAttenuatedTokens.
+     */
     String snapshot(String phase) {
-        int registered=0, bound=0, attempted=0, drawn=0, fallback=0, noNode=0, attenuated=0, unlit=0;
+        int registered=0, bound=0, attempted=0, drawn=0, fallback=0, noNode=0, attenuatedTokens=0;
         Map<String,Integer> roles = new LinkedHashMap<>();
+        java.util.IdentityHashMap<Object, boolean[]> boxes = new java.util.IdentityHashMap<>();
+        int orphanUnlit = 0;
         for (Token t : tokens.values()) {
             if(t.registered) registered++;
             if(t.bound) bound++; else noNode++;
             if(t.attempted) attempted++;
             if(t.drawn) drawn++; else fallback++;
-            if(t.rimAttenuated) { attenuated++; if(!t.drawn) unlit++; }
+            if(t.rimAttenuated) attenuatedTokens++;
+            java.lang.ref.WeakReference<Object> ref = t.box;
+            Object box = ref == null ? null : ref.get();
+            if (box != null) {
+                boolean[] f = boxes.computeIfAbsent(box, k -> new boolean[2]);
+                f[0] |= t.rimAttenuated;
+                f[1] |= t.drawn;
+            } else if (t.rimAttenuated && !t.drawn) orphanUnlit++;
             roles.put(t.role, roles.getOrDefault(t.role, 0) + 1);
         }
+        int attenuated = 0, unlit = orphanUnlit;
+        for (boolean[] f : boxes.values()) if (f[0]) { attenuated++; if (!f[1]) unlit++; }
         return "session=" + session + " phase=" + phase + " counters=session eligible=" + tokens.size()
                 + " selected=" + tokens.size() + " registered=" + registered + " bound=" + bound
                 + " drawAttempt=" + attempted + " drawn=" + drawn + " fallback=" + fallback
-                + " unmatched=" + noNode + " rimAttenuated=" + attenuated + " rimWithoutOptics=" + unlit
+                + " unmatched=" + noNode + " boxes=" + boxes.size() + " rimAttenuated=" + attenuated
+                + " rimWithoutOptics=" + unlit + " rimAttenuatedTokens=" + attenuatedTokens
                 + " evicted=" + evicted + " byRole=" + roles;
     }
     void summary(String phase) { log.accept("QS_OPTICS_COVERAGE", snapshot(phase)); }

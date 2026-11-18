@@ -141,6 +141,7 @@ public final class QuickSettingsHooks {
         // Optics gone (shader or geometry failure): full-strength rims again, recomposed now.
         capsuleOptics.onFailure(() -> { litRims.clear(); clearRims(); invalidateAll("optics-failed"); });
         edge.onOptics(this::opticsResult);
+        edge.onIsolationEnded(() -> invalidateAll("layer-isolation-ended"));
         edge.optics(capsuleOptics, () -> QuickSettingsHooks.this.backdrop != null
                         // On a cold/expired first frame UNKNOWN must not mean full-strength
                         // white optics. Hold the safe light-scene gain until classification.
@@ -221,6 +222,13 @@ public final class QuickSettingsHooks {
                         Object brush = q.rim;
                         if (lit) try { brush = rim(q.dark, true); }
                         catch (ReflectiveOperationException | RuntimeException e) { lit = false; Probe.error("QS_RIM_FAILED", e); }
+                        if (edge.isolation.rimOff(box, android.os.SystemClock.uptimeMillis())) try {
+                            // Diagnostic (debug.oulg.qslayers bit 4): this box only, transparent outline.
+                            brush = solidColor.newInstance(QuickSettingsGlass.color(0));
+                            if (edge.isolation.firstHit(QsLayerIsolation.COMPOSE_RIM))
+                                Probe.log("QS_LAYER_ISOLATION", "state=applied layer=composeRim id=" + edge.isolation.target()
+                                        + " lit=" + lit);
+                        } catch (ReflectiveOperationException | RuntimeException e) { Probe.error("QS_RIM_FAILED", e); }
                         p.args[1] = brush;
                         if (q.token != null) {
                             q.token.box = box == null ? null : new java.lang.ref.WeakReference<>(box);
@@ -692,7 +700,13 @@ public final class QuickSettingsHooks {
     private void opticsResult(QsOpticsCoverage.Token token, boolean drawn, long session) {
         java.lang.ref.WeakReference<Object> ref = token.box;
         Object box = ref == null ? null : ref.get();
-        if (!litRims.report(box, drawn, session)) return;
+        // Diagnostic target: learn its box, and recompose it once so its outline can be isolated.
+        boolean newTarget = edge.isolation.active(android.os.SystemClock.uptimeMillis())
+                && token.id == edge.isolation.target() && box != null && !edge.isolation.rimOff(box, android.os.SystemClock.uptimeMillis());
+        edge.isolation.learn(token.id, box);
+        boolean recompose = litRims.report(box, drawn, session)
+                | (newTarget && edge.isolation.rimOff(box, android.os.SystemClock.uptimeMillis()));
+        if (!recompose) return;
         if (Probe.trace) Probe.log("QS_RIM_OWNER", "session=" + session + " id=" + token.id + " role=" + token.role
                 + " rim=" + (drawn ? "attenuated" : "full"));
         if (invalidate == null) return;
