@@ -8,6 +8,7 @@ import android.os.Looper;
 import io.github.igorcv88.oneuiliquidglass.Config;
 import io.github.igorcv88.oneuiliquidglass.R;
 import io.github.igorcv88.oneuiliquidglass.config.*;
+import io.github.igorcv88.oneuiliquidglass.config.state.EditGuard;
 import io.github.igorcv88.oneuiliquidglass.live.*;
 
 import java.util.*;
@@ -129,19 +130,40 @@ public final class AppModel {
     }
 
     /**
-     * Saves a value edited from a control (row, sheet, exact field, reset). Refuses when the
-     * shared applicability rule says the control has no effect on that surface right now
-     * (INACTIVE or OFF), so no entry point can edit an inapplicable setting as if it were in
-     * effect; the value saved earlier is left untouched. NEEDS_RESTART stays editable.
+     * Saves a value edited from a control (row, sheet, exact field). Refuses when the guard, which
+     * reads only confirmed values (never a draft), says the control has no effect on that surface
+     * right now (INACTIVE, OFF or read-only), so no entry point can edit an inapplicable setting
+     * as if it were in effect; the value saved earlier is left untouched. NEEDS_RESTART stays
+     * editable.
      */
     public Result saveControl(String key, String value, Controls.Surface surface) {
-        Applicability.Result a = state().applicability().on(key, surface);
-        if (!a.usable()) {
+        return saveControl(key, value, surface, EditGuard.Action.EDIT);
+    }
+
+    /** As {@link #saveControl(String, String, Controls.Surface)} for EDIT or RESET_ONE. */
+    public Result saveControl(String key, String value, Controls.Surface surface, EditGuard.Action action) {
+        EditGuard.Decision d = EditGuard.check(action, key, surface, state().applicability());
+        if (d.outcome != EditGuard.Outcome.ALLOW) {
             drafts.remove(key);
             notifyChanged();
-            return new Result(false, false, ControlReasons.text(activity, a.reason));
+            return new Result(false, false, ControlReasons.text(activity, d.reason));
         }
+        if (violatesStyleOrder(key, value))
+            return new Result(false, false, activity.getString(R.string.error_style_order));
         return save(key, value);
+    }
+
+    /** stylelo (back to dark) must stay below stylehi (on to light), judged on the confirmed other limit. */
+    private boolean violatesStyleOrder(String key, String value) {
+        boolean lo = key.equals("stylelo");
+        if (!lo && !key.equals("stylehi")) return false;
+        try {
+            double mine = Double.parseDouble(value.trim());
+            double other = Double.parseDouble(state().confirmed(lo ? "stylehi" : "stylelo"));
+            return lo ? mine >= other : other >= mine;
+        } catch (NumberFormatException e) {
+            return false; // save() rejects the malformed value with its own message.
+        }
     }
 
     /** Validates and saves a desired value; refuses silently overwriting a Terminal change. */
@@ -267,9 +289,27 @@ public final class AppModel {
         notifyChanged();
     }
 
-    public void reset(Collection<String> keys) {
-        repo.resetToDefaults(keys);
+    /** Restores usable keys to their defaults; see {@link #reset(Collection, Controls.Surface)}. */
+    public List<String> reset(Collection<String> keys) {
+        return reset(keys, null);
+    }
+
+    /**
+     * Restores to the code default the keys the guard allows (RESET_ONE, rules from confirmed
+     * values) in one transaction. Inactive, off and read-only keys keep their saved value.
+     *
+     * @return the keys left alone
+     */
+    public List<String> reset(Collection<String> keys, Controls.Surface surface) {
+        Applicability rules = state().applicability();
+        List<String> approved = new ArrayList<>(), refused = new ArrayList<>();
+        for (String key : keys)
+            (EditGuard.check(EditGuard.Action.RESET_ONE, key, surface, rules).outcome == EditGuard.Outcome.ALLOW
+                    ? approved : refused).add(key);
+        drafts.keySet().removeAll(approved);
+        repo.resetToDefaults(approved);
         notifyChanged();
+        return refused;
     }
 
     public boolean undo() {
@@ -328,16 +368,50 @@ public final class AppModel {
 
     // ---- dynamic lens
 
+    /** Result of revalidating an Apply confirmation against the current list. */
+    public enum PlanCheck { OK, STALE, CONTRADICTION }
+
+    private PlanContradiction contradiction;
+
     /**
-     * Compositor values to list and publish on the next restart. A saved value whose control has
-     * no effect now (Applicability INACTIVE, evaluated with the saved values that will compile) is
-     * kept in the app but not published: the editor locks it, and the restart must not write it.
+     * What the next Apply writes and recompiles, from the confirmed state only (no drafts), the
+     * compositor baseline and the properties read last. Null when the saved values contradict the
+     * rules; see {@link #contradiction()}.
      */
-    public Map<String, String> pendingCompositor() {
+    public PublicationPlan plan() {
         SharedPreferences p = lensPrefs();
-        Applicability rules = state().applicability();
-        return CompositorValues.pending(state().saved, SystemPropertyReader.snapshot(),
-                CompositorValues.baseline(p), k -> rules.rule(k).kind == Applicability.Kind.INACTIVE);
+        try {
+            PublicationPlan plan = PublicationPlan.of(
+                    state().snapshot(CompositorValues.baseline(p), CompositorValues.awaitingVerification(p)),
+                    Applicability::new);
+            contradiction = null;
+            return plan;
+        } catch (PlanContradiction e) {
+            contradiction = e;
+            return null;
+        }
+    }
+
+    /** The contradiction found by the last {@link #plan()}, or null. */
+    public PlanContradiction contradiction() {
+        return contradiction;
+    }
+
+    /**
+     * Revalidates a confirmation shown for {@code shownFingerprint} against what is saved and read
+     * now. The caller refreshes {@link SystemPropertyReader} off the UI thread first.
+     */
+    public PlanCheck confirmPlan(String shownFingerprint) {
+        cached = null;
+        PublicationPlan now = plan();
+        if (now == null) return PlanCheck.CONTRADICTION;
+        return now.fingerprint.equals(shownFingerprint) ? PlanCheck.OK : PlanCheck.STALE;
+    }
+
+    /** Compositor values to list on the next restart: the plan's writes and active drift. */
+    public Map<String, String> pendingCompositor() {
+        PublicationPlan plan = plan();
+        return plan == null ? Collections.<String, String>emptyMap() : plan.listed();
     }
 
     public Map<String, String> pendingIcons() { return repo.pendingIcons(); }

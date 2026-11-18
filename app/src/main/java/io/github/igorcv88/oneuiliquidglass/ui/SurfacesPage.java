@@ -570,7 +570,7 @@ public final class SurfacesPage implements Page {
                 + (shared ? host.activity().getString(R.string.surface_reset_shared) : ""));
         sheet.action(host.activity().getString(R.string.action_cancel), Ui.ButtonStyle.OUTLINED, sheet::dismiss);
         sheet.action(host.activity().getString(R.string.action_restore), Ui.ButtonStyle.FILLED, () -> {
-            host.model().reset(keys);
+            host.model().reset(keys, surface); // inactive keys keep their saved value
             host.feedback(host.activity().getString(R.string.preset_restored));
             sheet.dismiss();
         });

@@ -49,6 +49,8 @@ public final class CompositorValues {
      * Saved compositor values the running compositor does not have yet: saved and different from
      * the property it would read (empty = library default).
      */
+    /** @deprecated superseded by {@link PublicationPlan}; kept for the existing tests (R6 T02). */
+    @Deprecated
     public static Map<String, String> pending(
             Map<String, String> saved, Map<String, String> observed) {
         return pending(saved, observed, k -> false);
@@ -60,6 +62,8 @@ public final class CompositorValues {
      * nor published, so the compositor keeps what it reads today (R5: sf.hubloom=1 saved under a
      * Gaussian adaptive kernel was about to be written). They return when the condition is met.
      */
+    /** @deprecated superseded by {@link PublicationPlan}; kept for the existing tests (R6 T02). */
+    @Deprecated
     public static Map<String, String> pending(
             Map<String, String> saved, Map<String, String> observed,
             java.util.function.Predicate<String> inapplicable) {
@@ -80,6 +84,8 @@ public final class CompositorValues {
      * verified, compare ALL compositor properties with that restart's captured inputs, including
      * properties the user has released to Terminal (which no longer occur in {@code saved}).
      */
+    /** @deprecated superseded by {@link PublicationPlan}; kept for the existing tests (R6 T02). */
+    @Deprecated
     public static Map<String, String> pending(
             Map<String, String> saved,
             Map<String, String> observed,
@@ -87,6 +93,8 @@ public final class CompositorValues {
         return pending(saved, observed, compiled, k -> false);
     }
 
+    /** @deprecated superseded by {@link PublicationPlan}; kept for the existing tests (R6 T02). */
+    @Deprecated
     public static Map<String, String> pending(
             Map<String, String> saved,
             Map<String, String> observed,

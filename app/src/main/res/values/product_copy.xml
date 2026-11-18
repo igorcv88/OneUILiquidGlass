@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Source: docs/OULG_UI_PLAN/COPY_PT_EN.csv. Phase B subset; T08 regenerates the full file. -->
+<resources>
+    <string name="state_inactive">Inactive</string>
+    <string name="state_external">Changed outside the app</string>
+    <string name="apply_list_changed">The list changed while the dialog was open. Check it again.</string>
+    <string name="apply_contradiction">Contradictory setup: %1$s. Change one of them before applying.</string>
+    <string name="error_style_order">The light threshold must stay below the dark threshold.</string>
+</resources>

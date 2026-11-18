@@ -5,6 +5,7 @@ import android.view.*;
 import android.widget.*;
 
 import io.github.igorcv88.oneuiliquidglass.config.*;
+import io.github.igorcv88.oneuiliquidglass.config.state.EditGuard;
 import io.github.igorcv88.oneuiliquidglass.R;
 import io.github.igorcv88.oneuiliquidglass.ui.kit.*;
 
@@ -149,7 +150,11 @@ public final class ControlRow extends LinearLayout {
     }
 
     private void commit(String raw) {
-        AppModel.Result r = host.model().saveControl(control.key, raw, surface);
+        commit(raw, EditGuard.Action.EDIT);
+    }
+
+    private void commit(String raw, EditGuard.Action action) {
+        AppModel.Result r = host.model().saveControl(control.key, raw, surface, action);
         if (!r.ok) {
             host.feedback(r.conflict ? host.activity().getString(R.string.error_conflict) : r.message);
             if (r.conflict) host.openConflicts();
@@ -160,7 +165,7 @@ public final class ControlRow extends LinearLayout {
 
     private void resetToDefault() {
         String def = control.spec().defaultValue;
-        commit(def);
+        commit(def, EditGuard.Action.RESET_ONE);
         performHapticFeedback(HapticFeedbackConstants.CONFIRM);
         announceForAccessibility(host.activity().getString(R.string.control_reset_done, ControlTitles.title(host.activity(), control)));
     }

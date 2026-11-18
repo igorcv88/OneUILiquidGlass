@@ -189,12 +189,16 @@ final class LensSheet extends Sheet {
             card.setPadding(t.dp(18), t.dp(12), t.dp(18), t.dp(12));
             StringBuilder b = new StringBuilder();
             ControlState st = m.state();
+            PublicationPlan current = m.plan();
+            Set<String> external = current == null ? Collections.<String>emptySet() : current.external;
             for (Map.Entry<String, String> e : pending.entrySet()) {
                 Controls.Control c = Controls.get(e.getKey());
                 if (c == null) continue;
                 b.append(b.length() == 0 ? "" : "\n").append(ControlTitles.title(host.activity(), c)).append(" · ").append(SearchSheet.surfaces(host.activity(), c))
                         .append(": ").append(ControlValues.display(host.activity(), c, from(e.getKey(), st))).append(" → ")
                         .append(ControlValues.display(host.activity(), c, e.getValue()));
+                if (external.contains(e.getKey()))
+                    b.append(" · ").append(activity.getString(R.string.state_external));
             }
             card.addView(Ui.text(activity, t, b, Theme.LABEL, t.ink, false));
             pendingBox.addView(card, Ui.match());
@@ -261,7 +265,16 @@ final class LensSheet extends Sheet {
             host.feedback(activity.getString(R.string.lens_install_first));
             return;
         }
-        Map<String, String> pending = m.pendingCompositor();
+        // Drafts are previews: dropped before the list is decided. The list is the plan's, from
+        // confirmed values only, and is revalidated when the person taps Restart.
+        m.clearDrafts();
+        PublicationPlan plan = m.plan();
+        if (plan == null) {
+            host.feedback(contradictionText());
+            return;
+        }
+        final String shown = plan.fingerprint;
+        Map<String, String> pending = plan.listed();
         Sheet s = new Sheet(activity, t, activity.getString(R.string.restart_userspace_title));
         s.text(activity.getString(R.string.lens_confirm_base)
                 + (pending.isEmpty() ? (m.compositorUnverified() ? activity.getString(R.string.lens_confirm_verify) : ".")
@@ -275,12 +288,45 @@ final class LensSheet extends Sheet {
         s.action(activity.getString(R.string.action_cancel), Ui.ButtonStyle.OUTLINED, s::dismiss);
         TextView go = s.action(activity.getString(R.string.restart_userspace), Ui.ButtonStyle.FILLED, () -> {
             s.dismiss();
-            m.lens.restartConfirmed(pending);
-            host.feedback(activity.getString(R.string.lens_applying));
+            revalidateAndRestart(shown);
         });
         go.setEnabled(false);
         ack.listener((x, on) -> go.setEnabled(on));
         s.show();
+    }
+
+    /**
+     * Re-reads the properties and compares the list with the one the person confirmed: a change
+     * made meanwhile (a Terminal write, another screen) reopens the dialog instead of restarting
+     * with a stale list.
+     */
+    private void revalidateAndRestart(String shown) {
+        m.refreshObserved(() -> {
+            switch (m.confirmPlan(shown)) {
+                case OK:
+                    m.lens.restartConfirmed(m.plan().writes);
+                    host.feedback(activity.getString(R.string.lens_applying));
+                    break;
+                case STALE:
+                    host.feedback(activity.getString(R.string.apply_list_changed));
+                    confirmRestart();
+                    break;
+                default:
+                    host.feedback(contradictionText());
+            }
+        });
+    }
+
+    private String contradictionText() {
+        PlanContradiction c = m.contradiction();
+        StringBuilder keys = new StringBuilder();
+        if (c != null)
+            for (String key : c.keys) {
+                Controls.Control control = Controls.get(key);
+                keys.append(keys.length() == 0 ? "" : ", ")
+                        .append(control == null ? key : ControlTitles.title(activity, control));
+            }
+        return activity.getString(R.string.apply_contradiction, keys);
     }
 
     private void confirmRemove() {

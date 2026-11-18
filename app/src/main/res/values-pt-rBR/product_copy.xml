@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Source: docs/OULG_UI_PLAN/COPY_PT_EN.csv. Phase B subset; T08 regenerates the full file. -->
+<resources>
+    <string name="state_inactive">Inativo</string>
+    <string name="state_external">Alterado fora do app</string>
+    <string name="apply_list_changed">A lista mudou enquanto o diálogo estava aberto. Confira de novo.</string>
+    <string name="apply_contradiction">Configuração contraditória: %1$s. Ajuste um deles antes de aplicar.</string>
+    <string name="error_style_order">O limite claro precisa ficar abaixo do limite escuro.</string>
+</resources>

@@ -6,6 +6,7 @@ import android.view.inputmethod.EditorInfo;
 import android.widget.*;
 
 import io.github.igorcv88.oneuiliquidglass.config.*;
+import io.github.igorcv88.oneuiliquidglass.config.state.EditGuard;
 import io.github.igorcv88.oneuiliquidglass.R;
 import io.github.igorcv88.oneuiliquidglass.ui.kit.*;
 import io.github.igorcv88.oneuiliquidglass.ui.preview.NotificationPreview;
@@ -106,6 +107,14 @@ final class ControlSheet extends Sheet {
         action(model.ui.getBoolean("favorite." + c.key, false) ? activity.getString(R.string.control_favorite_remove) : activity.getString(R.string.control_favorite_add),
                 Ui.ButtonStyle.OUTLINED, () -> {
                     boolean fav = !model.ui.getBoolean("favorite." + c.key, false);
+                    if (fav) {
+                        EditGuard.Decision d = EditGuard.check(EditGuard.Action.FAVORITE_ADD, c.key, surface,
+                                model.state().applicability());
+                        if (!d.permitted()) {
+                            host.feedback(ControlReasons.text(activity, d.reason));
+                            return;
+                        }
+                    }
                     model.ui.edit().putBoolean("favorite." + c.key, fav).apply();
                     host.feedback(fav ? activity.getString(R.string.control_favorite_added) : activity.getString(R.string.control_favorite_removed));
                     model.notifyChanged();

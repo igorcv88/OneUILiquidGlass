@@ -4,6 +4,7 @@ import android.os.Build;
 import android.widget.LinearLayout;
 
 import io.github.igorcv88.oneuiliquidglass.config.*;
+import io.github.igorcv88.oneuiliquidglass.config.state.EditGuard;
 import io.github.igorcv88.oneuiliquidglass.R;
 import io.github.igorcv88.oneuiliquidglass.ui.kit.*;
 
@@ -93,13 +94,18 @@ final class PresetsSheet extends Sheet {
             ControlState st = m.state();
             Sheet s = new Sheet(host.activity(), t, host.activity().getString(R.string.preset_use_question));
             List<String> lines = new ArrayList<>();
+            // Rules as they will be once the style is applied: a value the new setup does not use
+            // is still saved, and the review says it stays stored and inactive.
+            Applicability after = new ControlState(parsed.values, st.observed, Collections.emptyMap(), parsed.enabled).applicability();
             int compositor = 0;
             for (Map.Entry<String, String> e : parsed.values.entrySet()) {
                 Controls.Control c = Controls.get(e.getKey());
                 String now = c != null ? st.shown(e.getKey()) : st.shown(e.getKey());
                 if (now != null && now.equals(e.getValue())) continue;
                 if (c != null) {
-                    lines.add(ControlTitles.title(host.activity(), c) + " · " + surfaces(host.activity(), c) + ": " + ControlValues.display(host.activity(), c, now) + " → " + ControlValues.display(host.activity(), c, e.getValue()));
+                    lines.add(ControlTitles.title(host.activity(), c) + " · " + surfaces(host.activity(), c) + ": " + ControlValues.display(host.activity(), c, now) + " → " + ControlValues.display(host.activity(), c, e.getValue())
+                            + (EditGuard.check(EditGuard.Action.PRESET_APPLY, e.getKey(), null, after).outcome == EditGuard.Outcome.ALLOW_LATENT
+                                    ? " · " + host.activity().getString(R.string.state_inactive) : ""));
                     if (c.needsRestart()) compositor++;
                 } else lines.add(flagName(host.activity(), e.getKey()) + ": " + host.activity().getString("1".equals(e.getValue()) ? R.string.switch_on : R.string.switch_off));
             }
