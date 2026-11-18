@@ -3,8 +3,8 @@
     <string name="control_option_ec6472de3478">10 %</string>
     <string name="control_option_4d04d593eab2">25 %</string>
     <string name="control_option_3c5d28cf50f3">Follows the card during gestures</string>
-    <string name="control_option_0a0e3b18cbfb">Original adaptive color</string>
     <string name="control_option_8d954776f1cd">Adaptive</string>
+    <string name="control_option_0a0e3b18cbfb">Original adaptive color</string>
     <string name="control_option_a33344113b2b">Samsung adaptive color</string>
     <string name="control_option_d885925b9c29">Region alpha owned by the module</string>
     <string name="control_option_d64a750613b8">Alpha and program encoded over the glass</string>
@@ -36,9 +36,9 @@
     <string name="control_option_286cbcfd1496">Forces treatment of eligible icons, including custom icons</string>
     <string name="control_option_7b9330ac47fd">Frosted</string>
     <string name="control_option_783067a8aca7">Physical</string>
+    <string name="control_option_2747a88a5074">Nested Gaussian</string>
     <string name="control_option_67399b1f29d2">Strong nested Gaussian</string>
     <string name="control_option_b28a3abd304b">Gentle nested Gaussian</string>
-    <string name="control_option_2747a88a5074">Nested Gaussian</string>
     <string name="control_option_2212a1a4fd6a">Horizontal gestures</string>
     <string name="control_option_9a216516ec5f">Test grid</string>
     <string name="control_option_31d64f897e37">Hybrid</string>
@@ -62,8 +62,8 @@
     <string name="control_option_bb7b090dd8dc">Less text structure and less spreading of whites</string>
     <string name="control_option_b9ef5b172a58">Same veil on every card</string>
     <string name="control_option_3b1d364412af">Snell model with refractive index</string>
-    <string name="control_option_dbc4a5cb54f2">On the view (Samsung)</string>
     <string name="control_option_fb3c8b03b40e">On the view</string>
+    <string name="control_option_dbc4a5cb54f2">On the view (Samsung)</string>
     <string name="control_option_fffb17e84d35">Native</string>
     <string name="control_option_761716310a91">None</string>
     <string name="control_option_f78db5410a48">Neutral under the lens; inherited elsewhere</string>
@@ -88,9 +88,9 @@
     <string name="control_option_b21f94257814">No sampling</string>
     <string name="control_option_787bedf67271">No shape</string>
     <string name="control_option_9af72f16deab">No protection</string>
+    <string name="control_option_c004160342cd">System default</string>
     <string name="control_option_340a3940c102">System and verified originals</string>
     <string name="control_option_04ffe2381fff">System and services</string>
-    <string name="control_option_c004160342cd">System default</string>
     <string name="control_option_655a7c7b8a0f">System blur only</string>
     <string name="control_option_d97225752710">Composition probe</string>
     <string name="control_option_4ec6fa29d300">Only horizontal movements and two fingers</string>

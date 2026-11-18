@@ -11,8 +11,8 @@ final class ControlOptions {
             case "10 %": return R.string.control_option_ec6472de3478;
             case "25 %": return R.string.control_option_4d04d593eab2;
             case "Acompanha o cartão durante gestos": return R.string.control_option_3c5d28cf50f3;
-            case "Adaptativa original": return R.string.control_option_0a0e3b18cbfb;
             case "Adaptativa": return R.string.control_option_8d954776f1cd;
+            case "Adaptativa original": return R.string.control_option_0a0e3b18cbfb;
             case "Adaptação Samsung": return R.string.control_option_a33344113b2b;
             case "Alpha da região controlado pelo módulo": return R.string.control_option_d885925b9c29;
             case "Alpha e programa codificados sobre o vidro": return R.string.control_option_d64a750613b8;
@@ -44,9 +44,9 @@ final class ControlOptions {
             case "Força o tratamento de ícones elegíveis, inclusive os personalizados": return R.string.control_option_286cbcfd1496;
             case "Fosco": return R.string.control_option_7b9330ac47fd;
             case "Física": return R.string.control_option_783067a8aca7;
+            case "Gaussiano aninhado": return R.string.control_option_2747a88a5074;
             case "Gaussiano aninhado forte": return R.string.control_option_67399b1f29d2;
             case "Gaussiano aninhado suave": return R.string.control_option_b28a3abd304b;
-            case "Gaussiano aninhado": return R.string.control_option_2747a88a5074;
             case "Gestos laterais": return R.string.control_option_2212a1a4fd6a;
             case "Grade de teste": return R.string.control_option_9a216516ec5f;
             case "Híbrida": return R.string.control_option_31d64f897e37;
@@ -70,8 +70,8 @@ final class ControlOptions {
             case "Menos estrutura de texto e menos espalhamento de brancos": return R.string.control_option_bb7b090dd8dc;
             case "Mesmo véu em todos os cartões": return R.string.control_option_b9ef5b172a58;
             case "Modelo de Snell com índice de refração": return R.string.control_option_3b1d364412af;
-            case "Na view (Samsung)": return R.string.control_option_dbc4a5cb54f2;
             case "Na view": return R.string.control_option_fb3c8b03b40e;
+            case "Na view (Samsung)": return R.string.control_option_dbc4a5cb54f2;
             case "Nativo": return R.string.control_option_fffb17e84d35;
             case "Nenhuma": return R.string.control_option_761716310a91;
             case "Neutra sob a lente, herdada nos demais": return R.string.control_option_f78db5410a48;
@@ -96,9 +96,9 @@ final class ControlOptions {
             case "Sem amostragem": return R.string.control_option_b21f94257814;
             case "Sem forma": return R.string.control_option_787bedf67271;
             case "Sem proteção": return R.string.control_option_9af72f16deab;
+            case "Sistema": return R.string.control_option_c004160342cd;
             case "Sistema e originais confirmados": return R.string.control_option_340a3940c102;
             case "Sistema e serviços": return R.string.control_option_04ffe2381fff;
-            case "Sistema": return R.string.control_option_c004160342cd;
             case "Somente o desfoque do sistema": return R.string.control_option_655a7c7b8a0f;
             case "Sonda de composição": return R.string.control_option_d97225752710;
             case "Só movimentos horizontais e dois dedos": return R.string.control_option_4ec6fa29d300;
