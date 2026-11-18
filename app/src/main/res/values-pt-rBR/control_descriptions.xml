@@ -67,7 +67,7 @@
     <string name="control_description_qs_darkfill">Ajuste descontinuado mantido nos perfis; ele não altera mais a aparência das cápsulas.</string>
     <string name="control_description_qs_darkrim">Ajusta o brilho do contorno das cápsulas sobre fundos escuros ou coloridos.</string>
     <string name="control_description_qs_edgeblur">Controla o desfoque do fundo lido pela lente dinâmica nas bordas das cápsulas.</string>
-    <string name="control_description_qs_fill">Ajusta a espessura do preenchimento dos sliders sem alterar brilho ou volume.</string>
+    <string name="control_description_qs_fill">Ajusta a espessura do preenchimento dos sliders sem alterar brilho ou volume. Perto do zero o preenchimento mantém essa espessura, arredondado na ponta de origem, e some em 0 %.</string>
     <string name="control_description_qs_glint">Ajusta o reflexo adicional no canto superior esquerdo das cápsulas.</string>
     <string name="control_description_qs_hideoffdiscs">Oculta o fundo e a borda dos discos desligados identificados, mantendo seus ícones.</string>
     <string name="control_description_qs_idle">Ajuste descontinuado mantido nos perfis; ele não altera mais os discos desligados.</string>

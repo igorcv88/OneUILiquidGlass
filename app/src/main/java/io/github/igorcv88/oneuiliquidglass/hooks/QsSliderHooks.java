@@ -349,17 +349,19 @@ final class QsSliderHooks {
             // The body's computed rectangle is already inset. Bound its actual rasterization
             // to the same rounded track: a long native roundrect or animated draw must not
             // flatten the top cap or bleed beyond the full-height slider at 100%.
-            if(stage==1 && f.w<=f.h)try {
-                clipVerticalTrack(f.canvas,f.w,f.h,g[2]);
+            boolean vertical=f.w<=f.h;
+            float across=vertical?g[2]:g[3], along=vertical?g[3]:g[2];
+            if(stage==1)try {
+                clipTrack(f.canvas,f.w,f.h,across,vertical);
                 if(Probe.trace && barArguments.add("clip:"+f.role))
-                    Probe.log("QS_SLIDER_CLIP","role="+f.role+" width="+g[2]
-                            +" inset="+((f.w-g[2])/2f)+" height="+f.h+" radius="+(g[2]/2f));
+                    Probe.log("QS_SLIDER_CLIP","role="+f.role+" vertical="+vertical+" thickness="+across
+                            +" inset="+(((vertical?f.w:f.h)-across)/2f)+" length="+(vertical?f.h:f.w)+" radius="+(across/2f));
             }catch(RuntimeException | LinkageError e){Probe.error("QS_SLIDER_CLIP_UNAVAILABLE",e);}
             p.args[2]=pack(g[0],g[1]);p.args[3]=pack(g[2],g[3]);
             p.args[last]=explicitGeometryMask(mask,stage!=0);
             // At low values a circle-radius round rect becomes a flat-ended trapezoid. Elliptic
             // corner radii instead keep a smooth oval as the fill shrinks toward zero.
-            p.args[4]=QuickSettingsGlass.sliderCorners(g[2],g[3],f.w<=f.h);
+            p.args[4]=QuickSettingsGlass.sliderCorners(g[2],g[3],vertical);
             int fillColor = tone.get()==QsScene.Tone.LIGHT_SCENE ? s.sliderLightColor
                     : tone.get()==QsScene.Tone.DARK_SCENE ? s.sliderDarkColor : 0xffffffff;
             Float fraction=lightFraction.get();
@@ -370,11 +372,12 @@ final class QsSliderHooks {
                 if(barArguments.add(key)) Probe.log("QS_SLIDER_COLOR", "role="+f.role+" scene="+tone.get()
                         +" fill="+Integer.toHexString(fillColor)+" brush=SolidColor rgba=true");
             }
-            if(stage==1 && f.w<=f.h && g[3]<g[2]) {
-                // At the very bottom, the native uniform CornerRadius would flatten BOTH
-                // ends of the circular cap. Draw a top-clipped, bottom-rounded fill instead;
-                // it keeps its full transverse width and Samsung's exact progress height.
-                drawLowVerticalFill(f.canvas,g,fillColor,f.w,f.h);
+            if(stage==1 && along<across) {
+                // Near the origin, the native uniform CornerRadius would flatten BOTH ends of
+                // the circular cap. Draw a fill rounded at its origin end and flattened at the
+                // moving shoulder instead; full transverse thickness, Samsung's exact length.
+                float len=vertical?f.h:f.w, lo=vertical?g[1]:g[0];
+                drawLowFill(f.canvas,g,fillColor,f.w,f.h,vertical,QuickSettingsGlass.anchoredHigh(lo,lo+along,len));
                 p.setResult(null);
                 return;
             }
@@ -384,31 +387,35 @@ final class QsSliderHooks {
 
     private final ThreadLocal<android.graphics.Paint> lowFillPaint = ThreadLocal.withInitial(() ->
             new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG));
-    private final ThreadLocal<android.graphics.Path> lowFillPath = ThreadLocal.withInitial(android.graphics.Path::new);
-    private final ThreadLocal<android.graphics.Path> verticalTrackClip = ThreadLocal.withInitial(android.graphics.Path::new);
+    private final ThreadLocal<PathOutline> lowFillPath = ThreadLocal.withInitial(PathOutline::new);
 
-    /** Canvas is already translated to the inset DrawScope; the saved frame restores this clip. */
-    private void clipVerticalTrack(Canvas canvas,float frameWidth,float frameHeight,float fillWidth) {
-        float left=(frameWidth-fillWidth)/2f, right=left+fillWidth, radius=fillWidth/2f;
-        android.graphics.Path path=verticalTrackClip.get();path.reset();
-        path.addRoundRect(left,0f,right,frameHeight,radius,radius,android.graphics.Path.Direction.CW);
+    /** Reused per thread: the low fill is drawn every frame of a drag near the origin. */
+    private static final class PathOutline implements QuickSettingsGlass.Outline {
+        final android.graphics.Path path = new android.graphics.Path();
+        @Override public void move(float x,float y){path.moveTo(x,y);}
+        @Override public void line(float x,float y){path.lineTo(x,y);}
+        @Override public void quad(float x1,float y1,float x2,float y2){path.quadTo(x1,y1,x2,y2);}
+        @Override public void cubic(float x1,float y1,float x2,float y2,float x3,float y3){path.cubicTo(x1,y1,x2,y2,x3,y3);}
+        @Override public void close(){path.close();}
+    }
+    private final ThreadLocal<android.graphics.Path> trackClip = ThreadLocal.withInitial(android.graphics.Path::new);
+
+    /**
+     * The rounded track at the fill's thickness, on either axis. Canvas is already translated to
+     * the inset DrawScope; the saved frame restores this clip.
+     */
+    private void clipTrack(Canvas canvas,float frameWidth,float frameHeight,float thickness,boolean vertical) {
+        float inset=((vertical?frameWidth:frameHeight)-thickness)/2f, radius=thickness/2f;
+        android.graphics.Path path=trackClip.get();path.reset();
+        if(vertical)path.addRoundRect(inset,0f,inset+thickness,frameHeight,radius,radius,android.graphics.Path.Direction.CW);
+        else path.addRoundRect(0f,inset,frameWidth,inset+thickness,radius,radius,android.graphics.Path.Direction.CW);
         canvas.clipPath(path);
     }
 
-    /** Top shoulder progressively flattens; the lower semicircle stays on the capsule's end. */
-    private void drawLowVerticalFill(Canvas canvas, float[] g, int color, float trackW, float trackH) {
-        float x=g[0], y=g[1], w=g[2], h=g[3], bottom=y+h, half=w/2f;
-        float topR=Math.max(0f,h-half), bottomR=Math.min(half,h), cx=x+half;
-        android.graphics.Path path=lowFillPath.get(); path.reset();
-        path.moveTo(x+topR,y);
-        path.lineTo(x+w-topR,y);
-        if(topR>0f)path.quadTo(x+w,y,x+w,y+topR);
-        path.lineTo(x+w,bottom-bottomR);
-        path.cubicTo(x+w,bottom-bottomR*.4477f,cx+half*.5523f,bottom,cx,bottom);
-        path.cubicTo(cx-half*.5523f,bottom,x,bottom-bottomR*.4477f,x,bottom-bottomR);
-        path.lineTo(x,y+topR);
-        if(topR>0f)path.quadTo(x,y,x+topR,y);
-        path.close();
+    /** The moving shoulder progressively flattens; the origin semicircle stays on the capsule's end. */
+    private void drawLowFill(Canvas canvas, float[] g, int color, float trackW, float trackH, boolean vertical, boolean originHigh) {
+        PathOutline outline=lowFillPath.get(); android.graphics.Path path=outline.path; path.reset();
+        QuickSettingsGlass.lowFill(g,vertical,originHigh,outline);
         android.graphics.Paint paint=lowFillPaint.get(); paint.setColor(color);paint.setStyle(android.graphics.Paint.Style.FILL);
         // The native draw's changing clipping during the QS exit transition must never allow a
         // near-zero fill to paint beyond its own inset track, even if the canvas still animates.

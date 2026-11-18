@@ -846,8 +846,9 @@ public final class Controls {
         put(c("qs.fill", "Espessura do preenchimento").fmt(Format.PERCENT_1).in(QS, STD).on(SH)
                 .hint("Parte que se move ao arrastar")
                 .help("Largura da parte branca que acompanha o dedo, dentro da cápsula de vidro; a"
-                        + " mesma margem vale nas pontas e no mínimo ela fica um círculo. O valor do"
-                        + " brilho ou do volume não muda.")
+                        + " mesma margem vale nas pontas. Perto do zero ela mantém essa espessura,"
+                        + " arredondada na ponta de origem, e some em 0 %. O valor do brilho ou do"
+                        + " volume não muda.")
                 .show(BEHAV, Channel.NONE));
         put(c("sf.qslight", "Luz pela borda").fmt(Format.READONLY).in(QS, ADV).on(SH)
                 .help("Luz do compositor nas bordas dos controles rápidos. Padrão 0,90 em Frosted"

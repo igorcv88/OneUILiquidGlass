@@ -67,7 +67,7 @@
     <string name="control_description_qs_darkfill">Retired setting kept for saved profiles; it no longer changes capsule appearance.</string>
     <string name="control_description_qs_darkrim">Adjusts capsule outline brightness over dark or colored backgrounds.</string>
     <string name="control_description_qs_edgeblur">Controls background blur sampled by the dynamic lens at capsule edges.</string>
-    <string name="control_description_qs_fill">Adjusts the thickness of the slider fill without changing brightness or volume.</string>
+    <string name="control_description_qs_fill">Adjusts the thickness of the slider fill without changing brightness or volume. Near zero the fill keeps this thickness, rounded at its starting end, and is empty at 0 %.</string>
     <string name="control_description_qs_glint">Adjusts the additional highlight at the upper-left corner of capsules.</string>
     <string name="control_description_qs_hideoffdiscs">Hides the background and border of identified off tile discs while keeping their icons.</string>
     <string name="control_description_qs_idle">Retired setting kept for saved profiles; it no longer changes off discs.</string>

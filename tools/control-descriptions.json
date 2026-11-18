@@ -527,8 +527,8 @@
     "Ajusta a espessura das cápsulas de brilho e volume sem alterar a área de toque."
   ],
   "qs.fill": [
-    "Adjusts the thickness of the slider fill without changing brightness or volume.",
-    "Ajusta a espessura do preenchimento dos sliders sem alterar brilho ou volume."
+    "Adjusts the thickness of the slider fill without changing brightness or volume. Near zero the fill keeps this thickness, rounded at its starting end, and is empty at 0 %.",
+    "Ajusta a espessura do preenchimento dos sliders sem alterar brilho ou volume. Perto do zero o preenchimento mantém essa espessura, arredondado na ponta de origem, e some em 0 %."
   ],
   "qs.edgeblur": [
     "Controls background blur sampled by the dynamic lens at capsule edges.",

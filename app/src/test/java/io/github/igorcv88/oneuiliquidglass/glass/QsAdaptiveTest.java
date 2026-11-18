@@ -179,8 +179,9 @@ public class QsAdaptiveTest {
                         assertTrue(g[2]>0&&g[3]>0);
                         assertEquals(Math.min(g[2],g[3])/2,g[4],1e-4);
                         assertTrue(g[0]>=-1e-3&&g[1]>=-1e-3&&g[0]+g[2]<=w+1e-3&&g[1]+g[3]<=h+1e-3);
-                        // Centred thickness: the same margin on both sides of the narrow axis.
-                        float visibleThickness=vertical?d:Math.min(d,g[2]);
+                        // Centred, fixed thickness on both axes (R5: the horizontal low fill no
+                        // longer shrinks into a disc): the same margin on both sides.
+                        float visibleThickness=d;
                         assertEquals(visibleThickness,vertical?g[2]:g[3],1e-3);
                         assertEquals((vertical?w:h)-visibleThickness,2*(vertical?g[0]:g[1]),1e-3);
                     }
@@ -214,9 +215,7 @@ public class QsAdaptiveTest {
                 if(p==0){assertArrayEquals(new float[5],body,0);assertArrayEquals(new float[5],cap,0);continue;}
                 assertEquals(300*p,length,1e-3);
                 assertTrue("monotonic",length>previous);previous=length;
-                assertEquals(vertical?88:Math.min(88,length),vertical?body[2]:body[3],1e-3);
-                if(length<88&&vertical)assertEquals(88,body[2],1e-3);
-                if(length<88&&!vertical)assertEquals(body[3],length,1e-3);
+                assertEquals("fixed thickness on both axes",88,vertical?body[2]:body[3],1e-3);
                 assertEquals(Math.min(88,length)/2,body[4],1e-3);
                 assertTrue("cap never longer than the body",(vertical?cap[3]:cap[2])<=length+1e-3);
             }
@@ -263,4 +262,94 @@ public class QsAdaptiveTest {
     private static double luma(int c){double sum=0;double[] weights={.0722,.7152,.2126};
         for(int i=0;i<3;i++){double v=((c>>>(8*i))&255)/255.;sum+=weights[i]*(v<=.04045?v/12.92:Math.pow((v+.055)/1.055,2.4));}return sum;}
     private static double contrast(int a,int b){double x=luma(a),y=luma(b);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05);}
+
+    /** Records an outline as text and tracks its bounds. */
+    private static final class Rec implements QuickSettingsGlass.Outline {
+        final StringBuilder b=new StringBuilder();
+        final java.util.List<Float> pts=new java.util.ArrayList<>();
+        float minX=Float.MAX_VALUE,minY=Float.MAX_VALUE,maxX=-Float.MAX_VALUE,maxY=-Float.MAX_VALUE;
+        private void pt(float x,float y){b.append(' ').append(x).append(',').append(y);pts.add(x);pts.add(y);
+            minX=Math.min(minX,x);minY=Math.min(minY,y);maxX=Math.max(maxX,x);maxY=Math.max(maxY,y);}
+        @Override public void move(float x,float y){b.append('M');pt(x,y);}
+        @Override public void line(float x,float y){b.append('L');pt(x,y);}
+        @Override public void quad(float a,float c,float x,float y){b.append('Q');pt(a,c);pt(x,y);}
+        @Override public void cubic(float a,float c,float d,float e,float x,float y){b.append('C');pt(a,c);pt(d,e);pt(x,y);}
+        @Override public void close(){b.append('Z');}
+    }
+
+    /** The approved vertical low fill (QsSliderHooks.drawLowVerticalFill before R5), verbatim. */
+    private static Rec approvedVertical(float[] g){
+        float x=g[0], y=g[1], w=g[2], h=g[3], bottom=y+h, half=w/2f;
+        float topR=Math.max(0f,h-half), bottomR=Math.min(half,h), cx=x+half;
+        Rec r=new Rec();
+        r.move(x+topR,y);
+        r.line(x+w-topR,y);
+        if(topR>0f)r.quad(x+w,y,x+w,y+topR);
+        r.line(x+w,bottom-bottomR);
+        r.cubic(x+w,bottom-bottomR*.4477f,cx+half*.5523f,bottom,cx,bottom);
+        r.cubic(cx-half*.5523f,bottom,x,bottom-bottomR*.4477f,x,bottom-bottomR);
+        r.line(x,y+topR);
+        if(topR>0f)r.quad(x,y,x+topR,y);
+        r.close();
+        return r;
+    }
+
+    private static void assertSameOutline(Rec want,Rec got){
+        assertEquals(want.b.toString().replaceAll("[^MLQCZ]",""),got.b.toString().replaceAll("[^MLQCZ]",""));
+        assertEquals(want.pts.size(),got.pts.size());
+        for(int i=0;i<want.pts.size();i++)assertEquals(want.b.toString(),want.pts.get(i),got.pts.get(i),1e-3f);
+    }
+
+    private static final float[] R5_PROGRESS={0f,.01f,.05f,.10f,.50f,.95f,1f};
+
+    /**
+     * R5 5.2: the generalized low fill reproduces the approved vertical outline exactly, and on a
+     * horizontal bar (LTR and RTL) it keeps the full thickness, the origin cap on the bar's own
+     * end and the flattening shoulder on the moving end, at exactly the native length.
+     */
+    @Test public void lowFillKeepsTheApprovedVerticalShapeAndAnchorsHorizontalAtTheOrigin(){
+        float outer=1f,fill=.78f;
+        for(float p:R5_PROGRESS)for(int mode=0;mode<3;mode++){
+            boolean vertical=mode==0, rtl=mode==2;
+            float w=vertical?227.8f:697f,h=vertical?697f:199f,len=vertical?h:w;
+            float x=vertical?0:rtl?w*(1-p):0,y=vertical?h*(1-p):0;
+            float sw=vertical?w:w*p,sh=vertical?h*p:h;
+            float[] g=primitive(w,h,outer,fill,x,y,sw,sh,false,null);
+            float d=Math.min(w,h)*outer*fill;
+            if(len*p<=.5f){assertArrayEquals(new float[5],g,0);continue;}
+            float across=vertical?g[2]:g[3],along=vertical?g[3]:g[2];
+            assertEquals("fixed thickness at "+p,d,across,1e-3);
+            assertEquals("native length at "+p,len*p,along,1e-2);
+            float lo=vertical?g[1]:g[0];
+            boolean high=QuickSettingsGlass.anchoredHigh(lo,lo+along,len);
+            if(p<1)assertEquals("origin at "+p+" mode "+mode,vertical||rtl,high);
+            if(along>=across)continue; // drawn by Compose with circular corners
+            Rec r=new Rec();
+            QuickSettingsGlass.lowFill(g,vertical,high,r);
+            if(vertical)assertSameOutline(approvedVertical(g),r);
+            // Inside its own rectangle: full thickness, exactly the native length.
+            assertEquals(g[0],r.minX,1e-3);assertEquals(g[0]+g[2],r.maxX,1e-3);
+            assertEquals(g[1],r.minY,1e-3);assertEquals(g[1]+g[3],r.maxY,1e-3);
+            if(!vertical){
+                // The origin end is the round one: the curve's apex touches the bar's own end
+                // at mid-thickness, the moving shoulder is a flat edge at the other end.
+                float mid=g[1]+g[3]/2f, originX=rtl?g[0]+g[2]:g[0];
+                boolean apex=false;
+                for(int i=0;i<r.pts.size();i+=2)apex|=Math.abs(r.pts.get(i)-originX)<1e-3&&Math.abs(r.pts.get(i+1)-mid)<1e-3;
+                assertTrue(r.b.toString(),apex);
+                assertEquals(rtl?w:0f,originX,1e-2);
+            }
+        }
+    }
+
+    /** Horizontal and vertical outlines are the same shape, rotated: no orientation special case. */
+    @Test public void horizontalLowFillIsTheVerticalOneRotated(){
+        float[] v={10,600,88,40,0}, h={600,10,40,88,0};
+        Rec rv=new Rec(), rh=new Rec();
+        QuickSettingsGlass.lowFill(v,true,true,rv);
+        QuickSettingsGlass.lowFill(h,false,true,rh);
+        assertEquals(rv.maxX-rv.minX,rh.maxY-rh.minY,1e-4);
+        assertEquals(rv.maxY-rv.minY,rh.maxX-rh.minX,1e-4);
+        assertEquals(rv.b.toString().replaceAll("[^MLQCZ]",""),rh.b.toString().replaceAll("[^MLQCZ]",""));
+    }
 }
