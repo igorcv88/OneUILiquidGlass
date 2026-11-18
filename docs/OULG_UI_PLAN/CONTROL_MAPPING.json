@@ -85,7 +85,7 @@
       },
       "details": {
         "blur": ["kgblurradius@F,C", "semradiuslens@F,C", "sf.kcedge@C", "sf.kccore@C", "sf.kcblurexp@C", "sf.kgedgeblur@F", "sf.kgcore@F", "pillglass@S,F,C", "pillblur@S,F,C"],
-        "refraction": ["kglens@C", "sf.kcband@C", "sf.kcamp@C", "sf.kcbody@C", "sf.kcbody2@C", "sf.kgband@F", "sf.kgbodylens@F"],
+        "refraction": ["kglens@C", "sf.kcband@C", "sf.kcamp@C", "sf.kcbody@C", "sf.kcbody2@C", "sf.kgband@F,C", "sf.kgbodylens@F"],
         "light": ["sf.kglight@C", "kglinegain@S,F,C,X,P", "sf.kgline@F,C", "sf.kgrim@F,C", "sf.kgspec@F,C", "sf.kgglow@F,C", "sf.kgtilt@F,C", "sf.kgdepth@F,C", "liveoptics@S", "livesheen@S"],
         "color": ["sf.kgsat@F", "sf.kgcool@F", "sf.kgtone@F", "sf.kgflat@F", "sf.kglevel@F", "sf.kgcoredim@F", "sf.kcveil@C", "sf.kclevel@C", "sf.kcdim@C", "sf.kcknee@C", "sf.kccool@C", "lighttone@S,F,C,X,P"],
         "tone": ["kgdarkalpha@S", "lightglass@S,F,C,X,P", "textswap@S,F,C,X,P", "stylelo@S,F,C,X,P", "stylehi@S,F,C,X,P"]

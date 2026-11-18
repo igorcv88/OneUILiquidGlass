@@ -127,6 +127,18 @@ public class PublicationPlanTest {
         assertEquals(keys("sf.core"), p.deferred);
     }
 
+    // 8b (T04b)
+    @Test
+    public void case8b_rampGradientAndBandStayInTheWritesUnderClearBecauseTheReaderUsesThem() throws Exception {
+        // sf.ramp/kgramp/kggradient/kgband change oulg_bw/oulg_lw before the Clear output (P-NEUTRAL decision).
+        Map<String, String> saved = map("sf.huclear", "1", "sf.kgclear", "1", "sf.ramp", "2", "sf.kgramp", "2",
+                "sf.kggradient", "0.5", "sf.kgband", "0.5");
+        Map<String, String> o = plus(LENS, "sf.huclear", "1", "sf.kgclear", "1");
+        PublicationPlan p = plan(snap(saved, o, o));
+        assertEquals(map("sf.ramp", "2", "sf.kgramp", "2", "sf.kggradient", "0.5", "sf.kgband", "0.5"), p.writes);
+        assertTrue(p.deferred.isEmpty());
+    }
+
     // 9
     @Test
     public void case9_anExternalValueOfAnActiveKeyIsDriftNeedingACompile() throws Exception {

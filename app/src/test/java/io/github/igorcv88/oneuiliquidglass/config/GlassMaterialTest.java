@@ -79,13 +79,30 @@ public class GlassMaterialTest {
 
     @Test
     public void replacedOptics11KnobsActOnlyOnFrosted() {
-        for (String key : Arrays.asList("sf.core", "sf.edgeblur", "sf.ramp", "sf.hubodylens",
-                "sf.kgcore", "sf.kgedgeblur", "sf.kgcorecap", "sf.kgramp", "sf.kgblurexp",
-                "sf.kgband", "sf.kgbodylens", "sf.kgsat", "sf.kgtone", "sf.kgflat", "sf.kglevel",
+        // Reader proof classes (EXECUTION_TRACKER, P-NEUTRAL decision): OVERWRITTEN (core, edgeblur,
+        // bodylens, corecap, blurexp: the Clear output replaces oulg_br/oulg_bw/s), UNREACHABLE
+        // (sat, cool, flatcap: only read by oulg_material_base, which a Clear card never calls) and
+        // the rest identical in GLSL under Clear. Keep these INACTIVE for a Clear card.
+        for (String key : Arrays.asList("sf.core", "sf.edgeblur", "sf.hubodylens",
+                "sf.kgcore", "sf.kgedgeblur", "sf.kgcorecap", "sf.kgblurexp",
+                "sf.kgbodylens", "sf.kgsat", "sf.kgtone", "sf.kgflat", "sf.kglevel",
                 "sf.kgcool", "sf.kgflatcap", "sf.kgcoredim")) {
             assertEquals(key, GlassMaterial.Scope.FROSTED_ONLY, GlassMaterial.scope(key));
             assertTrue(key, GlassMaterial.FROSTED.acts(key));
             assertFalse(key, GlassMaterial.CLEAR.acts(key));
+        }
+    }
+
+    @Test
+    public void clearStillReadsRampGradientAndBandSoTheyStayCommon() {
+        // oulg_shift_base still runs on a Clear card and its ramp/gradient change oulg_bw before
+        // oulg_lw = oulg_bw, which oulg_material_clear and the edge read; kgband > 0 sets
+        // oulg_t/oulg_bv/oulg_n (light coordinates). Wrongly INACTIVE would hide a real effect,
+        // wrongly ACTIVE only costs one restart, so these are ACTIVE under Clear.
+        for (String key : Arrays.asList("sf.ramp", "sf.kgramp", "sf.kggradient", "sf.kgband")) {
+            assertEquals(key, GlassMaterial.Scope.COMMON, GlassMaterial.scope(key));
+            assertTrue(key, GlassMaterial.CLEAR.acts(key));
+            assertTrue(key, GlassMaterial.FROSTED.acts(key));
         }
     }
 

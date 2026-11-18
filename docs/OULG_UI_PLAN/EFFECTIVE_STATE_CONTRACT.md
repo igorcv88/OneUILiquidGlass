@@ -94,13 +94,21 @@ Toda regra que retorna INACTIVE para uma chave `sf.*` precisa de uma linha `IGNO
 |---|---|---|---|---|
 | `!lens` → NEEDS_LENS | todas `sf.*` | `sfrefract=0` | Biblioteca não carregada/sem tag; nenhum programa do módulo | IGNORED_BY_READER (prova estrutural, sem GLSL) |
 | CLEAR_ONLY com material Fosco | `sf.hc*`, `sf.kc*` | `huclear=0,kgclear=0`; varia cada chave | `oulg_clear_on` falso, campo Clear não emitido (refract.h:1091) | IGNORED_BY_READER |
-| FROSTED_ONLY com material Transparente | `sf.core, edgeblur, ramp, hubodylens, kgcore, kgedgeblur, kgcorecap, kgramp, kgblurexp, kggradient, kgband, kgbodylens, kgsat, kgtone, kgflat, kglevel, kgcool, kgflatcap, kgcoredim` | `huclear=1,kgclear=1` | Saída Clear sobrescreve shift/blur/material. **Teste obrigatório**; se o GLSL de `kgsat/kgtone/kgflat/kglevel/kgcool/kgcoredim` variar, parar T04 e reportar | IGNORED_BY_READER (a confirmar por T04) |
+| FROSTED_ONLY com material Transparente | `sf.core, edgeblur, hubodylens, kgcore, kgedgeblur, kgcorecap, kgblurexp, kgbodylens, kgsat, kgtone, kgflat, kglevel, kgcool, kgflatcap, kgcoredim` (`sf.ramp, kgramp, kggradient, kgband` são ACTIVE sob Transparente, ver nota) | `huclear=1,kgclear=1` | Saída Clear sobrescreve shift/blur/material. **Teste obrigatório**; se o GLSL de `kgsat/kgtone/kgflat/kglevel/kgcool/kgcoredim` variar, parar T04 e reportar | IGNORED_BY_READER (a confirmar por T04) |
 | `sf.hcamp`/`sf.kcamp` com menisco>0 | hcamp, kcamp | `huclear=1,hcfold=2` | Campo menisco não recebe `amp` (refract.h:1096-1100) | IGNORED_BY_READER |
 | `sf.kclevel` com `kcveil=0` | kclevel | `kgclear=1,kcveil=0` | véu multiplica nível | IGNORED_BY_READER (T04 confirma) |
 | `sf.hchlneutral` com `hcadapt=0` | hchlneutral | `huclear=1,hcadapt=0` | `oulg_hu_hl_on` falso (refract.h:844,1209) | IGNORED_BY_READER |
 | `sf.hcneutral` sem bloco de material | hcneutral | `huclear=1,hcsat=1,hcscrim=0,hcscrimmax=0,hclift=0` | `legacy_material_on ? neutral : 0.0` (refract.h:1207) | IGNORED_BY_READER |
 | `sf.hubloom` em Clear K1–3 com adapt>0 | hubloom | `huclear=1,hcadapt=1,hckernel=1/2/3` | disco A inline não lê bloom | IGNORED_BY_READER |
 | `sf.shadecap/shadelift` sem `shadetone=1` | shadecap, shadelift | perfil 2 só recebe tag com shadetone=1 (Java) | estrutural: sem cartão perfil 2 | IGNORED_BY_READER (estrutural) |
+
+Classes de prova de leitor (T04b, decisão P-NEUTRAL; `sfhook/tools/inactive_identity_check.sh` verifica por lista explícita `chave:classe` e por padrão de linha, e falha se uma divergência sair da lista ou do padrão, ou se uma entrada da lista deixar de divergir):
+
+- Idêntica em GLSL (prova por `cmp`): `sf.kgtone`, `sf.kgflat`, `sf.kglevel`, `sf.kgcoredim` sob Transparente; todas as `hc*`/`kc*` sob Fosco; `hcamp`/`kcamp`, `hchlneutral`, `hcneutral` nos contextos acima.
+- `OVERWRITTEN`: só mudam operandos de `oulg_br`/`oulg_bw` ou o `s` de `oulg_shift_base`/`oulg_field_base`, sobrescritos por `oulg_clearN` (e linhas de `oulg_material_base`, inalcançável): `sf.core`, `sf.edgeblur`, `sf.hubodylens`, `sf.kgcore`, `sf.kgedgeblur`, `sf.kgcorecap`, `sf.kgblurexp`, `sf.kgbodylens`.
+- `UNREACHABLE`: toda linha alterada está em `oulg_material_base` ou `oulg_disc0` (só chamadas com `oulg_cl < 0.5`): `sf.kgsat`, `sf.kgcool`, `sf.kgflatcap`, `sf.hubloom` (kernel 1-3 com adaptativo).
+- `ZERO_FACTOR`: a linha multiplica pelo literal `0.000 *`: `sf.kclevel` com `kcveil=0`.
+- ACTIVE sob Transparente (não são regra INACTIVE; o script exige que mudem o GLSL): `sf.ramp`, `sf.kgramp`, `sf.kggradient`, `sf.kgband`.
 
 Chaves LIVE (não `sf.`) inativas são lidas por `Tuning` mas os ramos de desenho que as usam só executam no modo/rota da regra (espelhado de `docs/CONTROL_MATRIX.md`). Nenhuma exige escrita de neutralidade: o valor salvo é entregue ao SystemUI como hoje e ignorado no ramo inativo. Isso não muda: o guard impede **edição**, não a entrega.
 

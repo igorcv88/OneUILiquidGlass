@@ -35,6 +35,17 @@ public class GlassMaterialApplicabilityTest {
     }
 
     @Test
+    public void rampGradientAndBandStayActiveUnderClearBecauseTheReaderStillUsesThem() {
+        // oulg_shift_base still runs on a Clear card; ramp/gradient alter oulg_bw before
+        // oulg_lw = oulg_bw (read by the Clear material and edge) and kgband sets the light
+        // coordinates. INACTIVE here would hide a real effect (P-NEUTRAL decision).
+        Applicability clear = of(true, "sf.huclear", "1", "sf.kgclear", "1");
+        for (String key : Arrays.asList("sf.ramp", "sf.kgramp", "sf.kggradient", "sf.kgband")) {
+            assertKind(Applicability.Kind.NEEDS_RESTART, clear, key);
+        }
+    }
+
+    @Test
     public void theReasonsNameTheMaterial() {
         assertEquals(Applicability.NEEDS_CLEAR, of(true).rule("sf.hcfold").reason);
         assertEquals(Applicability.NEEDS_FROSTED, of(true, "sf.huclear", "1").rule("sf.core").reason);
