@@ -128,6 +128,22 @@ public final class AppModel {
         }
     }
 
+    /**
+     * Saves a value edited from a control (row, sheet, exact field, reset). Refuses when the
+     * shared applicability rule says the control has no effect on that surface right now
+     * (INACTIVE or OFF), so no entry point can edit an inapplicable setting as if it were in
+     * effect; the value saved earlier is left untouched. NEEDS_RESTART stays editable.
+     */
+    public Result saveControl(String key, String value, Controls.Surface surface) {
+        Applicability.Result a = state().applicability().on(key, surface);
+        if (!a.usable()) {
+            drafts.remove(key);
+            notifyChanged();
+            return new Result(false, false, ControlReasons.text(activity, a.reason));
+        }
+        return save(key, value);
+    }
+
     /** Validates and saves a desired value; refuses silently overwriting a Terminal change. */
     public Result save(String key, String value) {
         SettingSpec s = SettingsRegistry.get(key);

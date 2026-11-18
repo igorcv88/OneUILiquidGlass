@@ -29,6 +29,9 @@ final class ControlSheet extends Sheet {
     private ColorPicker colorPicker;
     private NotificationPreview now;
     private Scale scale;
+    /** Whether the shared rule allows editing now; the sheet rebuilds when it flips. */
+    private boolean editable;
+    private final AppModel.Listener watch = this::conditionChanged;
 
     ControlSheet(Host host, String key, Controls.Surface surface) {
         super(host.activity(), host.theme(), ControlTitles.title(host.activity(), Controls.get(key)));
@@ -38,21 +41,48 @@ final class ControlSheet extends Sheet {
         this.model = host.model();
         working = model.state().shown(key);
         build();
+        model.listen(watch);
     }
 
     private Theme th() {
         return t;
     }
 
+    private Applicability.Result rule() {
+        return model.state().applicability().on(c.key, surface);
+    }
+
+    /**
+     * A related setting changed while the sheet is open (another screen, the Terminal, a mode
+     * switch). If that flips whether the control has an effect, rebuild: an inactive control
+     * loses its slider, field, reset and Save; an active one gets them back with the saved value.
+     */
+    private void conditionChanged() {
+        if (!isShowing() || rule().usable() == editable) return;
+        model.draft(c.key, null);
+        host.endPreview();
+        working = model.state().shown(c.key);
+        valueText = null;
+        slider = null;
+        field = null;
+        colorPicker = null;
+        now = null;
+        scale = null;
+        body().removeAllViews();
+        clearActions();
+        build();
+    }
+
     private void build() {
         ControlState st = model.state();
-        Applicability.Result a = st.applicability().on(c.key, surface);
+        Applicability.Result a = rule();
+        editable = a.usable();
         LinearLayout body = body();
         String hint = ControlDescriptions.hint(activity, c);
         if (!hint.isEmpty()) subtitle(hint);
-        if (a.kind == Applicability.Kind.INACTIVE || a.kind == Applicability.Kind.OFF) {
+        if (!editable) {
             LinearLayout n = Ui.notice(activity, t, Ui.Tone.INFO,
-                    ControlReasons.text(activity, a.reason) + ". " + activity.getString(R.string.control_inactive_suffix), null, null);
+                    ControlReasons.text(activity, a.reason) + ". " + activity.getString(R.string.control_locked_inactive), null, null);
             body.addView(n, Ui.match(0, t.dp(12)));
         } else if (a.kind == Applicability.Kind.NEEDS_RESTART) {
             body.addView(Ui.notice(activity, t, Ui.Tone.WARN,
@@ -62,12 +92,16 @@ final class ControlSheet extends Sheet {
                         host.openLens();
                     }), Ui.match(0, t.dp(12)));
         }
-        samples(body);
-        editor(body);
+        if (editable) {
+            samples(body);
+            editor(body);
+        } else {
+            readOnly(body);
+        }
         TextView help = Ui.text(activity, t, ControlDescriptions.help(activity, c), Theme.LABEL, t.inkMuted, false);
         help.setPadding(t.dp(8), t.dp(14), t.dp(8), t.dp(4));
         body.addView(help);
-        values(body, st);
+        values(body, st, editable);
         technical(body);
         action(model.ui.getBoolean("favorite." + c.key, false) ? activity.getString(R.string.control_favorite_remove) : activity.getString(R.string.control_favorite_add),
                 Ui.ButtonStyle.OUTLINED, () -> {
@@ -77,13 +111,25 @@ final class ControlSheet extends Sheet {
                     model.notifyChanged();
                     dismiss();
                 });
-        if (c.format != Controls.Format.CHOICE && c.format != Controls.Format.TOGGLE)
+        if (editable && c.format != Controls.Format.CHOICE && c.format != Controls.Format.TOGGLE)
             action(activity.getString(R.string.action_save), Ui.ButtonStyle.FILLED, this::saveAndClose);
         onClosed(() -> {
+            model.unlisten(watch);
             model.draft(c.key, null);
             host.endPreview();
             model.notifyChanged();
         });
+    }
+
+    /** The saved value, without slider, field, choice or reset: the control has no effect now. */
+    private void readOnly(LinearLayout body) {
+        LinearLayout box = Ui.card(activity, t);
+        box.setBackground(Ui.rounded(t.surface, t.dpf(20)));
+        box.setPadding(t.dp(16), t.dp(12), t.dp(16), t.dp(12));
+        TextView v = Ui.text(activity, t, ControlValues.display(host.activity(), c, working), Theme.TITLE, t.inkFaint, true);
+        box.addView(v);
+        box.setEnabled(false);
+        body.addView(box, Ui.match(t.dp(12), 0));
     }
 
     /** Less / now / more, magnified on the part the control changes. */
@@ -91,11 +137,14 @@ final class ControlSheet extends Sheet {
         boolean visual = c.channel != Controls.Channel.NONE
                 && (c.preview == Controls.Preview.FAITHFUL || c.preview == Controls.Preview.DIDACTIC);
         if (!visual) {
+            boolean test = c.preview == Controls.Preview.BEHAVIOR || c.preview == Controls.Preview.ON_DEVICE;
             LinearLayout n = Ui.notice(activity, t, Ui.Tone.INFO,
                     c.preview == Controls.Preview.BEHAVIOR
                             ? activity.getString(R.string.control_no_preview_behavior)
-                            : activity.getString(R.string.control_no_preview),
-                    c.preview == Controls.Preview.BEHAVIOR ? activity.getString(R.string.action_test) : null, host::testNotification);
+                            : c.preview == Controls.Preview.ON_DEVICE
+                                    ? activity.getString(R.string.control_no_preview_device)
+                                    : activity.getString(R.string.control_no_preview),
+                    test ? activity.getString(R.string.action_test) : null, host::testNotification);
             body.addView(n, Ui.match(0, t.dp(8)));
             return;
         }
@@ -285,6 +334,7 @@ final class ControlSheet extends Sheet {
     }
 
     private void setWorking(String raw, boolean syncSlider) {
+        if (!editable) return;
         working = raw;
         if (valueText != null) valueText.setText(ControlValues.display(host.activity(), c, raw));
         if (slider != null && syncSlider) {
@@ -343,7 +393,8 @@ final class ControlSheet extends Sheet {
     }
 
     private boolean commit(String raw) {
-        AppModel.Result r = model.save(c.key, raw);
+        // The same rule as the rows, checked again at commit: the condition may have changed.
+        AppModel.Result r = model.saveControl(c.key, raw, surface);
         if (r.ok) {
             host.feedback(c.needsRestart() ? activity.getString(R.string.control_saved_restart) : activity.getString(R.string.control_saved));
             return true;
@@ -357,10 +408,12 @@ final class ControlSheet extends Sheet {
     }
 
     /** Saved, on the phone now, and default; only rows that differ are worth reading. */
-    private void values(LinearLayout body, ControlState st) {
+    private void values(LinearLayout body, ControlState st, boolean inEffect) {
         String saved = st.saved.get(c.key), device = st.device(c.key);
         StringBuilder b = new StringBuilder();
         if (saved != null) b.append(activity.getString(R.string.control_saved_in_app, ControlValues.display(host.activity(), c, saved)));
+        if (!inEffect)
+            b.append(b.length() == 0 ? "" : "\n").append(activity.getString(R.string.control_effective_none));
         if (model.observedAvailable()) {
             String o = st.observed.get(c.key);
             if (o != null && !o.isEmpty()) {

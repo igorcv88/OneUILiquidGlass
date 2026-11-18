@@ -246,6 +246,9 @@
     <string name="action_save">Save</string>
     <string name="control_no_preview_behavior">No visual preview: this setting changes timing or behavior. Test it with a real notification.</string>
     <string name="control_no_preview">No visual preview for this setting.</string>
+    <string name="control_no_preview_device">No in-app sample: this optical effect is drawn only on the phone. Compare it there.</string>
+    <string name="control_locked_inactive">Editing is locked while this setting has no effect. The saved value is kept and applies again when the condition is met.</string>
+    <string name="control_effective_none">In effect now: nothing (inactive)</string>
     <string name="action_test">Test</string>
     <string name="control_less">Less</string>
     <string name="control_current">Current</string>

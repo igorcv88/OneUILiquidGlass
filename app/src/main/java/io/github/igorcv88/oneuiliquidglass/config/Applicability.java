@@ -260,7 +260,7 @@ public final class Applicability {
             NEEDS_MENISCUS_OFF = "Só funciona com o menisco desligado",
             NEEDS_MATERIAL_BLOCK = "Exige saturação, escurecimento ou clareamento",
             NEEDS_VEIL = "Só funciona com o véu acima de 0",
-            NEEDS_KERNEL0 = "Sem efeito nos kernels gaussianos; use o Original",
+            NEEDS_KERNEL0 = "Sem efeito nos kernels gaussianos com o Desfoque adaptativo ligado; use o Original ou desligue o Desfoque adaptativo",
             NEEDS_ADAPTIVE = "Exige o desfoque adaptativo ligado";
 
     /**
