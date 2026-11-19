@@ -67,6 +67,20 @@ public final class LiveSurfaceHooks {
         nowBar.setInstaller(this::installPlugin);
     }
 
+    @FunctionalInterface public interface CardContrast {
+        boolean update(View root, View host, boolean shown, CardInk icon);
+    }
+
+    /** The Clock card's existing verified monochrome lease, driven by the card tone. */
+    public interface CardInk {
+        android.widget.ImageView currentTarget();
+        Object binding();
+        int shown();
+        void show(int color);
+    }
+
+    public void setCardContrast(CardContrast contrast) { cards.setContrast(contrast); }
+
     boolean allows(LiveSurface s) {
         return !broken.contains(s) && master.getAsBoolean() && ConfigClient.flag(s.flag);
     }

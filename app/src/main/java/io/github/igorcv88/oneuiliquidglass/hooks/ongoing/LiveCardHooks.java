@@ -107,7 +107,7 @@ final class LiveCardHooks {
                 icon = found instanceof ImageView ? (ImageView) found : null;
                 image = new WeakReference<>(icon);
             }
-            lease.sync(icon, true, packageName);
+            lease.syncWithoutSampling(icon, true, packageName);
         }
     }
     /** Fill views changeCardBg wrote, by the root they belong to (found by structure otherwise). */
@@ -240,6 +240,9 @@ final class LiveCardHooks {
         syncStackFills(stack);
     }
 
+    private LiveSurfaceHooks.CardContrast contrast = (root, host, shown, icon) -> false;
+    void setContrast(LiveSurfaceHooks.CardContrast contrast) { this.contrast = contrast; }
+
     /** Offers the card's fill (and a root that has its own background) with the current verdict. */
     private void evaluate(View root, Classification c) {
         if (c == null) return;
@@ -265,12 +268,21 @@ final class LiveCardHooks {
         final WeakReference<View> rootRef = new WeakReference<>(root);
         options.onShown = (host, shown) -> {
             regionTint(host, shown);
-            if (cardIcon == null) return;
             View boundRoot = rootRef.get();
+            if (!shown && boundRoot != null) contrast.update(boundRoot, host, false, null);
+            if (cardIcon == null) return;
             if (boundRoot != null) cardIcon.sync(boundRoot, shown);
             else cardIcon.lease.restore();
         };
-        options.onSync = options.onShown;
+        options.onSync = (host, shown) -> {
+            options.onShown.accept(host, shown);
+            View boundRoot = rootRef.get();
+            if (shown && boundRoot != null) {
+                NowBarIconLease icon = cardIcon == null ? null : cardIcon.lease;
+                boolean controlled = contrast.update(boundRoot, host, true, icon);
+                if (icon != null) icon.cardTone(controlled);
+            }
+        };
         List<View> targets = fills(root);
         for (View t : targets) {
             glass.offer(t, LiveSurface.CARD, data, verdict, LiveChipHooks.RECHECK, options);

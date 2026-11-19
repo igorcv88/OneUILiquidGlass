@@ -13,7 +13,7 @@ import android.widget.ImageView;
 import java.lang.ref.WeakReference;
 
 /** The eligible Now Bar's native AdaptiveIconDrawable already contains a monochrome glyph. */
-final class NowBarIconLease {
+final class NowBarIconLease implements LiveSurfaceHooks.CardInk {
     interface InstalledIconSource {
         Drawable resolve(ImageView target, String packageName) throws PackageManager.NameNotFoundException;
     }
@@ -44,6 +44,7 @@ final class NowBarIconLease {
     private long generation, nextSample;
     private Boolean lightBackdrop;
     private int ink = Color.WHITE;
+    private boolean cardTone;
     private WeakReference<ImageView> rejectedView = new WeakReference<>(null);
     private WeakReference<Drawable> rejectedDrawable = new WeakReference<>(null);
     private String rejectedPackage;
@@ -60,7 +61,7 @@ final class NowBarIconLease {
         long epoch = generation;
         io.github.igorcv88.oneuiliquidglass.glass.ShadeTone.measure(target, luma -> {
             ImageView current = image.get();
-            if (epoch != generation || current != target || !Double.isFinite(luma)
+            if (epoch != generation || cardTone || current != target || !Double.isFinite(luma)
                     || !current.isAttachedToWindow() || current.getDrawable() != applied.get()) return;
             boolean light = io.github.igorcv88.oneuiliquidglass.glass.ShadeTone.lightBackdrop((float) luma, lightBackdrop);
             applyTone(light);
@@ -69,7 +70,12 @@ final class NowBarIconLease {
 
     void applyTone(boolean light) {
         lightBackdrop = light;
-        int color = light ? Color.BLACK : Color.WHITE;
+        show(light ? Color.BLACK : Color.WHITE);
+    }
+
+    @Override public int shown() { return ink; }
+
+    @Override public void show(int color) {
         Drawable glyph = applied.get();
         if (glyph != null && color != ink) {
             ink = color;
@@ -80,6 +86,19 @@ final class NowBarIconLease {
     }
 
     ImageView target() { return image.get(); }
+
+    @Override public Object binding() { return applied.get(); }
+
+    @Override public ImageView currentTarget() {
+        ImageView target = image.get();
+        return target != null && target.getDrawable() == applied.get() ? target : null;
+    }
+
+    void cardTone(boolean controlled) {
+        cardTone = controlled;
+        ImageView target = currentTarget();
+        if (!controlled && target != null) contrast(target);
+    }
 
     void sync(ImageView target, boolean glass) { sync(target, glass, null); }
 

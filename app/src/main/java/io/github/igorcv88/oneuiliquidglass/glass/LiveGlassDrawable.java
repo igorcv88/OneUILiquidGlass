@@ -120,6 +120,31 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
      * heads-up does; 1 elsewhere. Applied to the optics when they are built and on change.
      */
     private float edgeLineGain = 1f;
+    private int contrastVeil;
+    private boolean contrastLightStyle;
+    private float contrastLightEdge, contrastOutline;
+
+    /** Measured tint for the card's own region; the ancestor's Samsung region stays native. */
+    public void setContrastVeil(int veil) {
+        if (contrastVeil == veil) return;
+        contrastVeil = veil;
+        invalidateSelf();
+    }
+
+    /** Same light edge and outline used by the heads-up material. */
+    public void setContrastEdge(boolean light, float edge, float outline) {
+        if (contrastLightStyle == light && contrastLightEdge == edge && contrastOutline == outline) return;
+        contrastLightStyle = light;
+        contrastLightEdge = edge;
+        contrastOutline = outline;
+        if (optics != null) applyContrastEdge();
+        invalidateSelf();
+    }
+
+    private void applyContrastEdge() {
+        optics.setLightStyle(contrastLightStyle, contrastLightEdge);
+        optics.setOutline(contrastOutline);
+    }
     public void setEdgeLineGain(float gain) {
         if (edgeLineGain == gain) return;
         edgeLineGain = gain;
@@ -307,7 +332,7 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
             drawReport("REGIONLESS", canvas, b, "nativeBlurAncestor");
             return;
         }
-        int tint = currentTint();
+        int tint = contrastVeil != 0 ? contrastVeil : currentTint();
         if (tint != lastTint || spec.blurPx != lastPx || !java.util.Arrays.equals(clamped, lastRadii)) {
             try {
                 blur.update(spec.blurPx, tint, clamped);
@@ -338,6 +363,7 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
             optics = new GlassDrawable(blur, density, new GlassSpec());
             optics.setNotificationLineGain(edgeLineGain);
             optics.setP3EdgeCompatibility(p3EdgeCompatibility);
+            applyContrastEdge();
         }
         if (!optics.drawOptics(canvas, b, clamped, alpha)) drawRim(canvas, b);
         drawReport("OWN_REGION", canvas, b, "blurDrawReturned");
