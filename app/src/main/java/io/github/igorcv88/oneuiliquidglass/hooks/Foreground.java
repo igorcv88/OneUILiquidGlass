@@ -573,7 +573,7 @@ final class Foreground {
         final ImageView i;
         Icon(ImageView i) { this.i = i; }
         @Override public Object key() { return i; }
-        @Override public int color() { return i.getImageTintList().getDefaultColor(); }
+        @Override public int color() { ColorStateList tint = i.getImageTintList(); return tint == null ? 0 : tint.getDefaultColor(); }
         @Override public void set(int color) { i.setImageTintList(ColorStateList.valueOf(color)); }
         @Override public Object save() { return i.getImageTintList(); }
         @Override public void restore(Object saved) { i.setImageTintList((ColorStateList) saved); }
@@ -601,18 +601,25 @@ final class Foreground {
 
     static int apply(View root, boolean swap, boolean lightText, java.util.List<View> tracked,
                      boolean animate, InkAnimator.Timeline transition) {
+        return apply(root, swap, lightText, tracked, animate, transition, null);
+    }
+
+    static int apply(View root, boolean swap, boolean lightText, java.util.List<View> tracked,
+                     boolean animate, InkAnimator.Timeline transition, View leasedIcon) {
         if (tracked != null) tracked.clear();
         if (root == null) return 0;
         host = root.getContext().getPackageName();
         boolean before = animating;
         InkAnimator.Timeline previous = timeline;
-        applying = true; animating = animate; timeline = transition;
+        View previousIcon = excludedIcon;
+        applying = true; animating = animate; timeline = transition; excludedIcon = leasedIcon;
         try { return walk(root, swap, lightText, tracked); }
-        finally { applying = false; animating = before; timeline = previous; }
+        finally { applying = false; animating = before; timeline = previous; excludedIcon = previousIcon; }
     }
     /** Set by apply(..., animate): the views changed by this walk transition instead of jumping. */
     private static boolean animating;
     private static InkAnimator.Timeline timeline;
+    private static View excludedIcon;
     /** Views moving back to their own colours: what they get when the transition ends. */
     private static final WeakHashMap<Object, Rec> restoring = new WeakHashMap<>();
     /** One Ink as an animator target; its writes pass the colour interception as this class's own. */
@@ -754,6 +761,7 @@ final class Foreground {
     }
 
     private static int walk(View v, boolean swap, boolean lightText, java.util.List<View> tracked) {
+        if (v == excludedIcon) return 0;
         int changed = UberRemoteViewsTone.apply(v, swap, lightText) ? 1 : 0;
         // The template's ProgressBar (android:id/progress): its tint lists follow the text tone.
         changed += NotificationProgressTone.apply(v, swap, lightText) ? 1 : 0;

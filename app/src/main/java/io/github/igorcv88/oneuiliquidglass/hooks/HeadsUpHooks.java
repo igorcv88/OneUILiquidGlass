@@ -5,6 +5,7 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.drawable.Drawable;
 import android.view.View;
+import android.widget.ImageView;
 import android.view.ViewGroup;
 import android.view.ViewParent;
 import android.view.WindowManager;
@@ -47,6 +48,7 @@ import io.github.igorcv88.oneuiliquidglass.glass.P3EdgeSelection;
 import io.github.igorcv88.oneuiliquidglass.glass.P3ModeBus;
 import io.github.igorcv88.oneuiliquidglass.glass.NotificationEdgeLineGain;
 import io.github.igorcv88.oneuiliquidglass.glass.CornerGeometry;
+import io.github.igorcv88.oneuiliquidglass.hooks.ongoing.LiveSurfaceHooks.CardInk;
 
 public final class HeadsUpHooks {
     private static final String ROW = "com.android.systemui.statusbar.notification.row.ExpandableNotificationRow";
@@ -92,15 +94,16 @@ public final class HeadsUpHooks {
     private io.github.igorcv88.oneuiliquidglass.hooks.ongoing.LiveSurfaceHooks ongoing;
     private final WeakHashMap<View, State> liveCardTones = new WeakHashMap<>();
 
-    private void liveCardContrast(View root, View host, boolean shown) {
+    private boolean liveCardContrast(View root, View host, boolean shown, CardInk icon) {
         try {
-            updateLiveCardContrast(root, host, shown);
+            return updateLiveCardContrast(root, host, shown, icon);
         } catch (RuntimeException | LinkageError e) {
             Probe.error("LIVE_CARD_CONTRAST_FAILED", e);
+            return false;
         }
     }
 
-    private void updateLiveCardContrast(View root, View host, boolean shown) {
+    private boolean updateLiveCardContrast(View root, View host, boolean shown, CardInk icon) {
         Tuning t = Tuning.get();
         Drawable background = host.getBackground();
         io.github.igorcv88.oneuiliquidglass.glass.LiveGlassDrawable drawable =
@@ -113,26 +116,29 @@ public final class HeadsUpHooks {
                 && io.github.igorcv88.oneuiliquidglass.config.ConfigClient.flag("surface.headsup.feature.tonemap.enabled");
         if (state != null && (state.background.get() != host || state.liveCardGlass != drawable || !active)) {
             // A retired fill can deliver its final callback after the replacement took ownership.
-            if (!active && state.background.get() != host) return;
+            if (!active && state.background.get() != host) return false;
             liveCardTones.remove(root);
             View previous = state.background.get();
             if (previous != null) previous.removeCallbacks(state.popupPoke);
             state.popupArrival++;
             state.toneSurface = null;
             state.liveCardGlass.setContrastVeil(0);
+            state.setLiveCardIcon(null);
             state.setNative();
             state = null;
         }
-        if (!active) return;
+        if (!active) return false;
         if (state == null) {
             Foreground.apply(root, false, ShadeTone.lightText(), null);
             state = new State(host, root);
             state.liveCardGlass = drawable;
             liveCardTones.put(root, state);
         }
+        state.setLiveCardIcon(icon);
         state.nativeTint = drawable.currentTint();
         if (!t.live) drawable.setContrastVeil(0);
         state.popupTone(host);
+        return true;
     }
     private boolean blurEnvironmentReported;
     private final boolean samsungBlur = SemBlurBridge.available();
@@ -1764,6 +1770,45 @@ public final class HeadsUpHooks {
         boolean iconOwnerPreviously, iconOwnerLogged;
         InkAnimator.Timeline foregroundTimeline;
         boolean previousForegroundLight;
+        CardInk liveCardIcon;
+        ImageView liveIconView;
+        Object liveIconBinding;
+        int liveIconTarget, liveIconFrom;
+
+        void setLiveCardIcon(CardInk next) {
+            ImageView view = next == null ? null : next.currentTarget();
+            Object binding = next == null ? null : next.binding();
+            if (next == liveCardIcon && view == liveIconView && binding == liveIconBinding) return;
+            boolean sameLease = next == liveCardIcon && liveIconView != null;
+            if (liveCardIcon != null) InkAnimator.cancel(liveCardIcon);
+            liveCardIcon = next;
+            liveIconView = view;
+            liveIconBinding = binding;
+            if (view != null) {
+                Foreground.releaseIconTone(view);
+                liveIconTarget = next.shown();
+                if (foregroundTimeline != null && foregroundTimeline.active()) {
+                    next.show(sameLease ? liveIconFrom : previousForegroundLight ? 0xff000000 : 0xffffffff);
+                    syncLiveCardIcon(true);
+                }
+            }
+        }
+
+        void syncLiveCardIcon(boolean join) {
+            CardInk icon = liveCardIcon;
+            ImageView view = liveIconView;
+            if (icon == null || view == null) return;
+            int desired = lightBackdrop ? 0xff000000 : 0xffffffff;
+            if (liveIconTarget == desired && (icon.shown() == desired || InkAnimator.ownsShown(icon))) return;
+            liveIconTarget = desired;
+            liveIconFrom = icon.shown();
+            Object binding = liveIconBinding;
+            InkAnimator.Timeline ink = foregroundTimeline;
+            InkAnimator.run(icon, new InkAnimator.Target() {
+                @Override public int shown() { return icon.currentTarget() == view && icon.binding() == binding ? icon.shown() : ~icon.shown(); }
+                @Override public void show(int color) { if (icon.target() == view) icon.show(color); }
+            }, desired, ink != null && ink.active(), null, null, ink, join);
+        }
 
         void syncNotificationIcons() {
             View r = row.get(), v = background.get();
@@ -2122,8 +2167,8 @@ public final class HeadsUpHooks {
             foregroundTimeline = null;
             if (veilRamp != null) { veilRamp.cancel(); veilRamp = null; }
             setForeground(false);
-            if (wasTransitioning && !swapped)
-                Foreground.apply(row.get(), false, ShadeTone.lightText(), swappedViews);
+            if (wasTransitioning && !swapped && (liveCardGlass != null || !liveCardTones.containsKey(row.get())))
+                Foreground.apply(row.get(), false, ShadeTone.lightText(), swappedViews, false, null, liveIconView);
             setLightStyle(false);
             if (measuredVeil != 0) { measuredVeil = 0; pushToneVeil(); invalidate(); }
             styleChanged("native");
@@ -2257,6 +2302,7 @@ public final class HeadsUpHooks {
             // background. Samsung temporarily falls back to its native material while opening the
             // shade; restoring icons in that transition made the original icon flash for a frame.
             if (liveCardGlass == null) syncNotificationIcons();
+            else syncLiveCardIcon(false);
             long now = android.os.SystemClock.uptimeMillis();
             String reason = swap == swapped ? null : swap ? "style" : "restore";
             // A child row that just got its own glass may still carry its group's swapped text
@@ -2292,7 +2338,7 @@ public final class HeadsUpHooks {
                 InkAnimator.Timeline ink = foregroundTimeline;
                 boolean sameTransition = ink != null && ink.active();
                 int changed = Foreground.apply(shown, swap, ShadeTone.lightText(), swappedViews,
-                        sameTransition || animate, sameTransition ? ink : null);
+                        sameTransition || animate, sameTransition ? ink : null, liveIconView);
                 // Recorded only once the walk went through: a failed restore is retried.
                 swapped = swap;
                 if (sameTransition) ink.sealed = true;

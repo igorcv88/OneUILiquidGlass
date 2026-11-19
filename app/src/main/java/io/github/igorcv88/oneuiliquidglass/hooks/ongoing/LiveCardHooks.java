@@ -107,7 +107,7 @@ final class LiveCardHooks {
                 icon = found instanceof ImageView ? (ImageView) found : null;
                 image = new WeakReference<>(icon);
             }
-            lease.sync(icon, true, packageName);
+            lease.syncWithoutSampling(icon, true, packageName);
         }
     }
     /** Fill views changeCardBg wrote, by the root they belong to (found by structure otherwise). */
@@ -240,7 +240,7 @@ final class LiveCardHooks {
         syncStackFills(stack);
     }
 
-    private LiveSurfaceHooks.CardContrast contrast = (root, host, shown) -> {};
+    private LiveSurfaceHooks.CardContrast contrast = (root, host, shown, icon) -> false;
     void setContrast(LiveSurfaceHooks.CardContrast contrast) { this.contrast = contrast; }
 
     /** Offers the card's fill (and a root that has its own background) with the current verdict. */
@@ -269,7 +269,7 @@ final class LiveCardHooks {
         options.onShown = (host, shown) -> {
             regionTint(host, shown);
             View boundRoot = rootRef.get();
-            if (!shown && boundRoot != null) contrast.update(boundRoot, host, false);
+            if (!shown && boundRoot != null) contrast.update(boundRoot, host, false, null);
             if (cardIcon == null) return;
             if (boundRoot != null) cardIcon.sync(boundRoot, shown);
             else cardIcon.lease.restore();
@@ -277,7 +277,11 @@ final class LiveCardHooks {
         options.onSync = (host, shown) -> {
             options.onShown.accept(host, shown);
             View boundRoot = rootRef.get();
-            if (shown && boundRoot != null) contrast.update(boundRoot, host, true);
+            if (shown && boundRoot != null) {
+                NowBarIconLease icon = cardIcon == null ? null : cardIcon.lease;
+                boolean controlled = contrast.update(boundRoot, host, true, icon);
+                if (icon != null) icon.cardTone(controlled);
+            }
         };
         List<View> targets = fills(root);
         for (View t : targets) {

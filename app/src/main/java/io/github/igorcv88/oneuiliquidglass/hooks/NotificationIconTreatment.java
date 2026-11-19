@@ -145,7 +145,7 @@ final class NotificationIconTreatment {
             ImageView v = view.get();
             if (v == null || v.getDrawable() != installed) return;
             boolean intact = inkLease.intact(v);
-            if (intact && targetInk == ink && (shownInk == ink || InkAnimator.running(v))) return;
+            if (intact && targetInk == ink && (shownInk == ink || timeline != null && timeline.active() && InkAnimator.running(v))) return;
             if (!intact) inkLease.apply(v, shownInk);
             targetInk = ink;
             InkAnimator.run(v, new InkAnimator.Target() {
