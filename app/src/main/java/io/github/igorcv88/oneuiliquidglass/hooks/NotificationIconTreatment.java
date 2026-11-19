@@ -94,7 +94,7 @@ final class NotificationIconTreatment {
         final ShelfIconTint inkLease = new ShelfIconTint();
         Drawable suppressedBackground;
         int suppressedAlpha;
-        int driftReports;
+        int shownInk, targetInk;
 
         Lease(ImageView v, Drawable replacement, int ink) {
             view = new WeakReference<>(v);
@@ -108,6 +108,7 @@ final class NotificationIconTreatment {
             managed.add(v);
             // Expansion can update ImageView's filter or tint the same drawable in place.
             // Reuse the lease that checks both, including installation's inherited native filter.
+            shownInk = targetInk = ink;
             inkLease.apply(v, ink);
         }
 
@@ -138,16 +139,22 @@ final class NotificationIconTreatment {
             return v != null && v.getDrawable() == installed;
         }
 
-        void tone(int ink) {
+        void tone(int ink) { tone(ink, null, false); }
+
+        void tone(int ink, InkAnimator.Timeline timeline, boolean join) {
             ImageView v = view.get();
             if (v == null || v.getDrawable() != installed) return;
-            if (Probe.trace && !inkLease.intact(v) && driftReports++ < 3)
-                Probe.log("ICON_TREAT_ROW_INK_DRIFT", "view="
-                        + Integer.toHexString(System.identityHashCode(v))
-                        + " glyph=" + installed.getClass().getSimpleName()
-                        + " tint=" + (v.getImageTintList() != null)
-                        + " ink=" + Integer.toHexString(ink));
-            inkLease.apply(v, ink);
+            boolean intact = inkLease.intact(v);
+            if (intact && targetInk == ink && (shownInk == ink || InkAnimator.running(v))) return;
+            if (!intact) inkLease.apply(v, shownInk);
+            targetInk = ink;
+            InkAnimator.run(v, new InkAnimator.Target() {
+                @Override public int shown() { return inkLease.intact(v) ? shownInk : ~shownInk; }
+                @Override public void show(int color) {
+                    inkLease.apply(v, color);
+                    shownInk = color;
+                }
+            }, ink, timeline != null && timeline.active(), null, null, timeline, join);
         }
 
         void scale(float fraction) {
@@ -158,6 +165,7 @@ final class NotificationIconTreatment {
         void restore() {
             ImageView v = view.get();
             if (v == null) return;
+            InkAnimator.cancel(v);
             inkLease.restore(v);
             managed.remove(v);
             if (v.getDrawable() == installed) {
@@ -258,6 +266,11 @@ final class NotificationIconTreatment {
     }
 
     void sync(View row, int mode, boolean lightBackdrop, Integer sharedInk) {
+        sync(row, mode, lightBackdrop, sharedInk, null, lightBackdrop);
+    }
+
+    void sync(View row, int mode, boolean lightBackdrop, Integer sharedInk,
+              InkAnimator.Timeline timeline, boolean previousLight) {
         if (row == null || mode == NotificationIconPolicy.OFF) {
             rebindGuard.reset();
             protectedRow.clear();
@@ -336,11 +349,8 @@ final class NotificationIconTreatment {
         if (resolved == null) { if (!pending) skip("noSource"); return; }
         if (resolved.bitmap == null) { skip("existingMono"); return; }
         io.github.igorcv88.oneuiliquidglass.glass.Tuning tuning = io.github.igorcv88.oneuiliquidglass.glass.Tuning.get();
-        int ink = sharedInk != null ? sharedInk
-                : tuning.notificationIconInkMode == 1 ? tuning.notificationIconFixedInk
-                : tuning.notificationIconInkMode == 2
-                    ? (lightBackdrop ? tuning.notificationIconLightInk : tuning.notificationIconDarkInk)
-                    : (lightBackdrop ? Color.BLACK : Color.WHITE);
+        int ink = sharedInk != null ? sharedInk : inkFor(lightBackdrop, tuning);
+        int initialInk = timeline != null && timeline.active() ? inkFor(previousLight, tuning) : ink;
         boolean stale = false;
         int rebindings = 0;
         for (Lease l : active) if (!l.current()) { l.restore(); stale = true; rebindings++; }
@@ -370,7 +380,7 @@ final class NotificationIconTreatment {
             for (Lease l : active) if (l.view.get() == image) { found = l; break; }
             if (found != null) {
                 found.suppressBackground();
-                found.tone(ink);
+                found.tone(ink, timeline, false);
                 found.scale(tuning.notificationIconScale);
                 continue;
             }
@@ -378,10 +388,19 @@ final class NotificationIconTreatment {
             Foreground.glyph(image, false, false);
             NotificationGlyphDrawable replacement = new NotificationGlyphDrawable(resolved.bitmap,
                     tuning.notificationIconScale, image.getDrawable());
-            active.add(new Lease(image, replacement, ink));
+            Lease lease = new Lease(image, replacement, initialInk);
+            active.add(lease);
+            lease.tone(ink, timeline, true);
             if (Probe.trace) Probe.log("ICON_TREAT_APPLIED", "pkg=" + pkg + " source=" + resolved.source
                     + " " + Foreground.describe(image) + " ink=" + Integer.toHexString(ink));
         }
+    }
+
+    private static int inkFor(boolean lightBackdrop, io.github.igorcv88.oneuiliquidglass.glass.Tuning tuning) {
+        if (tuning.notificationIconInkMode == 1) return tuning.notificationIconFixedInk;
+        if (tuning.notificationIconInkMode == 2)
+            return lightBackdrop ? tuning.notificationIconLightInk : tuning.notificationIconDarkInk;
+        return lightBackdrop ? Color.BLACK : Color.WHITE;
     }
 
     /** Samsung variants differ in whether their row exposes a field or a getter. */

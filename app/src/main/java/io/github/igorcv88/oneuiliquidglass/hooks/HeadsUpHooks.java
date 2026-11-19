@@ -1762,6 +1762,8 @@ public final class HeadsUpHooks {
          * layers for the same row, with separate tone decisions; letting every layer replace
          * the icons makes black/white controllers overwrite one another every pre-draw. */
         boolean iconOwnerPreviously, iconOwnerLogged;
+        InkAnimator.Timeline foregroundTimeline;
+        boolean previousForegroundLight;
 
         void syncNotificationIcons() {
             View r = row.get(), v = background.get();
@@ -1783,7 +1785,8 @@ public final class HeadsUpHooks {
                         && !Tuning.get().shadeLocal;
                 boolean inkOnLight = shared ? shadePalette.lightBackdrop : lightBackdrop;
                 notificationIcons.sync(enabled ? r : null, Tuning.get().iconMode, inkOnLight,
-                        shared ? shadePalette.ink : null);
+                        shared ? shadePalette.ink : null, shared ? null : foregroundTimeline,
+                        previousForegroundLight);
             } else if (iconOwnerPreviously) {
                 notificationIcons.restore();
             }
@@ -2108,14 +2111,19 @@ public final class HeadsUpHooks {
         /** The theme's own look: no veil, no swapped text; the hysteresis starts on the theme's side. */
         void setNative() {
             sampledTone = false; animateSwap = false;
+            boolean wasTransitioning = foregroundTimeline != null && foregroundTimeline.active();
+            foregroundTimeline = null;
             darkNativeFrost = false;
             if (glass != null) glass.setSharedDarkFrost(false);
             lightBackdrop = !ShadeTone.lightText();
             // At once, never ramped: a ramp would replay the previous opening's (or surface's) veil
             // for VEIL_RAMP_MS on a card that is starting over. Its pending text swap goes with it.
             pendingSwap = null; pendingLightStyle = null;
+            foregroundTimeline = null;
             if (veilRamp != null) { veilRamp.cancel(); veilRamp = null; }
             setForeground(false);
+            if (wasTransitioning && !swapped)
+                Foreground.apply(row.get(), false, ShadeTone.lightText(), swappedViews);
             setLightStyle(false);
             if (measuredVeil != 0) { measuredVeil = 0; pushToneVeil(); invalidate(); }
             styleChanged("native");
@@ -2153,6 +2161,13 @@ public final class HeadsUpHooks {
                         + " darkNativeExtra=" + Integer.toHexString(darkNativeExtra)
                         + " changed=" + (m.veil != measuredVeil));
             }
+            if (SURFACE_POPUP.equals(toneSurface) && sampledTone && (m.light != lightBackdrop || m.swap != swapped)) {
+                View content = row.get();
+                if (content != null && content.isShown() && shownAlpha(content) > 0.01f) {
+                    previousForegroundLight = lightBackdrop;
+                    foregroundTimeline = new InkAnimator.Timeline();
+                }
+            } else if (shade) foregroundTimeline = null;
             lightBackdrop = shade && shadePalette != null && shadePalette.generation == shadeOpens
                     && !Tuning.get().shadeLocal ? shadePalette.lightBackdrop : m.light;
             if (!shade) popupScene = m.light;
@@ -2171,8 +2186,9 @@ public final class HeadsUpHooks {
                 if (pendingSwap == null && pendingLightStyle == null) { setForeground(m.swap); setLightStyle(swapLight); }
                 return;
             }
-            // A ramp still running ends here (applying its own pending swap) before this one starts.
+            // A superseded ramp must not change the outline of its replacement.
             if (veilRamp != null) { veilRamp.cancel(); veilRamp = null; }
+            pendingLightStyle = null;
             if (!transition && sameColour && da <= 24 && m.swap == swapped) {
                 measuredVeil = veil; pushToneVeil(); invalidate();
                 setForeground(m.swap); setLightStyle(swapLight);
@@ -2273,9 +2289,13 @@ public final class HeadsUpHooks {
                 View shown = row.get();
                 boolean animate = ("style".equals(reason) || "restore".equals(reason)) && shown != null
                         && shown.isShown() && shownAlpha(shown) > 0.01f && animateSwap;
-                int changed = Foreground.apply(shown, swap, ShadeTone.lightText(), swappedViews, animate);
+                InkAnimator.Timeline ink = foregroundTimeline;
+                boolean sameTransition = ink != null && ink.active();
+                int changed = Foreground.apply(shown, swap, ShadeTone.lightText(), swappedViews,
+                        sameTransition || animate, sameTransition ? ink : null);
                 // Recorded only once the walk went through: a failed restore is retried.
                 swapped = swap;
+                if (sameTransition) ink.sealed = true;
                 if (changed > 0 && (Probe.trace || animate || reason.equals("rebind") || reason.equals("detached"))) {
                     Probe.log("TEXT_REAPPLY", "rowId=" + Integer.toHexString(System.identityHashCode(row.get())) + " reason=" + reason
                             + " swap=" + swap + " views=" + changed + " animated=" + animate + " sinceLastWalk=" + sinceSwap + " surface=" + toneSurface

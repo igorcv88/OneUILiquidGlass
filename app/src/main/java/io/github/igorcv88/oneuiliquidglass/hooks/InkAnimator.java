@@ -26,15 +26,25 @@ final class InkAnimator {
         void show(int color);
     }
 
+    /** One start and deadline for every eligible colour in a card's committed transition. */
+    static final class Timeline {
+        final long start = SystemClock.uptimeMillis();
+        final long duration = duration();
+        boolean sealed;
+
+        boolean active() { return SystemClock.uptimeMillis() - start < duration; }
+    }
+
     private static final class Run {
         final Target target;
         final int from, to;
         final Runnable done, aborted;
         final long start, duration;
+        final float joinedAt;
         int last;
-        Run(Target target, int from, int to, Runnable done, Runnable aborted, long start, long duration) {
+        Run(Target target, int from, int to, Runnable done, Runnable aborted, long start, long duration, float joinedAt) {
             this.target = target; this.from = from; this.to = to; this.done = done; this.aborted = aborted;
-            this.start = start; this.duration = duration; last = from;
+            this.start = start; this.duration = duration; this.joinedAt = joinedAt; last = from;
         }
     }
     private static final Map<Object, Run> runs = new IdentityHashMap<>();
@@ -50,6 +60,12 @@ final class InkAnimator {
 
     /** Whether {@code key} is mid-transition (its colour differs from the decided one on purpose). */
     static boolean running(Object key) { return runs.containsKey(key); }
+
+    /** Whether the current frame is still owned by this animation. */
+    static boolean ownsShown(Object key) {
+        Run run = runs.get(key);
+        return run != null && run.target.shown() == run.last;
+    }
 
     /** Animator duration for the device's animator scale; 0 when animations are disabled. */
     static long duration() {
@@ -75,18 +91,47 @@ final class InkAnimator {
      * (a filter, a removed shadow), without touching the colour that writer set.
      */
     static void run(Object key, Target target, int to, boolean animate, Runnable done, Runnable aborted) {
+        run(key, target, to, animate, done, aborted, null, false);
+    }
+
+    /**
+     * Existing targets can retarget from their displayed colour and keep the card deadline.
+     * Newly inflated targets join the original curve at its current position.
+     */
+    static void run(Object key, Target target, int to, boolean animate, Runnable done, Runnable aborted,
+                    Timeline timeline, boolean joinFromNative) {
         runs.remove(key);
         int from = target.shown();
-        long duration = animate ? duration() : 0L;
-        if (from == to || duration <= 0L) {
+        long now = SystemClock.uptimeMillis();
+        long start = timeline == null ? now : timeline.start;
+        long duration = !animate ? 0L : timeline == null ? duration() : timeline.duration;
+        if (from == to || now - start >= duration) {
             if (from != to) target.show(to);
             if (done != null) done.run();
             return;
         }
-        Run run = new Run(target, from, to, done, aborted, SystemClock.uptimeMillis(), duration);
+        float joinedAt = joinFromNative || timeline == null || !timeline.sealed ? 0f : eased(now, start, duration);
+        Run run = new Run(target, from, to, done, aborted, start, duration, joinedAt);
         runs.put(key, run);
-        trace("start",key,run);
+        if (joinFromNative && timeline != null && timeline.sealed) step(key, run, now);
+        trace("start", key, run);
         start();
+    }
+
+    /** An intercepted rebind may change the endpoint while the displayed intermediate remains ours. */
+    static Integer rebind(Object key, int to) {
+        Run current = runs.get(key);
+        if (current == null || current.target.shown() != current.last) return null;
+        if (current.to == to) return current.last;
+        long now = SystemClock.uptimeMillis();
+        Run next = new Run(current.target, current.last, to, current.done, current.aborted,
+                current.start, current.duration, Math.min(0.999999f, eased(now, current.start, current.duration)));
+        runs.put(key, next);
+        return next.last;
+    }
+
+    private static float eased(long now, long start, long duration) {
+        return InkTransition.ease(Math.min(1f, (now - start) / (float) duration));
     }
 
     /** Stops {@code key}'s transition without showing its end colour. */
@@ -124,7 +169,8 @@ final class InkAnimator {
             return;
         }
         float t = Math.min(1f, (now - r.start) / (float) r.duration);
-        int c = InkTransition.lerp(r.from, r.to, InkTransition.ease(t));
+        float progress = InkTransition.ease(t);
+        int c = InkTransition.lerp(r.from, r.to, (progress - r.joinedAt) / (1f - r.joinedAt));
         if (t >= 1f) {
             runs.remove(key);
             r.target.show(r.to);

@@ -48,7 +48,7 @@ final class Foreground {
     static int interceptions() { int n = intercepted; intercepted = 0; return n; }
     /** Whether any view carries a swapped tone (the hooks' fast path). */
     static boolean tracking() {
-        return !swapped.isEmpty() || UberRemoteViewsTone.tracking() || NotificationProgressTone.tracking();
+        return !swapped.isEmpty() || !restoring.isEmpty() || UberRemoteViewsTone.tracking() || NotificationProgressTone.tracking();
     }
     /**
      * TextView.setTextColor / ImageView.setImageTintList on a view this class swapped, from SystemUI
@@ -61,19 +61,33 @@ final class Foreground {
      */
     static Integer redirect(Object key, int color, Map<Object, Rec> swapped, java.util.function.IntFunction<Object> saver) {
         Rec r = swapped.get(key);
+        if (r == null && swapped == Foreground.swapped) {
+            Rec leaving = restoring.get(key);
+            if (leaving == null) return null;
+            if (!themeTone(color, leaving.lightText) || (leaving.custom && key instanceof TextView
+                    && !textEligible((View) key))) {
+                restoring.remove(key);
+                InkAnimator.cancel(key);
+                return null;
+            }
+            leaving.saved = saver.apply(color);
+            return InkAnimator.rebind(key, color);
+        }
         if (r == null) return null;
         // A RemoteViews reapply may add a private background before writing the text colour.
         if (r.custom && key instanceof TextView && !textEligible((View) key)) {
             swapped.remove(key);
+            InkAnimator.cancel(key);
             reshadow((TextView) key);
             return null;
         }
-        if (color == r.applied) return null;
-        if (!themeTone(color, r.lightText)) { swapped.remove(key); if (key instanceof TextView) reshadow((TextView) key); return null; }
+        if (color == r.applied) return InkAnimator.rebind(key, color);
+        if (!themeTone(color, r.lightText)) { InkAnimator.cancel(key); swapped.remove(key); if (key instanceof TextView) reshadow((TextView) key); return null; }
         r.saved = saver.apply(color);
         r.applied = mirror(color);
         intercepted++;
-        return r.applied;
+        Integer intermediate = InkAnimator.rebind(key, r.applied);
+        return intermediate == null ? r.applied : intermediate;
     }
     static Integer interceptColor(TextView t, int color) {
         return redirect(t, color, swapped, ColorStateList::valueOf);
@@ -115,12 +129,16 @@ final class Foreground {
      */
     private static final class Glyph {
         final android.graphics.drawable.Drawable shown, original;
-        final android.graphics.ColorFilter saved, applied;
+        final android.graphics.ColorFilter saved;
+        android.graphics.ColorFilter applied;
+        final int nativeColor;
+        int color;
+        boolean restoring;
         final android.graphics.drawable.Drawable bg;
         final int bgAlpha;
         Glyph(android.graphics.drawable.Drawable shown, android.graphics.drawable.Drawable original, android.graphics.ColorFilter saved,
-              android.graphics.ColorFilter applied, android.graphics.drawable.Drawable bg, int bgAlpha) {
-            this.shown = shown; this.original = original; this.saved = saved; this.applied = applied; this.bg = bg; this.bgAlpha = bgAlpha;
+              int nativeColor, android.graphics.drawable.Drawable bg, int bgAlpha) {
+            this.shown = shown; this.original = original; this.saved = saved; this.nativeColor = nativeColor; this.bg = bg; this.bgAlpha = bgAlpha;
         }
         /** Whether the view still shows what this record applied. */
         boolean current(ImageView v) {
@@ -129,7 +147,6 @@ final class Foreground {
         }
     }
     private static final WeakHashMap<ImageView, Glyph> glyphs = new WeakHashMap<>();
-    private static int glyphLogged;
     /**
      * Whether {@code v} is a notification template's app or small icon, debug.oulg.icontone on: the
      * framework's android:icon, or a framework/SystemUI icon view (CachingIconView,
@@ -278,59 +295,81 @@ final class Foreground {
      * app icons and avatars are left as they are.
      */
     static boolean glyph(ImageView v, boolean swap, boolean lightText) {
+        return glyph(v, swap, lightText, false);
+    }
+
+    private static boolean glyph(ImageView v, boolean swap, boolean lightText, boolean animate) {
         Glyph g = glyphs.get(v);
         if (!swap) {
             if (g == null) return false;
-            glyphs.remove(v);
-            restore(v, g);
+            if (animate && g.current(v)) {
+                if (g.restoring) return false;
+                g.restoring = true;
+                Glyph leaving = g;
+                Runnable finish = () -> finishGlyph(v, leaving);
+                InkAnimator.run(v, glyphTarget(v, g), g.nativeColor, true, finish, finish, timeline, false);
+            } else finishGlyph(v, g);
             return true;
         }
         android.graphics.drawable.Drawable d = v.getDrawable();
         Integer c = d == null ? null : glyphColor(v, g);
         if (g != null && g.current(v)) {
-            // The template recoloured the icon in place (an accent tint): released, as text is.
-            if (c != null && !themeTone(c, lightText)) { glyphs.remove(v); restore(v, g); }
-            return false;
+            if (c != null && !themeTone(c, lightText)) { finishGlyph(v, g); return true; }
+            if (!g.restoring) return false;
+            g.restoring = false;
+            InkAnimator.run(v, glyphTarget(v, g), mirror(g.nativeColor), animate, null, null, timeline, false);
+            return true;
         }
+        if (g != null) finishGlyph(v, g);
         android.graphics.drawable.Drawable mono = null;
         if (d != null && c == null) {
-            if (d instanceof android.graphics.drawable.AdaptiveIconDrawable) mono = ((android.graphics.drawable.AdaptiveIconDrawable) d).getMonochrome();
+            if (d instanceof android.graphics.drawable.AdaptiveIconDrawable)
+                mono = ((android.graphics.drawable.AdaptiveIconDrawable) d).getMonochrome();
             if (mono == null) c = lightGlyph(d);
         }
-        if (io.github.igorcv88.oneuiliquidglass.diagnostics.Probe.trace && glyphLogged++ < 60)
-            io.github.igorcv88.oneuiliquidglass.diagnostics.Probe.log("ICON_TONE", describe(v)
-                    + " drawable=" + (d == null ? "null" : d.getClass().getSimpleName()) + " tint=" + (v.getImageTintList() != null)
-                    + " glyph=" + (c == null ? "none" : Integer.toHexString(c)) + " mono=" + (mono != null)
-                    + " bg=" + (v.getBackground() == null ? "null" : v.getBackground().getClass().getSimpleName()));
-        int target;
-        if (mono != null) target = lightText ? 0xff000000 : 0xffffffff;
-        else if (c != null && themeTone(c, lightText)) target = mirror(c);
-        else {
-            if (g != null) { glyphs.remove(v); restore(v, g); }
-            return false;
-        }
-        // A disc hidden by a stale record keeps that record's alpha to give back.
+        if (mono == null && (c == null || !themeTone(c, lightText))) return false;
+        int nativeColor = mono != null ? (lightText ? 0xffffffff : 0xff000000) : c;
         android.graphics.drawable.Drawable bg = v.getBackground();
-        int bgAlpha = g != null && g.bg == bg ? g.bgAlpha : bg != null ? bg.getAlpha() : 255;
-        android.graphics.ColorFilter applied = new android.graphics.PorterDuffColorFilter(target, android.graphics.PorterDuff.Mode.SRC_IN);
+        int bgAlpha = bg == null ? 255 : bg.getAlpha();
         Glyph next;
         if (mono != null) {
             android.graphics.drawable.Drawable.ConstantState cs = mono.getConstantState();
             android.graphics.drawable.Drawable m = (cs != null ? cs.newDrawable(v.getResources()) : mono).mutate();
-            m.setColorFilter(applied);
             v.setImageDrawable(m);
-            next = new Glyph(m, d, null, applied, bg, bgAlpha);
+            next = new Glyph(m, d, null, nativeColor, bg, bgAlpha);
         } else {
-            // Its own state: the drawable may share a constant state (and paint) with the status bar's.
-            // Not our filter (returned above): the template's current one is what restore gives back.
             d = d.mutate();
-            android.graphics.ColorFilter saved = d.getColorFilter();
-            d.setColorFilter(applied);
-            next = new Glyph(d, null, saved, applied, bg, bgAlpha);
+            next = new Glyph(d, null, d.getColorFilter(), nativeColor, bg, bgAlpha);
         }
         if (bg != null) bg.mutate().setAlpha(0);
         glyphs.put(v, next);
+        InkAnimator.Target target = glyphTarget(v, next);
+        target.show(nativeColor);
+        InkAnimator.run(v, target, mirror(nativeColor), animate, null, null, timeline, true);
         return true;
+    }
+
+    private static InkAnimator.Target glyphTarget(ImageView view, Glyph glyph) {
+        return new InkAnimator.Target() {
+            @Override public int shown() { return glyph.current(view) ? glyph.color : ~glyph.color; }
+            @Override public void show(int color) {
+                if (glyph.applied != null && glyph.color == color && glyph.current(view)) return;
+                glyph.color = color;
+                glyph.applied = new android.graphics.PorterDuffColorFilter(color, android.graphics.PorterDuff.Mode.SRC_IN);
+                glyph.shown.setColorFilter(glyph.applied);
+                view.invalidate();
+            }
+        };
+    }
+
+    private static void finishGlyph(ImageView view, Glyph glyph) {
+        if (glyphs.get(view) != glyph) return;
+        Rec leaving = restoring.remove(view);
+        boolean moving = InkAnimator.ownsShown(view);
+        InkAnimator.cancel(view);
+        if (leaving != null && moving) new Icon(view).restore(leaving.saved);
+        glyphs.remove(view);
+        restore(view, glyph);
     }
     private static void restore(ImageView v, Glyph g) {
         if (g.current(v)) {
@@ -391,9 +430,10 @@ final class Foreground {
     private static final WeakHashMap<ImageView,Chevron> chevrons=new WeakHashMap<>();
     /** Chevrons moving back to their own colour (the record to restore when the transition ends). */
     private static final WeakHashMap<ImageView,Chevron> restoringChevrons=new WeakHashMap<>();
-    static boolean trackingChevrons() { return !chevrons.isEmpty(); }
+    static boolean trackingChevrons() { return !chevrons.isEmpty() || !restoringChevrons.isEmpty(); }
     static void beforeChevronDrawable(ImageView view,android.graphics.drawable.Drawable incoming) {
         Chevron r=chevrons.get(view);
+        if(r==null)r=restoringChevrons.get(view);
         if(r==null||incoming==null)return;
         android.graphics.drawable.Drawable previous=r.drawable.get();
         if(previous!=null&&previous!=incoming&&previous.getColorFilter()==r.appliedFilter)
@@ -431,7 +471,13 @@ final class Foreground {
     private static boolean chevron(ImageView v,boolean swap,boolean lightText) {
         Chevron r=chevrons.get(v);
         if(!swap){
-            if(r==null)return false;
+            if(r==null){
+                if (!animating) {
+                    Chevron leaving = restoringChevrons.remove(v);
+                    if (leaving != null) { InkAnimator.cancel(v); leaving.restore(v); return true; }
+                }
+                return false;
+            }
             chevrons.remove(v);
             Integer back=animating&&r.current(v)?nativeChevron(v,r):null;
             if(back==null){InkAnimator.cancel(v);r.restore(v);return true;}
@@ -443,24 +489,27 @@ final class Foreground {
                 try{record.restore(v);}finally{applying=before;}
             };
             // Done or overridden by SystemUI: either way only what is still ours is put back.
-            InkAnimator.run(v,chevronTarget(v,r),back,true,restore,restore);
+            InkAnimator.run(v,chevronTarget(v,r),back,true,restore,restore,timeline,false);
             return true;
         }
         Chevron leaving=restoringChevrons.remove(v);
-        Integer resumeFrom=null;
         if(leaving!=null){
-            // Swapped again while moving back: finish the restore now so the record below
-            // remembers the native filters, then continue from the colour on screen.
-            if(InkAnimator.running(v)&&leaving.current(v))resumeFrom=leaving.color;
+            if(leaving.current(v)){
+                Integer from = nativeChevron(v, leaving);
+                int nativeColor = from == null ? (lightText ? 0xffffffff : 0xff1d1d1d) : from;
+                chevrons.put(v, leaving);
+                InkAnimator.run(v, chevronTarget(v, leaving), mirror(nativeColor), animating, null, null,
+                        timeline, false);
+                return true;
+            }
             InkAnimator.cancel(v);
-            boolean before=applying;applying=true;
-            try{leaving.restore(v);}finally{applying=before;}
+            leaving.restore(v);
             r=null;
         }
         if(r!=null&&r.current(v)&&r.lightText==lightText)return false;
         if(v.getDrawable()==null)return false;
         boolean fresh=r==null;
-        Integer shownBefore=r!=null&&r.current(v)?Integer.valueOf(r.color):resumeFrom;
+        Integer shownBefore=r!=null&&r.current(v)?Integer.valueOf(r.color):null;
         if(r==null){r=new Chevron(v);chevrons.put(v,r);}
         else {
             ColorStateList tint=v.getImageTintList();
@@ -480,7 +529,7 @@ final class Foreground {
         if(animating&&v.isShown()){
             // From the colour on screen: the native one on a first swap, the current one otherwise.
             paintChevron(v,r,shownBefore!=null?shownBefore:c);
-            InkAnimator.run(v,chevronTarget(v,r),mapped,true,null);
+            InkAnimator.run(v,chevronTarget(v,r),mapped,true,null,null,timeline,shownBefore==null);
         }else{InkAnimator.cancel(v);paintChevron(v,r,mapped);}
         if(chevronLogs++<8||io.github.igorcv88.oneuiliquidglass.diagnostics.Probe.trace)io.github.igorcv88.oneuiliquidglass.diagnostics.Probe.log("CHEVRON_TONE",
                 "view="+Integer.toHexString(System.identityHashCode(v))+" drawable="+Integer.toHexString(System.identityHashCode(v.getDrawable()))
@@ -544,20 +593,28 @@ final class Foreground {
     /**
      * {@code animate}: the tone changes on a card the user is looking at (a backdrop change while
      * it is shown), so text, tints and chevrons move to their new colour over a short transition
-     * (InkAnimator) instead of jumping; glyph filters and drawables still switch at once.
+     * (InkAnimator) instead of jumping.
      */
     static int apply(View root, boolean swap, boolean lightText, java.util.List<View> tracked, boolean animate) {
+        return apply(root, swap, lightText, tracked, animate, null);
+    }
+
+    static int apply(View root, boolean swap, boolean lightText, java.util.List<View> tracked,
+                     boolean animate, InkAnimator.Timeline transition) {
         if (tracked != null) tracked.clear();
         if (root == null) return 0;
         host = root.getContext().getPackageName();
         boolean before = animating;
-        applying = true; animating = animate;
-        try { return walk(root, swap, lightText, tracked); } finally { applying = false; animating = before; }
+        InkAnimator.Timeline previous = timeline;
+        applying = true; animating = animate; timeline = transition;
+        try { return walk(root, swap, lightText, tracked); }
+        finally { applying = false; animating = before; timeline = previous; }
     }
     /** Set by apply(..., animate): the views changed by this walk transition instead of jumping. */
     private static boolean animating;
+    private static InkAnimator.Timeline timeline;
     /** Views moving back to their own colours: what they get when the transition ends. */
-    private static final WeakHashMap<Object, Object> restoring = new WeakHashMap<>();
+    private static final WeakHashMap<Object, Rec> restoring = new WeakHashMap<>();
     /** One Ink as an animator target; its writes pass the colour interception as this class's own. */
     private static InkAnimator.Target target(Ink ink) {
         return new InkAnimator.Target() {
@@ -652,10 +709,12 @@ final class Foreground {
             if (v instanceof ImageView && chevrons.containsKey(v)) {
                 Chevron c=chevrons.get(v);
                 if (!c.current((ImageView)v)) {
-                    boolean before=applying;applying=true;
-                    try { chevron((ImageView)v,true,c.lightText); }
-                    finally { applying=before; }
+                    return "rebind";
                 }
+                continue;
+            }
+            if (v instanceof ImageView && glyphs.containsKey(v)) {
+                if (!glyphs.get(v).current((ImageView) v)) return "rebind";
                 continue;
             }
             if (UberRemoteViewsTone.owns(v)) {
@@ -671,11 +730,11 @@ final class Foreground {
             if (r == null) return "rebind";
             if (v instanceof TextView) {
                 if (r.custom && !textEligible(v)) return "surface";
-                if (((TextView) v).getCurrentTextColor() != r.applied && !InkAnimator.running(v)) return "rebind";
+                if (((TextView) v).getCurrentTextColor() != r.applied && !InkAnimator.ownsShown(v)) return "rebind";
             }
             else if (v instanceof ImageView) {
                 ColorStateList tint = ((ImageView) v).getImageTintList();
-                if ((tint == null || tint.getDefaultColor() != r.applied) && !InkAnimator.running(v)) return "rebind";
+                if ((tint == null || tint.getDefaultColor() != r.applied) && !InkAnimator.ownsShown(v)) return "rebind";
             }
         }
         lastDrift = null;
@@ -709,7 +768,7 @@ final class Foreground {
                             +" eligible="+eligible+" swap="+swap+" nativeColor="+Integer.toHexString(((TextView)v).getCurrentTextColor())
                             +" privateSurface="+!customSurface(v)+" tracked="+swapped.containsKey(v));
             }
-            if (eligible || swapped.containsKey(v)) {
+            if (eligible || swapped.containsKey(v) || restoring.containsKey(v)) {
                 changed += ink(new Text((TextView) v), swap && eligible, lightText, swapped, animating) ? 1 : 0;
                 Rec record = swapped.get(v);
                 if (record != null) record.custom = !standard(v, false);
@@ -717,18 +776,19 @@ final class Foreground {
             }
         } else if (v instanceof ImageView && ShelfIconTint.owns((ImageView) v)) {
             // The shade palette owns this glyph, including native-only monochrome icons.
-        } else if (v instanceof ImageView && (chevrons.containsKey(v) || chevronId(v))) {
+        } else if (v instanceof ImageView && (chevrons.containsKey(v) || restoringChevrons.containsKey(v) || chevronId(v))) {
             changed += chevron((ImageView)v,swap,lightText)?1:0;
         } else if (v instanceof ImageView && !NotificationIconTreatment.managed((ImageView) v)
                 && (glyphs.containsKey(v) || smallIcon(v))) {
             // icontone turned off live restores the glyphs already swapped.
-            changed += glyph((ImageView) v, swap && io.github.igorcv88.oneuiliquidglass.glass.Tuning.get().iconTone, lightText) ? 1 : 0;
+            changed += glyph((ImageView) v, swap && io.github.igorcv88.oneuiliquidglass.glass.Tuning.get().iconTone,
+                    lightText, timeline != null && animating) ? 1 : 0;
         } else if (v instanceof ImageView && (((ImageView) v).getImageTintList() != null || swapped.containsKey(v))) {
             ImageView i = (ImageView) v;
             if (i.getImageTintList() == null) swapped.remove(v);
             else if (standard(v, true)) changed += ink(new Icon(i), swap, lightText, swapped, animating) ? 1 : 0;
         }
-        if (tracked != null && swap && (swapped.containsKey(v) || chevrons.containsKey(v)
+        if (tracked != null && swap && (swapped.containsKey(v) || chevrons.containsKey(v) || glyphs.containsKey(v)
                 || UberRemoteViewsTone.owns(v) || NotificationProgressTone.owns(v))) tracked.add(v);
         if (v instanceof ViewGroup) {
             ViewGroup g = (ViewGroup) v;
@@ -757,53 +817,50 @@ final class Foreground {
     static boolean ink(Ink ink, boolean swap, boolean lightText, Map<Object, Rec> swapped, boolean animate) {
         Object key = ink.key();
         Rec r = swapped.get(key);
-        boolean moving = InkAnimator.running(key);
+        boolean moving = InkAnimator.ownsShown(key);
         int now = ink.color();
         if (!swap) {
-            if (r == null) return false;
+            Rec leaving = restoring.get(key);
+            if (r == null) {
+                if (animate || leaving == null) return false;
+                restoring.remove(key);
+                InkAnimator.cancel(key);
+                if (moving) ink.restore(leaving.saved);
+                return moving;
+            }
             swapped.remove(key);
-            // Mid-transition the colour on screen is ours even though it is not r.applied yet.
             if (now != r.applied && !moving) return false;
-            Object saved = r.saved;
-            if (!animate) { InkAnimator.cancel(key); ink.restore(saved); return true; }
-            restoring.put(key, saved);
-            InkAnimator.run(key, target(ink), ink.colorOf(saved), true, () -> {
+            if (!animate) { InkAnimator.cancel(key); ink.restore(r.saved); return true; }
+            restoring.put(key, r);
+            Rec record = r;
+            InkAnimator.run(key, target(ink), ink.colorOf(record.saved), true, () -> {
                 restoring.remove(key);
                 boolean before = applying; applying = true;
-                try { ink.restore(saved); } finally { applying = before; }
+                try { ink.restore(record.saved); } finally { applying = before; }
             }, () -> {
-                // SystemUI set its own colour mid-way: that colour stands; only the shadow comes back.
                 restoring.remove(key);
                 if (key instanceof TextView) reshadow((TextView) key);
-            });
+            }, timeline, false);
             return true;
         }
-        // Already moving to the swapped tone: let it finish.
         if (r != null && (now == r.applied || moving)) return false;
-        int shownNow = now;
-        Object back = restoring.remove(key);
-        // Only a restore still on screen is resumed; a finished or overridden one is history.
-        if (!moving) back = null;
-        if (back != null) {
-            // Moving back to its own colours: those are the original again, and the swap
-            // continues from the colour on screen instead of jumping to the original first.
+        Rec leaving = restoring.remove(key);
+        boolean reversing = leaving != null && moving;
+        int nativeColor = reversing ? ink.colorOf(leaving.saved) : now;
+        if (!themeTone(nativeColor, lightText)) {
             InkAnimator.cancel(key);
-            ink.restore(back);
-            now = ink.color();
-        }
-        if (!themeTone(now, lightText)) {
             if (r != null) swapped.remove(key);
-            if (back != null && shownNow != now) ink.set(now);
             return false;
         }
-        if (r == null) { r = new Rec(ink.save()); swapped.put(key, r); }
+        boolean fresh = r == null && !reversing;
+        if (reversing) r = leaving;
+        else if (r == null) r = new Rec(ink.save());
         else r.saved = ink.save();
+        swapped.put(key, r);
         r.lightText = lightText;
-        r.applied = mirror(now);
-        if (animate) {
-            if (back != null) ink.set(shownNow);
-            InkAnimator.run(key, target(ink), r.applied, true, null);
-        } else { InkAnimator.cancel(key); ink.set(r.applied); }
+        r.applied = mirror(nativeColor);
+        if (animate) InkAnimator.run(key, target(ink), r.applied, true, null, null, timeline, fresh);
+        else { InkAnimator.cancel(key); ink.set(r.applied); }
         return true;
     }
     static boolean textEligible(View v) {
