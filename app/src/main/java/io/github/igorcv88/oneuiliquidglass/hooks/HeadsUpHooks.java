@@ -2164,7 +2164,6 @@ public final class HeadsUpHooks {
             // At once, never ramped: a ramp would replay the previous opening's (or surface's) veil
             // for VEIL_RAMP_MS on a card that is starting over. Its pending text swap goes with it.
             pendingSwap = null; pendingLightStyle = null;
-            foregroundTimeline = null;
             if (veilRamp != null) { veilRamp.cancel(); veilRamp = null; }
             setForeground(false);
             if (wasTransitioning && !swapped && (liveCardGlass != null || !liveCardTones.containsKey(row.get())))
@@ -3342,12 +3341,19 @@ public final class HeadsUpHooks {
             // Every path to the native background (hidden, ineligible, failed draw or compose)
             // passes here: the text gets its own colours back in the same frame. A ramp still running
             // must not apply its pending swap to a card that is going native.
+            boolean restoringInk = foregroundTimeline != null && foregroundTimeline.active() && !swapped;
+            foregroundTimeline = null;
+            animateSwap = false;
             pendingSwap = null; pendingLightStyle = null;
             if (veilRamp != null) { veilRamp.cancel(); veilRamp = null; }
             // The shelf's text follows the shade's scene, not its glass: in the shade its native
             // background is drawn through material() -> release() on every frame, and restoring
             // here undid shelfTone() each redraw. shelfTone() restores it when the shade closes.
-            if (!pill) setForeground(false);
+            if (!pill) {
+                setForeground(false);
+                if (restoringInk && !liveCardTones.containsKey(row.get()))
+                    Foreground.apply(row.get(), false, ShadeTone.lightText(), swappedViews);
+            }
             if (glass == null) return;
             // The blur guard also blocked calls aimed at the row while this material was managed.
             boolean compositor = glassKind == Backdrop.Kind.SAMSUNG || glass.hybrid() || compBridge != null;

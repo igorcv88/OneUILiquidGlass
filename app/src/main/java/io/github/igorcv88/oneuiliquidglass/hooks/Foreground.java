@@ -68,6 +68,7 @@ final class Foreground {
                     && !textEligible((View) key))) {
                 restoring.remove(key);
                 InkAnimator.cancel(key);
+                if (key instanceof TextView) reshadow((TextView) key);
                 return null;
             }
             leaving.saved = saver.apply(color);

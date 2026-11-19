@@ -132,11 +132,11 @@ public class ForegroundTransitionTest {
         NotificationIconTreatment.Lease lease = new NotificationIconTreatment.Lease(
                 managed, new ColorDrawable(Color.WHITE), Color.WHITE);
 
-        InkAnimator.Timeline down = new InkAnimator.Timeline();
+        InkAnimator.Timeline down = new InkAnimator.Timeline(180);
         Foreground.apply(root, true, true, tracked, true, down);
         lease.tone(Color.BLACK, down, false);
         down.sealed = true;
-        idle(70);
+        InkAnimator.frame(down.start + 70);
         int intermediate = title.getCurrentTextColor();
         assertNotEquals(Color.WHITE, intermediate);
         assertNotEquals(Color.BLACK, intermediate);
@@ -144,17 +144,17 @@ public class ForegroundTransitionTest {
         assertEquals(Integer.valueOf(intermediate), Foreground.filterColor(icon.getDrawable().getColorFilter()));
         assertEquals(intermediate, lease.shownInk);
 
-        InkAnimator.Timeline up = new InkAnimator.Timeline();
+        InkAnimator.Timeline up = new InkAnimator.Timeline(180);
         Foreground.apply(root, false, true, tracked, true, up);
         lease.tone(Color.WHITE, up, false);
         up.sealed = true;
         assertEquals(intermediate, title.getCurrentTextColor());
         assertEquals(Integer.valueOf(intermediate), Foreground.filterColor(icon.getDrawable().getColorFilter()));
         assertEquals(intermediate, lease.shownInk);
-        idle(60);
+        InkAnimator.frame(up.start + 60);
         assertEquals(title.getCurrentTextColor(), expand.getImageTintList().getDefaultColor());
         assertEquals(title.getCurrentTextColor(), lease.shownInk);
-        idle(250);
+        InkAnimator.frame(up.start + 180);
         assertEquals(Color.WHITE, title.getCurrentTextColor());
         assertEquals(Color.WHITE, lease.shownInk);
         assertSame(original, icon.getImageTintList());
@@ -164,17 +164,18 @@ public class ForegroundTransitionTest {
     }
 
     @Test public void aReinflatedTitleJoinsTheInFlightCardDeadline() {
-        InkAnimator.Timeline transition = new InkAnimator.Timeline();
+        InkAnimator.Timeline transition = new InkAnimator.Timeline(180);
         Foreground.apply(root, true, true, tracked, true, transition);
         transition.sealed = true;
-        idle(65);
+        InkAnimator.frame(transition.start + 65);
         TextView rebound = new TextView(activity);
         rebound.setTextColor(Color.WHITE);
         root.addView(rebound);
         Foreground.apply(root, true, true, tracked, true, transition);
-        idle(32);
         assertEquals(title.getCurrentTextColor(), rebound.getCurrentTextColor());
-        idle(250);
+        InkAnimator.frame(transition.start + 96);
+        assertEquals(title.getCurrentTextColor(), rebound.getCurrentTextColor());
+        InkAnimator.frame(transition.start + 180);
         assertEquals(Color.BLACK, rebound.getCurrentTextColor());
         assertFalse(InkAnimator.running(rebound));
     }

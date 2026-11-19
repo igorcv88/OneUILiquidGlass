@@ -29,8 +29,12 @@ final class InkAnimator {
     /** One start and deadline for every eligible colour in a card's committed transition. */
     static final class Timeline {
         final long start = SystemClock.uptimeMillis();
-        final long duration = duration();
+        final long duration;
+        long lastFrame = start;
         boolean sealed;
+
+        Timeline() { this(duration()); }
+        Timeline(long duration) { this.duration = duration; }
 
         boolean active() { return SystemClock.uptimeMillis() - start < duration; }
     }
@@ -41,10 +45,11 @@ final class InkAnimator {
         final Runnable done, aborted;
         final long start, duration;
         final float joinedAt;
+        final Timeline timeline;
         int last;
-        Run(Target target, int from, int to, Runnable done, Runnable aborted, long start, long duration, float joinedAt) {
+        Run(Target target, int from, int to, Runnable done, Runnable aborted, long start, long duration, float joinedAt, Timeline timeline) {
             this.target = target; this.from = from; this.to = to; this.done = done; this.aborted = aborted;
-            this.start = start; this.duration = duration; this.joinedAt = joinedAt; last = from;
+            this.start = start; this.duration = duration; this.joinedAt = joinedAt; this.timeline = timeline; last = from;
         }
     }
     private static final Map<Object, Run> runs = new IdentityHashMap<>();
@@ -102,7 +107,7 @@ final class InkAnimator {
                     Timeline timeline, boolean joinFromNative) {
         runs.remove(key);
         int from = target.shown();
-        long now = SystemClock.uptimeMillis();
+        long now = timeline == null ? SystemClock.uptimeMillis() : timeline.lastFrame;
         long start = timeline == null ? now : timeline.start;
         long duration = !animate ? 0L : timeline == null ? duration() : timeline.duration;
         if (from == to || now - start >= duration) {
@@ -111,7 +116,7 @@ final class InkAnimator {
             return;
         }
         float joinedAt = joinFromNative || timeline == null || !timeline.sealed ? 0f : eased(now, start, duration);
-        Run run = new Run(target, from, to, done, aborted, start, duration, joinedAt);
+        Run run = new Run(target, from, to, done, aborted, start, duration, joinedAt, timeline);
         runs.put(key, run);
         if (joinFromNative && timeline != null && timeline.sealed) step(key, run, now);
         trace("start", key, run);
@@ -123,9 +128,9 @@ final class InkAnimator {
         Run current = runs.get(key);
         if (current == null || current.target.shown() != current.last) return null;
         if (current.to == to) return current.last;
-        long now = SystemClock.uptimeMillis();
+        long now = current.timeline == null ? SystemClock.uptimeMillis() : current.timeline.lastFrame;
         Run next = new Run(current.target, current.last, to, current.done, current.aborted,
-                current.start, current.duration, Math.min(0.999999f, eased(now, current.start, current.duration)));
+                current.start, current.duration, Math.min(0.999999f, eased(now, current.start, current.duration)), current.timeline);
         runs.put(key, next);
         return next.last;
     }
@@ -142,12 +147,11 @@ final class InkAnimator {
         clock = ValueAnimator.ofFloat(0f, 1f);
         clock.setDuration(1000);
         clock.setRepeatCount(ValueAnimator.INFINITE);
-        clock.addUpdateListener(a -> frame());
+        clock.addUpdateListener(a -> frame(SystemClock.uptimeMillis()));
         clock.start();
     }
 
-    private static void frame() {
-        long now = SystemClock.uptimeMillis();
+    static void frame(long now) {
         for (Map.Entry<Object, Run> e : new ArrayList<>(runs.entrySet())) {
             Run r = e.getValue();
             if (runs.get(e.getKey()) != r) continue;
@@ -168,6 +172,7 @@ final class InkAnimator {
             if (r.aborted != null) r.aborted.run();
             return;
         }
+        if (r.timeline != null) r.timeline.lastFrame = now;
         float t = Math.min(1f, (now - r.start) / (float) r.duration);
         float progress = InkTransition.ease(t);
         int c = InkTransition.lerp(r.from, r.to, (progress - r.joinedAt) / (1f - r.joinedAt));
