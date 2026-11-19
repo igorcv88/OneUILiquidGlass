@@ -41,6 +41,7 @@ final class Foreground {
     /** Whether a child row draws its own glass (and so its own tone); set by HeadsUpHooks. */
     static java.util.function.Predicate<View> ownsTone = v -> true;
     static java.util.function.Predicate<View> ownsLiveCardTone = v -> false;
+    static java.util.function.BiPredicate<View, View> ownsLiveCardFill = (root, fill) -> false;
     /** Set while this class changes colours itself: its own calls pass the interception untouched. */
     static boolean applying;
     /** Colour sets on swapped views redirected since the last read (interceptions()). */
@@ -886,12 +887,26 @@ final class Foreground {
      * No resource-id or publisher allowlist: RemoteViews can also contain labels without ids.
      */
     static boolean customSurface(View v) {
+        View liveFill = null;
         for (View p = v; p != null; ) {
-            if (ownsLiveCardTone.test(p) || p.getClass().getName().endsWith("ExpandableNotificationRow")) return p != v;
-            if (!clear(p.getBackground()) || !clear(p.getForeground())) return false;
-            ColorStateList tint = p.getBackgroundTintList();
-            if (p.getBackground() != null && tint != null && tint.getColorForState(p.getDrawableState(), tint.getDefaultColor()) >>> 24 != 0)
-                return false;
+            if (ownsLiveCardTone.test(p))
+                return p != v && (liveFill == null || ownsLiveCardFill.test(p, liveFill));
+            if (p.getClass().getName().endsWith("ExpandableNotificationRow"))
+                return p != v && liveFill == null;
+            if (!clear(p.getForeground())) return false;
+            android.graphics.drawable.Drawable background = p.getBackground();
+            if (background instanceof io.github.igorcv88.oneuiliquidglass.glass.LiveGlassDrawable
+                    && ((io.github.igorcv88.oneuiliquidglass.glass.LiveGlassDrawable) background).showsGlass()) {
+                // Defer the decision until the registered root confirms this exact fill.
+                if (liveFill != null) return false;
+                liveFill = p;
+            } else {
+                if (!clear(background)) return false;
+                ColorStateList tint = p.getBackgroundTintList();
+                if (background != null && tint != null
+                        && tint.getColorForState(p.getDrawableState(), tint.getDefaultColor()) >>> 24 != 0)
+                    return false;
+            }
             android.view.ViewParent parent = p.getParent();
             p = parent instanceof View ? (View) parent : null;
         }

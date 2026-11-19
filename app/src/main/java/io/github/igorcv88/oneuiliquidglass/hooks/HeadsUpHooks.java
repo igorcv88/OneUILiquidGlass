@@ -621,6 +621,11 @@ public final class HeadsUpHooks {
         // ran and its text stayed white on the group's light glass (TEXT_ROW app_name_text
         // ffffffff swapped=false, device log 26/10).
         Foreground.ownsLiveCardTone = liveCardTones::containsKey;
+        Foreground.ownsLiveCardFill = (root, fill) -> {
+            State state = liveCardTones.get(root);
+            return state != null && state.background.get() == fill
+                    && state.liveCardGlass == fill.getBackground() && state.liveCardGlass.showsGlass();
+        };
         Foreground.ownsTone = child -> {
             boolean shade = Boolean.TRUE.equals(shadeExpanded);
             for (State st : stateSnapshot())
