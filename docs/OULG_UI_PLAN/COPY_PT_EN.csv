@@ -1,0 +1,116 @@
+id,context,pt_BR,en,notes
+pc_blur,main control title,Desfoque,Blur,"Principal em todas as rotas; com lente é o multiplicador sf.hublur/kgblur"
+pc_blur_help,help,"Com a lente, escala o desfoque desenhado pelo vidro, na borda e no centro, mantendo a proporção entre eles.","With the lens, scales the blur drawn by the glass at the edge and the center, keeping their proportion.",
+pc_blur_help_standard,help,"Raio do desfoque do fundo atrás do cartão.","Radius of the background blur behind the card.",
+pc_system_blur,detail title,Desfoque do sistema,System blur,semradius/semradiuslens
+pc_system_blur_help,help,"Desfoque nativo da Samsung aplicado antes do vidro. Soma-se ao desfoque do vidro.","Samsung's native blur applied before the glass. It adds to the glass blur.",
+pc_edge_blur,detail title,Desfoque da borda,Edge blur,
+pc_center_blur,detail title,Desfoque do centro,Center blur,
+blur_effective_nominal,detail line,"Efetivo nominal: %1$s × %2$s = %3$s","Nominal effective: %1$s × %2$s = %3$s","ex.: 24 px × 115 % = 27,6 px"
+blur_chain_note,detail note,"O resultado final também inclui o desfoque do sistema e, quando ligado, o desfoque adaptativo.","The final result also includes the system blur and, when on, the adaptive blur.",
+pc_refraction,main title,Refração,Refraction,sf.hurefract/kgrefract
+pc_refraction_help,help,"Escala toda a distorção da lente: borda curva, menisco e corpo.","Scales all lens distortion: curved edge, meniscus and body.",
+pc_edge_refraction,title,Refração da borda,Edge refraction,sflens/kglens
+pc_edge_refraction_help,help,"Força da curvatura que o sistema aplica na borda do cartão. Diferente da Refração, que escala o efeito inteiro do vidro.","Strength of the curvature the system applies at the card edge. Different from Refraction, which scales the whole glass effect.",
+pc_brightening,main title,Clareamento,Brightening,"Nome preservado; sf.hclift/kclift"
+pc_saturation,main title,Saturação,Saturation,
+pc_meniscus,main title,Menisco,Meniscus,
+pc_edge_light,title,Luz pela borda,Edge light,
+pc_bloom_containment,detail title,Contenção de brilho,Bloom containment,sf.hubloom
+pc_bloom_containment_help,help,"Reduz o peso de pontos muito claros dentro do desfoque. Aumentar contém mais. Não espalha a luz.","Reduces the weight of very bright points inside the blur. Higher contains more. It does not spread light.",
+pc_highlight_neutrality,detail title,Neutralidade dos realces,Highlight neutrality,sf.hchlneutral
+pc_highlight_neutrality_help,help,"Tira a cor dos realces claros vistos através do vidro. Não espalha a luz. Requer Desfoque adaptativo.","Removes color from bright highlights seen through the glass. It does not spread light. Requires Adaptive blur.",
+pc_classic_white_neutrality,detail title,Neutralidade clássica dos brancos,Classic white neutrality,sf.hcneutral
+pc_classic_white_neutrality_help,help,"Ajuste anterior que aproxima brancos do neutro. Só age quando Clareamento, Saturação ou Escurecimento nas áreas claras estão em uso.","Earlier adjustment that pulls whites toward neutral. It acts only when Brightening, Saturation or Bright-area dimming is in use.",
+group_blur,group,Desfoque,Blur,
+group_refraction,group,Refração e forma,Refraction and shape,
+group_light,group,Luz e contorno,Light and outline,
+group_color,group,Cor e realces,Color and highlights,
+group_tone,group,Transparência e contraste,Transparency and contrast,
+section_appearance_details,section,Detalhes da aparência,Appearance details,
+section_behavior,section,Comportamento,Behavior,
+section_quick_settings,section,Central de controle,Quick panel,"mantém termo atual do app"
+restore_group,action,Restaurar grupo,Restore group,
+restore_group_confirm,dialog,"Restaurar os %1$d ajustes de “%2$s” para o padrão? Você pode desfazer.","Restore the %1$d settings in “%2$s” to default? You can undo.",
+state_active,state,Ativo,Active,
+state_pending,state,Aplicar para valer,Apply to take effect,
+state_inactive,state value,Inativo,Inactive,"substitui o número no valor"
+state_off,state value,Desligado,Off,
+state_read_only,state,Somente leitura,Read only,
+state_external,state,Alterado fora do app,Changed outside the app,
+state_unknown_compiled,state,Estado compilado desconhecido,Compiled state unknown,
+state_latent,sheet line,"Valor guardado: %1$s. Volta a valer quando este ajuste estiver ativo.","Saved value: %1$s. It applies again when this setting is active.",
+state_reactivated,notice,"O valor guardado voltará a valer ao aplicar.","The saved value will apply again when you apply.",
+apply_count,lens bar,"%1$d ajustes aguardando aplicação","%1$d settings waiting to apply",plural
+apply_list_changed,toast,"A lista mudou enquanto o diálogo estava aberto. Confira de novo.","The list changed while the dialog was open. Check it again.",
+apply_contradiction,error,"Configuração contraditória: %1$s. Ajuste um deles antes de aplicar.","Contradictory setup: %1$s. Change one of them before applying.",
+apply_inactive_drift,technical,"%1$d valores no sistema diferem do compilado, mas não têm efeito agora.","%1$d system values differ from the compiled ones but have no effect now.",
+error_style_order,error,"O limite claro precisa ficar abaixo do limite escuro.","The light threshold must stay below the dark threshold.",
+live_inherits,info,"Live Updates, Now Bar e avisos usam a aparência do pop-up e do bloqueio.","Live Updates, Now Bar and toasts use the pop-up and lock screen appearance.",
+favorites_migrated,notice,"%1$d favoritos técnicos saíram das listas principais. Eles continuam em Técnico.","%1$d technical favorites left the main lists. They remain in Technical.",
+settings_energy,section,Energia,Energy,
+energy_mode,title,Suspender o vidro com bateria baixa,Pause the glass on low battery,energymode
+energy_mode_never,choice,Nunca,Never,
+energy_mode_threshold,choice,Abaixo do limite,Below the limit,
+energy_threshold,title,Limite de bateria,Battery limit,
+energy_hysteresis,title,Retomar acima do limite em,Resume above the limit by,
+energy_charging,title,Manter o vidro carregando,Keep the glass while charging,
+energy_surfaces,title,Superfícies afetadas,Affected surfaces,
+energy_saver,title,Seguir a Economia de bateria,Follow Battery saver,
+energy_saver_help,help,"Desligado por padrão: o vidro continua igual com a Economia de bateria. Ligue para voltar ao comportamento antigo.","Off by default: the glass stays the same with Battery saver. Turn on to restore the old behavior.",
+energy_help,help,"Ao suspender, as superfícies voltam ao visual nativo da Samsung. Nada é reiniciado.","When paused, surfaces return to Samsung's native look. Nothing restarts.",
+energy_now_active,status,Agora: vidro ativo,Now: glass active,
+energy_now_low,status,"Agora: vidro suspenso em %1$s — bateria %2$d %% (limite %3$d %%)","Now: glass paused on %1$s — battery %2$d%% (limit %3$d%%)",
+energy_now_saver,status,Agora: suspenso pela Economia de bateria,Now: paused by Battery saver,
+energy_now_unknown,status,Estado do sistema desconhecido,System state unknown,
+energy_reported_at,status,Relatado às %1$s,Reported at %1$s,
+energy_home_notice,home,Vidro suspenso pela política de energia,Glass paused by the energy policy,
+settings_technical,section,Técnico e diagnóstico,Technical and diagnostics,
+technical_warning,banner,"Ajustes de backend para testes. Podem degradar a aparência ou o desempenho.","Backend settings for testing. They can degrade appearance or performance.",
+technical_group_route,group,Rota de desenho,Drawing route,
+technical_group_captured_band,group,Faixa de lente capturada,Captured lens strip,
+technical_group_capture,group,Captura,Capture,
+technical_group_samsung,group,Blur Samsung,Samsung blur,
+technical_group_kernel,group,Kernel do compositor,Compositor kernel,
+technical_group_lens_profile,group,Perfis ópticos,Optical profiles,
+technical_group_comparison,group,Comparações,Comparisons,
+technical_group_diagnostic,group,Diagnóstico,Diagnostics,
+technical_group_read_only,group,Estado do sistema (somente leitura),System state (read only),
+technical_group_legacy,group,Legado sem efeito,Legacy with no effect,
+material_per_card,choice,Por cartão (teste),Per card (test),"valor 2; só Técnico"
+state_pending_activation,state,Vale ao ativar a lente,Applies when the lens is activated,B2
+lens_not_loaded_banner,banner,"A lente não está carregada. Estes ajustes ficam salvos e valem quando você ativar a lente.","The lens is not loaded. These settings are saved and apply when you activate the lens.",B2
+activation_title,dialog,Ativar a lente,Activate the lens,B2
+activation_restore_group,group,Restaurar seus ajustes salvos (%1$d),Restore your saved settings (%1$d),B2
+activation_restore_origin,line,ausente no sistema,missing from the system,B2
+activation_changes_group,group,Suas alterações (%1$d),Your changes (%1$d),B2
+activation_external_group,group,Alterados fora do app (%1$d),Changed outside the app (%1$d),B2
+activation_dormant_group,group,Guardados sem efeito (%1$d),Saved without effect (%1$d),B2
+activation_lost_external_group,group,Valores anteriores do Terminal que não existem mais (%1$d),Earlier Terminal values that no longer exist (%1$d),B2
+activation_adopt,action,Adotar no app,Adopt in the app,B2
+compiled_historical,line,"Último compilado: %1$s, outra sessão do sistema","Last compiled: %1$s, another system session",B2
+plan_blocked_props,error,"Não foi possível ler as propriedades do sistema. Nada será aplicado até a leitura funcionar.","Could not read the system properties. Nothing will be applied until reading works.",B2
+import_mode_replace,choice,Substituir tudo,Replace everything,B2
+import_mode_merge,choice,Mesclar,Merge,B2
+import_group_changed,group,Alterados (%1$d),Changed (%1$d),B2
+import_group_added,group,Adicionados (%1$d),Added (%1$d),B2
+import_group_removed,group,Voltam ao padrão (%1$d),Return to default (%1$d),B2
+import_group_kept,group,Mantidos (%1$d),Kept (%1$d),B2
+import_group_dormant,group,Guardados sem efeito agora (%1$d),Saved with no effect now (%1$d),B2
+import_group_ignored,group,Ignorados (%1$d),Ignored (%1$d),B2
+import_use_backup_defaults,toggle,Usar os padrões do backup,Use the backup's defaults,B2
+import_adopt_terminal,toggle,Adotar valores do Terminal do arquivo,Adopt the file's Terminal values,B2
+import_needs_lens,line,"Depois de importar, aplique a lente para os ajustes do compositor valerem. Nada é reiniciado agora.","After importing, apply the lens for compositor settings to take effect. Nothing restarts now.",B2
+import_diagnostic_note,line,O arquivo também contém um diagnóstico do sistema; ele não é importado.,The file also contains a system diagnostic; it is not imported.,B2
+export_include_terminal,toggle,Incluir valores definidos pelo Terminal,Include values set from Terminal,B2
+undo_review_title,dialog,Desfazer: %1$s,Undo: %1$s,B2
+undo_previous_change,label,Alteração anterior,Previous change,B2
+provenance_line,line,"Última alteração: %1$s, %2$s","Last change: %1$s, %2$s",B2
+provenance_edit,label,edição,edit,B2
+provenance_reset,label,restaurar padrão,restore default,B2
+provenance_undo,label,desfazer,undo,B2
+provenance_import,label,importação,import,B2
+provenance_style,label,estilo,style,B2
+provenance_material,label,troca de material,material change,B2
+provenance_adopt,label,adotado do Terminal,adopted from Terminal,B2
+energy_surfaces_min,help,"Pelo menos uma superfície precisa continuar selecionada.","At least one surface must stay selected.",D

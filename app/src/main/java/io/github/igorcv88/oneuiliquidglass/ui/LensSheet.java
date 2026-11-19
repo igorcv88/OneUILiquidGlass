@@ -25,11 +25,13 @@ final class LensSheet extends Sheet {
     private final TextView protocol, maintenance;
     private final LinearLayout tools;
     private final AppModel.Listener listener = this::bind;
+    private final LensPlanView planView;
 
     LensSheet(Host host) {
         super(host.activity(), host.theme(), host.activity().getString(R.string.dynamic_lens));
         this.host = host;
         m = host.model();
+        planView = new LensPlanView(host);
         subtitle(activity.getString(R.string.lens_subtitle));
         LinearLayout card = Ui.card(activity, t);
         card.setPadding(t.dp(18), t.dp(16), t.dp(18), t.dp(16));
@@ -92,7 +94,9 @@ final class LensSheet extends Sheet {
     private void bind() {
         SfLiveController.Model model = m.lens.model();
         SfLive.State s = SfLive.state(model.status);
-        Map<String, String> pending = m.pendingCompositor();
+        PublicationPlan plan = m.plan();
+        Map<String, String> pending = plan == null ? Collections.<String, String>emptyMap() : plan.listed();
+        boolean blocked = plan != null && plan.blocked;
         boolean unverified = m.compositorUnverified();
         String title, text, action;
         boolean enabled = !model.busy && !m.root.busy();
@@ -126,7 +130,7 @@ final class LensSheet extends Sheet {
                 action = s == SfLive.State.UPDATE ? activity.getString(R.string.lens_install_test) : activity.getString(R.string.action_test);
                 break;
             case RESTART:
-                title = activity.getString(R.string.lens_ready);
+                title = activity.getString(R.string.activation_title);
                 text = activity.getString(R.string.lens_activate_desc);
                 action = activity.getString(R.string.lens_activate);
                 break;
@@ -177,27 +181,22 @@ final class LensSheet extends Sheet {
                 default: break;
             }
         }
+        if (blocked && !model.busy) {
+            text += "\n" + activity.getString(R.string.plan_blocked_props);
+            enabled = false;
+        }
+        text += historicalLine();
         state.setText(title);
         detail.setText(text);
         primary.setVisibility(action == null ? View.GONE : View.VISIBLE);
         if (action != null) primary.setText(action);
         primary.setEnabled(enabled);
         pendingBox.removeAllViews();
-        if (!pending.isEmpty()) {
+        if (plan != null && LensPlanView.hasContent(plan)) {
             pendingBox.addView(Ui.section(activity, t, activity.getString(R.string.lens_await_restart)));
-            LinearLayout card = Ui.card(activity, t);
-            card.setPadding(t.dp(18), t.dp(12), t.dp(18), t.dp(12));
-            StringBuilder b = new StringBuilder();
-            ControlState st = m.state();
-            for (Map.Entry<String, String> e : pending.entrySet()) {
-                Controls.Control c = Controls.get(e.getKey());
-                if (c == null) continue;
-                b.append(b.length() == 0 ? "" : "\n").append(ControlTitles.title(host.activity(), c)).append(" · ").append(SearchSheet.surfaces(host.activity(), c))
-                        .append(": ").append(ControlValues.display(host.activity(), c, from(e.getKey(), st))).append(" → ")
-                        .append(ControlValues.display(host.activity(), c, e.getValue()));
-            }
-            card.addView(Ui.text(activity, t, b, Theme.LABEL, t.ink, false));
-            pendingBox.addView(card, Ui.match());
+            LinearLayout list = Ui.column(activity);
+            planView.render(list, plan);
+            pendingBox.addView(list, Ui.match());
         } else if (unverified && s == SfLive.State.LOADED) {
             pendingBox.addView(Ui.text(activity, t,
                     activity.getString(R.string.lens_unverified_warning),
@@ -210,10 +209,13 @@ final class LensSheet extends Sheet {
         this.tools.setVisibility(tools);
     }
 
-    /** What the compositor runs now: the compiled (or last sent) value, else the property. */
-    private String from(String key, ControlState st) {
-        String compiled = m.compiledCompositor(key);
-        return compiled != null ? compiled : st.device(key);
+    /** A compile of another system session is history: said so, never used as the current state. */
+    private String historicalLine() {
+        CompiledEvidence evidence = m.compiledEvidence();
+        if (evidence.freshness != CompiledEvidence.Freshness.HISTORICAL || evidence.at <= 0) return "";
+        Date at = new Date(evidence.at);
+        return "\n" + activity.getString(R.string.compiled_historical,
+                DateFormat.getDateFormat(activity).format(at) + " " + DateFormat.getTimeFormat(activity).format(at));
     }
 
     private void next() {
@@ -261,12 +263,31 @@ final class LensSheet extends Sheet {
             host.feedback(activity.getString(R.string.lens_install_first));
             return;
         }
-        Map<String, String> pending = m.pendingCompositor();
-        Sheet s = new Sheet(activity, t, activity.getString(R.string.restart_userspace_title));
+        // Drafts are previews: dropped before the list is decided. The list is the plan's, from
+        // confirmed values only, and is revalidated when the person taps Restart.
+        m.clearDrafts();
+        PublicationPlan plan = m.plan();
+        if (plan == null) {
+            host.feedback(contradictionText());
+            return;
+        }
+        if (plan.blocked) {
+            host.feedback(activity.getString(R.string.plan_blocked_props));
+            return;
+        }
+        final String shown = plan.fingerprint;
+        Map<String, String> pending = plan.listed();
+        Sheet s = new Sheet(activity, t, activity.getString(plan.activation
+                ? R.string.activation_title : R.string.restart_userspace_title));
         s.text(activity.getString(R.string.lens_confirm_base)
                 + (pending.isEmpty() ? (m.compositorUnverified() ? activity.getString(R.string.lens_confirm_verify) : ".")
                         : pending.size() == 1 ? activity.getString(R.string.lens_confirm_one) : activity.getString(R.string.lens_confirm_many, pending.size()))
                 + "\n\n" + activity.getString(R.string.lens_confirm_fallback));
+        if (LensPlanView.hasContent(plan)) {
+            LinearLayout list = Ui.column(activity);
+            planView.render(list, plan);
+            s.body().addView(list, Ui.match(t.dp(4), 0));
+        }
         Toggle ack = new Toggle(activity, t);
         LinearLayout row = Ui.switchRow(activity, t, null, activity.getString(R.string.restart_saved_ack), null, ack);
         LinearLayout card = Ui.card(activity, t);
@@ -275,12 +296,55 @@ final class LensSheet extends Sheet {
         s.action(activity.getString(R.string.action_cancel), Ui.ButtonStyle.OUTLINED, s::dismiss);
         TextView go = s.action(activity.getString(R.string.restart_userspace), Ui.ButtonStyle.FILLED, () -> {
             s.dismiss();
-            m.lens.restartConfirmed(pending);
-            host.feedback(activity.getString(R.string.lens_applying));
+            revalidateAndRestart(shown);
         });
         go.setEnabled(false);
         ack.listener((x, on) -> go.setEnabled(on));
         s.show();
+    }
+
+    /**
+     * Re-reads the properties and compares the list with the one the person confirmed: a change
+     * made meanwhile (a Terminal write, another screen) reopens the dialog instead of restarting
+     * with a stale list.
+     */
+    private void revalidateAndRestart(String shown) {
+        m.refreshObserved(() -> {
+            switch (m.confirmPlan(shown)) {
+                case OK:
+                    PublicationPlan confirmed = m.plan();
+                    // The controller recomputes the plan with the status it reads itself and
+                    // aborts before writing if the confirmed fingerprint no longer holds.
+                    m.lens.restartConfirmed(confirmed.writeValues(), confirmed.fingerprint, m::planFingerprint);
+                    host.feedback(activity.getString(R.string.lens_applying));
+                    break;
+                case BLOCKED:
+                    host.feedback(activity.getString(R.string.plan_blocked_props));
+                    break;
+                case STALE:
+                    host.feedback(activity.getString(R.string.apply_list_changed));
+                    confirmRestart();
+                    break;
+                default:
+                    host.feedback(contradictionText());
+            }
+        });
+    }
+
+    private String contradictionText() {
+        return contradictionText(m, activity);
+    }
+
+    static String contradictionText(AppModel m, android.content.Context context) {
+        PlanContradiction c = m.contradiction();
+        StringBuilder keys = new StringBuilder();
+        if (c != null)
+            for (String key : c.keys) {
+                Controls.Control control = Controls.get(key);
+                keys.append(keys.length() == 0 ? "" : ", ")
+                        .append(control == null ? key : ControlTitles.title(context, control));
+            }
+        return context.getString(R.string.apply_contradiction, keys);
     }
 
     private void confirmRemove() {

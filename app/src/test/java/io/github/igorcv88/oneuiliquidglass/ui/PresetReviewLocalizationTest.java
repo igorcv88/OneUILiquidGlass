@@ -29,7 +29,7 @@ public class PresetReviewLocalizationTest {
     }
     @Test public void importErrorsIdentifyTheCauseInBothLanguages() throws Exception {
         Context base = RuntimeEnvironment.getApplication();
-        String[] inputs = {"{\"schemaVersion\":2}", "{\"schemaVersion\":1,\"enabled\":true,\"desired\":{\"mediaart\":25}}", "{\"schemaVersion\":1,\"enabled\":true,\"desired\":{\"mediaart\":\"bad\"}}", "{"};
+        String[] inputs = {"{\"schemaVersion\":3}", "{\"schemaVersion\":1,\"enabled\":true,\"desired\":{\"mediaart\":25}}", "{\"schemaVersion\":1,\"enabled\":true,\"desired\":{\"mediaart\":\"bad\"}}", "{"};
         String[][] expected = {{"This preset version is incompatible.", "The value for mediaart must be text.", "The value for mediaart is invalid."}, {"A versão deste preset é incompatível.", "O valor de mediaart deve ser texto.", "O valor de mediaart é inválido."}};
         int index = 0;
         for (String language : new String[] {AppLanguage.ENGLISH, AppLanguage.PORTUGUESE}) {

@@ -218,6 +218,12 @@ Gerada por `ControlMatrixTest` a partir de `SettingsRegistry`, `Controls`, `Appl
 | `qs.fill` | Espessura do preenchimento | Central | Central de controle · standard | float · 0.1–1 · .85 | glass/QsStyle, glass/QuickSettingsGlass, hooks/QuickSettingsHooks, hooks/QsSliderHooks | ao vivo | ativo | ativo | ativo |  | behavior | CM, SC |
 | `qs.lightstyle` | Estilo antigo (descontinuado) | Central | Central de controle · internal | enum · obsidian/light · light | glass/QsStyle, glass/QuickSettingsGlass, hooks/QuickSettingsHooks, hooks/QsSliderHooks | leitura | leitura | leitura | leitura |  | none | CM |
 | `sf.qslight` | Luz pela borda | Central | Central de controle · advanced | readonly · 0.90 | sfhook/oulg_sf.c | leitura | leitura | leitura | leitura |  | on_device | CM, CV |
+| `energymode` | Suspender o vidro com bateria baixa | Pop-up, Bloqueio, Central | Energia · standard | int · 0–1 · 0 | glass/EnergyPolicy | ao vivo | ativo | ativo | ativo |  | none | CM, SC |
+| `energythreshold` | Limite de bateria | Pop-up, Bloqueio, Central | Energia · standard | int · 5–50 · 20 | glass/EnergyPolicy | ao vivo | ativo | ativo | ativo |  | none | CM, SC |
+| `energyhysteresis` | Retomar acima do limite em | Pop-up, Bloqueio, Central | Energia · standard | int · 2–15 · 5 | glass/EnergyPolicy | ao vivo | ativo | ativo | ativo |  | none | CM, SC |
+| `energycharging` | Manter o vidro carregando | Pop-up, Bloqueio, Central | Energia · standard | boolean · 1 | glass/EnergyPolicy | ao vivo | ativo | ativo | ativo |  | none | CM |
+| `energysurfaces` | Superfícies afetadas | Pop-up, Bloqueio, Central | Energia · standard | int · 1–127 · 127 | glass/EnergyPolicy | ao vivo | ativo | ativo | ativo |  | none | CM, SC |
+| `energysaver` | Seguir a Economia de bateria | Pop-up, Bloqueio, Central | Energia · standard | boolean · 0 | glass/EnergyPolicy | ao vivo | ativo | ativo | ativo |  | none | CM |
 
 ## Interruptores de produto (fora de `debug.oulg.*`)
 

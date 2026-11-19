@@ -101,5 +101,9 @@
   "Transparente (estilo iOS)": "Clear (iOS style)",
   "Exige reiniciar o userspace": "Needs a userspace restart",
   "Por cartão (avançado)": "Per card (advanced)",
-  "Definido fora do app": "Set outside the app"
+  "Definido fora do app": "Set outside the app",
+  "Nunca": "Never",
+  "O vidro nunca é suspenso pela bateria": "The glass is never paused by the battery",
+  "Abaixo do limite": "Below the limit",
+  "Suspende o vidro nas superfícies escolhidas com bateria baixa": "Pauses the glass on the chosen surfaces when the battery is low"
 }

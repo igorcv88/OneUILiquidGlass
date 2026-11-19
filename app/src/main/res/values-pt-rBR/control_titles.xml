@@ -95,6 +95,7 @@
     <string name="control_title_5aaf82f5a308">Lente dinâmica</string>
     <string name="control_title_b43bb6ef2255">Lente do pop-up na entrada</string>
     <string name="control_title_404a512dbeda">Limite da uniformidade</string>
+    <string name="control_title_22006d89dbe8">Limite de bateria</string>
     <string name="control_title_b060e343d3f2">Limite para texto claro</string>
     <string name="control_title_ef3825b141ca">Limite para texto claro (lente)</string>
     <string name="control_title_7c47b0e7e366">Limite para texto escuro</string>
@@ -102,6 +103,7 @@
     <string name="control_title_5a234be298cb">Luz da linha externa</string>
     <string name="control_title_e5aac2df4c8e">Luz pela borda</string>
     <string name="control_title_256e11955fd8">Luz pela borda (lente)</string>
+    <string name="control_title_55329dc58a03">Manter o vidro carregando</string>
     <string name="control_title_924efb059063">Material da lente no bloqueio</string>
     <string name="control_title_c60839297a14">Material da lente no pop-up</string>
     <string name="control_title_0222fce643b7">Material do vidro</string>
@@ -142,10 +144,14 @@
     <string name="control_title_aecfbcfc899f">Refração de toda a lente</string>
     <string name="control_title_2b4b1681d963">Refração difusa do miolo</string>
     <string name="control_title_28658f422c8a">Registro detalhado de janelas</string>
+    <string name="control_title_371a620e4d49">Retomar acima do limite em</string>
     <string name="control_title_23907232c21c">Saturação</string>
     <string name="control_title_76f1a4366eb4">Saturação da captura</string>
     <string name="control_title_e5c959aaabfb">Saturação do vidro</string>
+    <string name="control_title_1bc37966ed28">Seguir a Economia de bateria</string>
     <string name="control_title_5df7b3c6b57c">Sombra da borda no vidro claro</string>
+    <string name="control_title_0f4c2427bf8c">Superfícies afetadas</string>
+    <string name="control_title_07e1a1d2614e">Suspender o vidro com bateria baixa</string>
     <string name="control_title_d6218cd33215">Tamanho dos ícones da barra de status</string>
     <string name="control_title_6fb27e5b7855">Tamanho dos ícones das notificações</string>
     <string name="control_title_936eb873bedb">Teto do desfoque interno</string>

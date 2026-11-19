@@ -111,11 +111,14 @@ public enum GlassMaterial {
      * a frosted one (docs/clear-glass/INTEGRATION_CONTRACT.md section 4 and UI_HANDOFF.md
      * sections 3 to 5). Shared knobs that keep acting on Clear (hurefract, hublur, taps,
      * hulight, hubloom, kgrefract, kgblur, kgtaps, kglight, kgdepth, kgglow, kgrim, kgspec,
-     * kgline, kgtilt, kgfixedrim) are deliberately absent.
+     * kgline, kgtilt, kgfixedrim) are deliberately absent. So are ramp, kgramp, kggradient and
+     * kgband: oulg_shift_base still runs on a Clear card, ramp/gradient change oulg_bw before
+     * oulg_lw = oulg_bw and kgband sets the light coordinates, all read after the Clear
+     * override (P-NEUTRAL decision, docs/OULG_UI_PLAN/EXECUTION_TRACKER.md).
      */
     private static final List<String> FROSTED_ONLY = Arrays.asList(
-            "core", "edgeblur", "ramp", "hubodylens",
-            "kgcore", "kgedgeblur", "kgcorecap", "kgramp", "kgblurexp", "kggradient", "kgband",
+            "core", "edgeblur", "hubodylens",
+            "kgcore", "kgedgeblur", "kgcorecap", "kgblurexp",
             "kgbodylens", "kgsat", "kgtone", "kgflat", "kglevel", "kgcool", "kgflatcap",
             "kgcoredim");
 
@@ -176,7 +179,6 @@ public enum GlassMaterial {
         m.put("sf.hcbody2", "0");
         m.put("sf.hcadapt", "1");
         m.put("sf.hcsat", "1.05");
-        m.put("sf.hclift", "0.3");
         m.put("sf.hcscrim", "0");
         m.put("sf.hcscrimmax", "0");
         m.put("sf.kcband", "0.42");

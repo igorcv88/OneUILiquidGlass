@@ -4,6 +4,7 @@ import android.content.Context;
 import io.github.igorcv88.oneuiliquidglass.R;
 import io.github.igorcv88.oneuiliquidglass.config.Controls;
 import io.github.igorcv88.oneuiliquidglass.config.ValueFormat;
+import io.github.igorcv88.oneuiliquidglass.config.product.ProductLayout;
 
 /** Formats visible values using app resources and the app locale. */
 final class ControlValues {
@@ -19,7 +20,15 @@ final class ControlValues {
         }
         if (c.format == Controls.Format.READONLY && raw.isEmpty())
             return context.getString(R.string.control_not_reported);
-        return ValueFormat.display(c, raw, context.getResources().getConfiguration().getLocales().get(0));
+        java.util.Locale locale = context.getResources().getConfiguration().getLocales().get(0);
+        if (ProductLayout.display(c.key) == ProductLayout.Display.MULTIPLIER_PERCENT) {
+            try {
+                return ValueFormat.percentOfMultiplier(Float.parseFloat(raw.trim()), locale);
+            } catch (NumberFormatException e) {
+                return raw;
+            }
+        }
+        return ValueFormat.display(c, raw, locale);
     }
     private ControlValues() {}
 }

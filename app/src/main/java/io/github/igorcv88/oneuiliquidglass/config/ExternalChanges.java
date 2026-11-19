@@ -25,6 +25,8 @@ final class ExternalChanges {
     static boolean conflict(SettingSpec spec, String baseline, String desired, String observed,
                             int baselineBoot, int currentBoot) {
         if (baseline == null) return false;
+        // An absent property is a reset (reboot, getprop reset) or an unreadable system, never an edit.
+        if (observed == null || observed.isEmpty()) return false;
         // Properties reset at reboot. A baseline from another boot is no evidence of an edit.
         if (baselineBoot != UNKNOWN_BOOT && currentBoot != UNKNOWN_BOOT
                 && baselineBoot != currentBoot) return false;

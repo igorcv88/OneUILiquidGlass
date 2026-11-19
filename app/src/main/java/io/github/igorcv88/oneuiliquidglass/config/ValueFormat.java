@@ -191,6 +191,49 @@ public final class ValueFormat {
         }
     }
 
+    // ---- multipliers shown as a percentage of 1 (docs/OULG_UI_PLAN/CONTROL_MAPPING.json "display")
+
+    /** 0.65 -> "65 %": the stored multiplier is unchanged; only the text is a percentage. */
+    public static String percentOfMultiplier(float multiplier) {
+        return percentOfMultiplier(multiplier, BR);
+    }
+
+    public static String percentOfMultiplier(float multiplier, Locale locale) {
+        return num(BigDecimal.valueOf(multiplier).multiply(BigDecimal.valueOf(100)).doubleValue(), 0, locale) + " %";
+    }
+
+    /** Stored multiplier -> the number typed in the editor (65 for 0.65). */
+    public static String multiplierToEdit(String raw, Locale locale) {
+        try {
+            return num(new BigDecimal(raw.trim()).multiply(BigDecimal.valueOf(100)).doubleValue(), 0, locale);
+        } catch (RuntimeException e) {
+            return raw;
+        }
+    }
+
+    /**
+     * Editor text ("65", "65 %", "65%", "65,5") -> the stored multiplier, on the registry step and
+     * inside its range. Throws IllegalArgumentException for anything else.
+     */
+    public static String multiplierFromEdit(Controls.Control c, String text) {
+        SettingSpec s = c.spec();
+        String t = text == null ? "" : text.trim().replace(',', '.').replace("%", "").trim();
+        BigDecimal percent;
+        try {
+            percent = new BigDecimal(t);
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("Digite um número");
+        }
+        double n = percent.movePointLeft(2).doubleValue();
+        if (s.step > 0)
+            n = BigDecimal.valueOf(n).divide(BigDecimal.valueOf(s.step), 0, RoundingMode.HALF_UP)
+                    .multiply(BigDecimal.valueOf(s.step)).doubleValue();
+        if (n < s.min || n > s.max)
+            throw new IllegalArgumentException("Use de " + percentOfMultiplier((float) s.min) + " a "
+                    + percentOfMultiplier((float) s.max));
+        return s.validate(plain(n));
+    }
+
     public static String plain(double n) {
         return BigDecimal.valueOf(n).setScale(6, RoundingMode.HALF_UP).stripTrailingZeros()
                 .toPlainString();

@@ -31,4 +31,10 @@ public class ExternalChangesTest {
         assertTrue(ExternalChanges.conflict(ramp, "1", "2", "3", 7, 7));
         assertFalse(ExternalChanges.conflict(ramp, null, "2", "3", 7, 7));
     }
+
+    @Test public void absentIsNotExternal() {
+        assertFalse("a reset property is not an edit", ExternalChanges.conflict(ramp, "1", "2", "", 7, 7));
+        assertFalse(ExternalChanges.conflict(ramp, "1", "2", null, 7, 7));
+        assertFalse(ExternalChanges.conflict(ramp, "1", "2", "", ExternalChanges.UNKNOWN_BOOT, 7));
+    }
 }

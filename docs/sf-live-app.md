@@ -154,11 +154,26 @@ new occurrence. This implementation has no device trace explaining the 27 Octobe
 
 ## Export provenance and defaults
 
-Schema 1 remains import-compatible. `desired` contains app overrides only; `observed` records a fresh
-unprivileged property snapshot (including an availability flag), and `verifiedRestart` records the
-historical generation/request time/input snapshot. Those diagnostic sections are **never imported**
-as desired settings. Their timestamps do not imply current health or per-shader compilation.
+Schema 2 (R6 B2) is the backup contract. `desired` holds every app override, dormant ones included;
+`implicitDefaults` lists each editable key the file does not override with the default of the writing
+version (`app.registry` is a SHA-1 of those defaults, `app.versionCode` the version), so an import can tell
+the file's defaults from this version's. `terminal` is empty unless the export dialog's "Include values set
+by the Terminal" switch was on (default off); its values are adopted only by an explicit choice on the
+import review. `diagnostic` (a fresh unprivileged property read with an availability flag, and the
+confirmed compile's generation, time, freshness and inputs) is evidence and is **never imported**.
+Schema 1 files still import: only `desired` is read, `observed`/`verifiedRestart` stay diagnostic. Unknown
+schemas and files over 128 KiB are refused, and a v2 file is validated in every block before anything
+changes. Import, a saved style, Restore defaults and Undo share one reviewed plan (Replace or Merge,
+groups changed/added/removed/kept/dormant/ignored) applied in one transaction with one Undo. Each saved
+value records its last operation (`src.<key>`, `srcAt.<key>`).
 A desired-only backup cannot reproduce Terminal-only settings or guarantee the complete appearance.
+
+Lens activation (R6 B2): after a reboot the lens is installed but not loaded, and the properties are
+gone. The next restart runs the helper in `rewrite`, which loads the lens, so the compile after it is
+judged with a virtual `sfrefract=1` in memory (never saved). The plan writes saved, usable-on-next-compile
+values that differ from what is observed (absent counts as the default), tagged RESTORE (observed absent)
+or CHANGE; values the next compile cannot use stay dormant. A compiled baseline whose generation is not
+the helper's current one is history and never produces drift. Unreadable properties block the plan.
 
 No defaults are changed by this userspace fix. `semradiuslens=22` remains the accepted test base;
 `core=90 / ramp=1 / taps=48` is a reproduced, visually rejected experiment, not a new-user preset.

@@ -15,6 +15,37 @@ public final class ConfigRepository {
     public static final Uri SNAPSHOT = Uri.parse("content://" + Config.AUTHORITY + "/v1/snapshot");
     public static final String PREFIX = "desired.", BASELINE = "baseline.";
     private static final String BASELINE_BOOT = "baselineBoot.";
+    /** Provenance of an override: the last operation that wrote it and when (one entry per key, not a log). */
+    private static final String SOURCE = "src.", SOURCE_AT = "srcAt.";
+
+    /** Which operation wrote an override. */
+    public enum Source { EDIT, RESET, UNDO, IMPORT, STYLE, MATERIAL, ADOPT }
+
+    public static final class Provenance {
+        public final Source source;
+        public final long at;
+
+        Provenance(Source source, long at) {
+            this.source = source;
+            this.at = at;
+        }
+    }
+
+    /** What Undo would restore: the saved values before the last operation, and which operation it was. */
+    public static final class UndoSnapshot {
+        /** The operation Undo takes back; null for a snapshot recorded before operations were named. */
+        public final Source label;
+        public final long at;
+        public final Map<String, String> overrides;
+        public final boolean enabled;
+
+        UndoSnapshot(Source label, long at, Map<String, String> overrides, boolean enabled) {
+            this.label = label;
+            this.at = at;
+            this.overrides = Collections.unmodifiableMap(overrides);
+            this.enabled = enabled;
+        }
+    }
     private final Context context;
     private final SharedPreferences prefs;
     private final int bootCount;
@@ -137,6 +168,8 @@ public final class ConfigRepository {
     }
 
     public boolean conflict(SettingSpec s) {
+        // An unreadable system proves nothing about the Terminal (the plan is blocked meanwhile).
+        if (!SystemPropertyReader.available()) return false;
         String baseline = prefs.getString(BASELINE + s.key, null);
         return ExternalChanges.conflict(s, baseline, prefs.getString(PREFIX + s.key, null),
                 SystemPropertyReader.read(s.key),
@@ -144,16 +177,31 @@ public final class ConfigRepository {
     }
 
     public synchronized void save(SettingSpec s, String value) {
+        save(s, value, Source.EDIT);
+    }
+
+    public synchronized void save(SettingSpec s, String value, Source source) {
         String normalized = s.validate(value);
         Map<String, String> update = new LinkedHashMap<>();
         update.put(s.key, normalized);
-        replace(update, false);
+        replace(update, false, null, source);
+    }
+
+    /** The last operation that wrote the override of {@code key}, or null when none is recorded. */
+    public Provenance provenance(String key) {
+        String name = prefs.getString(SOURCE + key, null);
+        if (name == null) return null;
+        try {
+            return new Provenance(Source.valueOf(name), prefs.getLong(SOURCE_AT + key, 0));
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 
     public synchronized void flag(String key, boolean value) {
         if (!ProductFlags.known(key) && !key.equals(Config.KEY_ENABLED))
             throw new IllegalArgumentException(key);
-        snapshot();
+        snapshot(Source.EDIT);
         prefs.edit()
                 .putBoolean(key, value)
                 .putLong("generation", generation() + 1)
@@ -170,7 +218,7 @@ public final class ConfigRepository {
             if (s != null && s.type != SettingSpec.Type.READONLY && !s.helperOwned())
                 defaults.put(key, s.defaultValue);
         }
-        if (!defaults.isEmpty()) replace(defaults, false);
+        if (!defaults.isEmpty()) replace(defaults, false, null, Source.RESET);
     }
 
     public long lastChange() {
@@ -198,6 +246,20 @@ public final class ConfigRepository {
 
     /** Values and, when not null, the master switch in one edit with one undo snapshot. */
     public synchronized void replace(Map<String, String> values, boolean clear, Boolean enabled) {
+        replace(values, clear, enabled, Source.EDIT);
+    }
+
+    /**
+     * Saves exactly {@code result} (everything else is dropped) and the master switch in one
+     * transaction with one undo snapshot: what an import plan decided, nothing more.
+     */
+    public synchronized void replaceAll(Map<String, String> result, Boolean enabled, Source source) {
+        replace(result, true, enabled, source);
+    }
+
+    /** The transaction behind every write: values, master switch, undo snapshot and provenance. */
+    public synchronized void replace(
+            Map<String, String> values, boolean clear, Boolean enabled, Source source) {
         Map<String, String> checked = new LinkedHashMap<>();
         for (Map.Entry<String, String> e : values.entrySet()) {
             SettingSpec s = SettingsRegistry.get(e.getKey());
@@ -211,7 +273,8 @@ public final class ConfigRepository {
         boolean affectsRunningEngine = clear || enabled != null;
         for (String key : checked.keySet())
             if (!IconSettings.contains(key)) affectsRunningEngine = true;
-        snapshot();
+        snapshot(source);
+        long now = System.currentTimeMillis();
         SharedPreferences.Editor edit = prefs.edit();
         for (String key : IconSettings.keys()) {
             if (!checked.containsKey(key) && !clear) continue;
@@ -224,7 +287,8 @@ public final class ConfigRepository {
         if (clear)
             for (String key : prefs.getAll().keySet())
                 if (key.startsWith(PREFIX) || key.startsWith(BASELINE)
-                        || key.startsWith(BASELINE_BOOT) || ProductFlags.known(key))
+                        || key.startsWith(BASELINE_BOOT) || key.startsWith(SOURCE)
+                        || key.startsWith(SOURCE_AT) || ProductFlags.known(key))
                     edit.remove(key);
         for (Map.Entry<String, String> e : checked.entrySet()) {
             if (ProductFlags.known(e.getKey()))
@@ -232,7 +296,9 @@ public final class ConfigRepository {
             else
                 edit.putString(PREFIX + e.getKey(), e.getValue())
                         .putString(BASELINE + e.getKey(), SystemPropertyReader.read(e.getKey()))
-                        .putInt(BASELINE_BOOT + e.getKey(), bootCount);
+                        .putInt(BASELINE_BOOT + e.getKey(), bootCount)
+                        .putString(SOURCE + e.getKey(), source.name())
+                        .putLong(SOURCE_AT + e.getKey(), now);
         }
         if (enabled != null) edit.putBoolean(Config.KEY_ENABLED, enabled);
         if (affectsRunningEngine) edit.putLong("generation", generation() + 1)
@@ -254,19 +320,22 @@ public final class ConfigRepository {
         edit.commit();
     }
 
-    private void snapshot() {
+    /** {@code operation} is what is about to be done: it is what Undo will name. */
+    private void snapshot(Source operation) {
         // Undo refers to the visible desired edits, including un-applied icon values.
         org.json.JSONObject json = new org.json.JSONObject(overrides());
         prefs.edit()
                 .putString("undo", json.toString())
                 .putBoolean("undo.enabled", prefs.getBoolean(Config.KEY_ENABLED, false))
+                .putString("undo.label", operation.name())
+                .putLong("undo.at", System.currentTimeMillis())
                 .apply();
     }
 
-    public synchronized boolean undo() {
+    /** The snapshot Undo would restore, or null; one saved before operations were named has no label. */
+    public synchronized UndoSnapshot undoSnapshot() {
         String previous = prefs.getString("undo", null);
-        if (previous == null) return false;
-        boolean enabled = prefs.getBoolean("undo.enabled", false);
+        if (previous == null) return null;
         try {
             org.json.JSONObject json = new org.json.JSONObject(previous);
             Map<String, String> map = new LinkedHashMap<>();
@@ -275,24 +344,36 @@ public final class ConfigRepository {
                 String key = keys.next();
                 map.put(key, json.getString(key));
             }
-            replace(map, true);
-            prefs.edit().putBoolean(Config.KEY_ENABLED, enabled).apply();
-            notifyChanged();
-            return true;
+            Source label = null;
+            try {
+                String name = prefs.getString("undo.label", null);
+                if (name != null) label = Source.valueOf(name);
+            } catch (IllegalArgumentException ignored) {
+                // An unknown label reads as an unnamed snapshot.
+            }
+            return new UndoSnapshot(label, prefs.getLong("undo.at", 0), map, prefs.getBoolean("undo.enabled", false));
         } catch (org.json.JSONException e) {
-            return false;
+            return null;
         }
     }
 
+    public synchronized boolean undo() {
+        UndoSnapshot previous = undoSnapshot();
+        if (previous == null) return false;
+        replace(previous.overrides, true, previous.enabled, Source.UNDO);
+        return true;
+    }
+
     public synchronized void releaseToExternal(SettingSpec s) {
-        snapshot();
+        snapshot(Source.EDIT);
         SharedPreferences.Editor edit = prefs.edit();
         if (IconSettings.contains(s.key) && !prefs.contains(IconSettings.APPLIED_PREFIX + s.key)) {
             String before = prefs.getString(PREFIX + s.key, null);
             edit.putString(IconSettings.APPLIED_PREFIX + s.key,
                     before == null ? IconSettings.ABSENT : before);
         }
-        edit.remove(PREFIX + s.key).remove(BASELINE + s.key).remove(BASELINE_BOOT + s.key);
+        edit.remove(PREFIX + s.key).remove(BASELINE + s.key).remove(BASELINE_BOOT + s.key)
+                .remove(SOURCE + s.key).remove(SOURCE_AT + s.key);
         if (!IconSettings.contains(s.key)) edit.putLong("generation", generation() + 1);
         edit.apply();
         if (!IconSettings.contains(s.key)) notifyChanged();

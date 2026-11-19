@@ -37,6 +37,8 @@ public final class Controls {
         LENS_TUNING("Lente dinâmica"),
         /** Central only, with its own opt-in: drawn as one block of its own (SurfacesPage). */
         QUICK_SETTINGS("Central de controle"),
+        /** Settings › Energia only: never listed on Surfaces, in Search or in Technical. */
+        ENERGY("Energia"),
         TECHNICAL("Técnico");
 
         public final String label;
@@ -255,6 +257,7 @@ public final class Controls {
             MOTION = Section.MOTION,
             LENS = Section.LENS_TUNING,
             QS = Section.QUICK_SETTINGS,
+            ENERGY = Section.ENERGY,
             TECH = Section.TECHNICAL;
     private static final Tier STD = Tier.STANDARD, ADV = Tier.ADVANCED, TEC = Tier.TECHNICAL;
     private static final Preview FAITH = Preview.FAITHFUL,
@@ -1048,6 +1051,21 @@ public final class Controls {
                 .help("Suaviza as áreas mais claras atrás dos cartões da tela de bloqueio." + restart));
         put(c("sf.kccool", "Tom frio do vidro").fmt(Format.PERCENT_1).in(COLOR, ADV).on(KG)
                 .help("Dá um tom frio, azulado, ao vidro da tela de bloqueio sem mudar o brilho." + restart));
+        // Energia: só em Configurações › Energia (ui/EnergySection); nunca em Superfícies, Busca ou Técnico.
+        put(c("energymode", "Suspender o vidro com bateria baixa").fmt(Format.CHOICE).in(ENERGY, STD).all()
+                .help("Nunca: o vidro não muda com a bateria. Abaixo do limite: nas superfícies escolhidas, o visual nativo da Samsung volta enquanto a bateria estiver baixa.")
+                .choice("0", "Nunca", "O vidro nunca é suspenso pela bateria")
+                .choice("1", "Abaixo do limite", "Suspende o vidro nas superfícies escolhidas com bateria baixa"));
+        put(c("energythreshold", "Limite de bateria").fmt(Format.PLAIN).in(ENERGY, STD).all()
+                .help("O vidro é suspenso quando a bateria chega a esse nível ou fica abaixo dele."));
+        put(c("energyhysteresis", "Retomar acima do limite em").fmt(Format.PLAIN).in(ENERGY, STD).all()
+                .help("O vidro só volta quando a bateria passa do limite por esta margem, para não alternar sem parar."));
+        put(c("energycharging", "Manter o vidro carregando").fmt(Format.TOGGLE).in(ENERGY, STD).all()
+                .help("Enquanto o aparelho carrega, o vidro continua ativo mesmo com bateria baixa."));
+        put(c("energysurfaces", "Superfícies afetadas").fmt(Format.PLAIN).in(ENERGY, STD).all()
+                .help("Quais superfícies voltam ao visual nativo quando a política suspende o vidro."));
+        put(c("energysaver", "Seguir a Economia de bateria").fmt(Format.TOGGLE).in(ENERGY, STD).all()
+                .help("Desligado por padrão: o vidro continua igual com a Economia de bateria. Ligue para suspender o vidro enquanto ela estiver ativa."));
     }
 
     public static Control get(String key) {

@@ -214,7 +214,7 @@
     <string name="section_glass">Glass and blur</string>
     <string name="section_edges">Edges and highlights</string>
     <string name="section_color">Color and contrast</string>
-    <string name="section_behavior">Behavior</string>
+    <string name="selector_per_card">Per card (advanced)</string>
     <string name="section_motion">Lens and motion</string>
     <string name="section_lens">Dynamic lens</string>
     <string name="section_qs">Quick Settings</string>
@@ -507,7 +507,6 @@
     <string name="material_scope">Available for pop-ups and the lock screen. The shade, Quick Settings, Now Bar and toasts keep their current look.</string>
     <string name="material_frosted">Frosted</string>
     <string name="material_clear">Clear (iOS style)</string>
-    <string name="material_per_card">Per card (advanced)</string>
     <string name="material_saved">Material saved.</string>
     <string name="material_saved_pending">Saved. It applies after the compositor restarts.</string>
     <string name="material_saved_unavailable">Saved. Clear needs the dynamic lens.</string>
@@ -531,4 +530,9 @@
     <string name="search_material_clear">Clear glass only</string>
     <string name="search_material_frosted">Frosted glass only</string>
     <string name="control_caution_contrast">Can reduce text contrast</string>
+    <string name="group_active_count">%1$d of %2$d active</string>
+    <string name="control_affects">Affects: %1$s</string>
+    <string name="details_title">Details</string>
+    <string name="restore_group_nothing">Nothing to restore in this group</string>
+    <string name="search_path_main">Main</string>
 </resources>

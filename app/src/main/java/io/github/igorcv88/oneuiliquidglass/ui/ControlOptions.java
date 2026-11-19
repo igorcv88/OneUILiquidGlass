@@ -10,6 +10,7 @@ final class ControlOptions {
         switch (value) {
             case "10 %": return R.string.control_option_ec6472de3478;
             case "25 %": return R.string.control_option_4d04d593eab2;
+            case "Abaixo do limite": return R.string.control_option_20d73871dda7;
             case "Acompanha o cartão durante gestos": return R.string.control_option_3c5d28cf50f3;
             case "Adaptativa": return R.string.control_option_8d954776f1cd;
             case "Adaptativa original": return R.string.control_option_0a0e3b18cbfb;
@@ -76,7 +77,9 @@ final class ControlOptions {
             case "Nenhuma": return R.string.control_option_761716310a91;
             case "Neutra sob a lente, herdada nos demais": return R.string.control_option_f78db5410a48;
             case "No cartão": return R.string.control_option_9935aac96730;
+            case "Nunca": return R.string.control_option_f951a9952b5c;
             case "O mesmo material dos pop-ups": return R.string.control_option_31310ebb3669;
+            case "O vidro nunca é suspenso pela bateria": return R.string.control_option_cca95c2218a9;
             case "Original": return R.string.control_option_c0a8060f3b11;
             case "Padrão": return R.string.control_option_d8e00743b1a4;
             case "Padrão: preserva os aplicativos do usuário e seus packs": return R.string.control_option_bc563cb30bb5;
@@ -101,6 +104,7 @@ final class ControlOptions {
             case "Sistema e serviços": return R.string.control_option_04ffe2381fff;
             case "Somente o desfoque do sistema": return R.string.control_option_655a7c7b8a0f;
             case "Sonda de composição": return R.string.control_option_d97225752710;
+            case "Suspende o vidro nas superfícies escolhidas com bateria baixa": return R.string.control_option_d3a6e02d6bec;
             case "Só movimentos horizontais e dois dedos": return R.string.control_option_4ec6fa29d300;
             case "Textura sintética numerada": return R.string.control_option_0706bd786e3a;
             case "Todos": return R.string.control_option_a4114a83f4c6;

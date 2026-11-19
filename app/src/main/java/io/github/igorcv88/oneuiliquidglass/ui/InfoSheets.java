@@ -169,10 +169,7 @@ final class InfoSheets {
                     if (m.lens.model().busy) {
                         host.feedback(a.getString(R.string.restart_lens_busy));
                     } else {
-                        // No new values: preserve the current compositor properties.
-                        // The helper checks its install/selftest and reinjects before restarting zygote.
-                        m.lens.restartConfirmed(Collections.emptyMap());
-                        host.feedback(a.getString(R.string.restart_lens_started));
+                        reinjectLens(host);
                     }
                     return;
                 }
@@ -189,6 +186,29 @@ final class InfoSheets {
         go.setEnabled(false);
         ack.listener((x, on) -> go.setEnabled(on));
         s.show();
+    }
+
+    /**
+     * The userspace restart that keeps the lens goes through the plan the Apply dialog uses: the
+     * properties were just refreshed, so the plan is current, and the controller checks its
+     * fingerprint again on the worker before writing. A restart that wrote nothing would compile
+     * defaults after a reboot.
+     */
+    private static void reinjectLens(Host host) {
+        android.app.Activity a = host.activity();
+        AppModel m = host.model();
+        AppModel.Reinject plan = m.reinjectPlan();
+        switch (plan.outcome) {
+            case BLOCKED:
+                host.feedback(a.getString(R.string.plan_blocked_props));
+                return;
+            case CONTRADICTION:
+                host.feedback(LensSheet.contradictionText(m, a));
+                return;
+            default:
+                m.lens.restartConfirmed(plan.writes, plan.fingerprint, m::planFingerprint);
+                host.feedback(a.getString(R.string.restart_lens_started));
+        }
     }
 
     /** A Terminal changed a value the app also saves: choose which one wins. */

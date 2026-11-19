@@ -1,0 +1,137 @@
+{
+  "schema": 1,
+  "baseline": "4f3311478f439c598ad33b3de6fec3bc55855d68",
+  "notes": [
+    "Source of truth for tools/generate-product-layout.py (task T05). Stored keys, domains and defaults are NOT changed by this file.",
+    "Route tokens: S=STANDARD, F=LENS_FROSTED, C=LENS_CLEAR, X=CAPTURE, P=PLAIN_BLUR. LENS_MIXED (per-card selector 2, or HU/KG selectors disagree) = union of F and C, order of F first then C-only keys. Shade under the lens uses F (shade has no material).",
+    "A key listed in main[route] is removed from every details group of the same (surface, route) (dedupe by the generator, not by hand).",
+    "A details entry 'key@F,C' is structurally relevant only on those routes; outside them it is hidden (not disabled). Inside them, Applicability decides ACTIVE / NEEDS_RESTART / INACTIVE (disabled with reason).",
+    "display: MULTIPLIER_PERCENT shows value*100 with % (1 -> 100 %), storage unchanged; PX, PERCENT_1, PERCENT_255, GAIN keep the existing Controls.Format."
+  ],
+  "routes": {
+    "derive": "Mode.of(confirmed) -> STANDARD|CAPTURE|PLAIN_BLUR; DYNAMIC_LENS + GlassMaterial.forSurface(confirmed, surface): CLEAR->LENS_CLEAR, FROSTED->LENS_FROSTED, null (2 or disagreement)->LENS_MIXED; surface SHADE + DYNAMIC_LENS -> LENS_FROSTED"
+  },
+  "groups": [
+    {"id": "blur", "order": 10, "icon": "BLUR"},
+    {"id": "refraction", "order": 20, "icon": "LENS"},
+    {"id": "light", "order": 30, "icon": "SPARKLE"},
+    {"id": "color", "order": 40, "icon": "PALETTE"},
+    {"id": "tone", "order": 50, "icon": "CONTRAST"}
+  ],
+  "display": {
+    "sf.hublur": "MULTIPLIER_PERCENT",
+    "sf.kgblur": "MULTIPLIER_PERCENT",
+    "sf.hurefract": "MULTIPLIER_PERCENT",
+    "sf.kgrefract": "MULTIPLIER_PERCENT"
+  },
+  "product_titles": {
+    "sf.hublur": "pc_blur",
+    "sf.kgblur": "pc_blur",
+    "sf.hurefract": "pc_refraction",
+    "sf.kgrefract": "pc_refraction",
+    "liveradius": "pc_blur",
+    "liveshaderadius": "pc_blur",
+    "kgblurradius": "pc_blur",
+    "semradius": "pc_system_blur",
+    "semradiuslens": "pc_system_blur",
+    "sflens": "pc_edge_refraction",
+    "kglens": "pc_edge_refraction",
+    "sf.hclift": "pc_brightening",
+    "sf.kclift": "pc_brightening",
+    "sf.hcsat": "pc_saturation",
+    "sf.kcsat": "pc_saturation",
+    "sf.hcfold": "pc_meniscus",
+    "sf.kcfold": "pc_meniscus",
+    "sf.hcedge": "pc_edge_blur",
+    "sf.kcedge": "pc_edge_blur",
+    "sf.edgeblur": "pc_edge_blur",
+    "sf.kgedgeblur": "pc_edge_blur",
+    "sf.hccore": "pc_center_blur",
+    "sf.kccore": "pc_center_blur",
+    "sf.core": "pc_center_blur",
+    "sf.kgcore": "pc_center_blur",
+    "sf.hubloom": "pc_bloom_containment",
+    "sf.hchlneutral": "pc_highlight_neutrality",
+    "sf.hcneutral": "pc_classic_white_neutrality",
+    "sf.hulight": "pc_edge_light",
+    "sf.kglight": "pc_edge_light",
+    "sf.shadelight": "pc_edge_light"
+  },
+  "surfaces": {
+    "headsup": {
+      "main": {
+        "S": ["liveradius", "livedarkfill", "lightglass", "liverim", "liveglint"],
+        "F": ["sf.hublur", "sf.hurefract", "sflens", "sf.hulight", "lightglass"],
+        "C": ["sf.hublur", "sf.hurefract", "sf.hclift", "sf.hcsat", "sf.hcfold"],
+        "X": ["lightglass", "textswap", "veilmax"],
+        "P": ["lightglass", "textswap"]
+      },
+      "details": {
+        "blur": ["semradiuslens@F,C", "sf.hcedge@C", "sf.hccore@C", "sf.hcblurexp@C", "sf.hcadapt@C", "sf.edgeblur@F", "sf.core@F"],
+        "refraction": ["sflens@C", "sf.hcband@C", "sf.hcamp@C", "sf.hcbody@C", "sf.hcbody2@C", "sf.hubodylens@F"],
+        "light": ["sf.hulight@C", "popuplinegain@S,F,C,X,P", "liveoptics@S", "livesheen@S", "lightoutline@S,F,C,X,P", "lightedge@S"],
+        "color": ["sf.hcscrim@C", "sf.hcscrimmax@C", "sf.hchlneutral@C", "sf.hubloom@F,C", "sf.hcneutral@C", "lighttone@S,F,C,X,P"],
+        "tone": ["livedarkalpha@S", "lightglass@S,F,C,X,P", "textswap@S,F,C,X,P", "popuptone@S,F,C", "veilmax@S,F,C,X,P", "stylelo@S,F,C,X,P", "stylehi@S,F,C,X,P", "shadecap@S,F,C,X,P", "shadelift@S,F,C,X,P"]
+      },
+      "behavior": ["popuplock", "hufadecut", "headergap"]
+    },
+    "keyguard": {
+      "main": {
+        "S": ["kgblurradius", "kgdarkfill", "lightglass", "kgrim", "kgglint"],
+        "F": ["sf.kgblur", "sf.kgrefract", "kglens", "sf.kglight", "lightglass"],
+        "C": ["sf.kgblur", "sf.kgrefract", "sf.kclift", "sf.kcsat", "sf.kcfold"],
+        "X": ["lightglass", "textswap"],
+        "P": ["lightglass", "textswap"]
+      },
+      "details": {
+        "blur": ["kgblurradius@F,C", "semradiuslens@F,C", "sf.kcedge@C", "sf.kccore@C", "sf.kcblurexp@C", "sf.kgedgeblur@F", "sf.kgcore@F", "pillglass@S,F,C", "pillblur@S,F,C"],
+        "refraction": ["kglens@C", "sf.kcband@C", "sf.kcamp@C", "sf.kcbody@C", "sf.kcbody2@C", "sf.kgband@F,C", "sf.kgbodylens@F"],
+        "light": ["sf.kglight@C", "kglinegain@S,F,C,X,P", "sf.kgline@F,C", "sf.kgrim@F,C", "sf.kgspec@F,C", "sf.kgglow@F,C", "sf.kgtilt@F,C", "sf.kgdepth@F,C", "liveoptics@S", "livesheen@S"],
+        "color": ["sf.kgsat@F", "sf.kgcool@F", "sf.kgtone@F", "sf.kgflat@F", "sf.kglevel@F", "sf.kgcoredim@F", "sf.kcveil@C", "sf.kclevel@C", "sf.kcdim@C", "sf.kcknee@C", "sf.kccool@C", "lighttone@S,F,C,X,P"],
+        "tone": ["kgdarkalpha@S", "lightglass@S,F,C,X,P", "textswap@S,F,C,X,P", "stylelo@S,F,C,X,P", "stylehi@S,F,C,X,P"]
+      },
+      "behavior": ["kgwinblur", "headergap"]
+    },
+    "shade": {
+      "main": {
+        "S": ["liveshaderadius", "shadelightglass", "shadedarkglass", "shadeglint", "panelblurcap"],
+        "F": ["semradius", "shadelightglass", "shadedarkglass", "panelblurcap", "sf.shadelight"],
+        "X": ["shadelightglass", "shadedarkglass", "panelblurcap"],
+        "P": ["shadelightglass", "shadedarkglass", "panelblurcap"]
+      },
+      "details": {
+        "blur": ["panelblurcap@S,F,X,P"],
+        "light": ["shadelinegain@S,F,X,P", "lightoutline@S,F,X,P", "lightedge@S", "liveoptics@S", "livesheen@S"],
+        "color": ["lighttone@S,F,X,P", "panelcolor@S,F,X,P", "panelnativegray@S,F,X,P"],
+        "tone": ["mediaart@S,F,X,P", "paneldim@S,F,X,P", "shadetone@S,F,X,P", "textswap@S,F,X,P", "veilmax@S,F,X,P", "stylelo@S,F,X,P", "stylehi@S,F,X,P", "shadecap@S,F,X,P", "shadelift@S,F,X,P", "sf.shadecap@F", "sf.shadelift@F"]
+      },
+      "behavior": ["shadeblur", "shadelocal", "shadescaleveil", "orphandraw", "shadefadecut", "headertone", "headergap"],
+      "quick_settings": {
+        "main": ["qs.lightfill", "qs.lightglassopacity", "qs.lightoptics", "qs.darkrim", "qs.lightrim", "qs.tilelight", "qs.hideoffdiscs"],
+        "details": ["qs.lightcolor", "qs.lightglasscolor", "qs.glint", "qs.edgeblur", "sf.qslens", "sf.qsbody", "sf.qsdepth", "qs.outer", "qs.fill", "qs.sliderlightcolor", "qs.sliderdarkcolor", "qs.tilelighton", "qs.tilelightoff", "qs.tilelightoffalpha", "qs.tilelightonink", "qs.tilelightoffink", "qs.tiledark", "qs.tiledarkon", "qs.tiledarkoff", "qs.tiledarkoffalpha", "qs.tiledarkonink", "qs.tiledarkoffink"]
+      }
+    }
+  },
+  "technical": {
+    "order": ["route", "captured-band", "capture", "samsung", "kernel", "lens-profile", "comparison", "diagnostic"],
+    "groups": {
+      "route": ["liveblur", "backdrop", "kgblurpath", "hublurpath", "shadeblurpath"],
+      "captured-band": ["livelens", "lens", "profile", "refract", "ior", "disp", "rimblur", "rimhz", "lensmaxage", "lenssettle", "lenstransition", "lensgate"],
+      "capture": ["blur", "sat", "hz", "hzkg", "tint"],
+      "samsung": ["semcurve", "semshape", "semalpha"],
+      "kernel": ["sf.hckernel", "sf.taps", "sf.ramp", "sf.kgtaps", "sf.kgramp", "sf.kgflatcap", "sf.kgcorecap", "sf.kggradient", "sf.kgblurexp"],
+      "lens-profile": ["kgoptics", "huoptics"],
+      "comparison": ["kgsharedoptics", "sf.kgfixedrim"],
+      "diagnostic": ["perf", "trace", "edgepremul", "sf.debug"]
+    },
+    "read_only": ["sfrefract", "sf.optics", "sf.clear", "sf.norewrite", "sf.qslight"],
+    "legacy_hidden": ["qs.darkfill", "qs.darkcolor", "qs.idle", "qs.active", "qs.track", "qs.lightstyle"],
+    "material_selectors": ["sf.huclear", "sf.kgclear"]
+  },
+  "icons_page": ["iconmode", "icontone", "iconcardsize", "statusiconsize", "statusmaxicons", "iconinkmode", "iconfixedink", "iconlightink", "icondarkink", "statusinkmode", "statusfixedink", "statuslightink", "statusdarkink"],
+  "energy_keys": ["energymode", "energythreshold", "energyhysteresis", "energycharging", "energysurfaces", "energysaver"],
+  "favorites": {
+    "allowed_destinations": ["MAIN", "DETAIL", "QS_MAIN", "QS_DETAIL", "BEHAVIOR"],
+    "migration": "favorite.<key> for a key whose destination is TECHNICAL, DIAGNOSTIC, LEGACY or MATERIAL is ignored by the surface list (not deleted) and listed once in the migration notice (T13)."
+  }
+}

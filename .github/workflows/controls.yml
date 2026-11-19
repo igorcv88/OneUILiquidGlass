@@ -39,6 +39,10 @@ jobs:
           git diff --exit-code -- app/src/main/java/io/github/igorcv88/oneuiliquidglass/ui/ControlTitles.java app/src/main/res/values/control_titles.xml app/src/main/res/values-pt-rBR/control_titles.xml
           python3 tools/generate-settings.py
           git diff --exit-code -- app/src/main/java/io/github/igorcv88/oneuiliquidglass/config/SettingsRegistry.java
+          python3 tools/generate-product-layout.py
+          git diff --exit-code -- app/src/main/java/io/github/igorcv88/oneuiliquidglass/config/product/ProductLayout.java
+          python3 tools/generate-product-copy.py
+          git diff --exit-code -- app/src/main/res/values/product_copy.xml app/src/main/res/values-pt-rBR/product_copy.xml
           python3 tools/test-distribution.py
           sh sfhook/tools/live_check.sh
       - name: Build bundled SurfaceFlinger binaries

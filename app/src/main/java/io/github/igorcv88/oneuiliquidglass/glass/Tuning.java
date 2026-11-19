@@ -344,6 +344,16 @@ public final class Tuning {
      * the glass. A change shows at the next measure of each notification.
      */
     public final float headerGap;
+    /** Energy policy (docs/OULG_UI_PLAN/ENERGY_POLICY.md): 0 never pauses the glass, 1 pauses it below the limit. */
+    public final int energyMode;
+    /** Battery percent at or below which the glass pauses, 5-50. */
+    public final int energyThreshold;
+    /** Points above the limit at which the glass resumes, 2-15. */
+    public final int energyHysteresis;
+    /** Surface bit mask (1 pop-up, 2 lock, 4 shade, 8 quick settings, 16 live, 32 Now Bar, 64 toasts), 1-127. */
+    public final int energySurfaces;
+    public final boolean energyCharging;
+    public final boolean energySaver;
     /** Logs main-thread time spent in the module's hooks (see {@link Perf}). */
     public final boolean perf;
     /** Enables the view-tree and window diagnostic dumps (see {@link Probe#trace}). */
@@ -493,6 +503,12 @@ public final class Tuning {
         shadeScaleVeil = Math.round(Math.max(0f, Math.min(255f, number("shadescaleveil", 115f))));
         sfOptics = Math.round(clamp(number("sf.optics", 0f), 0f, 1000f));
         headerGap = clamp(number("headergap", 7f), 0f, 8f);
+        energyMode = Math.round(clamp(number("energymode", 0f), 0f, 1f));
+        energyThreshold = Math.round(clamp(number("energythreshold", 20f), 5f, 50f));
+        energyHysteresis = Math.round(clamp(number("energyhysteresis", 5f), 2f, 15f));
+        energySurfaces = Math.round(clamp(number("energysurfaces", 127f), 1f, 127f));
+        energyCharging = number("energycharging", 1f) >= 1f;
+        energySaver = number("energysaver", 0f) >= 1f;
         perf = number("perf", 0f) >= 1f;
         Perf.enabled = perf;
         // A persisted UI preference of trace=0 must not mask an explicit temporary root
@@ -597,7 +613,9 @@ public final class Tuning {
                 + " statuslightink=" + Integer.toHexString(statusIconLightInk)
                 + " statusdarkink=" + Integer.toHexString(statusIconDarkInk)
                 + " kgsharedoptics=" + kgSharedOptics + " popuplinegain=" + popupLineGain
-                + " kglinegain=" + lockscreenLineGain + " shadelinegain=" + shadeLineGain;
+                + " kglinegain=" + lockscreenLineGain + " shadelinegain=" + shadeLineGain
+                + " energymode=" + energyMode + " energythreshold=" + energyThreshold + " energyhysteresis=" + energyHysteresis
+                + " energysurfaces=" + energySurfaces + " energycharging=" + energyCharging + " energysaver=" + energySaver;
     }
 
     /** A hex RGB value (with or without #), or the fallback. */

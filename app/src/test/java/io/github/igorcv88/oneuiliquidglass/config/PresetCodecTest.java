@@ -79,7 +79,7 @@ public class PresetCodecTest {
     public void rejectWrongSchemaOversizeAndWrongJsonType() throws Exception {
         for (String data :
                 new String[] {
-                    "{\"schemaVersion\":2,\"enabled\":false,\"desired\":{}}",
+                    "{\"schemaVersion\":3,\"enabled\":false,\"desired\":{}}",
                     "{\"schemaVersion\":1,\"enabled\":false,\"desired\":{\"lens\":0.2}}",
                     " ".repeat(PresetCodec.MAX_BYTES + 1)
                 })

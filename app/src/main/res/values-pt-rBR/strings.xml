@@ -214,7 +214,7 @@
     <string name="section_glass">Vidro e desfoque</string>
     <string name="section_edges">Bordas e reflexos</string>
     <string name="section_color">Cor e contraste</string>
-    <string name="section_behavior">Comportamento</string>
+    <string name="selector_per_card">Por cartão (avançado)</string>
     <string name="section_motion">Lente e movimento</string>
     <string name="section_lens">Lente dinâmica</string>
     <string name="section_qs">Central de controle</string>
@@ -507,7 +507,6 @@
     <string name="material_scope">Disponível para pop-ups e tela de bloqueio. A central, a Central de controle, a Now Bar e os toasts mantêm o visual atual.</string>
     <string name="material_frosted">Fosco</string>
     <string name="material_clear">Transparente (estilo iOS)</string>
-    <string name="material_per_card">Por cartão (avançado)</string>
     <string name="material_saved">Material salvo.</string>
     <string name="material_saved_pending">Salvo. Passa a valer depois que o compositor reiniciar.</string>
     <string name="material_saved_unavailable">Salvo. O Transparente precisa da lente dinâmica.</string>
@@ -531,4 +530,9 @@
     <string name="search_material_clear">Só no vidro Transparente</string>
     <string name="search_material_frosted">Só no vidro Fosco</string>
     <string name="control_caution_contrast">Pode reduzir o contraste do texto</string>
+    <string name="group_active_count">%1$d de %2$d ativos</string>
+    <string name="control_affects">Afeta: %1$s</string>
+    <string name="details_title">Detalhes</string>
+    <string name="restore_group_nothing">Nada para restaurar neste grupo</string>
+    <string name="search_path_main">Principais</string>
 </resources>

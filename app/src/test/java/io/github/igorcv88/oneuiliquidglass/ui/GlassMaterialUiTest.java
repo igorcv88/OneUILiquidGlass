@@ -56,19 +56,19 @@ public class GlassMaterialUiTest {
 
     /** The property snapshot the screens read; the real one is filled by an off-thread getprop. */
     private static void observe(Map<String, String> values) {
-        try {
-            java.lang.reflect.Field f = SystemPropertyReader.class.getDeclaredField("observed");
-            f.setAccessible(true);
-            f.set(null, Collections.unmodifiableMap(new HashMap<>(values)));
-        } catch (ReflectiveOperationException e) {
-            throw new AssertionError(e);
-        }
+        lastObserved = values;
+        io.github.igorcv88.oneuiliquidglass.config.ReaderState.set(values, !values.isEmpty());
     }
 
     private MainActivity open() {
         controller = Robolectric.buildActivity(MainActivity.class).setup();
+        // The activity starts a real getprop read, which fails off a device and marks the reader
+        // unavailable: put the test's read back (an unreadable system blocks the plan by design).
+        observe(lastObserved);
         return controller.get();
     }
+
+    private static Map<String, String> lastObserved = Collections.emptyMap();
 
     // ---- view helpers
 
@@ -164,7 +164,8 @@ public class GlassMaterialUiTest {
         changed.keySet().removeAll(before.keySet());
         for (String key : changed.keySet())
             assertTrue(key, key.startsWith("desired.sf.") || key.startsWith("baseline") || key.equals("undo")
-                    || key.equals("undo.enabled") || key.equals("generation") || key.equals("lastChange"));
+                    || key.equals("undo.enabled") || key.equals("undo.label") || key.equals("undo.at")
+                    || key.startsWith("src.") || key.startsWith("srcAt.") || key.equals("generation") || key.equals("lastChange"));
         assertEquals(GlassMaterial.CLEAR, a.model().material());
         assertFalse(a.model().root.granted());
         assertFalse(a.model().root.busy());
@@ -262,12 +263,14 @@ public class GlassMaterialUiTest {
     public void frostedShowsFrostedControlsAndHidesClearOnes() {
         MainActivity a = open();
         List<String> hu = surfaceTexts(a, Controls.Surface.HEADSUP);
-        assertTrue(hu.toString(), hu.contains("Inner blur"));
+        assertTrue(hu.toString(), hu.contains("Center blur"));
+        assertTrue(hu.toString(), hu.contains("Diffuse center refraction"));
         assertFalse(hu.toString(), hu.contains("Meniscus"));
         assertFalse(hu.contains("Adaptive blur"));
         List<String> kg = surfaceTexts(a, Controls.Surface.KEYGUARD);
-        assertTrue(kg.contains("Uniformity"));
-        assertFalse(kg.contains("Meniscus"));
+        assertTrue(kg.toString(), kg.contains("Center blur"));
+        assertFalse(kg.toString(), kg.contains("Meniscus"));
+        assertFalse(kg.toString(), kg.contains("Brightening"));
     }
 
     @Test
@@ -275,19 +278,17 @@ public class GlassMaterialUiTest {
         MainActivity a = open();
         assertTrue(a.model().selectMaterial(GlassMaterial.CLEAR).ok);
         List<String> hu = surfaceTexts(a, Controls.Surface.HEADSUP);
-        for (String expected : new String[] {"Meniscus", "Outer edge blur", "Center blur", "Adaptive blur",
-                "Glass saturation", "Brightening", "Highlight neutrality", "Legacy neutralization"})
+        for (String expected : new String[] {"Meniscus", "Edge blur", "Center blur", "Adaptive blur",
+                "Saturation", "Brightening", "Highlight neutrality"})
             assertTrue(expected + " in " + hu, hu.contains(expected));
-        assertFalse("replaced by the clear field", hu.contains("Inner blur"));
-        assertTrue("shared knobs keep acting", hu.contains("Full lens refraction"));
+        assertFalse("replaced by the clear field", hu.contains("Diffuse center refraction"));
+        assertFalse("legacy leaves the surface pages", hu.contains("Legacy neutralization"));
         List<String> kg = surfaceTexts(a, Controls.Surface.KEYGUARD);
-        assertTrue(kg.contains("Meniscus"));
+        assertTrue(kg.toString(), kg.contains("Meniscus"));
         assertTrue(kg.contains("Brightening"));
-        assertTrue(kg.contains("Leveling veil"));
         assertFalse("the lock screen has no adaptive blur", kg.contains("Adaptive blur"));
         assertFalse("pop-up only", kg.contains("Highlight neutrality"));
         assertFalse("pop-up only", kg.contains("Legacy neutralization"));
-        assertFalse(kg.contains("Uniformity"));
     }
 
     @Test
@@ -295,8 +296,9 @@ public class GlassMaterialUiTest {
         MainActivity a = open();
         assertTrue(a.model().selectMaterial(GlassMaterial.CLEAR).ok);
         List<String> hu = surfaceTexts(a, Controls.Surface.HEADSUP);
-        List<String> main = Arrays.asList("Meniscus", "Outer edge blur", "Center blur", "Adaptive blur",
-                "Glass saturation", "Brightening");
+        // Main settings come first, in the product order; the rest sits in the detail groups.
+        List<String> main = Arrays.asList("Main settings", "Blur", "Refraction", "Brightening", "Saturation",
+                "Meniscus", "Appearance details");
         int last = -1;
         for (String title : main) {
             int at = hu.indexOf(title);
@@ -316,10 +318,10 @@ public class GlassMaterialUiTest {
         assertNull(a.model().material());
         List<String> hu = surfaceTexts(a, Controls.Surface.HEADSUP);
         assertTrue(hu.contains("Meniscus"));
-        assertFalse(hu.contains("Inner blur"));
+        assertFalse(hu.contains("Diffuse center refraction"));
         List<String> kg = surfaceTexts(a, Controls.Surface.KEYGUARD);
         assertFalse(kg.contains("Meniscus"));
-        assertTrue(kg.contains("Uniformity"));
+        assertTrue(kg.toString(), kg.contains("Center blur"));
     }
 
     @Test
@@ -329,7 +331,7 @@ public class GlassMaterialUiTest {
         assertTrue(a.model().selectMaterial(GlassMaterial.CLEAR).ok);
         List<String> clear = surfaceTexts(a, Controls.Surface.SHADE);
         assertEquals(frosted, clear);
-        assertTrue(clear.contains("Edge lighting (lens)"));
+        assertTrue(clear.toString(), clear.contains("Effect layers"));
     }
 
     // ---- first use and values from the Terminal

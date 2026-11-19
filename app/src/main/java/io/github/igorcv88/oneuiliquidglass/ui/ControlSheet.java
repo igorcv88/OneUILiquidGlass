@@ -6,6 +6,10 @@ import android.view.inputmethod.EditorInfo;
 import android.widget.*;
 
 import io.github.igorcv88.oneuiliquidglass.config.*;
+import io.github.igorcv88.oneuiliquidglass.config.product.ProductLayout;
+import io.github.igorcv88.oneuiliquidglass.config.state.EditGuard;
+import io.github.igorcv88.oneuiliquidglass.config.state.EffectiveState;
+import io.github.igorcv88.oneuiliquidglass.ui.surfaces.SurfacesPlan;
 import io.github.igorcv88.oneuiliquidglass.R;
 import io.github.igorcv88.oneuiliquidglass.ui.kit.*;
 import io.github.igorcv88.oneuiliquidglass.ui.preview.NotificationPreview;
@@ -34,7 +38,7 @@ final class ControlSheet extends Sheet {
     private final AppModel.Listener watch = this::conditionChanged;
 
     ControlSheet(Host host, String key, Controls.Surface surface) {
-        super(host.activity(), host.theme(), ControlTitles.title(host.activity(), Controls.get(key)));
+        super(host.activity(), host.theme(), ProductTitles.title(host.activity(), Controls.get(key)));
         this.host = host;
         this.c = Controls.get(key);
         this.surface = surface == null || !c.on(surface) ? c.surfaces.iterator().next() : surface;
@@ -49,7 +53,7 @@ final class ControlSheet extends Sheet {
     }
 
     private Applicability.Result rule() {
-        return model.state().applicability().on(c.key, surface);
+        return model.rules().on(c.key, surface);
     }
 
     /**
@@ -80,13 +84,15 @@ final class ControlSheet extends Sheet {
         LinearLayout body = body();
         String hint = ControlDescriptions.hint(activity, c);
         if (!hint.isEmpty()) subtitle(hint);
+        stateHeader(body);
         if (!editable) {
             LinearLayout n = Ui.notice(activity, t, Ui.Tone.INFO,
                     ControlReasons.text(activity, a.reason) + ". " + activity.getString(R.string.control_locked_inactive), null, null);
             body.addView(n, Ui.match(0, t.dp(12)));
         } else if (a.kind == Applicability.Kind.NEEDS_RESTART) {
             body.addView(Ui.notice(activity, t, Ui.Tone.WARN,
-                    activity.getString(R.string.control_restart_needed),
+                    activity.getString(model.rules().pendingActivation(c.key, surface)
+                            ? R.string.lens_not_loaded_banner : R.string.control_restart_needed),
                     activity.getString(R.string.home_apply), () -> {
                         dismiss();
                         host.openLens();
@@ -95,17 +101,33 @@ final class ControlSheet extends Sheet {
         if (editable) {
             samples(body);
             editor(body);
+            insights(body);
         } else {
             readOnly(body);
         }
         TextView help = Ui.text(activity, t, ControlDescriptions.help(activity, c), Theme.LABEL, t.inkMuted, false);
         help.setPadding(t.dp(8), t.dp(14), t.dp(8), t.dp(4));
         body.addView(help);
+        String provenance = ProvenanceText.line(activity, model.repo.provenance(c.key));
+        if (!provenance.isEmpty()) {
+            TextView last = Ui.text(activity, t, provenance, Theme.LABEL, t.inkMuted, false);
+            last.setPadding(t.dp(8), 0, t.dp(8), t.dp(4));
+            body.addView(last);
+        }
         values(body, st, editable);
         technical(body);
-        action(model.ui.getBoolean("favorite." + c.key, false) ? activity.getString(R.string.control_favorite_remove) : activity.getString(R.string.control_favorite_add),
+        if (SurfacesPlan.favoriteAllowed(c.key))
+            action(model.ui.getBoolean("favorite." + c.key, false) ? activity.getString(R.string.control_favorite_remove) : activity.getString(R.string.control_favorite_add),
                 Ui.ButtonStyle.OUTLINED, () -> {
                     boolean fav = !model.ui.getBoolean("favorite." + c.key, false);
+                    if (fav) {
+                        EditGuard.Decision d = EditGuard.check(EditGuard.Action.FAVORITE_ADD, c.key, surface,
+                                model.rules());
+                        if (!d.permitted()) {
+                            host.feedback(ControlReasons.text(activity, d.reason));
+                            return;
+                        }
+                    }
                     model.ui.edit().putBoolean("favorite." + c.key, fav).apply();
                     host.feedback(fav ? activity.getString(R.string.control_favorite_added) : activity.getString(R.string.control_favorite_removed));
                     model.notifyChanged();
@@ -130,6 +152,73 @@ final class ControlSheet extends Sheet {
         box.addView(v);
         box.setEnabled(false);
         body.addView(box, Ui.match(t.dp(12), 0));
+        String saved = model.state().saved.get(c.key);
+        TextView latent = Ui.text(activity, t, activity.getString(R.string.state_latent,
+                ControlValues.display(host.activity(), c, saved != null ? saved : working)), Theme.CAPTION, t.inkMuted, false);
+        latent.setPadding(t.dp(8), t.dp(10), t.dp(8), 0);
+        body.addView(latent);
+    }
+
+    /** Active, apply to take effect, inactive with its reason, or changed outside the app. */
+    private void stateHeader(LinearLayout body) {
+        EffectiveState.Effective e = model.effectiveView().of(c.key, surface);
+        RowText text = RowText.of(activity, e, ProductTitles.title(activity, c), "");
+        String label = text.line == null ? activity.getString(R.string.state_active)
+                : e.kind == EffectiveState.Kind.INACTIVE || e.kind == EffectiveState.Kind.OFF
+                        ? text.value + ". " + text.line : text.line;
+        TextView header = Ui.text(activity, t, label, Theme.LABEL,
+                text.tone == RowText.Tone.PENDING ? t.warn : text.tone == RowText.Tone.EXTERNAL ? t.lilac : t.inkMuted, true);
+        header.setPadding(t.dp(8), t.dp(4), t.dp(8), t.dp(8));
+        header.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        body.addView(header);
+    }
+
+    /** For a lens multiplier: what it scales. For a blur child: its nominal result with the parent. */
+    private void insights(LinearLayout body) {
+        ProductLayout.Route route = model.surfaceRoute(surface).route;
+        String parent = ControlInsights.parentOf(c.key);
+        StringBuilder text = new StringBuilder();
+        java.util.List<String> affected = ControlInsights.affected(surface, route, c.key);
+        if (!affected.isEmpty()) {
+            StringBuilder names = new StringBuilder();
+            for (String key : affected) {
+                String name = ProductTitles.title(activity, Controls.get(key));
+                if (names.indexOf(name) < 0) names.append(names.length() == 0 ? "" : ", ").append(name);
+            }
+            text.append(activity.getString(R.string.control_affects, names));
+        } else if (ControlInsights.routeHasParent(surface, route, parent)) {
+            try {
+                double px = Double.parseDouble(working), multiplier = Double.parseDouble(model.state().confirmed(parent));
+                java.util.Locale locale = activity.getResources().getConfiguration().getLocales().get(0);
+                text.append(activity.getString(R.string.blur_effective_nominal, ControlValues.display(activity, c, working),
+                        ValueFormat.percentOfMultiplier((float) multiplier, locale),
+                        ControlInsights.nominalPx(locale, px, multiplier)));
+                text.append(System.lineSeparator()).append(activity.getString(R.string.blur_chain_note));
+            } catch (NumberFormatException ignored) {
+                return; // no number to multiply (not expected for a blur radius)
+            }
+        }
+        if (text.length() == 0) return;
+        TextView v = Ui.text(activity, t, text, Theme.CAPTION, t.inkMuted, false);
+        v.setPadding(t.dp(8), t.dp(10), t.dp(8), 0);
+        body.addView(v);
+    }
+
+    private boolean percent() {
+        return ProductLayout.display(c.key) == ProductLayout.Display.MULTIPLIER_PERCENT;
+    }
+
+    private java.util.Locale locale() {
+        return host.activity().getResources().getConfiguration().getLocales().get(0);
+    }
+
+    /** The number the exact-value field shows for a raw value. */
+    private String editText(String raw) {
+        return percent() ? ValueFormat.multiplierToEdit(raw, locale()) : ValueFormat.toEdit(c, raw, locale());
+    }
+
+    private String editUnit() {
+        return percent() ? "%" : ValueFormat.editUnit(c);
     }
 
     /** Less / now / more, magnified on the part the control changes. */
@@ -192,7 +281,7 @@ final class ControlSheet extends Sheet {
         p.zoomOnly(c.channel, label);
         p.setClipToOutline(true);
         p.setBackground(Ui.rounded(t.surfaceLow, t.dpf(16)));
-        p.setContentDescription(activity.getString(R.string.control_preview_a11y, label, ControlTitles.title(activity, c)));
+        p.setContentDescription(activity.getString(R.string.control_preview_a11y, label, ProductTitles.title(activity, c)));
         return p;
     }
 
@@ -206,7 +295,7 @@ final class ControlSheet extends Sheet {
             case TOGGLE: {
                 Toggle tg = new Toggle(activity, t);
                 tg.set("1".equals(working), false);
-                LinearLayout r = Ui.switchRow(activity, t, null, ControlTitles.title(activity, c), null, tg);
+                LinearLayout r = Ui.switchRow(activity, t, null, ProductTitles.title(activity, c), null, tg);
                 r.setPadding(0, 0, t.dp(8), 0);
                 tg.listener((x, on) -> {
                     working = on ? "1" : "0";
@@ -255,19 +344,19 @@ final class ControlSheet extends Sheet {
         slider = new Slider(activity, t);
         slider.configure(scale.steps, scale.index(s.defaultValue), scale.auto);
         slider.set(scale.index(working));
-        slider.describe(ControlTitles.title(activity, c), i -> ControlValues.display(host.activity(), c, scale.value(i)));
+        slider.describe(ProductTitles.title(activity, c), i -> ControlValues.display(host.activity(), c, scale.value(i)));
         slider.listener(new Slider.Listener() {
             @Override public void start() {}
             @Override public void change(int index, boolean fromUser) { setWorking(scale.value(index), false); }
             @Override public void stop(int index) {}
         });
         box.addView(slider, Ui.match());
-        String unit = ValueFormat.editUnit(c);
+        String unit = editUnit();
         TextView exact = Ui.text(activity, t, activity.getString(R.string.control_exact_value) + (unit.isEmpty() ? "" : " (" + unit + ")"), Theme.CAPTION, t.inkMuted, false);
         exact.setPadding(t.dp(4), t.dp(8), 0, 0);
         box.addView(exact);
         field = field(activity.getString(R.string.control_value) + (unit.isEmpty() ? "" : " (" + unit + ")") + (scale.auto ? activity.getString(R.string.control_auto_suffix) : ""),
-                ValueFormat.isAuto(c, working) ? "-1" : ValueFormat.isOff(c, working) ? "0" : ValueFormat.toEdit(c, working, host.activity().getResources().getConfiguration().getLocales().get(0)),
+                ValueFormat.isAuto(c, working) ? "-1" : ValueFormat.isOff(c, working) ? "0" : editText(working),
                 InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL | InputType.TYPE_NUMBER_FLAG_SIGNED);
         field.setOnEditorActionListener((v, id, e) -> {
             if (id == EditorInfo.IME_ACTION_DONE) {
@@ -344,7 +433,7 @@ final class ControlSheet extends Sheet {
         }
         if (colorPicker != null) colorPicker.setColor(raw);
         if (field != null) {
-            String edit = scale == null ? raw : ValueFormat.isAuto(c, raw) ? "-1" : ValueFormat.isOff(c, raw) ? "0" : ValueFormat.toEdit(c, raw, host.activity().getResources().getConfiguration().getLocales().get(0));
+            String edit = scale == null ? raw : ValueFormat.isAuto(c, raw) ? "-1" : ValueFormat.isOff(c, raw) ? "0" : editText(raw);
             if (!edit.equals(field.getText().toString())) field.setText(edit);
             field.setError(null);
         }
@@ -369,7 +458,7 @@ final class ControlSheet extends Sheet {
             String raw;
             if (c.format == Controls.Format.COLOR) raw = c.spec().validate(text);
             else if (scale.auto && text.equals("-1")) raw = c.spec().validate("-1");
-            else raw = ValueFormat.fromEdit(c, text);
+            else raw = percent() ? ValueFormat.multiplierFromEdit(c, text) : ValueFormat.fromEdit(c, text);
             setWorking(raw, true);
             return true;
         } catch (IllegalArgumentException e) {

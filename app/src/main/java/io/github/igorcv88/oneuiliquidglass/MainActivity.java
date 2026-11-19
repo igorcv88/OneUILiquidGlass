@@ -12,8 +12,10 @@ import android.view.*;
 import android.widget.*;
 
 import io.github.igorcv88.oneuiliquidglass.config.*;
+import io.github.igorcv88.oneuiliquidglass.config.state.ConfirmedSnapshot;
 import io.github.igorcv88.oneuiliquidglass.i18n.AppLanguage;
-import io.github.igorcv88.oneuiliquidglass.live.CompositorValues;
+import io.github.igorcv88.oneuiliquidglass.live.PlanContradiction;
+import io.github.igorcv88.oneuiliquidglass.live.PublicationPlan;
 import io.github.igorcv88.oneuiliquidglass.ui.*;
 import io.github.igorcv88.oneuiliquidglass.ui.kit.*;
 
@@ -341,6 +343,13 @@ public final class MainActivity extends Activity implements Host {
     }
 
     @Override
+    public void showEnergy() {
+        nav.select(3, true);
+        go(3);
+        settings.revealEnergy();
+    }
+
+    @Override
     public void testNotification() {
         requestTest(1, 0);
     }
@@ -420,8 +429,57 @@ public final class MainActivity extends Activity implements Host {
 
     @Override
     public void exportSettings() {
-        startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("application/json")
-                .addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE, "OneUILiquidGlass-ajustes.json"), REQ_EXPORT);
+        // The file keeps what the person chose; values the Terminal set go in only if asked for.
+        Sheet sheet = new Sheet(this, theme(), getString(R.string.export_settings));
+        Toggle terminal = new Toggle(this, theme());
+        LinearLayout card = Ui.card(this, theme());
+        card.addView(Ui.switchRow(this, theme(), null, getString(R.string.export_include_terminal), null, terminal));
+        sheet.body().addView(card, Ui.match());
+        sheet.action(getString(R.string.action_cancel), Ui.ButtonStyle.OUTLINED, sheet::dismiss);
+        sheet.action(getString(R.string.export_settings), Ui.ButtonStyle.FILLED, () -> {
+            exportTerminal = terminal.checked();
+            sheet.dismiss();
+            startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("application/json")
+                    .addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE, "OneUILiquidGlass-ajustes.json"), REQ_EXPORT);
+        });
+        sheet.show();
+    }
+
+    private boolean exportTerminal;
+
+    /** Schema 2 backup: desired and implicit defaults, the Terminal values on request, a read-only diagnostic. */
+    private String backupJson(boolean enabled, java.util.Map<String, String> values, boolean withTerminal)
+            throws org.json.JSONException {
+        SystemPropertyReader.refresh();
+        ConfirmedSnapshot snapshot = model.confirmedSnapshot();
+        java.util.Map<String, String> terminal = null;
+        if (withTerminal && snapshot.propsAvailable) terminal = terminalValues(snapshot);
+        PresetCodec.Diagnostic diagnostic = new PresetCodec.Diagnostic(snapshot.propsAvailable,
+                System.currentTimeMillis(), snapshot.observed, snapshot.compiled);
+        return PresetCodec.encodeV2(values, enabled, Build.MANUFACTURER + " " + Build.MODEL + " · " + Build.DISPLAY,
+                versionCode(), System.currentTimeMillis(), terminal, diagnostic);
+    }
+
+    /** What the Terminal set and the app does not own, as read now. */
+    private java.util.Map<String, String> terminalValues(
+            ConfirmedSnapshot snapshot) {
+        java.util.Map<String, String> out = new java.util.TreeMap<>();
+        try {
+            for (String key : PublicationPlan
+                    .of(snapshot, Applicability::new).external)
+                out.put(key, snapshot.observed.get(key));
+        } catch (PlanContradiction e) {
+            return java.util.Collections.emptyMap();
+        }
+        return out;
+    }
+
+    private int versionCode() {
+        try {
+            return (int) getPackageManager().getPackageInfo(getPackageName(), 0).getLongVersionCode();
+        } catch (Exception e) {
+            return 0;
+        }
     }
 
     @Override
@@ -462,17 +520,13 @@ public final class MainActivity extends Activity implements Host {
         }
         if (request != REQ_EXPORT && request != REQ_IMPORT) return;
         boolean enabled = model.state().enabled;
+        boolean withTerminal = exportTerminal;
+        exportTerminal = false;
         java.util.Map<String, String> values = model.repo.overrides();
         io.execute(() -> {
             try {
                 if (request == REQ_EXPORT) {
-                    SystemPropertyReader.refresh();
-                    android.content.SharedPreferences sf = model.lensPrefs();
-                    String json = PresetCodec.encode(values, enabled,
-                            Build.MANUFACTURER + " " + Build.MODEL + " · " + Build.DISPLAY,
-                            SystemPropertyReader.snapshot(), SystemPropertyReader.available(),
-                            CompositorValues.compiledValues(sf),
-                            sf.getString("compiledGeneration", ""), sf.getLong("compiledAt", 0));
+                    String json = backupJson(enabled, values, withTerminal);
                     try (java.io.OutputStream out = getContentResolver().openOutputStream(uri, "wt")) {
                         if (out == null) throw new java.io.IOException(getString(R.string.export_unavailable));
                         out.write(json.getBytes(java.nio.charset.StandardCharsets.UTF_8));

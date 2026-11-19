@@ -62,19 +62,19 @@ public class ControlSheetApplicabilityTest {
     }
 
     private static void observe(Map<String, String> values) {
-        try {
-            java.lang.reflect.Field f = SystemPropertyReader.class.getDeclaredField("observed");
-            f.setAccessible(true);
-            f.set(null, Collections.unmodifiableMap(new HashMap<>(values)));
-        } catch (ReflectiveOperationException e) {
-            throw new AssertionError(e);
-        }
+        lastObserved = values;
+        io.github.igorcv88.oneuiliquidglass.config.ReaderState.set(values, !values.isEmpty());
     }
 
     private MainActivity open() {
         controller = Robolectric.buildActivity(MainActivity.class).setup();
+        // The activity starts a real getprop read, which fails off a device and marks the reader
+        // unavailable: put the test's read back (an unreadable system blocks the plan by design).
+        observe(lastObserved);
         return controller.get();
     }
+
+    private static Map<String, String> lastObserved = Collections.emptyMap();
 
     private static void collect(View v, List<View> out) {
         out.add(v);

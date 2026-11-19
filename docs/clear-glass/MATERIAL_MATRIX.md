@@ -23,7 +23,6 @@ Gerada por `MaterialMatrixTest` a partir de `Controls` e `GlassMaterial`. Não e
 | `sf.core` | Desfoque interno | Pop-up | Lente dinâmica · advanced | fosco | sim | não |
 | `sf.hubodylens` | Refração difusa do miolo | Pop-up | Lente dinâmica · advanced | fosco | sim | não |
 | `sf.edgeblur` | Desfoque no contorno | Pop-up | Lente dinâmica · advanced | fosco | sim | não |
-| `sf.ramp` | Rampa do pop-up | Pop-up | Técnico · technical | fosco | sim | não |
 | `sf.kgcore` | Desfoque interno | Bloqueio | Lente dinâmica · advanced | fosco | sim | não |
 | `sf.kgedgeblur` | Desfoque no contorno | Bloqueio | Lente dinâmica · advanced | fosco | sim | não |
 | `sf.kgsat` | Saturação | Bloqueio | Lente dinâmica · advanced | fosco | sim | não |
@@ -34,11 +33,8 @@ Gerada por `MaterialMatrixTest` a partir de `Controls` e `GlassMaterial`. Não e
 | `sf.kgtone` | Curva de destaque | Bloqueio | Lente dinâmica · advanced | fosco | sim | não |
 | `sf.kgcoredim` | Escurecer o miolo | Bloqueio | Lente dinâmica · advanced | fosco | sim | não |
 | `sf.kgcorecap` | Teto do desfoque interno | Bloqueio | Lente dinâmica · advanced | fosco | sim | não |
-| `sf.kggradient` | Transição vidro-miolo | Bloqueio | Técnico · technical | fosco | sim | não |
-| `sf.kgband` | Largura da transição óptica | Bloqueio | Lente dinâmica · advanced | fosco | sim | não |
 | `sf.kgbodylens` | Refração difusa do miolo | Bloqueio | Lente dinâmica · advanced | fosco | sim | não |
 | `sf.kgblurexp` | Curva do desfoque na transição | Bloqueio | Técnico · technical | fosco | sim | não |
-| `sf.kgramp` | Rampa do bloqueio | Bloqueio | Técnico · technical | fosco | sim | não |
 | `sf.hcfold` | Menisco | Pop-up | Bordas e reflexos · standard | clear | não | sim |
 | `sf.hcband` | Largura da borda curva | Pop-up | Bordas e reflexos · advanced | clear | não | sim |
 | `sf.hcamp` | Curvatura sem menisco | Pop-up | Bordas e reflexos · advanced | clear | não | sim |
@@ -73,4 +69,4 @@ Gerada por `MaterialMatrixTest` a partir de `Controls` e `GlassMaterial`. Não e
 
 ## Comuns do compositor que continuam valendo no Transparente
 
-`sf.hublur`, `sf.hurefract`, `sf.hubloom`, `sf.taps`, `sf.kgblur`, `sf.kgrefract`, `sf.kgline`, `sf.kgfixedrim`, `sf.kgrim`, `sf.kgspec`, `sf.kgglow`, `sf.kgtilt`, `sf.kgtaps`, `sf.hulight`, `sf.kglight`, `sf.kgdepth`, `sf.debug`
+`sf.hublur`, `sf.hurefract`, `sf.hubloom`, `sf.taps`, `sf.ramp`, `sf.kgblur`, `sf.kgrefract`, `sf.kgline`, `sf.kgfixedrim`, `sf.kgrim`, `sf.kgspec`, `sf.kgglow`, `sf.kgtilt`, `sf.kggradient`, `sf.kgband`, `sf.kgtaps`, `sf.kgramp`, `sf.hulight`, `sf.kglight`, `sf.kgdepth`, `sf.debug`

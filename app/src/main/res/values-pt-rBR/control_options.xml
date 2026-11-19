@@ -2,6 +2,7 @@
 <resources>
     <string name="control_option_ec6472de3478">10 %</string>
     <string name="control_option_4d04d593eab2">25 %</string>
+    <string name="control_option_20d73871dda7">Abaixo do limite</string>
     <string name="control_option_3c5d28cf50f3">Acompanha o cartão durante gestos</string>
     <string name="control_option_8d954776f1cd">Adaptativa</string>
     <string name="control_option_0a0e3b18cbfb">Adaptativa original</string>
@@ -68,7 +69,9 @@
     <string name="control_option_761716310a91">Nenhuma</string>
     <string name="control_option_f78db5410a48">Neutra sob a lente, herdada nos demais</string>
     <string name="control_option_9935aac96730">No cartão</string>
+    <string name="control_option_f951a9952b5c">Nunca</string>
     <string name="control_option_31310ebb3669">O mesmo material dos pop-ups</string>
+    <string name="control_option_cca95c2218a9">O vidro nunca é suspenso pela bateria</string>
     <string name="control_option_c0a8060f3b11">Original</string>
     <string name="control_option_d8e00743b1a4">Padrão</string>
     <string name="control_option_bc563cb30bb5">Padrão: preserva os aplicativos do usuário e seus packs</string>
@@ -93,6 +96,7 @@
     <string name="control_option_04ffe2381fff">Sistema e serviços</string>
     <string name="control_option_655a7c7b8a0f">Somente o desfoque do sistema</string>
     <string name="control_option_d97225752710">Sonda de composição</string>
+    <string name="control_option_d3a6e02d6bec">Suspende o vidro nas superfícies escolhidas com bateria baixa</string>
     <string name="control_option_4ec6fa29d300">Só movimentos horizontais e dois dedos</string>
     <string name="control_option_0706bd786e3a">Textura sintética numerada</string>
     <string name="control_option_a4114a83f4c6">Todos</string>
