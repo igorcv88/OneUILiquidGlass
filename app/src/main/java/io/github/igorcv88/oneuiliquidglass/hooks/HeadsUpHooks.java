@@ -1806,7 +1806,7 @@ public final class HeadsUpHooks {
             InkAnimator.Timeline ink = foregroundTimeline;
             InkAnimator.run(icon, new InkAnimator.Target() {
                 @Override public int shown() { return icon.currentTarget() == view && icon.binding() == binding ? icon.shown() : ~icon.shown(); }
-                @Override public void show(int color) { if (icon.target() == view) icon.show(color); }
+                @Override public void show(int color) { if (icon.currentTarget() == view && icon.binding() == binding) icon.show(color); }
             }, desired, ink != null && ink.active(), null, null, ink, join);
         }
 
