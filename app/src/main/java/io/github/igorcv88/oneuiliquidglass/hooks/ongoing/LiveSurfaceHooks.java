@@ -67,6 +67,12 @@ public final class LiveSurfaceHooks {
         nowBar.setInstaller(this::installPlugin);
     }
 
+    @FunctionalInterface public interface CardContrast {
+        void update(View root, View host, boolean shown);
+    }
+
+    public void setCardContrast(CardContrast contrast) { cards.setContrast(contrast); }
+
     boolean allows(LiveSurface s) {
         return !broken.contains(s) && master.getAsBoolean() && ConfigClient.flag(s.flag);
     }

@@ -2,6 +2,13 @@ package io.github.igorcv88.oneuiliquidglass.hooks;
 
 import static org.junit.Assert.*;
 
+import android.graphics.drawable.ColorDrawable;
+import android.view.View;
+import android.widget.FrameLayout;
+import android.widget.TextView;
+import java.util.function.Predicate;
+import org.robolectric.RuntimeEnvironment;
+
 import io.github.igorcv88.oneuiliquidglass.glass.Material;
 import io.github.igorcv88.oneuiliquidglass.glass.ShadeTone;
 import io.github.igorcv88.oneuiliquidglass.glass.ToneGate;
@@ -34,6 +41,37 @@ public class HeadsUpPopupContrastTest {
         assertFalse(HeadsUpHooks.popupContrastRoute(false, true, false, false, false));
         assertFalse(HeadsUpHooks.popupContrastRoute(false, false, true, false, true));
         assertFalse(HeadsUpHooks.popupContrastRoute(true, false, false, true, false));
+    }
+
+    @Test public void liveCardOwnsItsTextUntilItReturnsToNative() {
+        FrameLayout parent = new FrameLayout(RuntimeEnvironment.getApplication());
+        FrameLayout liveCard = new FrameLayout(parent.getContext());
+        FrameLayout privateFill = new FrameLayout(parent.getContext());
+        TextView label = new TextView(parent.getContext());
+        TextView badge = new TextView(parent.getContext());
+        label.setTextColor(0xffffffff);
+        badge.setTextColor(0xffffffff);
+        liveCard.setBackground(new ColorDrawable(0xffdddddd));
+        privateFill.setBackground(new ColorDrawable(0xff101010));
+        parent.addView(liveCard);
+        liveCard.addView(label);
+        liveCard.addView(privateFill);
+        privateFill.addView(badge);
+        Predicate<View> before = Foreground.ownsLiveCardTone;
+        try {
+            Foreground.ownsLiveCardTone = view -> view == liveCard;
+            assertTrue(Foreground.customSurface(label));
+            assertFalse(Foreground.customSurface(badge));
+            Foreground.apply(liveCard, true, true, null);
+            assertNotEquals(0xffffffff, label.getCurrentTextColor());
+            assertEquals(0xffffffff, badge.getCurrentTextColor());
+            Foreground.apply(parent, false, true, null);
+            assertNotEquals(0xffffffff, label.getCurrentTextColor());
+            Foreground.apply(liveCard, false, true, null);
+            assertEquals(0xffffffff, label.getCurrentTextColor());
+        } finally {
+            Foreground.ownsLiveCardTone = before;
+        }
     }
 
     private static void contrastChangesWithBackdrop() {

@@ -90,6 +90,50 @@ public final class HeadsUpHooks {
     private NotificationCompactIconHooks compactIcons;
     /** Non-media live updates and toasts (laudo 02/11/2026); independent of notification state. */
     private io.github.igorcv88.oneuiliquidglass.hooks.ongoing.LiveSurfaceHooks ongoing;
+    private final WeakHashMap<View, State> liveCardTones = new WeakHashMap<>();
+
+    private void liveCardContrast(View root, View host, boolean shown) {
+        try {
+            updateLiveCardContrast(root, host, shown);
+        } catch (RuntimeException | LinkageError e) {
+            Probe.error("LIVE_CARD_CONTRAST_FAILED", e);
+        }
+    }
+
+    private void updateLiveCardContrast(View root, View host, boolean shown) {
+        Tuning t = Tuning.get();
+        Drawable background = host.getBackground();
+        io.github.igorcv88.oneuiliquidglass.glass.LiveGlassDrawable drawable =
+                background instanceof io.github.igorcv88.oneuiliquidglass.glass.LiveGlassDrawable
+                ? (io.github.igorcv88.oneuiliquidglass.glass.LiveGlassDrawable) background : null;
+        State state = liveCardTones.get(root);
+        boolean active = shown && drawable != null && host.isAttachedToWindow() && host.isShown()
+                && host.getWidth() > 0 && host.getHeight() > 0
+                && barState != null && barState == Eligibility.BAR_SHADE && t.popupTone
+                && io.github.igorcv88.oneuiliquidglass.config.ConfigClient.flag("surface.headsup.feature.tonemap.enabled");
+        if (state != null && (state.background.get() != host || state.liveCardGlass != drawable || !active)) {
+            // A retired fill can deliver its final callback after the replacement took ownership.
+            if (!active && state.background.get() != host) return;
+            liveCardTones.remove(root);
+            View previous = state.background.get();
+            if (previous != null) previous.removeCallbacks(state.popupPoke);
+            state.popupArrival++;
+            state.toneSurface = null;
+            state.liveCardGlass.setContrastVeil(0);
+            state.setNative();
+            state = null;
+        }
+        if (!active) return;
+        if (state == null) {
+            Foreground.apply(root, false, ShadeTone.lightText(), null);
+            state = new State(host, root);
+            state.liveCardGlass = drawable;
+            liveCardTones.put(root, state);
+        }
+        state.nativeTint = drawable.currentTint();
+        if (!t.live) drawable.setContrastVeil(0);
+        state.popupTone(host);
+    }
     private boolean blurEnvironmentReported;
     private final boolean samsungBlur = SemBlurBridge.available();
     private final GlassSpec spec = new GlassSpec();
@@ -502,6 +546,7 @@ public final class HeadsUpHooks {
         // Live update chip/card, Now Bar (AOD plugin) and toasts: own opt-ins, own failure budget.
         try {
             ongoing = new io.github.igorcv88.oneuiliquidglass.hooks.ongoing.LiveSurfaceHooks(loader, () -> enabled, this::resolveConfig);
+            ongoing.setCardContrast(this::liveCardContrast);
             ongoing.install();
         } catch (RuntimeException | LinkageError e) { ongoing = null; Probe.error("LIVE_INSTALL_FAILED", e); }
         // ConfigClient dispatches immediately, but Tuning publishes its new material on a
@@ -569,6 +614,7 @@ public final class HeadsUpHooks {
         // minimised group's child kept its glass but its background is not drawn, so its tone never
         // ran and its text stayed white on the group's light glass (TEXT_ROW app_name_text
         // ffffffff swapped=false, device log 26/10).
+        Foreground.ownsLiveCardTone = liveCardTones::containsKey;
         Foreground.ownsTone = child -> {
             boolean shade = Boolean.TRUE.equals(shadeExpanded);
             for (State st : stateSnapshot())
@@ -1766,6 +1812,7 @@ public final class HeadsUpHooks {
         SemBlurBridge semBridge;
         /** The lens-mode BackgroundBlurDrawable behind glass on the lockscreen (debug.oulg.kgblurpath). */
         BackgroundBlurBridge compBridge;
+        io.github.igorcv88.oneuiliquidglass.glass.LiveGlassDrawable liveCardGlass;
         Backdrop.Kind glassKind;
         String glassSource;
         boolean materialReported;
@@ -2026,6 +2073,7 @@ public final class HeadsUpHooks {
             int arrival = popupArrival;
             ShadeTone.measure(v, luma -> {
                 if (!SURFACE_POPUP.equals(toneSurface) || arrival != popupArrival) return;
+                if (liveCardGlass != null && (!v.isAttachedToWindow() || !v.isShown())) return;
                 boolean firstSample = !"sample".equals(toneSource);
                 if (!firstSample && Tuning.get().popupLock) {
                     // Only a confirmed change of side moves a pop-up that already has its look;
@@ -2187,11 +2235,12 @@ public final class HeadsUpHooks {
         }
         /** Swapped text and icon tone; the views are walked again every SWAP_WALK_MS while it is on (new inflations). */
         void setForeground(boolean swap) {
+            if (liveCardGlass == null && liveCardTones.containsKey(row.get())) return;
             // Existing pre-draw/rebind path: cached identity checks only; decoding happens off-thread.
             // Notification symbols belong to the notification, not to the lifetime of its glass
             // background. Samsung temporarily falls back to its native material while opening the
             // shade; restoring icons in that transition made the original icon flash for a frame.
-            syncNotificationIcons();
+            if (liveCardGlass == null) syncNotificationIcons();
             long now = android.os.SystemClock.uptimeMillis();
             String reason = swap == swapped ? null : swap ? "style" : "restore";
             // A child row that just got its own glass may still carry its group's swapped text
@@ -2243,6 +2292,7 @@ public final class HeadsUpHooks {
         void setLightStyle(boolean on) {
             lightStyle = on;
             if (glass != null) { glass.setLightStyle(on, Tuning.get().lightEdge); glass.setOutline(outline()); }
+            if (liveCardGlass != null) liveCardGlass.setContrastEdge(on, Tuning.get().lightEdge, outline());
         }
         /**
          * A shade or pop-up card whose glass is light (the light theme's own card, or light glass
@@ -2268,6 +2318,7 @@ public final class HeadsUpHooks {
                 // Both SF lens routes keep their native region tint. The measured veil still
                 // drives their shared text/edge transition; only Live draws it into the blur region.
                 if (SURFACE_POPUP.equals(toneSurface)) {
+                    if (liveCardGlass != null) liveCardGlass.setContrastVeil(Tuning.get().live ? veil : 0);
                     if (compBridge != null) compBridge.setPopupVeil(veil);
                     return;
                 }
@@ -2308,7 +2359,7 @@ public final class HeadsUpHooks {
             // A card still fading in (the shade's first frames) takes the new veil at once: a ramp
             // would only replay the old veil under the fade.
             if (ends == null || v == null || !v.isShown() || shownAlpha(v) < 0.5f
-                    || (compBridge == null && semBridge == null && glassKind != Backdrop.Kind.SHARED)) {
+                    || (compBridge == null && semBridge == null && liveCardGlass == null && glassKind != Backdrop.Kind.SHARED)) {
                 pushToneVeil(); invalidate(); flushLightStyle(); return false;
             }
             android.animation.ValueAnimator a = android.animation.ValueAnimator.ofArgb(ends[0], ends[1]);

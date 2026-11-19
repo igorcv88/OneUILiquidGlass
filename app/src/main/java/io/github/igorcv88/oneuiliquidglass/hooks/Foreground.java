@@ -40,6 +40,7 @@ final class Foreground {
     }
     /** Whether a child row draws its own glass (and so its own tone); set by HeadsUpHooks. */
     static java.util.function.Predicate<View> ownsTone = v -> true;
+    static java.util.function.Predicate<View> ownsLiveCardTone = v -> false;
     /** Set while this class changes colours itself: its own calls pass the interception untouched. */
     static boolean applying;
     /** Colour sets on swapped views redirected since the last read (interceptions()). */
@@ -737,7 +738,8 @@ final class Foreground {
                 // child row drawn inside the group's card (a collapsed or minimised group, whose
                 // own background is hidden) takes the group's tone, or its text stayed white on
                 // the group's light glass (TEXT_ROW: app_name_text ffffffff swapped=false, 25/10).
-                if (c.getClass().getName().endsWith("ExpandableNotificationRow") && ownsTone.test(c)) continue;
+                if (ownsLiveCardTone.test(c)
+                        || (c.getClass().getName().endsWith("ExpandableNotificationRow") && ownsTone.test(c))) continue;
                 changed += walk(c, swap, lightText, tracked);
             }
         }
@@ -819,7 +821,7 @@ final class Foreground {
      */
     static boolean customSurface(View v) {
         for (View p = v; p != null; ) {
-            if (p.getClass().getName().endsWith("ExpandableNotificationRow")) return p != v;
+            if (ownsLiveCardTone.test(p) || p.getClass().getName().endsWith("ExpandableNotificationRow")) return p != v;
             if (!clear(p.getBackground()) || !clear(p.getForeground())) return false;
             ColorStateList tint = p.getBackgroundTintList();
             if (p.getBackground() != null && tint != null && tint.getColorForState(p.getDrawableState(), tint.getDefaultColor()) >>> 24 != 0)

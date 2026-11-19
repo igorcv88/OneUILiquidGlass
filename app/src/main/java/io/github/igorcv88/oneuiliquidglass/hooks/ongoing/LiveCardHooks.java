@@ -240,6 +240,9 @@ final class LiveCardHooks {
         syncStackFills(stack);
     }
 
+    private LiveSurfaceHooks.CardContrast contrast = (root, host, shown) -> {};
+    void setContrast(LiveSurfaceHooks.CardContrast contrast) { this.contrast = contrast; }
+
     /** Offers the card's fill (and a root that has its own background) with the current verdict. */
     private void evaluate(View root, Classification c) {
         if (c == null) return;
@@ -265,12 +268,17 @@ final class LiveCardHooks {
         final WeakReference<View> rootRef = new WeakReference<>(root);
         options.onShown = (host, shown) -> {
             regionTint(host, shown);
-            if (cardIcon == null) return;
             View boundRoot = rootRef.get();
+            if (!shown && boundRoot != null) contrast.update(boundRoot, host, false);
+            if (cardIcon == null) return;
             if (boundRoot != null) cardIcon.sync(boundRoot, shown);
             else cardIcon.lease.restore();
         };
-        options.onSync = options.onShown;
+        options.onSync = (host, shown) -> {
+            options.onShown.accept(host, shown);
+            View boundRoot = rootRef.get();
+            if (shown && boundRoot != null) contrast.update(boundRoot, host, true);
+        };
         List<View> targets = fills(root);
         for (View t : targets) {
             glass.offer(t, LiveSurface.CARD, data, verdict, LiveChipHooks.RECHECK, options);
