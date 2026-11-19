@@ -1658,6 +1658,11 @@ public final class HeadsUpHooks {
         if (bg.isAttachedToWindow()) s.onViewAttachedToWindow(bg);
         return s;
     }
+    static boolean popupContrastRoute(boolean live, boolean sfRefract, boolean compositor,
+                                      boolean samsung, boolean headsUpDrawable) {
+        return (live && compositor) || (sfRefract && (samsung || (compositor && headsUpDrawable)));
+    }
+
     /** How long a card stays untagged after it last scaled or faded. */
     private static final long SETTLE_MS = 300;
     /** How long a card's shade veil takes to move to a new measurement. */
@@ -1902,9 +1907,11 @@ public final class HeadsUpHooks {
                 return;
             }
             if (t.shadeAdaptive && Boolean.TRUE.equals(shadeExpanded) && barState != null && barState == Eligibility.BAR_SHADE) { shadeTone(v); return; }
-            // The compositor-lens mode (sfrefract) draws through the Samsung blur: the pop-up's text
-            // tone follows the backdrop there too; its veil slot exists only on the live drawable.
-            if (t.popupTone && popupSurface() && ((t.live && compBridge != null) || (t.sfRefract && semBridge != null))) { popupTone(v); return; }
+            if (t.popupTone && popupSurface() && popupContrastRoute(t.live, t.sfRefract,
+                    compBridge != null, semBridge != null, compBridge != null && compBridge.isHeadsUpLensRoute())) {
+                popupTone(v);
+                return;
+            }
             // Unlocked, between surfaces (a pop-up handing over to the shade: heads-up animating away,
             // the shade not yet expanded): hold the material. Restoring here and applying it again a
             // few frames later flashed the text white-dark (TEXT_TONE swap=false, then true 50 ms
@@ -2258,8 +2265,12 @@ public final class HeadsUpHooks {
         void pushToneVeil(int veil) { pushToneVeil(veil, false); }
         void pushToneVeil(int veil, boolean ramping) {
             try {
-                // A pop-up's veil has its own slot: the shade veil must not reach a lens card.
-                if (SURFACE_POPUP.equals(toneSurface)) { if (compBridge != null) compBridge.setPopupVeil(veil); return; }
+                // Both SF lens routes keep their native region tint. The measured veil still
+                // drives their shared text/edge transition; only Live draws it into the blur region.
+                if (SURFACE_POPUP.equals(toneSurface)) {
+                    if (compBridge != null) compBridge.setPopupVeil(veil);
+                    return;
+                }
                 // SharedBackdrop has no blur bridge: paint the light material over the panel's
                 // existing blur. During a ramp the body follows every frame, even while the edge
                 // light style is still awaiting its midpoint switch.

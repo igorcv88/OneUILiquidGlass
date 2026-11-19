@@ -95,10 +95,11 @@ public final class BackgroundBlurBridge implements Backdrop {
      * The heads-up comparison route (debug.oulg.hublurpath): the region takes semradiuslens, the
      * radius the Samsung path gives a lens card, not the lockscreen's kgblurradius.
      */
-    private boolean lensRadius;
+    private boolean headsUpLensRoute;
+    public boolean isHeadsUpLensRoute() { return headsUpLensRoute; }
     public void useLensRadius() throws ReflectiveOperationException {
-        if (lensRadius) return;
-        lensRadius = true;
+        if (headsUpLensRoute) return;
+        headsUpLensRoute = true;
         if (built) update(lastPx, lastTint, lastRadii);
     }
     /** Region radius of a lens card: kgblurradius when set, unless the heads-up route asks for semradiuslens. */
@@ -110,7 +111,7 @@ public final class BackgroundBlurBridge implements Backdrop {
         float tl = radii[0], tr = radii[2], bl = radii[6], br = radii[4];
         if (lensMode) {
             Tuning t = Tuning.get();
-            int lensPx = lensPx(t.kgBlurRadius, t.semRadiusLens, lensRadius);
+            int lensPx = lensPx(t.kgBlurRadius, t.semRadiusLens, headsUpLensRoute);
             // LSPosed-only: no lens to leave backdrop detail for, so one full blur everywhere.
             px = t.live ? t.livePx(lens, keyguard) : lens && lensPx >= 0 ? lensPx : t.semRadius >= 0 ? t.semRadius : GlassSpec.SAMSUNG_RADIUS;
             // The same veil as the Samsung path (semalpha over the Samsung tone).
@@ -118,7 +119,7 @@ public final class BackgroundBlurBridge implements Backdrop {
             if (pill) px = t.pillBlur;
             int profile = pill || (scaled && !lens) ? -1 : SemBlurBridge.tagProfile(lens, keyguard);
             tagSent = profile;
-            // A pop-up over an app (lens, not the lockscreen) takes its measured veil too (popuptone).
+            // Live draws the measured pop-up veil. The SF lens route keeps Samsung's native tint.
             int veil = pill ? 0 : lens ? (!keyguard && t.live && t.popupTone && (popupVeil >>> 24) > 0 ? popupVeil : 0)
                     : SemBlurBridge.shadeVeil(lens, keyguard, scaled, toneVeil);
             if (veil != 0) tint = veil;
