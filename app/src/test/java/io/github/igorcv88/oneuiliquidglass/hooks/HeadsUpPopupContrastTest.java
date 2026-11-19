@@ -2,6 +2,8 @@ package io.github.igorcv88.oneuiliquidglass.hooks;
 
 import static org.junit.Assert.*;
 
+import android.content.Context;
+import android.content.ContextWrapper;
 import android.graphics.drawable.ColorDrawable;
 import android.view.View;
 import android.widget.FrameLayout;
@@ -47,8 +49,11 @@ public class HeadsUpPopupContrastTest {
         FrameLayout parent = new FrameLayout(RuntimeEnvironment.getApplication());
         FrameLayout liveCard = new FrameLayout(parent.getContext());
         FrameLayout privateFill = new FrameLayout(parent.getContext());
-        TextView label = new TextView(parent.getContext());
-        TextView badge = new TextView(parent.getContext());
+        Context remoteViewsContext = new ContextWrapper(parent.getContext()) {
+            @Override public String getPackageName() { return "com.example.liveupdate"; }
+        };
+        TextView label = new TextView(remoteViewsContext);
+        TextView badge = new TextView(remoteViewsContext);
         label.setTextColor(0xffffffff);
         badge.setTextColor(0xffffffff);
         liveCard.setBackground(new ColorDrawable(0xffdddddd));
