@@ -49,6 +49,7 @@ import io.github.igorcv88.oneuiliquidglass.glass.P3ModeBus;
 import io.github.igorcv88.oneuiliquidglass.glass.NotificationEdgeLineGain;
 import io.github.igorcv88.oneuiliquidglass.glass.CornerGeometry;
 import io.github.igorcv88.oneuiliquidglass.hooks.ongoing.LiveSurfaceHooks.CardInk;
+import io.github.igorcv88.oneuiliquidglass.hooks.ongoing.MediaArtGlass;
 
 public final class HeadsUpHooks {
     private static final String ROW = "com.android.systemui.statusbar.notification.row.ExpandableNotificationRow";
@@ -609,7 +610,8 @@ public final class HeadsUpHooks {
         // Read-only media map (debug.oulg.mediaprobe=1); one property read per second when off.
         io.github.igorcv88.oneuiliquidglass.hooks.ongoing.LiveMediaSurvey.start();
         // Album art of the shade player and of the stack's media card over our glass (debug.oulg.mediaart).
-        try { io.github.igorcv88.oneuiliquidglass.hooks.ongoing.MediaArtGlass.install(loader, this::rowDrawsGlass); }
+        try { io.github.igorcv88.oneuiliquidglass.hooks.ongoing.MediaArtGlass.install(loader, this::rowDrawsGlass,
+                this::mediaCompositionChanged, this::applyShadeMediaRim); }
         catch (RuntimeException | LinkageError e) { Probe.error("MEDIA_ART_INSTALL_FAILED", e); }
         installBlurGuard();
         installTouchSignal();
@@ -1695,16 +1697,37 @@ public final class HeadsUpHooks {
      * draw was hooked, and lastFallback is null exactly while glass is drawn.
      */
     private boolean rowDrawsGlass(View row) {
-        if (!enabled || !(row instanceof ViewGroup)) return false;
+        return mediaGlassState(row) != null;
+    }
+
+    private State mediaGlassState(View row) {
+        if (!enabled || !(row instanceof ViewGroup)) return null;
         ViewGroup g = (ViewGroup) row;
         for (int i = 0; i < g.getChildCount(); i++) {
             View c = g.getChildAt(i);
             if (c.getVisibility() != View.VISIBLE) continue;
             State s = registeredState(c);
-            if (s != null && s.glass != null && !s.failed && s.lastFallback == null) return true;
+            if (s != null && s.glass != null && !s.failed && s.lastFallback == null) return s;
         }
-        return false;
+        return null;
     }
+
+    private void applyShadeMediaRim(View row, View art,
+            io.github.igorcv88.oneuiliquidglass.hooks.ongoing.MediaArtRim rim) {
+        State state = mediaGlassState(row);
+        if (state != null) state.glass.applyMediaRim(row, state.background.get(), art, rim);
+    }
+
+    private void mediaCompositionChanged(View row) {
+        if (!(row instanceof ViewGroup)) return;
+        ViewGroup group = (ViewGroup) row;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            State state = registeredState(group.getChildAt(i));
+            if (state != null && state.row.get() == row && state.liveCardGlass == null)
+                state.setForeground(state.requestedMediaSwap);
+        }
+    }
+
     private State state(View bg, View row) {
         State existing = registeredState(bg);
         if (existing != null) return existing;
@@ -2300,6 +2323,7 @@ public final class HeadsUpHooks {
         }
         /** Swapped text and icon tone; the views are walked again every SWAP_WALK_MS while it is on (new inflations). */
         void setForeground(boolean swap) {
+            requestedMediaSwap = swap;
             if (liveCardGlass == null && liveCardTones.containsKey(row.get())) return;
             // Existing pre-draw/rebind path: cached identity checks only; decoding happens off-thread.
             // Notification symbols belong to the notification, not to the lifetime of its glass
@@ -2307,8 +2331,11 @@ public final class HeadsUpHooks {
             // shade; restoring icons in that transition made the original icon flash for a frame.
             if (liveCardGlass == null) syncNotificationIcons();
             else syncLiveCardIcon(false);
+            boolean nativeMedia = liveCardGlass == null && MediaArtGlass.usesNativeShadeForeground(row.get());
+            if (nativeMedia) swap = false;
             long now = android.os.SystemClock.uptimeMillis();
-            String reason = swap == swapped ? null : swap ? "style" : "restore";
+            String reason = nativeMedia && !nativeMediaForeground ? "mediaNative"
+                    : swap == swapped ? null : swap ? "style" : "restore";
             // A child row that just got its own glass may still carry its group's swapped text
             // (Foreground.ownsTone): restore it once, or it kept the group's tone on its own glass.
             if (reason == null && !swap && inherited) reason = "inherited";
@@ -2337,14 +2364,15 @@ public final class HeadsUpHooks {
                 // A tone change on a card the user is looking at moves its text over a short
                 // transition; the first tone of a card and a hidden card change at once.
                 View shown = row.get();
-                boolean animate = ("style".equals(reason) || "restore".equals(reason)) && shown != null
+                boolean animate = !nativeMedia && ("style".equals(reason) || "restore".equals(reason)) && shown != null
                         && shown.isShown() && shownAlpha(shown) > 0.01f && animateSwap;
                 InkAnimator.Timeline ink = foregroundTimeline;
-                boolean sameTransition = ink != null && ink.active();
+                boolean sameTransition = !nativeMedia && ink != null && ink.active();
                 int changed = Foreground.apply(shown, swap, ShadeTone.lightText(), swappedViews,
                         sameTransition || animate, sameTransition ? ink : null, liveIconView);
                 // Recorded only once the walk went through: a failed restore is retried.
                 swapped = swap;
+                nativeMediaForeground = nativeMedia;
                 if (sameTransition) ink.sealed = true;
                 if (changed > 0 && (Probe.trace || animate || reason.equals("rebind") || reason.equals("detached"))) {
                     Probe.log("TEXT_REAPPLY", "rowId=" + Integer.toHexString(System.identityHashCode(row.get())) + " reason=" + reason
@@ -2354,6 +2382,7 @@ public final class HeadsUpHooks {
                 }
             } catch (RuntimeException e) { Probe.error("TEXT_TONE_FAILED", e); }
         }
+        boolean nativeMediaForeground, requestedMediaSwap;
         int driftCount;
         long driftWindowAt;
         /** Set when this row's glass is built: its text may carry its group's tone until the next setForeground. */

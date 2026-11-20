@@ -228,6 +228,11 @@ public final class GlassDrawable extends Drawable {
             configured = true; lastTint = tint; tuningGeneration = Tuning.generation;
         }
     }
+    public void applyMediaRim(android.view.View ancestor, android.view.View host,
+            android.view.View art, io.github.igorcv88.oneuiliquidglass.hooks.ongoing.MediaArtRim rim) {
+        rim.apply(ancestor, host, art, getBounds(), radii, Math.max(0.75f * GlassSpec.hairPx(spec.hairDp, density), 1.1f));
+    }
+
     @Override public void draw(Canvas canvas) {
         long started = Perf.start(Perf.GLASS_DRAW);
         try { drawGlass(canvas); } finally { Perf.end(Perf.GLASS_DRAW, started); }

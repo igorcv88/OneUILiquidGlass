@@ -32,22 +32,23 @@ import io.github.igorcv88.oneuiliquidglass.hooks.Reflect;
  * eligible any more (recycled for an unknown item, data changed), gate off or detach of a dead toast: the
  * exact native background and Samsung's own blur are put back.</p>
  *
- * <p>The compositor region exists only while the host is attached and cross-window blur is on;
- * otherwise the wrapper draws the native drawable, so a translucent pane never shows over a sharp
- * backdrop. An attached pre-draw listener reconciles background ownership and companion layers, and
+ * <p>The compositor region normally lives only while the host is attached and cross-window blur is on.
+ * An active media card may retain its region during a bounded detach, subject to ViewRoot identity
+ * on reattachment. An attached pre-draw listener reconciles background ownership and companion layers, and
  * makes the region follow ancestor alpha without rebuilding it on unchanged frames.</p>
  */
 public final class LiveGlass {
-    // A live card can detach and reattach in the same transition frame. Releasing its old
-    // compositor blur must remain immediate, but restoring the Samsung ancestor colour/blur
-    // during that brief gap exposes a grey backing layer for one frame. This grace period
-    // applies ONLY to the CARD companion-restoration callback, not to region lifetime.
-    private static final long CARD_DETACH_GRACE_MS = 48L;
+    // Samsung reattaches a visible media card in the same transition frame.
+    static final long CARD_DETACH_GRACE_MS = 48L;
     private final Handler cardDetachHandler = new Handler(Looper.getMainLooper());
     /** The compositor region for a host, and whether cross-window blur is on now. */
     public interface Blur {
         BackgroundBlurBridge create(View host) throws ReflectiveOperationException;
         boolean enabled(View host);
+        default Object viewRoot(View host) {
+            try { return Reflect.call(host, "getViewRootImpl"); }
+            catch (ReflectiveOperationException | RuntimeException | LinkageError e) { return null; }
+        }
         default BackgroundBlurBridge create(View host, LiveSurface surface) throws ReflectiveOperationException { return create(host); }
     }
     /** Samsung's own SemBlurInfo on a host (read, clear, re-install); production: SemBlurBridge. */
@@ -115,6 +116,8 @@ public final class LiveGlass {
         int backgroundRepairs;
         boolean lastShown;
         Runnable pendingCardDetachRestore;
+        WeakReference<Object> regionRoot;
+        boolean retainedMediaRegion;
         /** Policy/capability sampled by lifecycle events, never queried through Binder per frame. */
         boolean available;
         /** Per-host state-change telemetry; never holds the host or its notification data. */
@@ -270,7 +273,7 @@ public final class LiveGlass {
             s.waiting = true;
             listen(s, v);
             if (!canShow(s, v)) { render(s, "WAITING_SAMSUNG", "canShow=false"); return Outcome.NATIVE; }
-            try { region = neutral(blur.create(v, s.surface)); }
+            try { region = createRegion(s, v); }
             catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
                 s.regionBroken = true;
                 logOnce(s.surface, "LIVE_GLASS_NO_REGION", "surface=" + s.surface + " stage=create keep=samsungBlur");
@@ -381,6 +384,8 @@ public final class LiveGlass {
         View v = s.host.get();
         LiveGlassDrawable g = s.glass;
         s.glass = null;
+        s.retainedMediaRegion = false;
+        s.regionRoot = null;
         removeListeners(s);
         if (g == null) return;
         Drawable nativeBg = s.displacedBackground != null ? s.displacedBackground : g.nativeDrawable();
@@ -414,7 +419,17 @@ public final class LiveGlass {
             s.pendingCardDetachRestore = null;
             // Another card's short-lived detach does not mean this card left the stack.
             // Explicit gate-off/forget/native fallback still restores immediately elsewhere.
-            if (s.glass != null && !view.isAttachedToWindow()) shown(s, view, false);
+            if (s.glass != null && !view.isAttachedToWindow()) {
+                if (s.retainedMediaRegion) {
+                    dropDetachedRegion(s);
+                    render(s, "DETACHED", "mediaDetachExpired");
+                    if (s.semInfo != null) {
+                        nativeBlurBack(s, "mediaDetachExpired");
+                        return;
+                    }
+                }
+                shown(s, view, false);
+            }
         };
         s.pendingCardDetachRestore = task[0];
         cardDetachHandler.postDelayed(task[0], CARD_DETACH_GRACE_MS);
@@ -425,21 +440,35 @@ public final class LiveGlass {
         s.attach = new View.OnAttachStateChangeListener() {
             @Override public void onViewAttachedToWindow(View view) {
                 cancelPendingCardRestore(s);
+                boolean retained = s.retainedMediaRegion;
+                if (retained) {
+                    Object previous = s.regionRoot == null ? null : s.regionRoot.get();
+                    Object current = blur.viewRoot(view);
+                    boolean sameRoot = previous != null && previous == current;
+                    if (!sameRoot) dropDetachedRegion(s);
+                    s.retainedMediaRegion = false;
+                    render(s, sameRoot ? "MEDIA_REATTACH_SAME_ROOT" : "MEDIA_REATTACH_NEW_ROOT",
+                            "previousRoot=" + Integer.toHexString(System.identityHashCode(previous))
+                            + " currentRoot=" + Integer.toHexString(System.identityHashCode(current)));
+                }
                 s.backgroundRepairs = 0;
                 sync(s);
+                // Re-record the background RenderNode on the receiving hierarchy, even though
+                // the region's geometry and alpha did not change.
+                if (retained) view.invalidate();
                 if (s.surface == LiveSurface.CARD) p3Sample(s, view, "attach");
             }
             @Override public void onViewDetachedFromWindow(View view) {
                 if (s.glass != null) {
-                    // The old blur region is tied to the previous ViewRoot and is released NOW.
-                    s.glass.setRegionless(false);
-                    s.glass.setBlur(null);
-                    s.glass.setGlass(false);
+                    s.retainedMediaRegion = s.surface == LiveSurface.CARD && s.lastShown
+                            && s.glass.blur() != null && s.regionRoot != null && s.regionRoot.get() != null
+                            && MediaArtGlass.hasStackComposition(view);
+                    if (!s.retainedMediaRegion) dropDetachedRegion(s);
                     if (s.surface == LiveSurface.CARD && s.lastShown)
                         delayCardCompanionRestore(s, view);
                     else shown(s, view, false);
                 }
-                render(s, "DETACHED", "windowLost");
+                render(s, s.retainedMediaRegion ? "MEDIA_DETACH_HELD" : "DETACHED", "windowLost");
                 removePreDraw(s);
                 // A toast view is never shown again: put its background back and drop it.
                 if (s.surface == LiveSurface.TOAST) forget(view, "detached");
@@ -447,6 +476,14 @@ public final class LiveGlass {
         };
         v.addOnAttachStateChangeListener(s.attach);
     }
+    private void dropDetachedRegion(State s) {
+        s.retainedMediaRegion = false;
+        s.regionRoot = null;
+        s.glass.setRegionless(false);
+        s.glass.setBlur(null);
+        s.glass.setGlass(false);
+    }
+
     private void removeListeners(State s) {
         cancelPendingCardRestore(s);
         if (s.p3 != null) { P3ModeBus.remove(s.p3); s.p3 = null; }
@@ -521,7 +558,7 @@ public final class LiveGlass {
     }
     private void sync(State s, boolean frame) {
         View v = s.host.get();
-        if (v == null) return;
+        if (v == null || s.retainedMediaRegion) return;
         boolean want = frame ? s.available && !s.regionBroken && v.isAttachedToWindow() : canShow(s, v);
         s.available = want;
         if (s.glass == null) {
@@ -571,7 +608,7 @@ public final class LiveGlass {
         }
         g.setRegionless(false);
         if (want && g.blur() == null) {
-            try { g.setBlur(neutral(blur.create(v, s.surface))); }
+            try { g.setBlur(createRegion(s, v)); }
             catch (ReflectiveOperationException | RuntimeException | LinkageError e) {
                 logOnce(s.surface, "LIVE_GLASS_NO_REGION", "surface=" + s.surface + " error=" + e.getClass().getSimpleName());
                 g.setBlur(null);
@@ -595,6 +632,14 @@ public final class LiveGlass {
         try { return s.nativeRegion != null && s.nativeRegion.test(v); }
         catch (RuntimeException e) { return false; }
     }
+    private BackgroundBlurBridge createRegion(State s, View host) throws ReflectiveOperationException {
+        // Resolve the creating root while attached. A missing identity disables reuse.
+        Object root = s.surface == LiveSurface.CARD ? blur.viewRoot(host) : null;
+        BackgroundBlurBridge region = neutral(blur.create(host, s.surface));
+        s.regionRoot = root == null || region == null ? null : new WeakReference<>(root);
+        return region;
+    }
+
     /** Every live region carries the neutral colour curve of the approved glass. */
     private static BackgroundBlurBridge neutral(BackgroundBlurBridge b) {
         if (b != null) b.setNeutralCurve(true);
