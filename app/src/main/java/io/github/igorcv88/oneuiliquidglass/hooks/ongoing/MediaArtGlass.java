@@ -90,6 +90,19 @@ public final class MediaArtGlass implements View.OnAttachStateChangeListener, Vi
     private static final Map<View, MediaArtGlass> WATCHED = new WeakHashMap<>();
     private static final Map<View, WeakReference<MediaArtGlass>> SHADE_ROWS = new WeakHashMap<>();
     private static Method getter;
+    private final android.os.Handler detachHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+    private boolean pendingStackDetach;
+    private final Runnable finishStackDetach = this::expireStackDetach;
+
+    static boolean hasStackComposition(View host) {
+        if (!(host instanceof ViewGroup)) return false;
+        ViewGroup group = (ViewGroup) host;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            MediaArtGlass media = WATCHED.get(group.getChildAt(i));
+            if (media != null && media.context == Context.STACK && media.artLease.held()) return true;
+        }
+        return false;
+    }
 
     /** The row reads the composition committed by the media pre-draw listener. */
     public static boolean usesNativeShadeForeground(View row) {
@@ -175,7 +188,12 @@ public final class MediaArtGlass implements View.OnAttachStateChangeListener, Vi
             }
         }
         // The same carousel may be re-hosted: the context is resolved again on every attach.
+        View previousHost = anchor == null ? null : anchor.get();
         resolveContext(v);
+        if (pendingStackDetach) {
+            cancelStackDetach();
+            if (context != Context.STACK || anchor.get() != previousHost) clearDetachedLayers();
+        }
         bindingDirty = true;
         nativeForeground = true;
         readProperties();
@@ -195,6 +213,25 @@ public final class MediaArtGlass implements View.OnAttachStateChangeListener, Vi
         if (owner != null && owner.get() == this) SHADE_ROWS.remove(row);
         observer = null;
         endHandoff(v);
+        if (context == Context.STACK && artLease.held() && appliedProbeMode == 0) {
+            cancelStackDetach();
+            pendingStackDetach = true;
+            detachHandler.postDelayed(finishStackDetach, LiveGlass.CARD_DETACH_GRACE_MS);
+        } else clearDetachedLayers();
+    }
+
+    private void cancelStackDetach() {
+        pendingStackDetach = false;
+        detachHandler.removeCallbacks(finishStackDetach);
+    }
+
+    private void expireStackDetach() {
+        if (!pendingStackDetach) return;
+        pendingStackDetach = false;
+        clearDetachedLayers();
+    }
+
+    private void clearDetachedLayers() {
         restore("detached", null);
         restoreProbe("detached");
         overlayView = null;

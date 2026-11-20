@@ -541,6 +541,96 @@ public class MediaArtGlassTest {
         assertEquals(0.50f, art.getTransitionAlpha(), 0f);
     }
 
+    @Test public void visibleStackReattachKeepsTheRegionAndArtworkLeases() {
+        StackTransfer stack = new StackTransfer();
+        var region = stack.drawable.blur();
+
+        stack.window.removeView(stack.holder);
+        assertSame(region, stack.drawable.blur());
+        assertStackComposition(stack);
+
+        stack.window.addView(stack.holder);
+        frame();
+        stack.expireDetach();
+        assertSame(region, stack.drawable.blur());
+        assertStackComposition(stack);
+    }
+
+    @Test public void visibleStackMovingToADifferentRootRecreatesOnlyTheRegion() {
+        StackTransfer stack = new StackTransfer();
+        var region = stack.drawable.blur();
+
+        stack.window.removeView(stack.holder);
+        stack.viewRoot = new Object();
+        stack.window.addView(stack.holder);
+        frame();
+
+        assertNotNull(stack.drawable.blur());
+        assertNotSame(region, stack.drawable.blur());
+        assertStackComposition(stack);
+    }
+
+    @Test public void finalStackDetachReleasesBothRegionAndArtwork() {
+        StackTransfer stack = new StackTransfer();
+        stack.window.removeView(stack.holder);
+        assertStackComposition(stack);
+
+        stack.expireDetach();
+        assertNull(stack.drawable.blur());
+        assertFalse(stack.drawable.showsGlass());
+        assertEquals(1f, art.getTransitionAlpha(), 0f);
+        assertEquals(1f, stack.overlay.getTransitionAlpha(), 0f);
+        assertEquals(255, fill.getAlpha());
+        assertNull(stack.media.artForTest());
+    }
+
+    private void assertStackComposition(StackTransfer stack) {
+        assertTrue(stack.drawable.showsGlass());
+        assertEquals(1f, stack.drawable.regionFadeForTrace(), 0f);
+        assertEquals(.5f, art.getTransitionAlpha(), 0f);
+        assertEquals(0f, stack.overlay.getTransitionAlpha(), 0f);
+        assertEquals(0, fill.getAlpha());
+    }
+
+    private final class StackTransfer {
+        final FrameLayout window = new FrameLayout(activity);
+        final FrameLayout holder = new FrameLayout(activity);
+        final io.github.igorcv88.oneuiliquidglass.glass.LiveGlassDrawable drawable;
+        final MediaArtGlass media;
+        final View overlay;
+        Object viewRoot = new Object();
+
+        StackTransfer() {
+            shade();
+            ((FrameLayout) root.getParent()).removeView(root);
+            holder.setId(android.R.id.icon_frame);
+            android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
+            bg.setCornerRadius(24f);
+            bg.setColor(0xff112233);
+            holder.setBackground(bg);
+            overlay = addOverlay(1f);
+            holder.addView(root);
+            window.addView(holder);
+            activity.setContentView(window);
+            Env env = new Env() {
+                @Override public Object viewRoot(View host) { return viewRoot; }
+            };
+            LiveGlass live = env.glass();
+            live.offer(holder, LiveSurface.CARD, this, LiveEligibility.Verdict.OK, owner -> true);
+            drawable = live.glassOf(holder);
+            assertNotNull(drawable);
+            assertNotNull(drawable.blur());
+            media = MediaArtGlass.watch(root);
+            frame();
+            assertStackComposition(this);
+        }
+
+        void expireDetach() {
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(
+                    java.time.Duration.ofMillis(LiveGlass.CARD_DETACH_GRACE_MS + 1));
+        }
+    }
+
     @Test public void aMediaPlayerOutsideTheShadeRowAndTheStackIsNeverTouched() {
         // QS panel media: same class and ids, no row or stack holder above it.
         FrameLayout panel = new FrameLayout(activity);
