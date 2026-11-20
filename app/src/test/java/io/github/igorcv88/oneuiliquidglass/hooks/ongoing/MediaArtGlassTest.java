@@ -446,6 +446,71 @@ public class MediaArtGlassTest {
         assertEquals(1f, fresh.getTransitionAlpha(), 0f);
     }
 
+    @Test public void aVisibleReplacementWinsOverAnAttachedHiddenPanel() {
+        shade();
+        View oldOverlay = addOverlay(1f);
+        glass = true;
+        MediaArtGlass m = MediaArtGlass.watch(root);
+        frame();
+
+        FrameLayout replacement = new FrameLayout(activity);
+        replacement.setId(art.getId());
+        ColorDrawable replacementFill = new ColorDrawable(0xff123456);
+        replacement.setBackground(replacementFill);
+        ImageView replacementOverlay = new ImageView(activity);
+        replacementOverlay.setId(oldOverlay.getId());
+        art.setVisibility(View.INVISIBLE);
+        oldOverlay.setVisibility(View.INVISIBLE);
+        root.addView(replacement);
+        root.addView(replacementOverlay);
+        now.addAndGet(16);
+        frame();
+
+        assertTrue(art.isAttachedToWindow());
+        assertSame(replacement, m.artForTest());
+        assertEquals(1f, art.getTransitionAlpha(), 0f);
+        assertEquals(1f, oldOverlay.getTransitionAlpha(), 0f);
+        assertEquals(255, fill.getAlpha());
+        assertEquals(0.50f, replacement.getTransitionAlpha(), 0f);
+        assertEquals(0f, replacementOverlay.getTransitionAlpha(), 0f);
+        assertEquals(0, replacementFill.getAlpha());
+    }
+
+    @Test public void aReplacementFilmIsAcquiredWithoutReplacingTheArt() {
+        shade();
+        View oldOverlay = addOverlay(1f);
+        glass = true;
+        MediaArtGlass.watch(root);
+        frame();
+        root.removeView(oldOverlay);
+        View nextOverlay = addOverlay(1f);
+        frame();
+
+        assertEquals(1f, oldOverlay.getTransitionAlpha(), 0f);
+        assertEquals(0f, nextOverlay.getTransitionAlpha(), 0f);
+        assertEquals(0.50f, art.getTransitionAlpha(), 0f);
+    }
+
+    @Test public void lateAlbumArtUsesTheFirstLayoutAndShadeToneWaitsForTheLease() {
+        shade();
+        root.removeView(art);
+        glass = true;
+        MediaArtGlass.watch(root);
+        View row = (View) root.getParent();
+        assertTrue(MediaArtGlass.usesNativeShadeForeground(row));
+
+        root.addView(art, 0);
+        root.getViewTreeObserver().dispatchOnGlobalLayout();
+        assertFalse(MediaArtGlass.usesNativeShadeForeground(row));
+        assertEquals(0.50f, art.getTransitionAlpha(), 0f);
+        assertEquals(0, fill.getAlpha());
+
+        glass = false;
+        assertTrue(MediaArtGlass.usesNativeShadeForeground(row));
+        assertEquals(1f, art.getTransitionAlpha(), 0f);
+        assertEquals(255, fill.getAlpha());
+    }
+
     @Test public void aMediaPlayerOutsideTheShadeRowAndTheStackIsNeverTouched() {
         // QS panel media: same class and ids, no row or stack holder above it.
         FrameLayout panel = new FrameLayout(activity);

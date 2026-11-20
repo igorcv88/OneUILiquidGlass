@@ -49,6 +49,7 @@ import io.github.igorcv88.oneuiliquidglass.glass.P3ModeBus;
 import io.github.igorcv88.oneuiliquidglass.glass.NotificationEdgeLineGain;
 import io.github.igorcv88.oneuiliquidglass.glass.CornerGeometry;
 import io.github.igorcv88.oneuiliquidglass.hooks.ongoing.LiveSurfaceHooks.CardInk;
+import io.github.igorcv88.oneuiliquidglass.hooks.ongoing.MediaArtGlass;
 
 public final class HeadsUpHooks {
     private static final String ROW = "com.android.systemui.statusbar.notification.row.ExpandableNotificationRow";
@@ -2307,8 +2308,11 @@ public final class HeadsUpHooks {
             // shade; restoring icons in that transition made the original icon flash for a frame.
             if (liveCardGlass == null) syncNotificationIcons();
             else syncLiveCardIcon(false);
+            boolean nativeMedia = liveCardGlass == null && MediaArtGlass.usesNativeShadeForeground(row.get());
+            if (nativeMedia) swap = false;
             long now = android.os.SystemClock.uptimeMillis();
-            String reason = swap == swapped ? null : swap ? "style" : "restore";
+            String reason = nativeMedia && !nativeMediaForeground ? "mediaNative"
+                    : swap == swapped ? null : swap ? "style" : "restore";
             // A child row that just got its own glass may still carry its group's swapped text
             // (Foreground.ownsTone): restore it once, or it kept the group's tone on its own glass.
             if (reason == null && !swap && inherited) reason = "inherited";
@@ -2337,14 +2341,15 @@ public final class HeadsUpHooks {
                 // A tone change on a card the user is looking at moves its text over a short
                 // transition; the first tone of a card and a hidden card change at once.
                 View shown = row.get();
-                boolean animate = ("style".equals(reason) || "restore".equals(reason)) && shown != null
+                boolean animate = !nativeMedia && ("style".equals(reason) || "restore".equals(reason)) && shown != null
                         && shown.isShown() && shownAlpha(shown) > 0.01f && animateSwap;
                 InkAnimator.Timeline ink = foregroundTimeline;
-                boolean sameTransition = ink != null && ink.active();
+                boolean sameTransition = !nativeMedia && ink != null && ink.active();
                 int changed = Foreground.apply(shown, swap, ShadeTone.lightText(), swappedViews,
                         sameTransition || animate, sameTransition ? ink : null, liveIconView);
                 // Recorded only once the walk went through: a failed restore is retried.
                 swapped = swap;
+                nativeMediaForeground = nativeMedia;
                 if (sameTransition) ink.sealed = true;
                 if (changed > 0 && (Probe.trace || animate || reason.equals("rebind") || reason.equals("detached"))) {
                     Probe.log("TEXT_REAPPLY", "rowId=" + Integer.toHexString(System.identityHashCode(row.get())) + " reason=" + reason
@@ -2354,6 +2359,7 @@ public final class HeadsUpHooks {
                 }
             } catch (RuntimeException e) { Probe.error("TEXT_TONE_FAILED", e); }
         }
+        boolean nativeMediaForeground;
         int driftCount;
         long driftWindowAt;
         /** Set when this row's glass is built: its text may carry its group's tone until the next setForeground. */
