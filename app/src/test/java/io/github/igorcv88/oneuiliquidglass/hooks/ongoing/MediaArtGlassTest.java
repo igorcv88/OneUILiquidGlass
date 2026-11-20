@@ -75,6 +75,13 @@ public class MediaArtGlassTest {
 
     private void frame() { root.getViewTreeObserver().dispatchOnPreDraw(); }
 
+    private void loseGlass() {
+        glass = false;
+        frame();
+        now.addAndGet(MediaArtGlass.GLASS_HANDOFF_MS);
+        frame();
+    }
+
     @Test public void artShowsTheGlassAtTheDefaultOpacity() {
         shade();
         glass = true;
@@ -98,8 +105,7 @@ public class MediaArtGlassTest {
         glass = true;
         MediaArtGlass.watch(root);
         frame();
-        glass = false;
-        frame();
+        loseGlass();
         assertEquals(1f, art.getTransitionAlpha(), 0f);
         assertEquals(255, fill.getAlpha());
         assertEquals(0xff000000, fill.getColor());
@@ -124,8 +130,7 @@ public class MediaArtGlassTest {
         assertEquals(255, fill.getAlpha());
         frame();
         assertEquals(0, fill.getAlpha());
-        glass = false;
-        frame();
+        loseGlass();
         assertEquals(0xff112233, fill.getColor());
     }
 
@@ -329,8 +334,7 @@ public class MediaArtGlassTest {
         glass = true;
         MediaArtGlass.watch(root);
         frame();
-        glass = false;
-        frame();
+        loseGlass();
         assertEquals(1f, art.getTransitionAlpha(), 0f);
         assertEquals(1f, overlay.getTransitionAlpha(), 0f);
         assertEquals(0.65f, overlay.getAlpha(), 0f);
@@ -369,8 +373,7 @@ public class MediaArtGlassTest {
         assertEquals(0f, overlay.getAlpha(), 0f);
         assertEquals("transition alpha untouched in this mode", 1f, art.getTransitionAlpha(), 0f);
         assertEquals(1f, overlay.getTransitionAlpha(), 0f);
-        glass = false;
-        frame();
+        loseGlass();
         assertEquals(0.80f, art.getAlpha(), 0f);
         assertEquals(0.90f, overlay.getAlpha(), 0f);
     }
@@ -387,8 +390,7 @@ public class MediaArtGlassTest {
         frame();
         assertEquals(0.30f, art.getAlpha(), 1e-6f);
         assertEquals(0f, overlay.getAlpha(), 0f);
-        glass = false;
-        frame();
+        loseGlass();
         assertEquals("the latest native value comes back", 0.60f, art.getAlpha(), 0f);
         assertEquals(0.70f, overlay.getAlpha(), 0f);
     }
@@ -501,14 +503,42 @@ public class MediaArtGlassTest {
 
         root.addView(art, 0);
         root.getViewTreeObserver().dispatchOnGlobalLayout();
+        assertTrue(MediaArtGlass.usesNativeShadeForeground(row));
+        frame();
         assertFalse(MediaArtGlass.usesNativeShadeForeground(row));
         assertEquals(0.50f, art.getTransitionAlpha(), 0f);
         assertEquals(0, fill.getAlpha());
 
-        glass = false;
+        loseGlass();
         assertTrue(MediaArtGlass.usesNativeShadeForeground(row));
         assertEquals(1f, art.getTransitionAlpha(), 0f);
         assertEquals(255, fill.getAlpha());
+    }
+
+    @Test public void openingKeepsTheArtAndFilmLeasesAcrossAShortGlassHandoff() {
+        shade();
+        View overlay = addOverlay(1f);
+        glass = true;
+        MediaArtGlass.watch(root);
+        frame();
+
+        root.setVisibility(View.INVISIBLE);
+        glass = false;
+        frame();
+        assertEquals(0.50f, art.getTransitionAlpha(), 0f);
+        root.setVisibility(View.VISIBLE);
+        frame();
+        now.addAndGet(45);
+        frame();
+        assertEquals(0.50f, art.getTransitionAlpha(), 0f);
+        assertEquals(0f, overlay.getTransitionAlpha(), 0f);
+        assertEquals(0, fill.getAlpha());
+
+        glass = true;
+        frame();
+        now.addAndGet(MediaArtGlass.GLASS_HANDOFF_MS);
+        frame();
+        assertEquals(0.50f, art.getTransitionAlpha(), 0f);
     }
 
     @Test public void aMediaPlayerOutsideTheShadeRowAndTheStackIsNeverTouched() {

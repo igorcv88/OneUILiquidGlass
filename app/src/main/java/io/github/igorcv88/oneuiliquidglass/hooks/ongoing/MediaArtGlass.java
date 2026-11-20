@@ -57,6 +57,7 @@ public final class MediaArtGlass implements View.OnAttachStateChangeListener, Vi
             MIN_OPACITY = io.github.igorcv88.oneuiliquidglass.glass.Tuning.MEDIA_ART_MIN, MAX_OPACITY = 1.00f,
             OFF = io.github.igorcv88.oneuiliquidglass.glass.Tuning.MEDIA_ART_NATIVE;
     static final long SESSION_GAP_MS = 1000;
+    static final long GLASS_HANDOFF_MS = 100;
     private static final String ROOT_CLASS = "com.android.systemui.media.QSMediaCornerRoundedView";
 
     /** Whether the module's glass is drawn under a shade notification row right now. */
@@ -75,6 +76,11 @@ public final class MediaArtGlass implements View.OnAttachStateChangeListener, Vi
 
     static Names names = DZIF;
     static RowGlass rowGlass = row -> false;
+    private static java.util.function.Consumer<View> shadeCompositionChanged = row -> {};
+    private static RimSource rimSource = (row, art, rim) -> {};
+    public interface RimSource { void apply(View row, View art, MediaArtRim rim); }
+    private final MediaArtRim rim = new MediaArtRim();
+    private boolean nativeForeground = true;
     /** The opacity, already parsed (production: Tuning, which reads the app setting first). */
     interface OpacitySource { float get(); }
     static OpacitySource opacitySource = () -> io.github.igorcv88.oneuiliquidglass.glass.Tuning.get().mediaArt;
@@ -85,16 +91,14 @@ public final class MediaArtGlass implements View.OnAttachStateChangeListener, Vi
     private static final Map<View, WeakReference<MediaArtGlass>> SHADE_ROWS = new WeakHashMap<>();
     private static Method getter;
 
-    /** Reconcile the shade media layers before the row chooses its foreground for this traversal. */
+    /** The row reads the composition committed by the media pre-draw listener. */
     public static boolean usesNativeShadeForeground(View row) {
         WeakReference<MediaArtGlass> ref = SHADE_ROWS.get(row);
         MediaArtGlass media = ref == null ? null : ref.get();
         if (media == null) return false;
         View root = media.root.get();
         if (root == null || !root.isShown()) return false;
-        media.onPreDraw();
-        return !media.artLease.held() || (media.art.getAlpha() >= 1f
-                && media.art.getTransitionAlpha() >= 1f);
+        return media.nativeForeground;
     }
 
     enum Context { NONE, SHADE, STACK }
@@ -106,6 +110,8 @@ public final class MediaArtGlass implements View.OnAttachStateChangeListener, Vi
     private View art;
     private boolean bindingDirty;
     private boolean artShown, overlayShown;
+    private long missingGlassSince = -1;
+    private final Runnable finishHandoff = this::invalidateRoot;
     private View overlayView;
     private float opacity = DEFAULT_OPACITY;
     /** true: View.setAlpha; false: View.setTransitionAlpha (debug.oulg.mediaart.alpha). */
@@ -128,7 +134,10 @@ public final class MediaArtGlass implements View.OnAttachStateChangeListener, Vi
     private MediaArtGlass(View root) { this.root = new java.lang.ref.WeakReference<>(root); }
 
     /** From the hook installation: follows every QSMediaCornerRoundedView SystemUI creates. */
-    public static void install(ClassLoader loader, RowGlass rows) {
+    public static void install(ClassLoader loader, RowGlass rows,
+            java.util.function.Consumer<View> foregroundChanged, RimSource shadeRim) {
+        shadeCompositionChanged = foregroundChanged;
+        rimSource = shadeRim;
         if (rows != null) rowGlass = rows;
         Class<?> c;
         try { c = XposedHelpers.findClassIfExists(ROOT_CLASS, loader); }
@@ -168,6 +177,7 @@ public final class MediaArtGlass implements View.OnAttachStateChangeListener, Vi
         // The same carousel may be re-hosted: the context is resolved again on every attach.
         resolveContext(v);
         bindingDirty = true;
+        nativeForeground = true;
         readProperties();
         lastFrame = clock.getAsLong();
         observer = v.getViewTreeObserver();
@@ -184,6 +194,7 @@ public final class MediaArtGlass implements View.OnAttachStateChangeListener, Vi
         WeakReference<MediaArtGlass> owner = SHADE_ROWS.get(row);
         if (owner != null && owner.get() == this) SHADE_ROWS.remove(row);
         observer = null;
+        endHandoff(v);
         restore("detached", null);
         restoreProbe("detached");
         overlayView = null;
@@ -201,6 +212,17 @@ public final class MediaArtGlass implements View.OnAttachStateChangeListener, Vi
             restoreProbe("error");
             Probe.error("MEDIA_ART_FAILED", e);
         }
+        if (context == Context.SHADE) {
+            boolean nativeNow = !artLease.held() || (art.getAlpha() >= 1f && art.getTransitionAlpha() >= 1f);
+            if (nativeNow != nativeForeground) {
+                nativeForeground = nativeNow;
+                View row = anchor == null ? null : anchor.get();
+                if (row != null) {
+                    try { shadeCompositionChanged.accept(row); }
+                    catch (RuntimeException | LinkageError e) { Probe.error("MEDIA_FOREGROUND_FAILED", e); }
+                }
+            }
+        }
         return true;
     }
 
@@ -214,18 +236,29 @@ public final class MediaArtGlass implements View.OnAttachStateChangeListener, Vi
             bindingDirty = true;
         }
         lastFrame = now;
+        // A hidden carousel has no pixels. Keep its current lease across visibility changes
+        // during opening; rebind before it next becomes visible.
+        if (opacity == OFF && probeMode == 0) {
+            restoreProbe("disabled");
+            restore("off", null);
+            return;
+        }
+        if (!r.isShown()) return;
         if (bindingDirty || (art != null && (!art.isAttachedToWindow() || art.isShown() != artShown))
                 || (overlayView != null && (!overlayView.isAttachedToWindow()
                 || overlayView.getParent() != art.getParent()
                 || overlayView.isShown() != overlayShown))) {
             View nextArt = findVisibleArt(r);
             View nextOverlay = findOverlaySibling(nextArt);
-            if (nextArt != art || nextOverlay != overlayView) {
+            if (nextArt != art) {
                 restore("rebind", null);
                 restoreProbe("rebind");
                 art = nextArt;
-                overlayView = nextOverlay;
+            } else if (nextOverlay != overlayView) {
+                overlayLease.release();
+                restoreProbe("overlayRebind");
             }
+            overlayView = nextOverlay;
             artShown = art != null && art.isShown();
             overlayShown = overlayView != null && overlayView.isShown();
             bindingDirty = false;
@@ -237,10 +270,21 @@ public final class MediaArtGlass implements View.OnAttachStateChangeListener, Vi
             return;
         }
         restoreProbe("disabled");
-        if (opacity == OFF) { restore("off", null); return; }
-        if (!r.isShown()) { restore("hidden", null); return; }
         if (art == null) { restore("noArt", null); return; }
-        if (!glassBehind()) { restore("noGlass", null); return; }
+        boolean hasGlass = glassBehind();
+        if (hasGlass) {
+            endHandoff(r);
+        } else {
+            if (!artLease.held()) { restore("noGlass", null); return; }
+            if (missingGlassSince < 0) {
+                missingGlassSince = now;
+                r.postDelayed(finishHandoff, GLASS_HANDOFF_MS);
+            }
+            if (now - missingGlassSince >= GLASS_HANDOFF_MS) {
+                restore("noGlass", null);
+                return;
+            }
+        }
         Drawable fill = art.getBackground();
         if (fill != null && !(fill instanceof ColorDrawable)) {
             // An unknown opaque layer: a lower alpha would only darken the art over it.
@@ -248,12 +292,30 @@ public final class MediaArtGlass implements View.OnAttachStateChangeListener, Vi
             return;
         }
         apply(fill == null ? null : (ColorDrawable) fill);
+        View host = anchor == null ? null : anchor.get();
+        if (!hasGlass || host == null || !art.isHardwareAccelerated()) return;
+        if (context == Context.SHADE) rimSource.apply(host, art, rim);
+        else if (host.getBackground() instanceof LiveGlassDrawable) {
+            ((LiveGlassDrawable) host.getBackground()).applyMediaRim(host, host, art, rim);
+        }
+    }
+
+    private void invalidateRoot() {
+        View v = root.get();
+        if (v != null) v.invalidate();
+    }
+
+    private void endHandoff(View view) {
+        if (missingGlassSince < 0) return;
+        missingGlassSince = -1;
+        view.removeCallbacks(finishHandoff);
     }
 
     private boolean glassBehind() {
         View a = anchor == null ? null : anchor.get();
         if (a == null) return false;
-        if (context == Context.STACK) return a.getBackground() instanceof LiveGlassDrawable;
+        if (context == Context.STACK) return a.getBackground() instanceof LiveGlassDrawable
+                && ((LiveGlassDrawable) a.getBackground()).showsGlassBehindMedia();
         return rowGlass.drawsGlass(a);
     }
 
@@ -291,8 +353,11 @@ public final class MediaArtGlass implements View.OnAttachStateChangeListener, Vi
 
     /** reason is a literal: an unchanged reason is recognised by identity, without building a string. */
     private void restore(String reason, Drawable fill) {
+        View r = root.get();
+        if (r != null) endHandoff(r);
         boolean held = artLease.held() || overlayLease.held() || leasedFill != null;
         int nativeWrites = artLease.nativeWrites + overlayLease.nativeWrites;
+        rim.release();
         artLease.release();
         overlayLease.release();
         restoreFill();

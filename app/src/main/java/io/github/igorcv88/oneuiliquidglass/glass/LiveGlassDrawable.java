@@ -260,6 +260,10 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
     public float regionFadeForTrace() { return regionFade; }
     /** Whether the glass is what would be drawn now. */
     public boolean showsGlass() { return glass && (blur != null || regionless); }
+
+    public boolean showsGlassBehindMedia() {
+        return showsGlass() && (!regionless || nativeRegionActive.getAsBoolean());
+    }
     /** Ancestor alpha, which fades the view but not the compositor region. True if it changed. */
     public boolean setRegionFade(float f) {
         f = Math.max(0f, Math.min(1f, f));
@@ -305,6 +309,11 @@ public final class LiveGlassDrawable extends Drawable implements Drawable.Callba
     }
 
     // ---- drawing ---------------------------------------------------------------------------
+
+    public void applyMediaRim(android.view.View ancestor, android.view.View host,
+            android.view.View art, io.github.igorcv88.oneuiliquidglass.hooks.ongoing.MediaArtRim rim) {
+        rim.apply(ancestor, host, art, getBounds(), radii, neutralSigma);
+    }
 
     @Override public void draw(Canvas canvas) {
         long token = Perf.start(Perf.LIVE_DRAW);

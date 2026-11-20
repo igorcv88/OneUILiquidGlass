@@ -610,7 +610,8 @@ public final class HeadsUpHooks {
         // Read-only media map (debug.oulg.mediaprobe=1); one property read per second when off.
         io.github.igorcv88.oneuiliquidglass.hooks.ongoing.LiveMediaSurvey.start();
         // Album art of the shade player and of the stack's media card over our glass (debug.oulg.mediaart).
-        try { io.github.igorcv88.oneuiliquidglass.hooks.ongoing.MediaArtGlass.install(loader, this::rowDrawsGlass); }
+        try { io.github.igorcv88.oneuiliquidglass.hooks.ongoing.MediaArtGlass.install(loader, this::rowDrawsGlass,
+                this::mediaCompositionChanged, this::applyShadeMediaRim); }
         catch (RuntimeException | LinkageError e) { Probe.error("MEDIA_ART_INSTALL_FAILED", e); }
         installBlurGuard();
         installTouchSignal();
@@ -1696,16 +1697,37 @@ public final class HeadsUpHooks {
      * draw was hooked, and lastFallback is null exactly while glass is drawn.
      */
     private boolean rowDrawsGlass(View row) {
-        if (!enabled || !(row instanceof ViewGroup)) return false;
+        return mediaGlassState(row) != null;
+    }
+
+    private State mediaGlassState(View row) {
+        if (!enabled || !(row instanceof ViewGroup)) return null;
         ViewGroup g = (ViewGroup) row;
         for (int i = 0; i < g.getChildCount(); i++) {
             View c = g.getChildAt(i);
             if (c.getVisibility() != View.VISIBLE) continue;
             State s = registeredState(c);
-            if (s != null && s.glass != null && !s.failed && s.lastFallback == null) return true;
+            if (s != null && s.glass != null && !s.failed && s.lastFallback == null) return s;
         }
-        return false;
+        return null;
     }
+
+    private void applyShadeMediaRim(View row, View art,
+            io.github.igorcv88.oneuiliquidglass.hooks.ongoing.MediaArtRim rim) {
+        State state = mediaGlassState(row);
+        if (state != null) state.glass.applyMediaRim(row, state.background.get(), art, rim);
+    }
+
+    private void mediaCompositionChanged(View row) {
+        if (!(row instanceof ViewGroup)) return;
+        ViewGroup group = (ViewGroup) row;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            State state = registeredState(group.getChildAt(i));
+            if (state != null && state.row.get() == row && state.liveCardGlass == null)
+                state.setForeground(state.requestedMediaSwap);
+        }
+    }
+
     private State state(View bg, View row) {
         State existing = registeredState(bg);
         if (existing != null) return existing;
@@ -2301,6 +2323,7 @@ public final class HeadsUpHooks {
         }
         /** Swapped text and icon tone; the views are walked again every SWAP_WALK_MS while it is on (new inflations). */
         void setForeground(boolean swap) {
+            requestedMediaSwap = swap;
             if (liveCardGlass == null && liveCardTones.containsKey(row.get())) return;
             // Existing pre-draw/rebind path: cached identity checks only; decoding happens off-thread.
             // Notification symbols belong to the notification, not to the lifetime of its glass
@@ -2359,7 +2382,7 @@ public final class HeadsUpHooks {
                 }
             } catch (RuntimeException e) { Probe.error("TEXT_TONE_FAILED", e); }
         }
-        boolean nativeMediaForeground;
+        boolean nativeMediaForeground, requestedMediaSwap;
         int driftCount;
         long driftWindowAt;
         /** Set when this row's glass is built: its text may carry its group's tone until the next setForeground. */
