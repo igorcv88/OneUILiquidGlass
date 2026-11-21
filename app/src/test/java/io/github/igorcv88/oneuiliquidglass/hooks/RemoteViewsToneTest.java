@@ -131,6 +131,19 @@ public final class RemoteViewsToneTest {
         assertSame(nativeTint, button.getImageTintList());
     }
 
+    @Test public void clickBoundBitmapAndStatefulVectorActionArePreserved() {
+        ImageButton button = action();
+        ColorStateList stateful = new ColorStateList(
+                new int[][] { {android.R.attr.state_pressed}, {} }, new int[] { LIGHT, DARK });
+        button.setImageTintList(stateful);
+        assertFalse(apply(button, true, true));
+        assertSame(stateful, button.getImageTintList());
+        button.setImageTintList(ColorStateList.valueOf(LIGHT));
+        button.setImageBitmap(android.graphics.Bitmap.createBitmap(2, 2, android.graphics.Bitmap.Config.ARGB_8888));
+        assertFalse(apply(button, true, true));
+        assertEquals(LIGHT, button.getImageTintList().getDefaultColor());
+    }
+
     @Test public void replacementRestoresViewTintButKeepsNewDrawable() {
         ImageButton button = action();
         ColorStateList nativeTint = button.getImageTintList();

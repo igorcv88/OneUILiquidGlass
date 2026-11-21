@@ -97,8 +97,9 @@ final class Foreground {
     /** A list set on a swapped view: its default colour decides; the original list is what gets restored. */
     static ColorStateList interceptList(View v, ColorStateList list) {
         if (list == null) return null;
-        if (v instanceof TextView && list.isStateful() && !standard(v, false)
-                && !UberRemoteViewsTone.vehicleText(v)) {
+        if (list.isStateful() && v instanceof TextView
+                && (swapped.containsKey(v) || restoring.containsKey(v))
+                && !standard(v, false) && !UberRemoteViewsTone.vehicleText(v)) {
             swapped.remove(v);
             restoring.remove(v);
             InkAnimator.cancel(v);
@@ -778,8 +779,13 @@ final class Foreground {
         if (v == excludedIcon) return 0;
         // Existing expanded-Uber fallback. Its FrameLayouts expose no typed progress channel.
         int changed = UberRemoteViewsTone.apply(v, swap, lightText) ? 1 : 0;
-        // Typed app controls only. Use the same committed timeline as text and template glyphs.
-        changed += RemoteViewsTone.apply(v, swap, lightText, animating, timeline) ? 1 : 0;
+        // Native glyph routes keep priority if a view's ownership changes during a rebind.
+        if (v instanceof android.widget.ImageButton && (chevrons.containsKey(v) || restoringChevrons.containsKey(v)
+                || chevronId(v) || glyphs.containsKey(v) || smallIcon(v) || standard(v, true))) {
+            RemoteViewsTone.release(v);
+        } else {
+            changed += RemoteViewsTone.apply(v, swap, lightText, animating, timeline) ? 1 : 0;
+        }
         // The template's ProgressBar (android:id/progress): its tint lists follow the text tone.
         changed += NotificationProgressTone.apply(v, swap, lightText) ? 1 : 0;
         if (v instanceof TextView) {

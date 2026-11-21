@@ -53,6 +53,11 @@ final class RemoteViewsTone {
     }
 
     static boolean apply(View view, boolean swap, boolean lightText, boolean animate, InkAnimator.Timeline timeline) {
+        if (!(view instanceof ImageView) && !(view instanceof ProgressBar)) {
+            if (swap && Probe.trace && view.getClass() == android.widget.FrameLayout.class
+                    && view.getBackground() != null) report("painted-container-role-unverified");
+            return false;
+        }
         int kind = kind(view);
         Slot[] slots = active.get(view);
         if (kind == UNKNOWN && slots == null) {
