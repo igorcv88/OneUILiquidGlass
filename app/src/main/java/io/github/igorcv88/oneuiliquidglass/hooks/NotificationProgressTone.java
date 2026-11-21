@@ -62,13 +62,17 @@ final class NotificationProgressTone {
         return Foreground.mirror(color);
     }
 
-    private static boolean candidate(ProgressBar bar) {
-        int id = bar.getId();
-        if (id == View.NO_ID || (id >>> 24) == 0) return false;
+    static boolean template(View view) {
+        int id = view.getId();
+        if (id != android.R.id.progress) return false;
         try {
-            android.content.res.Resources r = bar.getResources();
-            if (!templateId(r.getResourcePackageName(id), r.getResourceEntryName(id))) return false;
+            android.content.res.Resources r = view.getResources();
+            return templateId(r.getResourcePackageName(id), r.getResourceEntryName(id));
         } catch (RuntimeException e) { return false; }
+    }
+
+    private static boolean candidate(ProgressBar bar) {
+        if (!template(bar)) return false;
         ViewParent p = bar.getParent();
         for (int depth = 0; p instanceof View && depth < 24; depth++) {
             if (p.getClass().getName().endsWith("ExpandableNotificationRow")) return true;
@@ -85,7 +89,7 @@ final class NotificationProgressTone {
             default: return b.getIndeterminateTintList();
         }
     }
-    private static void set(ProgressBar b, int channel, ColorStateList list) {
+    static void set(ProgressBar b, int channel, ColorStateList list) {
         switch (channel) {
             case PROGRESS: b.setProgressTintList(list); break;
             case BACKGROUND: b.setProgressBackgroundTintList(list); break;
@@ -178,3 +182,4 @@ final class NotificationProgressTone {
                 + " class=" + b.getClass().getName());
     }
 }
+
