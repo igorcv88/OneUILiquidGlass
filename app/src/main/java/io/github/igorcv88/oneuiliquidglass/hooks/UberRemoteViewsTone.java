@@ -30,6 +30,9 @@ final class UberRemoteViewsTone {
     private static final String UBER = "com.ubercab";
     private static final String ACCESSORY = "ub__ooa_layout_rider_trip_expanded_accessory_container";
     private static final String PROGRESS = "ub__ooa_layout_rider_trip_expanded_progress_container";
+    // Uber 4.657.10000: collapsed_a declares a separate slot for the trip-progress widget.
+    // Only the existing, individually verified monochrome child roles may be tinted here.
+    private static final String COLLAPSED_PROGRESS = "ub__ooa_layout_collapsed_rider_trip_progress";
     private static final WeakHashMap<View, Lease> active = new WeakHashMap<>();
     private static final Set<String> reported = new HashSet<>();
 
@@ -206,7 +209,7 @@ final class UberRemoteViewsTone {
             return restore(v, l);
         boolean expected = (r == Role.PROGRESS_FILLED || r == Role.PROGRESS_REMAINING)
                 ? v instanceof FrameLayout : v instanceof ImageView;
-        if (!expected || !inside(v, PROGRESS)) return restore(v, l);
+        if (!expected || !(inside(v, PROGRESS) || inside(v, COLLAPSED_PROGRESS))) return restore(v, l);
         return tintKnown(v, r, swap, lightText);
     }
 
