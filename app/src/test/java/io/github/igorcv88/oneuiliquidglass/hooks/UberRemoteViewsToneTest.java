@@ -65,6 +65,10 @@ public final class UberRemoteViewsToneTest {
             FrameLayout a=id(new FrameLayout(ctx),"ub__ooa_layout_rider_trip_expanded_progress_container");
             row.addView(a);return a;
         }
+        FrameLayout collapsedProgress() {
+            FrameLayout a=id(new FrameLayout(ctx),"ub__ooa_layout_collapsed_rider_trip_progress");
+            row.addView(a);return a;
+        }
     }
 
     @Test public void exactPublisherAndIdsOnly() {
@@ -136,6 +140,65 @@ public final class UberRemoteViewsToneTest {
         Foreground.apply(f.row,false,true,tracked);
         assertNull(filled.getBackgroundTintList());
         assertNull(remainder.getBackgroundTintList());
+    }
+
+    @Test public void contractedTripProgressSwapsOnlyKnownNeutralSegmentsAndRestores() {
+        Fixture f=new Fixture();FrameLayout progress=f.collapsedProgress();
+        FrameLayout filled=f.id(new FrameLayout(f.ctx),"progress_bar_filled");
+        FrameLayout remaining=f.id(new FrameLayout(f.ctx),"progress_bar_not_filled");
+        GradientDrawable rounded=new GradientDrawable();
+        rounded.setColor(0xfff3f3f3);rounded.setCornerRadius(9f);
+        filled.setBackground(rounded);
+        remaining.setBackground(new ColorDrawable(0xff727272));
+        progress.addView(filled);progress.addView(remaining);
+        ArrayList<View> tracked=new ArrayList<>();
+        Foreground.apply(f.row,true,true,tracked);
+        assertEquals(0xff0c0c0c,filled.getBackgroundTintList().getDefaultColor());
+        assertNull("the grey remaining segment is not theme-white",remaining.getBackgroundTintList());
+        assertSame(rounded,filled.getBackground());
+        assertEquals(1,tracked.size());
+        assertFalse(UberRemoteViewsTone.drift(filled));
+        Foreground.apply(f.row,false,true,tracked);
+        assertNull(filled.getBackgroundTintList());
+        assertNull(remaining.getBackgroundTintList());
+        assertEquals(0xfff3f3f3,rounded.getColor().getDefaultColor());
+    }
+
+    @Test public void contractedTripProgressIgnoresOtherUberSubtreesAndAccents() {
+        Fixture f=new Fixture();
+        FrameLayout body=f.id(new FrameLayout(f.ctx),"ub__ooa_layout_collapsed_rider_trip_body");
+        FrameLayout outside=f.id(new FrameLayout(f.ctx),"progress_bar_filled");
+        outside.setBackground(new ColorDrawable(0xfff3f3f3));
+        f.row.addView(body);body.addView(outside);
+        FrameLayout progress=f.collapsedProgress();
+        FrameLayout accent=f.id(new FrameLayout(f.ctx),"progress_bar_filled");
+        accent.setBackground(new ColorDrawable(0xff1279f4));
+        progress.addView(accent);
+        ImageView vehicle=f.id(new ImageView(f.ctx),"ub__ooa_element_collapsed_driver_image");
+        vehicle.setImageDrawable(new ColorDrawable(0xffffffff));
+        progress.addView(vehicle);
+        Foreground.apply(f.row,true,true,new ArrayList<>());
+        assertNull(outside.getBackgroundTintList());
+        assertNull(accent.getBackgroundTintList());
+        assertNull(vehicle.getImageTintList());
+    }
+
+    @Test public void contractedTripProgressPublisherRebindRetainsItsNewAccent() {
+        Fixture f=new Fixture();FrameLayout progress=f.collapsedProgress();
+        FrameLayout filled=f.id(new FrameLayout(f.ctx),"progress_bar_filled");
+        filled.setBackground(new ColorDrawable(0xfff3f3f3));
+        progress.addView(filled);
+        ArrayList<View> tracked=new ArrayList<>();
+        Foreground.apply(f.row,true,true,tracked);
+        assertEquals(0xff0c0c0c,filled.getBackgroundTintList().getDefaultColor());
+        ColorStateList accent=ColorStateList.valueOf(0xffaf5500);
+        filled.setBackground(new ColorDrawable(0xffccaacc));
+        filled.setBackgroundTintList(accent);
+        assertTrue(UberRemoteViewsTone.drift(filled));
+        Foreground.apply(f.row,true,true,tracked);
+        assertSame(accent,filled.getBackgroundTintList());
+        Foreground.apply(f.row,false,true,tracked);
+        assertSame(accent,filled.getBackgroundTintList());
     }
 
     @Test public void originalPublisherTintAndDynamicRebindAreRespected() {
