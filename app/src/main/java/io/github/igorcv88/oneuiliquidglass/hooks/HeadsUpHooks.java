@@ -2340,6 +2340,7 @@ public final class HeadsUpHooks {
             // (Foreground.ownsTone): restore it once, or it kept the group's tone on its own glass.
             if (reason == null && !swap && inherited) reason = "inherited";
             inherited = false;
+            if (reason == null && swap && foregroundRebound) reason = "notificationUpdated";
             if (reason == null && swap) {
                 // Swapped already: walk again only if SystemUI changed a colour back (rebind) or
                 // replaced the views; the periodic walk stays as a backstop for new views.
@@ -2372,6 +2373,7 @@ public final class HeadsUpHooks {
                         sameTransition || animate, sameTransition ? ink : null, liveIconView);
                 // Recorded only once the walk went through: a failed restore is retried.
                 swapped = swap;
+                foregroundRebound = false;
                 nativeMediaForeground = nativeMedia;
                 if (sameTransition) ink.sealed = true;
                 if (changed > 0 && (Probe.trace || animate || reason.equals("rebind") || reason.equals("detached"))) {
@@ -2382,7 +2384,7 @@ public final class HeadsUpHooks {
                 }
             } catch (RuntimeException e) { Probe.error("TEXT_TONE_FAILED", e); }
         }
-        boolean nativeMediaForeground, requestedMediaSwap;
+        boolean nativeMediaForeground, requestedMediaSwap, foregroundRebound;
         int driftCount;
         long driftWindowAt;
         /** Set when this row's glass is built: its text may carry its group's tone until the next setForeground. */
@@ -3036,6 +3038,7 @@ public final class HeadsUpHooks {
         }
         private void onEvent(String event) {
             View v = background.get(), r = row.get(); if (v == null || r == null) return;
+            if (swapped && "onNotificationUpdated".equals(event)) foregroundRebound = true;
             // Pre-resolve when SystemUI inflates/binds the row, usually while the shade is still
             // closed. In particular, do not wait for the first visible glass pre-draw to start
             // the PackageManager lookup and bitmap work on the worker thread.
@@ -3525,4 +3528,5 @@ public final class HeadsUpHooks {
         canvas.clipRect(0, top, v.getWidth(), Math.max(top, bottom));
     }
 }
+
 

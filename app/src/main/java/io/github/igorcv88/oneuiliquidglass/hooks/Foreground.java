@@ -14,7 +14,7 @@ import java.util.WeakHashMap;
  * The text and icon tone of a card that changed material style (ShadeTone.materialFor): over light
  * glass the theme's light text turns dark, over dark glass the theme's dark text turns light.
  * Standard template text and custom text on a clear path to the notification row qualify;
- * custom text with a background of its own is left alone. Icons retain their template-only rules.
+ * custom text with a background of its own is left alone. Typed RemoteViews controls have their own tint leases.
  * Among those, only the theme's text tone
  * (near-neutral greys: primary, secondary, time) changes; accent text, coloured spans, app icons
  * and action colours are left alone. Each grey is mirrored (255 - value, alpha kept), so the primary/secondary hierarchy holds.
@@ -97,6 +97,14 @@ final class Foreground {
     /** A list set on a swapped view: its default colour decides; the original list is what gets restored. */
     static ColorStateList interceptList(View v, ColorStateList list) {
         if (list == null) return null;
+        if (v instanceof TextView && list.isStateful() && !standard(v, false)
+                && !UberRemoteViewsTone.vehicleText(v)) {
+            swapped.remove(v);
+            restoring.remove(v);
+            InkAnimator.cancel(v);
+            reshadow((TextView) v);
+            return null;
+        }
         Integer c = redirect(v, list.getDefaultColor(), swapped, x -> list);
         return c == null ? null : ColorStateList.valueOf(c);
     }
@@ -730,6 +738,10 @@ final class Foreground {
                 if (UberRemoteViewsTone.drift(v)) return "uber-rebind";
                 continue;
             }
+            if (RemoteViewsTone.owns(v)) {
+                if (RemoteViewsTone.drift(v)) return "remoteviews-rebind";
+                continue;
+            }
             if (NotificationProgressTone.owns(v)) {
                 if (NotificationProgressTone.drift(v)) return "progress-rebind";
                 continue;
@@ -764,7 +776,10 @@ final class Foreground {
 
     private static int walk(View v, boolean swap, boolean lightText, java.util.List<View> tracked) {
         if (v == excludedIcon) return 0;
+        // Existing expanded-Uber fallback. Its FrameLayouts expose no typed progress channel.
         int changed = UberRemoteViewsTone.apply(v, swap, lightText) ? 1 : 0;
+        // Typed app controls only. Use the same committed timeline as text and template glyphs.
+        changed += RemoteViewsTone.apply(v, swap, lightText, animating, timeline) ? 1 : 0;
         // The template's ProgressBar (android:id/progress): its tint lists follow the text tone.
         changed += NotificationProgressTone.apply(v, swap, lightText) ? 1 : 0;
         if (v instanceof TextView) {
@@ -799,7 +814,7 @@ final class Foreground {
             else if (standard(v, true)) changed += ink(new Icon(i), swap, lightText, swapped, animating) ? 1 : 0;
         }
         if (tracked != null && swap && (swapped.containsKey(v) || chevrons.containsKey(v) || glyphs.containsKey(v)
-                || UberRemoteViewsTone.owns(v) || NotificationProgressTone.owns(v))) tracked.add(v);
+                || UberRemoteViewsTone.owns(v) || NotificationProgressTone.owns(v) || RemoteViewsTone.owns(v))) tracked.add(v);
         if (v instanceof ViewGroup) {
             ViewGroup g = (ViewGroup) v;
             for (int i = 0; i < g.getChildCount(); i++) {
@@ -874,7 +889,8 @@ final class Foreground {
         return true;
     }
     static boolean textEligible(View v) {
-        return standard(v, false) || customSurface(v) || UberRemoteViewsTone.vehicleText(v);
+        return standard(v, false) || UberRemoteViewsTone.vehicleText(v)
+                || (v instanceof TextView && !((TextView) v).getTextColors().isStateful() && customSurface(v));
     }
 
     /**
@@ -968,3 +984,4 @@ final class Foreground {
         return lightText ? luma >= 0.55f : luma <= 0.45f;
     }
 }
+
