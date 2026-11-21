@@ -195,8 +195,78 @@ public final class RemoteViewsToneTest {
         ColorStateList original = control.getProgressTintList();
         assertTrue(apply(control, true, true));
         row.removeView(control);
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
         assertSame(original, control.getProgressTintList());
         assertFalse(RemoteViewsTone.owns(control));
+    }
+
+    @Test public void sameHostReattachKeepsTintThroughDetachAndQueuedCleanup() {
+        ProgressBar control = bar(row, View.NO_ID, LIGHT);
+        org.robolectric.Robolectric.buildActivity(android.app.Activity.class).setup().get().setContentView(row);
+        var looper = org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper());
+        looper.idle();
+        assertTrue(apply(control, true, true));
+        ColorStateList applied = control.getProgressTintList();
+        row.removeView(control);
+        assertSame(applied, control.getProgressTintList());
+        row.addView(control);
+        looper.idle();
+        assertTrue(RemoteViewsTone.owns(control));
+        assertSame(applied, control.getProgressTintList());
+        assertFalse(apply(control, true, true));
+
+        row.removeView(control);
+        ColorStateList rebound = ColorStateList.valueOf(DARK);
+        control.setProgressTintList(rebound);
+        row.addView(control);
+        looper.idle();
+        assertFalse(RemoteViewsTone.owns(control));
+        assertSame(rebound, control.getProgressTintList());
+    }
+
+    @Test public void reattachInSameWindowToDifferentHostRestoresOldLease() {
+        ProgressBar control = bar(row, View.NO_ID, LIGHT);
+        FrameLayout window = new FrameLayout(context);
+        ExpandableNotificationRow other = new ExpandableNotificationRow(context);
+        window.addView(row);
+        window.addView(other);
+        org.robolectric.Robolectric.buildActivity(android.app.Activity.class).setup().get().setContentView(window);
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+        ColorStateList original = control.getProgressTintList();
+        assertTrue(apply(control, true, true));
+        row.removeView(control);
+        other.addView(control);
+        assertSame(original, control.getProgressTintList());
+        assertFalse(RemoteViewsTone.owns(control));
+    }
+
+    @Test public void platformActionTintIdentityDistinguishesEqualPublisherRewrite() {
+        ImageButton button = action();
+        assertTrue(apply(button, true, true));
+        ColorStateList applied = button.getImageTintList();
+        assertSame(applied, button.getImageTintList());
+        assertFalse(RemoteViewsTone.drift(button));
+        ColorStateList publisher = ColorStateList.valueOf(DARK);
+        assertNotSame(applied, publisher);
+        button.setImageTintList(publisher);
+        assertTrue(RemoteViewsTone.drift(button));
+        assertFalse(apply(button, false, true));
+        assertSame(publisher, button.getImageTintList());
+    }
+
+    @Test public void diagnosticsIdentifyPaintedNodeWithoutReadingContentDescription() {
+        FrameLayout painted = new FrameLayout(context);
+        painted.setId(android.R.id.background);
+        painted.setBackgroundColor(LIGHT);
+        painted.setContentDescription("private-content");
+        row.addView(painted);
+        String line = RemoteViewsTone.diagnostic(painted, -1, true, "painted-container-role-unverified");
+        assertTrue(line.contains("FrameLayout#background@"));
+        assertTrue(line.contains("drawable=ColorDrawable"));
+        assertTrue(line.contains("material=light"));
+        assertTrue(line.contains("glassPath=false"));
+        assertTrue(line.contains("ancestors=ExpandableNotificationRow"));
+        assertFalse(line.contains("private-content"));
     }
 
     @Test public void foregroundWalkRoutesTextAndBothLayoutBranches() {

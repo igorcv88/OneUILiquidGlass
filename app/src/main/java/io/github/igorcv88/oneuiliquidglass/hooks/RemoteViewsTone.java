@@ -10,6 +10,10 @@ import android.graphics.drawable.InsetDrawable;
 import android.graphics.drawable.LayerDrawable;
 import android.graphics.drawable.ScaleDrawable;
 import android.graphics.drawable.VectorDrawable;
+import android.os.Handler;
+import android.os.IBinder;
+import android.os.Looper;
+import android.os.SystemClock;
 import android.view.View;
 import android.widget.ImageButton;
 import android.widget.ImageView;
@@ -26,10 +30,59 @@ final class RemoteViewsTone {
     private static final int ACTION = NotificationProgressTone.CHANNELS;
     private static final int UNKNOWN = -1;
     private static final WeakHashMap<View, Slot[]> active = new WeakHashMap<>();
+    private static final WeakHashMap<View, Attachment> attachments = new WeakHashMap<>();
+    private static final Handler main = new Handler(Looper.getMainLooper());
+
+    private static final class Attachment {
+        final WeakReference<View> host;
+        final WeakReference<View> root;
+        final WeakReference<IBinder> window;
+        boolean pending;
+
+        Attachment(View view) {
+            host = new WeakReference<>(host(view));
+            root = new WeakReference<>(view.getRootView());
+            window = new WeakReference<>(view.getWindowToken());
+        }
+
+        boolean matches(View view) {
+            return host.get() != null && host.get() == host(view)
+                    && root.get() == view.getRootView()
+                    && window.get() != null && window.get() == view.getWindowToken();
+        }
+    }
+
+    private static View host(View view) {
+        for (android.view.ViewParent parent = view.getParent(); parent instanceof View;
+                parent = parent.getParent()) {
+            View ancestor = (View) parent;
+            if (Foreground.ownsLiveCardTone.test(ancestor)
+                    || ancestor.getClass().getName().endsWith("ExpandableNotificationRow")) return ancestor;
+        }
+        return null;
+    }
+
     private static final View.OnAttachStateChangeListener lifecycle = new View.OnAttachStateChangeListener() {
-        @Override public void onViewAttachedToWindow(View view) {}
+        @Override public void onViewAttachedToWindow(View view) {
+            Attachment previous = attachments.get(view);
+            if (previous != null && previous.pending
+                    && (!previous.matches(view) || !Foreground.customSurface(view) || drift(view))) {
+                release(view);
+                return;
+            }
+            attachments.put(view, new Attachment(view));
+        }
+
         @Override public void onViewDetachedFromWindow(View view) {
-            release(view);
+            Attachment previous = attachments.get(view);
+            if (previous == null || previous.pending) return;
+            previous.pending = true;
+            WeakReference<View> detached = new WeakReference<>(view);
+            // Keep the displayed tint across same-message transfers. A later attach starts native.
+            main.post(() -> {
+                View child = detached.get();
+                if (child != null && attachments.get(child) == previous) release(child);
+            });
         }
     };
 
@@ -55,19 +108,19 @@ final class RemoteViewsTone {
     static boolean apply(View view, boolean swap, boolean lightText, boolean animate, InkAnimator.Timeline timeline) {
         if (!(view instanceof ImageView) && !(view instanceof ProgressBar)) {
             if (swap && Probe.trace && view.getClass() == android.widget.FrameLayout.class
-                    && view.getBackground() != null) report("painted-container-role-unverified");
+                    && view.getBackground() != null) report(view, UNKNOWN, lightText, "painted-container-role-unverified");
             return false;
         }
         int kind = kind(view);
         Slot[] slots = active.get(view);
         if (kind == UNKNOWN && slots == null) {
             if (swap && Probe.trace && (view instanceof ImageView || view instanceof ProgressBar))
-                report(view instanceof ImageView ? "image-role-unverified" : "progress-owner-unverified");
+                report(view, UNKNOWN, lightText, view instanceof ImageView ? "image-role-unverified" : "progress-role-unverified");
             return false;
         }
         boolean eligible = kind != UNKNOWN && Foreground.customSurface(view);
         if ((!swap || !eligible) && slots == null) {
-            if (swap) report("private-or-unowned-surface");
+            if (swap) report(view, kind, lightText, "private-or-unowned-surface");
             return false;
         }
         if (slots == null) {
@@ -95,6 +148,9 @@ final class RemoteViewsTone {
         Drawable drawable = drawable(view, channel);
         BlendMode mode = mode(view, channel);
         boolean changed = false;
+        if (slot != null && Probe.trace && tint(view, channel) != slot.shown
+                && NotificationProgressTone.same(tint(view, channel), slot.shown))
+            report(view, channel, lightText, "equal-tint-different-reference");
         if (slot != null && (tint(view, channel) != slot.shown
                 || drawable != slot.drawable.get() || mode != slot.mode)) {
             changed = drop(view, slots, index, channel, slot);
@@ -106,7 +162,7 @@ final class RemoteViewsTone {
         if (!supported) target = null;
         if (target == null) {
             if (slot == null) {
-                if (swap && eligible) report(!supported ? "drawable-or-blend-unverified" : tintReason(nativeTint));
+                if (swap && eligible) report(view, channel, lightText, !supported ? "drawable-or-blend-unverified" : tintReason(nativeTint));
                 return changed;
             }
             if (slot.restoring && animate) return changed;
@@ -122,6 +178,7 @@ final class RemoteViewsTone {
             slots[index] = slot;
             if (!active.containsKey(view)) {
                 active.put(view, slots);
+                attachments.put(view, new Attachment(view));
                 view.addOnAttachStateChangeListener(lifecycle);
             }
         }
@@ -179,6 +236,7 @@ final class RemoteViewsTone {
         for (Slot remaining : slots) empty &= remaining == null;
         if (empty) {
             active.remove(view);
+            attachments.remove(view);
             view.removeOnAttachStateChangeListener(lifecycle);
         }
         // Tint belongs to the View even if its Drawable was replaced. Exact list identity avoids
@@ -273,8 +331,53 @@ final class RemoteViewsTone {
         return "native-tone-or-accent";
     }
 
+    private static final int TRACE_BUDGET = 120;
     private static final java.util.Set<String> reported = new java.util.HashSet<>();
-    private static void report(String reason) {
-        if (Probe.trace && reported.add(reason)) Probe.log("REMOTE_VIEWS_TONE", "preserved=" + reason);
+    private static long traceWindow;
+
+    private static void report(View view, int channel, boolean lightText, String reason) {
+        if (!Probe.trace || !view.isShown()) return;
+        long now = SystemClock.uptimeMillis();
+        if (now - traceWindow >= 5000L) {
+            traceWindow = now;
+            reported.clear();
+        }
+        if (reported.size() >= TRACE_BUDGET) return;
+        String entry = diagnostic(view, channel, lightText, reason);
+        if (reported.add(entry)) Probe.log("REMOTE_VIEWS_TONE", entry);
+    }
+
+    static String diagnostic(View view, int channel, boolean lightText, String reason) {
+        Drawable paint = channel >= 0 ? drawable(view, channel)
+                : view instanceof ImageView ? ((ImageView) view).getDrawable()
+                : view instanceof ProgressBar ? ((ProgressBar) view).getProgressDrawable()
+                : view.getBackground();
+        View owner = host(view);
+        StringBuilder ancestors = new StringBuilder();
+        for (android.view.ViewParent parent = view.getParent(); parent instanceof View;
+                parent = parent.getParent()) {
+            View node = (View) parent;
+            if (ancestors.length() > 640) break;
+            if (ancestors.length() > 0) ancestors.append('/');
+            ancestors.append(describe(node));
+            if (node == owner) break;
+        }
+        return "preserved=" + reason + " view=" + describe(view)
+                + " size=" + view.getWidth() + "x" + view.getHeight()
+                + " drawable=" + (paint == null ? "none" : paint.getClass().getSimpleName())
+                + " channel=" + channel + " material=" + (lightText ? "light" : "dark")
+                + " glassPath=" + Foreground.customSurface(view)
+                + " host=" + (owner == null ? "none" : describe(owner)) + " ancestors=" + ancestors;
+    }
+
+    private static String describe(View view) {
+        int id = view.getId();
+        String resource = Integer.toHexString(id);
+        if (id != View.NO_ID) {
+            try { resource = view.getResources().getResourceEntryName(id); }
+            catch (android.content.res.Resources.NotFoundException ignored) { }
+        }
+        return view.getClass().getSimpleName() + "#" + resource + "@"
+                + Integer.toHexString(System.identityHashCode(view));
     }
 }
